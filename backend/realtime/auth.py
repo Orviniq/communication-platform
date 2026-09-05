@@ -10,20 +10,18 @@ it cannot do through the wrapper, because the wrapper's connection bracket close
 the connection the test's own transaction holds.
 """
 
-from api.auth import FULL, decode_access, load_device
+from api.auth import decode_session, load_device
 from api.errors import ApiError
 from api.orm import run_unit
 
 
-def _authenticate_access(token_str):
-    """Validate an access token through the one verifier, exactly as the HTTP
-    surface does: full scope, a live device, an active account. Returns
+def _authenticate_session(token_str):
+    """Validate a session token through the one verifier, exactly as the HTTP
+    surface does: a device-bound token, a live device, an active account. Returns
     (user, device) on success, None on any failure."""
     try:
-        claims = decode_access(token_str)
+        claims = decode_session(token_str)
     except ApiError:
-        return None
-    if claims["scope"] != FULL:
         return None
     device = load_device(claims)
     if device is None:
@@ -59,8 +57,8 @@ def _touch_active(device_id):
     )
 
 
-async def authenticate_access(token_str):
-    return await run_unit(_authenticate_access, token_str)
+async def authenticate_session(token_str):
+    return await run_unit(_authenticate_session, token_str)
 
 
 async def delete_envelopes(device_id, ids):

@@ -274,7 +274,7 @@ class Connection:
 
     # ---- helpers ---------------------------------------------------------
     async def _bind(self, token_str):
-        result = await auth.authenticate_access(token_str)
+        result = await auth.authenticate_session(token_str)
         if result is None:
             return False
         self.user, self.device = result

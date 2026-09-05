@@ -8,7 +8,7 @@ and claiming key material to start sessions. Every route here is served by FastA
 
 All paths are under `/api/v1`. Requests and responses are JSON; binary values are
 base64 strings. Unless an endpoint says otherwise, it requires
-`Authorization: Bearer <access token>` with `full` scope. Errors use the envelope and
+`Authorization: Bearer <session token>`. Errors use the envelope and
 the vocabulary that [`core/API.md`](../core/API.md) fixes; three responses can appear
 on any authenticated endpoint and are not repeated per section:
 
@@ -58,7 +58,7 @@ stored identity correct; on `409` the client re-reads before it writes again.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | yes | `application/json` |
 
 **Request body**
@@ -140,7 +140,7 @@ self-contained so no such indirection exists.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 
@@ -286,7 +286,7 @@ controls: a modified server would skip them, and peers must reject unverifiable 
 regardless. What they buy is that a client cannot believe it cross-signed a device it
 did not. The full enrollment order is `CLIENT_CONTRACT.md` §M.
 
-`GET` (full scope only) lists the caller's live devices with their encrypted labels
+`GET` (session token only) lists the caller's live devices with their encrypted labels
 and coarse dates, marking which entry is the calling device, plus `log_head_seq`, the
 head of the account's device-list log (null when empty). The response carries an
 `ETag`; poll with `If-None-Match` and treat `304` as "nothing changed". The tag covers
@@ -294,7 +294,7 @@ the live device set **and** the device-log head, so a log append also invalidate
 expect more frequent invalidation than under the device-set-only tag.
 
 **Retry semantics.** `POST` is not idempotent: a retry after a lost response mints a
-second device with a second id and a second token pair, and the first device stays
+second device with a second id and a second session token, and the first device stays
 live and counts against `MAX_DEVICES_PER_USER`. A client that has lost the response
 lists its devices with `GET` before it registers again, and revokes the device it
 cannot use. `GET` writes nothing.
@@ -303,7 +303,7 @@ cannot use. `GET` writes nothing.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`; POST accepts register or full scope, GET requires full |
+| `Authorization` | yes | `Bearer <session token>`; POST also accepts a register token, GET does not |
 | `Content-Type` | POST only | `application/json` |
 | `If-None-Match` | no (GET) | Previous `ETag` value |
 
@@ -353,11 +353,15 @@ verification is the peer client's job.
 ```json
 {
   "device_id": "9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611",
-  "access": "eyJhbGciOiJIUzI1NiIs…",
-  "refresh": "eyJhbGciOiJIUzI1NiIs…",
+  "token": "eyJhbGciOiJIUzI1NiIs…",
+  "expires_in": 2592000,
   "scope": "full"
 }
 ```
+
+The token is a session token bound to the device the response names, and
+`expires_in` is its lifetime in seconds. It is the credential the client
+cross-signs the new device with; there is nothing further to exchange.
 
 ### Listed — `200 OK` (GET)
 
@@ -453,7 +457,7 @@ Scope `accounts`, default 120/min.
 **Path:** `/api/v1/me/devices/{device_id}`
 
 `PUT` replaces the device's encrypted label. `DELETE` revokes the device: its token
-generation is bumped (killing every outstanding access and refresh token), its
+generation is bumped (killing every outstanding token of that device), its
 one-time prekeys (classical and ML-KEM) and queued envelopes are deleted in one
 transaction, any live WebSocket is closed with code 4003, and it disappears from
 device lists. Revocation is permanent; a "re-added"
@@ -471,7 +475,7 @@ a `404` never confirms that a device exists.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | PUT only | `application/json` |
 
 **Path parameters**
@@ -592,7 +596,7 @@ landed can answer `409 prekey_limit` while storing nothing. On `409` the client 
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, bound to `{device_id}` |
+| `Authorization` | yes | `Bearer <session token>`, bound to `{device_id}` |
 | `Content-Type` | yes | `application/json` |
 
 **Path parameters**
@@ -679,7 +683,7 @@ has stored. Same self-only gate as replenishment.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, bound to `{device_id}` |
+| `Authorization` | yes | `Bearer <session token>`, bound to `{device_id}` |
 
 **Path parameters**
 
@@ -754,7 +758,7 @@ session state / log-head comparison should be refreshed.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `If-None-Match` | no | Previous `ETag` value |
 
 **Path parameters**
@@ -861,7 +865,7 @@ treats the claim as spent and starts the session from the bundle the retry retur
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | yes | `application/json` |
 
 **Path parameters**
@@ -984,7 +988,7 @@ append should have produced.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | yes | `application/json` |
 
 **Request body**
@@ -1059,7 +1063,7 @@ equivocation (CLIENT_CONTRACT.md §C/§J).
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 

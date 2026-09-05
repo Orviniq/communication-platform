@@ -10,7 +10,7 @@ from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 
 from accounts.models import User
-from api.auth import issue_full, issue_register_scope
+from api.auth import issue_register_scope, issue_session
 from config.asgi import api_application, application
 from core.tests import artefact
 from devices.models import Device
@@ -156,7 +156,7 @@ def active_user(db):
 
 @pytest.fixture
 def device(active_user):
-    """A live device for `active_user`, enough to mint full-scope tokens."""
+    """A live device for `active_user`, enough to mint session tokens."""
     return Device.objects.create(
         user=active_user,
         ik_pub=b"ik-public",
@@ -169,11 +169,11 @@ def device(active_user):
 
 @pytest.fixture
 def bearer():
-    """`Authorization` for a full-scope token bound to `device`."""
+    """`Authorization` for a session token bound to `device`."""
 
     def build(user, device):
-        access, _refresh = issue_full(user, device)
-        return {"Authorization": f"Bearer {access}"}
+        token, _expires_in = issue_session(user, device)
+        return {"Authorization": f"Bearer {token}"}
 
     return build
 
@@ -184,7 +184,8 @@ def register_bearer():
     device."""
 
     def build(user):
-        return {"Authorization": f"Bearer {issue_register_scope(user)}"}
+        token, _expires_in = issue_register_scope(user)
+        return {"Authorization": f"Bearer {token}"}
 
     return build
 

@@ -74,10 +74,9 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
     # Anti-vacuity: every step really ran and generated its secret.
     for label in (
         "user id",
-        "register-scope access token",
+        "register-scope token",
         "device id",
-        "access token",
-        "refresh token",
+        "session token",
         "envelope blob",
         "queued envelope id",
         "attachment id",
@@ -86,8 +85,7 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
         "signal blob",
         "profile blob",
         "key backup blob",
-        "rotated access token",
-        "rotated refresh token",
+        "renewed session token",
     ):
         assert secrets.get(label), f"the audit never exercised the {label} step"
 
@@ -127,8 +125,7 @@ async def test_the_pass_drives_every_route_of_the_table():
         "envelope blob",
         "key backup blob",
         "profile blob",
-        "access token",
-        "refresh token",
+        "session token",
         "attachment id",
         "queued envelope id",
         "relay credential",

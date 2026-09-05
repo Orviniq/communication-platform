@@ -1,11 +1,11 @@
 # accounts API
 
-Account lifecycle and identity: registration, login, token refresh and logout, the
+Account lifecycle and identity: registration, login, session renewal and logout, the
 user directory, and encrypted profile blobs. Every route here is served by FastAPI.
 
 All paths are under `/api/v1`. Requests and responses are JSON; binary values are
 base64 strings. Unless an endpoint says otherwise, it requires
-`Authorization: Bearer <access token>` with `full` scope. Errors use the envelope and
+`Authorization: Bearer <session token>`. Errors use the envelope and
 the vocabulary that [`core/API.md`](../core/API.md) fixes; three responses can appear
 on any authenticated endpoint and are not repeated per section:
 
@@ -22,21 +22,25 @@ read strictly: a value of the wrong JSON type is refused rather than converted, 
 
 ## Tokens
 
-The server stores no token. An access token carries `user_id`, `scope`, `typ`, `jti`,
-`iat`, `exp` and — at `full` scope — `device_id` and `tgen`. A refresh token carries
-those plus `rgen`. Two counters on the device row are the whole of revocation:
+The server stores no token. There is one token, and `typ` decides its power.
 
-- `tgen` is checked against the device's `token_generation` on every authenticated
-  request. Revoking the device, logging out, and detecting a replayed refresh each
-  advance it, and every outstanding token of that device dies at once.
-- `rgen` is checked on refresh against the device's `refresh_generation`. A rotation
-  advances it, and so does a login that names the device.
+- A **session token** carries `user_id`, `device_id`, `tgen`, `typ` `session`, `jti`,
+  `iat` and `exp`, lives `SESSION_TOKEN_DAYS` days (default 30), and reaches every
+  authenticated route.
+- A **register token** carries `user_id`, `typ` `register`, `jti`, `iat` and `exp`,
+  lives `REGISTER_SCOPE_ACCESS_MIN` minutes (default 10), and reaches
+  `POST /api/v1/me/devices` and nothing else. Presenting one anywhere else is
+  `403 scope_forbidden`.
 
-**A refresh token is used exactly once.** Replaying one that was already rotated is
-reported as a replay: the server advances `token_generation`, so the newest pair —
-access and refresh alike — dies with the replayed token, and the account must log in
-again. Never retry a refresh with the same token, including after a timeout: on an
-unclear outcome, log in again rather than replaying.
+One counter on the device row is the whole of revocation. `tgen` is checked against
+the device's `token_generation` on every authenticated request and at every socket
+bind. Logging out and revoking the device each advance it, and every outstanding
+token of that device dies at once.
+
+**Nothing else ends a token before its own `exp`.** A token does not rotate, a login
+retires none, and renewing leaves the token it was renewed from valid until that
+token expires. A client may therefore hold several live tokens for one device, and
+two of its own processes may renew concurrently without either losing the session.
 
 ## Register an account
 
@@ -130,12 +134,11 @@ seconds to wait.
 **Method:** `POST`
 **Path:** `/api/v1/auth/login`
 
-Verifies the password and issues tokens. With a `device_id` naming a live device of
-this account, the response is a full-scope access/refresh pair bound to that device,
-and the device's refresh generation advances — so any refresh token that device still
-held is retired by the login. Without one (first login, or a revoked/foreign device
-id), the response is a short-lived register-scope access token whose only power is
-`POST /api/v1/me/devices`.
+Verifies the password and issues a token. With a `device_id` naming a live device of
+this account, the response is a session token bound to that device; the device row is
+read and never written, so a token that device already held keeps working. Without one
+(first login, or a revoked/foreign device id), the response is a short-lived register
+token whose only power is `POST /api/v1/me/devices`.
 
 Unknown usernames and wrong passwords return the same body, and unknown usernames
 still pay for a real Argon2 verification, so the two cases are not distinguishable by
@@ -177,29 +180,33 @@ below stands beside it.
 
 `device_id` is optional and must be a UUID string when present.
 
-**Retry semantics.** A retry issues a fresh pair and retires the pair the previous
-attempt issued, so a client that retried must use the newest response and discard the
-older tokens.
+**Retry semantics.** Safe to repeat. A retry issues another token and retires none,
+so a client that did not learn the outcome of the first attempt loses nothing by
+signing in again; both tokens work until they expire.
 
 **Responses**
 
-### Full-scope pair — `200 OK`
+### Session token — `200 OK`
 
 ```json
 {
-  "access": "eyJhbGciOiJIUzI1NiIs…",
-  "refresh": "eyJhbGciOiJIUzI1NiIs…",
+  "token": "eyJhbGciOiJIUzI1NiIs…",
+  "expires_in": 2592000,
   "user_id": "6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10",
   "device_id": "9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611",
   "scope": "full"
 }
 ```
 
-### Register-scope token — `200 OK`
+`expires_in` is the lifetime in seconds of the token the response carries. Branch on
+`scope`: it is the field that tells the two success shapes apart.
+
+### Register token — `200 OK`
 
 ```json
 {
-  "access": "eyJhbGciOiJIUzI1NiIs…",
+  "token": "eyJhbGciOiJIUzI1NiIs…",
+  "expires_in": 600,
   "user_id": "6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10",
   "scope": "register"
 }
@@ -242,116 +249,31 @@ Scope `login`, default 20/hour per client address, with `detail` `"Request was
 throttled."`. The body above is the other cause of the same status: the name is in
 its cool-off, and `Retry-After` carries the seconds left in it.
 
-## Refresh tokens
+## Renew the session token
 
 **Method:** `POST`
-**Path:** `/api/v1/auth/refresh`
+**Path:** `/api/v1/auth/renew`
 
-Rotates a full-scope refresh token: the device's refresh generation advances and a new
-access/refresh pair is issued for the same device. The device and account are
-re-checked, so revocation, a bumped token generation, or deactivation all end the
-session here even if the refresh token itself is still validly signed.
+Issues another session token for the device the presented token names. The device and
+the account are re-checked through the same verifier every other authenticated route
+uses, so a revoked device, a stale token generation and a deactivated account each end
+the session here rather than extending it.
 
-Clients refresh shortly before access expiry (default 15 minutes) and **must replace
-the stored refresh token on every call**. Presenting a token that was already rotated
-is a replay: it answers `401 token_revoked` and, as described under Tokens, ends every
-token of that device.
-
-**Headers**
-
-| Header | Required | Value |
-|---|---|---|
-| `Content-Type` | yes | `application/json` |
-
-**Path parameters**
-
-| Name | Type | Required | Description |
-|---|---|---|---|
-| — | | | none |
-
-**Query parameters**
-
-| Name | Type | Required | Default | Description |
-|---|---|---|---|---|
-| — | | | | none |
-
-**Request body**
-
-```json
-{ "refresh": "eyJhbGciOiJIUzI1NiIs…" }
-```
-
-`refresh` is at most 4096 characters.
-
-**Retry semantics.** None. A refresh is never retried with the same token; a client
-that does not learn the outcome logs in again.
-
-**Responses**
-
-### Rotated — `200 OK`
-
-```json
-{ "access": "eyJhbGciOiJIUzI1NiIs…", "refresh": "eyJhbGciOiJIUzI1NiIs…" }
-```
-
-### Invalid request — `400 Bad Request`
-
-```json
-{ "code": "invalid_request", "detail": { "refresh": ["Field required"] } }
-```
-
-A body that is not an object, a missing `refresh`, a non-string one, and one above
-4096 characters all land here. A well-formed string that is not a valid token is
-`401` instead.
-
-### Body too large — `413 Payload Too Large`
-
-```json
-{ "code": "payload_too_large", "detail": "Request body is too large." }
-```
-
-The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
-`Content-Length`, so an understated header does not defeat it.
-
-### Missing or malformed token — `401 Unauthorized`
-
-```json
-{ "code": "invalid_token", "detail": "Token is missing, malformed, or expired." }
-```
-
-Covers an expired token, a token that is not a refresh token, and a register-scope
-token, all of which are rejected before any database read.
-
-### Revoked — `401 Unauthorized`
-
-```json
-{ "code": "token_revoked", "detail": "Token is no longer valid." }
-```
-
-Returned for a revoked or deleted device, a stale token generation, a deactivated
-account, and a replayed refresh token, without distinguishing them.
-
-### Rate limited — `429 Too Many Requests`
-
-Scope `refresh`, default 120/hour per client address.
-
-## Log out
-
-**Method:** `POST`
-**Path:** `/api/v1/auth/logout`
-
-Ends the session of the device the access token names: `token_generation` advances, so
-the presented access token and every refresh token of that device die immediately, and
-the device's sockets are dropped.
+**The presented token stays valid until its own `exp`.** Nothing is written and no
+generation moves, so renewing invalidates neither the token that bought the new one
+nor any other token of the device.
 
 **The request takes no body.** A body, if sent, is ignored. The caller is identified by
-the access token it presents, so there is nothing to send and nothing to leak.
+the token it presents, so there is nothing to send and nothing to leak.
+
+Clients renew well before expiry — the token lives 30 days by default — and may renew
+from more than one process at once without coordinating between them.
 
 **Headers**
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 
@@ -369,8 +291,66 @@ the access token it presents, so there is nothing to send and nothing to leak.
 
 None.
 
-**Retry semantics.** A retry with the same access token answers `401 token_revoked`,
-because the first call killed that token. A client treats that as success.
+**Retry semantics.** Safe to repeat. A retry issues another token and retires none, so
+a client that did not learn the outcome of the first call simply calls again and keeps
+whichever token it received.
+
+**Responses**
+
+### Renewed — `200 OK`
+
+```json
+{ "token": "eyJhbGciOiJIUzI1NiIs…", "expires_in": 2592000 }
+```
+
+### Register token — `403 Forbidden`
+
+```json
+{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
+```
+
+A register token names no device, so there is no session to renew.
+
+### Rate limited — `429 Too Many Requests`
+
+Scope `accounts`, default 120/min per account.
+
+## Log out
+
+**Method:** `POST`
+**Path:** `/api/v1/auth/logout`
+
+Ends the session of the device the token names: `token_generation` advances, so the
+presented token and every other token of that device die immediately, and the device's
+sockets are dropped.
+
+**The request takes no body.** A body, if sent, is ignored. The caller is identified by
+the token it presents, so there is nothing to send and nothing to leak.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <session token>` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+None.
+
+**Retry semantics.** A retry with the same token answers `401 token_revoked`, because
+the first call killed that token. A client treats that as success.
 
 **Responses**
 
@@ -378,7 +358,7 @@ because the first call killed that token. A client treats that as success.
 
 Empty body.
 
-### Register-scope token — `403 Forbidden`
+### Register token — `403 Forbidden`
 
 ```json
 { "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
@@ -402,7 +382,7 @@ is not paginated, because the scale band caps it at fewer than 50 accounts.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 
@@ -461,7 +441,7 @@ a peer announces a change.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 
@@ -530,7 +510,7 @@ losing writer gets `409 stale_version`, refetches, and reapplies.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | PUT only | `application/json` |
 
 **Path parameters**

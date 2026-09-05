@@ -70,7 +70,7 @@ def route_limits():
         f"{API_PREFIX}/health": json_class,
         f"{API_PREFIX}/auth/register": json_class,
         f"{API_PREFIX}/auth/login": json_class,
-        f"{API_PREFIX}/auth/refresh": json_class,
+        f"{API_PREFIX}/auth/renew": json_class,
         f"{API_PREFIX}/auth/logout": json_class,
         f"{API_PREFIX}/users": json_class,
         f"{API_PREFIX}/users/{{user_id}}/profile": json_class,

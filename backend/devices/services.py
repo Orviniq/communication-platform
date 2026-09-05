@@ -14,7 +14,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from accounts.models import User
-from api.auth import issue_full
+from api.auth import issue_session
 from api.errors import ApiError
 from devices.models import (
     Device,
@@ -194,11 +194,11 @@ def register_device(user, payload):
                 ]
             )
 
-    access, refresh = issue_full(user, device)
+    token, expires_in = issue_session(user, device)
     return {
         "device_id": str(device.id),
-        "access": access,
-        "refresh": refresh,
+        "token": token,
+        "expires_in": expires_in,
         "scope": "full",
     }
 

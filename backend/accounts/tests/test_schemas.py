@@ -16,7 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from accounts.schemas import MAX_PROFILE_CHARS, LoginIn, ProfileIn, RefreshIn, RegisterIn
+from accounts.schemas import MAX_PROFILE_CHARS, LoginIn, ProfileIn, RegisterIn
 from core.buckets import PROFILE_BUCKETS
 from core.fields import BadBucket
 
@@ -173,25 +173,6 @@ class TestLoginIn:
     def test_a_field_of_the_wrong_type_or_size_is_refused(self, payload):
         with pytest.raises(ValidationError):
             LoginIn(**payload)
-
-
-class TestRefreshIn:
-    def test_the_longest_token_the_field_admits_is_accepted(self):
-        token = "t" * 4096
-
-        assert RefreshIn(refresh=token).refresh == token
-
-    def test_one_character_more_is_refused(self):
-        with pytest.raises(ValidationError) as exc_info:
-            RefreshIn(refresh="t" * 4097)
-
-        assert error_types(exc_info) == {"string_too_long"}
-
-    def test_a_non_string_token_is_refused_rather_than_coerced(self):
-        with pytest.raises(ValidationError) as exc_info:
-            RefreshIn(refresh=None)
-
-        assert error_fields(exc_info) == {"refresh"}
 
 
 class TestProfileIn:

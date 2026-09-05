@@ -106,7 +106,7 @@ async def _scripted_account_traffic(client):
         json={"username": s["username"], "password": s["password"]},
     )
     assert r.status_code == 200, f"login: {r.status_code}"
-    s["register-scope access token"] = r.json()["access"]
+    s["register-scope token"] = r.json()["token"]
     return s
 
 
@@ -130,14 +130,13 @@ async def _scripted_device_traffic(client, s):
             "registration_id": 4242,
             "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
         },
-        headers={"Authorization": f"Bearer {s['register-scope access token']}"},
+        headers={"Authorization": f"Bearer {s['register-scope token']}"},
     )
     assert r.status_code == 201, f"device register: {r.status_code}"
     body = r.json()
     s["device id"] = body["device_id"]
-    s["access token"] = body["access"]
-    s["refresh token"] = body["refresh"]
-    auth = {"Authorization": f"Bearer {s['access token']}"}
+    s["session token"] = body["token"]
+    auth = {"Authorization": f"Bearer {s['session token']}"}
 
     # Cross-sign the device now that its device_id is known (CLIENT_CONTRACT.md §M).
     s["cross signature"] = _b64_filled(64, 0x78)
@@ -183,7 +182,7 @@ async def _scripted_device_traffic(client, s):
     )
     assert r.status_code == 201, f"second device register: {r.status_code}"
     s["second device id"] = r.json()["device_id"]
-    s["second device access token"] = r.json()["access"]
+    s["second device session token"] = r.json()["token"]
 
     # Rename, list, count, then revoke the second device. The label is client
     # ciphertext and the revocation is the one write that reaches a live socket.
@@ -246,7 +245,7 @@ async def _scripted_blob_traffic(client, s):
     back. The upload is the one body of this API that is bytes rather than JSON."""
     from core.buckets import ATTACHMENT_BUCKETS
 
-    auth = {"Authorization": f"Bearer {s['access token']}"}
+    auth = {"Authorization": f"Bearer {s['session token']}"}
 
     # Upload + download an attachment (download answers via X-Accel-Redirect).
     upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
@@ -266,7 +265,7 @@ async def _scripted_account_state_traffic(client, s):
     set."""
     from core.buckets import BACKUP_BUCKETS, PROFILE_BUCKETS
 
-    auth = {"Authorization": f"Bearer {s['access token']}"}
+    auth = {"Authorization": f"Bearer {s['session token']}"}
 
     r = await client.get("/api/v1/health")
     assert r.status_code == 200, f"health: {r.status_code}"
@@ -295,18 +294,17 @@ async def _scripted_account_state_traffic(client, s):
     r = await client.get("/api/v1/me/keybackup", headers=auth)
     assert r.status_code == 200, f"key backup read: {r.status_code}"
 
-    # Rotation issues a second pair; both halves must stay out of every log line.
-    r = await client.post("/api/v1/auth/refresh", json={"refresh": s["refresh token"]})
-    assert r.status_code == 200, f"refresh: {r.status_code}"
-    s["rotated access token"] = r.json()["access"]
-    s["rotated refresh token"] = r.json()["refresh"]
+    # Renewal issues a second session token; it must stay out of every log line.
+    r = await client.post("/api/v1/auth/renew", headers=auth)
+    assert r.status_code == 200, f"renew: {r.status_code}"
+    s["renewed session token"] = r.json()["token"]
 
 
 async def _scripted_logout(client, s):
     """Last, because it ends every token of the device."""
     r = await client.post(
         "/api/v1/auth/logout",
-        headers={"Authorization": f"Bearer {s['rotated access token']}"},
+        headers={"Authorization": f"Bearer {s['renewed session token']}"},
     )
     assert r.status_code == 204, f"logout: {r.status_code}"
 
@@ -322,7 +320,7 @@ async def _scripted_relay_traffic(client, s):
     `TURN_URLS` answers `503 voice_unconfigured`, so the suites that drive this
     audit configure one.
     """
-    auth = {"Authorization": f"Bearer {s['access token']}"}
+    auth = {"Authorization": f"Bearer {s['session token']}"}
 
     r = await client.post("/api/v1/me/relay", headers=auth)
     assert r.status_code == 200, f"relay credential: {r.status_code}"
@@ -341,7 +339,7 @@ async def _scripted_socket_traffic(s):
     comm = WebSocketCommunicator(
         application,
         "/ws",
-        headers=[(b"authorization", f"Bearer {s['access token']}".encode())],
+        headers=[(b"authorization", f"Bearer {s['session token']}".encode())],
     )
     connected, _ = await comm.connect(timeout=2)
     assert connected, "socket handshake refused"

@@ -29,7 +29,7 @@ EXPECTED = {
     ("GET", "/api/v1/health"): (ANONYMOUS, None),
     ("POST", "/api/v1/auth/register"): (ANONYMOUS, "register"),
     ("POST", "/api/v1/auth/login"): (ANONYMOUS, "login"),
-    ("POST", "/api/v1/auth/refresh"): (ANONYMOUS, "refresh"),
+    ("POST", "/api/v1/auth/renew"): (FULL_DEVICE, "accounts"),
     ("POST", "/api/v1/auth/logout"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/profile"): (FULL_DEVICE, "accounts"),

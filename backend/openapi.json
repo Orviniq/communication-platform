@@ -324,28 +324,28 @@
       },
       "DeviceRegisteredOut": {
         "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
-          },
           "device_id": {
             "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
-          "refresh": {
-            "title": "Refresh",
-            "type": "string"
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
           },
           "scope": {
             "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
             "type": "string"
           }
         },
         "required": [
           "device_id",
-          "access",
-          "refresh",
+          "token",
+          "expires_in",
           "scope"
         ],
         "title": "DeviceRegisteredOut",
@@ -471,22 +471,22 @@
       "FullScopeOut": {
         "description": "The login answer when the request named a live device of the account.",
         "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
-          },
           "device_id": {
             "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
-          "refresh": {
-            "title": "Refresh",
-            "type": "string"
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
           },
           "scope": {
             "const": "full",
             "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
             "type": "string"
           },
           "user_id": {
@@ -497,8 +497,8 @@
         },
         "required": [
           "scope",
-          "access",
-          "refresh",
+          "token",
+          "expires_in",
           "user_id",
           "device_id"
         ],
@@ -1071,21 +1071,6 @@
         "title": "ProfileOut",
         "type": "object"
       },
-      "RefreshIn": {
-        "additionalProperties": false,
-        "properties": {
-          "refresh": {
-            "maxLength": 4096,
-            "title": "Refresh",
-            "type": "string"
-          }
-        },
-        "required": [
-          "refresh"
-        ],
-        "title": "RefreshIn",
-        "type": "object"
-      },
       "RegisterDeviceIn": {
         "additionalProperties": false,
         "properties": {
@@ -1210,15 +1195,19 @@
         "type": "object"
       },
       "RegisterScopeOut": {
-        "description": "The login answer when the request named no live device of the account: a\nshort token whose only power is `POST /me/devices`. It carries no refresh\ntoken, because the pair a refresh rotates is bound to a device.",
+        "description": "The login answer when the request named no live device of the account: a\nshort token whose only power is `POST /me/devices`. It names no device,\nbecause a session token is bound to one.",
         "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
           },
           "scope": {
             "const": "register",
             "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
             "type": "string"
           },
           "user_id": {
@@ -1229,7 +1218,8 @@
         },
         "required": [
           "scope",
-          "access",
+          "token",
+          "expires_in",
           "user_id"
         ],
         "title": "RegisterScopeOut",
@@ -1317,6 +1307,25 @@
         "title": "SendOut",
         "type": "object"
       },
+      "SessionOut": {
+        "description": "What `POST /auth/renew` answers: the same session, on a later token.",
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expires_in"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
       "SignedPrekeyIn": {
         "additionalProperties": false,
         "description": "The signature is stored and relayed, never verified: checking it would mean\nthe server parsing key material and committing to a curve, and the client is the\nparty that must verify spk_sig against ik_pub as part of X3DH. Validating it\nhere would imply a guarantee the server does not keep.",
@@ -1344,24 +1353,6 @@
           "sig"
         ],
         "title": "SignedPrekeyIn",
-        "type": "object"
-      },
-      "TokenPairOut": {
-        "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
-          },
-          "refresh": {
-            "title": "Refresh",
-            "type": "string"
-          }
-        },
-        "required": [
-          "access",
-          "refresh"
-        ],
-        "title": "TokenPairOut",
         "type": "object"
       }
     }
@@ -1580,7 +1571,7 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "description": "Two success shapes: a full-scope pair when `device_id` names a live device\nof this account, and a register-scope token otherwise.",
+        "description": "Two success shapes: a session token when `device_id` names a live device\nof this account, and a register-scope token otherwise.",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -1697,7 +1688,7 @@
     },
     "/api/v1/auth/logout": {
       "post": {
-        "description": "Takes no body: the caller is identified by the access token it presents,\nand the device row is what carries the revocation. The presented token dies\nwith the rest of the family, so a second call with it answers 401.",
+        "description": "Takes no body: the caller is identified by the token it presents, and the\ndevice row is what carries the revocation. The presented token dies with\nevery other token of the device, so a second call with it answers 401.",
         "operationId": "logout",
         "responses": {
           "204": {
@@ -1755,97 +1746,6 @@
           }
         },
         "summary": "Logout",
-        "tags": [
-          "accounts"
-        ]
-      }
-    },
-    "/api/v1/auth/refresh": {
-      "post": {
-        "operationId": "refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TokenPairOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`invalid_request`"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`invalid_token`, `token_revoked`"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`payload_too_large`"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`throttled`"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`server_error`"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`unavailable`"
-          }
-        },
-        "summary": "Refresh",
         "tags": [
           "accounts"
         ]
@@ -1937,6 +1837,78 @@
           }
         },
         "summary": "Register",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/auth/renew": {
+      "post": {
+        "description": "Takes no body: the caller is identified by the token it presents, and the\nrequirement above has already re-read the device row and its owner. Nothing\nis written, so a client that repeats the call after a dropped connection gets\nanother token and loses nothing \u2014 the one it presented stays good until its\nown `exp`.",
+        "operationId": "renew",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Renew",
         "tags": [
           "accounts"
         ]

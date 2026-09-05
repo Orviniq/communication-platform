@@ -16,7 +16,7 @@ import re
 
 import pytest
 
-from api.auth import issue_full
+from api.auth import issue_session
 from core.buckets import BACKUP_BUCKETS, ENVELOPE_BUCKETS
 from core.tests.test_seizure_guard import (
     dual_user_fk_offenders,
@@ -101,7 +101,7 @@ def test_revoking_a_device_cuts_its_access_and_destroys_its_state(
     """After DELETE, the revoked device's tokens die and its queue is gone (the full
     cascade and ETag behaviour live in devices/tests/test_revocation.py)."""
     doomed = _second_device(active_user, 9002)
-    doomed_access, _ = issue_full(active_user, doomed)
+    doomed_access, _ = issue_session(active_user, doomed)
     QueuedEnvelope.objects.create(
         recipient_device=doomed, seq=1, blob=b"\xa5" * min(ENVELOPE_BUCKETS)
     )

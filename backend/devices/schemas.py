@@ -342,8 +342,8 @@ class IdentityOut(BaseModel):
 
 class DeviceRegisteredOut(BaseModel):
     device_id: uuid.UUID
-    access: str
-    refresh: str
+    token: str
+    expires_in: int
     scope: str
 
 

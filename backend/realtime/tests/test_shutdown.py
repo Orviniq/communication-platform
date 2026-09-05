@@ -12,7 +12,7 @@ import pytest
 from config.asgi import api_application
 from realtime import bus, gateway
 
-from .conftest import bearer, connect_ok, mint_access, probe, ws
+from .conftest import bearer, connect_ok, mint_session, probe, ws
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -22,7 +22,7 @@ async def test_a_lifespan_shutdown_closes_every_live_socket_with_1012(
 ):
     """1012 is "service restart": a deploy must look like a reconnect to the
     client, not like the network going away."""
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
     await probe(comm, device.id)  # the socket is live and bound before the drain
 
     async with api_application.router.lifespan_context(api_application):
@@ -46,7 +46,7 @@ async def test_a_socket_that_never_reads_is_closed_as_a_slow_consumer_4008(
     # The wire holds one frame, so a peer that never reads blocks the send loop
     # after the first, and everything behind it piles up in the send queue.
     comm = await connect_ok(
-        bearer(await mint_access(active_user, device)), outbound_max=1
+        bearer(await mint_session(active_user, device)), outbound_max=1
     )
 
     for _ in range(10):
@@ -83,8 +83,8 @@ async def test_every_live_socket_of_the_worker_is_drained_not_just_the_first(
     """The drain iterates a snapshot of the registry, and a deploy leaves nothing
     behind: a worker that closed one socket and dropped the rest would look like a
     network failure to every client but one."""
-    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
-    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    comm_a = await connect_ok(bearer(await mint_session(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_session(peer, peer_device)))
     await probe(comm_a, device.id)
     await probe(comm_b, peer_device.id)
 
@@ -123,7 +123,7 @@ async def test_the_drain_gives_up_on_a_socket_that_will_not_answer(
         return await give_back_the_topic(self, topic, sink)
 
     monkeypatch.setattr(bus.Subscriber, "unsubscribe", hang)
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
     await probe(comm, device.id)
 
     async with asyncio.timeout(1):

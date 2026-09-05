@@ -31,7 +31,7 @@ NAME = "canary_9317"
 SECRET = "loud-canary-passphrase-9317"
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
-REFRESH_URL = "/api/v1/auth/refresh"
+RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
 DIRECTORY_URL = "/api/v1/users"
 MY_PROFILE_URL = "/api/v1/me/profile"
@@ -68,8 +68,8 @@ def test_the_whole_account_lifecycle_emits_no_name_password_or_token(http):
             LOGIN_URL,
             json={"username": NAME, "password": SECRET, "device_id": str(device.id)},
         )
-        auth = {"Authorization": f"Bearer {full.json()['access']}"}
-        rotated = http.post(REFRESH_URL, json={"refresh": full.json()["refresh"]})
+        auth = {"Authorization": f"Bearer {full.json()['token']}"}
+        renewed = http.post(RENEW_URL, headers=auth)
         blob = profile_blob()
         written = http.put(
             MY_PROFILE_URL, json={"blob": blob, "version": 1}, headers=auth
@@ -80,7 +80,7 @@ def test_the_whole_account_lifecycle_emits_no_name_password_or_token(http):
         loggedout = http.post(LOGOUT_URL, headers=auth)
 
     assert (registered.status_code, written.status_code) == (201, 200)
-    assert (rotated.status_code, loggedout.status_code) == (200, 204)
+    assert (renewed.status_code, loggedout.status_code) == (200, 204)
     assert_absent(
         lines,
         {
@@ -88,11 +88,9 @@ def test_the_whole_account_lifecycle_emits_no_name_password_or_token(http):
             "password": SECRET,
             "user id": user_id,
             "device id": str(device.id),
-            "register-scope token": first.json()["access"],
-            "full-scope access token": full.json()["access"],
-            "full-scope refresh token": full.json()["refresh"],
-            "rotated access token": rotated.json()["access"],
-            "rotated refresh token": rotated.json()["refresh"],
+            "register-scope token": first.json()["token"],
+            "session token": full.json()["token"],
+            "renewed session token": renewed.json()["token"],
             "profile blob": blob,
         },
     )

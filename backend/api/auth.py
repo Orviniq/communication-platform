@@ -5,9 +5,9 @@ The FastAPI dependencies below and `realtime.auth` for the WebSocket gateway bot
 reach the same two functions, so a token the HTTP surface revokes is dead on the
 socket as well.
 
-No token is ever stored. A refresh is rotation plus reuse detection over two
-counters on the device row: `token_generation` kills every token of the device,
-and `refresh_generation` kills every refresh token issued before the last one.
+No token is ever stored, and none rotates. One counter on the device row is the
+whole of revocation: `token_generation` advances, and every token of the device
+dies at once (ADR-0023).
 """
 
 import uuid
@@ -29,15 +29,13 @@ from api.errors import (
 from api.orm import run_unit
 from devices.models import Device
 
-ACCESS = "access"
-REFRESH = "refresh"
-FULL = "full"
+SESSION = "session"
 REGISTER = "register"
 
 # Every decode requires these. The library skips a check on an absent claim, so
 # the require list is what turns a missing claim into a failure instead of a
 # silently passed check.
-_REQUIRED = ["exp", "iat", "jti", "typ", "scope", "user_id"]
+_REQUIRED = ["exp", "iat", "jti", "typ", "user_id"]
 
 
 @dataclass(frozen=True)
@@ -57,11 +55,10 @@ def _encode(claims):
     return jwt.encode(claims, settings.JWT_SIGNING_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def _claims(user_id, scope, typ, lifetime):
+def _claims(user_id, typ, lifetime):
     issued = _now()
     return {
         "user_id": str(user_id),
-        "scope": scope,
         "typ": typ,
         "jti": uuid.uuid4().hex,
         "iat": issued,
@@ -69,42 +66,41 @@ def _claims(user_id, scope, typ, lifetime):
     }
 
 
-def issue_full(user, device):
-    """The access/refresh pair bound to one device, at its current generations."""
-    access = _claims(
-        user.id, FULL, ACCESS, timedelta(minutes=settings.ACCESS_TOKEN_MINUTES)
-    )
-    access["device_id"] = str(device.id)
-    access["tgen"] = device.token_generation
-    refresh = _claims(user.id, FULL, REFRESH, timedelta(days=settings.REFRESH_TOKEN_DAYS))
-    refresh["device_id"] = str(device.id)
-    refresh["tgen"] = device.token_generation
-    refresh["rgen"] = device.refresh_generation
-    return _encode(access), _encode(refresh)
+def _issued(claims, lifetime):
+    """The token and the seconds it lives, which is what every route answers.
+
+    The lifetime is published rather than left in the claims for the client to
+    read, so no client has to parse a token whose shape is this server's alone.
+    """
+    return _encode(claims), int(lifetime.total_seconds())
+
+
+def issue_session(user, device):
+    """The one token, bound to one device at the generation it was cut at."""
+    lifetime = timedelta(days=settings.SESSION_TOKEN_DAYS)
+    claims = _claims(user.id, SESSION, lifetime)
+    claims["device_id"] = str(device.id)
+    claims["tgen"] = device.token_generation
+    return _issued(claims, lifetime)
 
 
 def issue_register_scope(user):
     """The short-lived token whose only power is adding a device."""
-    return _encode(
-        _claims(
-            user.id,
-            REGISTER,
-            ACCESS,
-            timedelta(minutes=settings.REGISTER_SCOPE_ACCESS_MIN),
-        )
-    )
+    lifetime = timedelta(minutes=settings.REGISTER_SCOPE_ACCESS_MIN)
+    return _issued(_claims(user.id, REGISTER, lifetime), lifetime)
 
 
 def _invalid_token():
     return ApiError(401, "invalid_token", INVALID_TOKEN)
 
 
-def _decode(raw, typ):
+def decode(raw):
     """Verify a token and return its claims. No I/O happens here.
 
     Pinning `algorithms` is what stops an `alg: none` token and an
-    algorithm-confusion token; checking `typ` is what stops a refresh token
-    presented as an access token.
+    algorithm-confusion token. `typ` is what carries the power of a token, so a
+    value outside the two this module mints is refused here rather than
+    interpreted by a caller below.
     """
     if not isinstance(raw, str):
         raise _invalid_token()
@@ -117,13 +113,13 @@ def _decode(raw, typ):
         )
     except jwt.PyJWTError:
         raise _invalid_token()
-    if claims["typ"] != typ or claims["scope"] not in (FULL, REGISTER):
+    if claims["typ"] not in (SESSION, REGISTER):
         raise _invalid_token()
     return claims
 
 
 def _device_bound(claims):
-    """Every full-scope token names a device and the generation it was cut at."""
+    """Every session token names a device and the generation it was cut at."""
     try:
         uuid.UUID(str(claims["device_id"]))
     except (KeyError, TypeError, ValueError):
@@ -133,23 +129,17 @@ def _device_bound(claims):
     return claims
 
 
-def decode_access(raw):
-    claims = _decode(raw, ACCESS)
-    if claims["scope"] == FULL:
-        _device_bound(claims)
-    return claims
+def decode_session(raw):
+    """A session token, and nothing else.
 
-
-def decode_refresh(raw):
-    """A refresh token is always full scope: a register-scope token must never
-    rotate its way up to a device-bound pair."""
-    claims = _decode(raw, REFRESH)
-    if claims["scope"] != FULL:
-        raise _invalid_token()
-    _device_bound(claims)
-    if not isinstance(claims.get("rgen"), int):
-        raise _invalid_token()
-    return claims
+    A register token reaching here is authentic and is being used past the one
+    route it was given, which is a `403` rather than the `401` a token nobody
+    minted answers.
+    """
+    claims = decode(raw)
+    if claims["typ"] != SESSION:
+        raise ApiError(403, "scope_forbidden", SCOPE_FORBIDDEN)
+    return _device_bound(claims)
 
 
 def load_device(claims):
@@ -189,8 +179,8 @@ def load_device(claims):
 
 def load_register_user(claims):
     """The owner of a register-scope token, or None when the account is gone or
-    the operator deactivated it. A register token names no device, so the two
-    device generations have nothing to check here."""
+    the operator deactivated it. A register token names no device, so the device
+    generation has nothing to check here."""
     return User.objects.filter(id=claims["user_id"], is_active=True).only("id").first()
 
 
@@ -210,11 +200,9 @@ def bearer(request):
 
 
 async def require_full_device(request: Request) -> Principal:
-    """The default requirement of every route: a full-scope, device-bound token
-    whose device is live and whose account is active."""
-    claims = decode_access(bearer(request))
-    if claims["scope"] != FULL:
-        raise ApiError(403, "scope_forbidden", SCOPE_FORBIDDEN)
+    """The default requirement of every route: a session token whose device is
+    live and whose account is active."""
+    claims = decode_session(bearer(request))
     device = await run_unit(load_device, claims)
     if device is None:
         raise ApiError(401, "token_revoked", TOKEN_REVOKED)
@@ -226,12 +214,13 @@ async def require_full_device(request: Request) -> Principal:
 async def require_register_or_full(request: Request) -> Principal:
     """The requirement of device registration, and of nothing else.
 
-    A register-scope token names no device, so the principal it builds carries
-    none; the route it reaches is the one that mints the device the caller lacks.
-    Every other route takes `require_full_device`, which refuses that token.
+    A register token names no device, so the principal it builds carries none;
+    the route it reaches is the one that mints the device the caller lacks. Every
+    other route takes `require_full_device`, which refuses that token.
     """
-    claims = decode_access(bearer(request))
-    if claims["scope"] == FULL:
+    claims = decode(bearer(request))
+    if claims["typ"] == SESSION:
+        _device_bound(claims)
         device = await run_unit(load_device, claims)
         if device is None:
             raise ApiError(401, "token_revoked", TOKEN_REVOKED)

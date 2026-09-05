@@ -16,7 +16,7 @@ import redis.asyncio
 
 from realtime import auth, bus, gateway
 
-from .conftest import bearer, connect_ok, mint_access, probe, ws
+from .conftest import bearer, connect_ok, mint_session, probe, ws
 from .test_log_silence import raw_root_capture
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -63,7 +63,7 @@ async def test_a_cancelled_socket_gives_its_topic_back(active_user, device):
     short leaves a sink registered for a topic nobody reads — the worker stays
     subscribed to a device that is gone — and a connection in `LIVE` that the
     next drain waits on."""
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
     topic = bus.device_topic(str(device.id))
     await wait_for(lambda: topic in bus.get_subscriber()._sinks)
 
@@ -80,7 +80,7 @@ async def test_a_socket_that_crashes_still_gives_its_topic_back(
     `except* _Stop` clause does not catch, so it propagates rather than closing
     cleanly. The cleanup is in a `finally` for exactly that case: without it a
     crashed socket keeps its topic and its place in `LIVE`."""
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
     topic = bus.device_topic(str(device.id))
     await wait_for(lambda: topic in bus.get_subscriber()._sinks)
 
@@ -110,7 +110,7 @@ async def test_a_bind_that_fails_after_its_subscribe_gives_its_topic_back(
 
     monkeypatch.setattr(auth, "touch_active", explode)
     topic = bus.device_topic(str(device.id))
-    comm = ws(bearer(await mint_access(active_user, device)))
+    comm = ws(bearer(await mint_session(active_user, device)))
 
     with pytest.raises(RuntimeError):
         await comm.connect(timeout=2)
@@ -129,7 +129,7 @@ async def test_a_bind_whose_subscribe_fails_leaves_no_sink_behind(
         bus, "get_client", lambda: redis.asyncio.Redis.from_url(DEAD_REDIS_URL)
     )
     topic = bus.device_topic(str(device.id))
-    comm = ws(bearer(await mint_access(active_user, device)))
+    comm = ws(bearer(await mint_session(active_user, device)))
 
     with pytest.raises(redis.exceptions.ConnectionError):
         await comm.connect(timeout=2)
@@ -149,8 +149,8 @@ async def test_a_bind_that_fails_before_it_registers_still_fails_the_handshake(
     async def explode(*_args, **_kwargs):
         raise RuntimeError("the database was gone at the token check")
 
-    monkeypatch.setattr(auth, "authenticate_access", explode)
-    comm = ws(bearer(await mint_access(active_user, device)))
+    monkeypatch.setattr(auth, "authenticate_session", explode)
+    comm = ws(bearer(await mint_session(active_user, device)))
 
     with pytest.raises(RuntimeError):
         await comm.connect(timeout=2)
@@ -177,7 +177,7 @@ async def test_a_live_socket_still_receives_after_the_subscription_reconnects(
     that SUBSCRIBE except redis-py's own reconnect — so a socket that survives the
     drop but never hears again is the failure this pins."""
     monkeypatch.setattr(bus, "RECONNECT_DELAY_SECONDS", 0.05)
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
     await probe(comm, device.id)
 
     await kill_the_subscription(settings)

@@ -18,10 +18,10 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from api.auth import issue_full, issue_register_scope
+from api.auth import issue_register_scope, issue_session
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
-from realtime.auth import _authenticate_access, _delete_envelopes, _touch_active
+from realtime.auth import _authenticate_session, _delete_envelopes, _touch_active
 
 pytestmark = pytest.mark.django_db
 
@@ -41,12 +41,12 @@ def _count(unit, *args):
     return [q["sql"] for q in ctx.captured_queries]
 
 
-def test_authenticate_access_is_one_joined_query(active_user, device):
+def test_authenticate_session_is_one_joined_query(active_user, device):
     """Device and user in one SELECT via select_related: the socket's auth is one
     query cheaper than REST's two-step lookup."""
-    access, _ = issue_full(active_user, device)
+    access, _ = issue_session(active_user, device)
 
-    queries = _count(_authenticate_access, access)
+    queries = _count(_authenticate_session, access)
 
     assert len(queries) == 1
     assert "JOIN" in queries[0]
@@ -86,9 +86,9 @@ def test_a_bind_costs_the_token_check_and_the_activity_stamp(active_user, device
     the token, one UPDATE to stamp the device active. Nothing here may grow with
     the mailbox or the account's device count, because it runs on every reconnect
     of every client."""
-    access, _ = issue_full(active_user, device)
+    access, _ = issue_session(active_user, device)
 
-    queries = _count(_authenticate_access, access) + _count(_touch_active, device.id)
+    queries = _count(_authenticate_session, access) + _count(_touch_active, device.id)
 
     assert len(queries) == 2
 
@@ -97,16 +97,16 @@ def test_a_token_that_fails_verification_costs_no_query_at_all(db):
     """Signature and expiry are settled in memory, before anything is looked up. A
     flood of garbage tokens against `/ws` is otherwise a flood of device lookups on
     the one thread every socket of the worker shares."""
-    assert _count(_authenticate_access, "not-a-jwt") == []
+    assert _count(_authenticate_session, "not-a-jwt") == []
 
 
 def test_a_register_scope_token_never_reaches_the_device_row(active_user):
     """Scope is checked before the lookup, so the endpoint a register token does
     not open costs it nothing to be refused from — and the refusal cannot be timed
     against a device row that may or may not exist."""
-    token = issue_register_scope(active_user)
+    token, _expires_in = issue_register_scope(active_user)
 
-    assert _count(_authenticate_access, token) == []
+    assert _count(_authenticate_session, token) == []
 
 
 def test_an_ack_naming_rows_that_are_not_there_is_still_one_statement(device):

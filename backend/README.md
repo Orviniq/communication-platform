@@ -197,9 +197,8 @@ Every environment variable the code reads, with its default:
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout and the gateway bus. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
 | `REDIS_COMMAND_TIMEOUT_SECONDS` | `2` | Connect and per-command timeout, seconds, for every Redis client of the process; a store that accepts the connection and then stops answering fails the command instead of holding its caller. The blocking pub/sub read of the gateway bus opts out of it |
 | `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs; at least 32 characters and never equal to `DJANGO_SECRET_KEY`, or `check --deploy` refuses it (`core.E005`) |
-| `ACCESS_MIN` | `15` | Access-token lifetime, minutes |
-| `REFRESH_DAYS` | `14` | Refresh-token lifetime, days |
-| `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-scope token lifetime, minutes |
+| `SESSION_TOKEN_DAYS` | `30` | Session-token lifetime, days |
+| `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-token lifetime, minutes |
 | `REQUEST_DEADLINE_SECONDS` | `15` | Deadline for a request FastAPI serves; past it the answer is `503 unavailable` |
 | `UPLOAD_DEADLINE_SECONDS` | `120` | Deadline for the attachment upload and the device/envelope batch routes |
 | `BODY_CAP_JSON_BYTES` | `16384` | Body cap for a small-JSON route, and for any path no route claims |
@@ -208,7 +207,6 @@ Every environment variable the code reads, with its default:
 | `MULTIPART_OVERHEAD_BYTES` | `8192` | Added to the largest attachment bucket to give `POST /api/v1/attachments` its cap |
 | `THROTTLE_REGISTER` | `10/hour` | Rate limit: account registration |
 | `THROTTLE_LOGIN` | `20/hour` | Rate limit: login |
-| `THROTTLE_REFRESH` | `120/hour` | Rate limit: token refresh |
 | `THROTTLE_ACCOUNTS` | `120/min` | Rate limit: general account and device endpoints |
 | `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey-bundle claims |
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |

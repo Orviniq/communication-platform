@@ -3,7 +3,7 @@ directory and the encrypted profile blobs.
 
 Two routers, and a route belongs to exactly one of them. `anonymous` declares
 that a route takes no credential; `authenticated` declares the default, which is
-a full-scope token bound to a live device. A route on neither is a failed gate,
+a session token bound to a live device. A route on neither is a failed gate,
 and `core/tests/test_route_table.py` is where it fails.
 """
 
@@ -18,13 +18,11 @@ from accounts.schemas import (
     LoginOut,
     ProfileIn,
     ProfileOut,
-    RefreshIn,
     RegisterIn,
     RegisterOut,
-    TokenPairOut,
+    SessionOut,
 )
-from api.auth import Principal, allow_anonymous, decode_refresh, require_full_device
-from api.errors import TOKEN_REVOKED, ApiError
+from api.auth import Principal, allow_anonymous, issue_session, require_full_device
 from api.orm import run_unit
 from api.ratelimit import rate_limit
 from api.schema import FULL_DEVICE, errors
@@ -59,7 +57,7 @@ async def register(payload: RegisterIn):
     dependencies=[Depends(rate_limit("login"))],
 )
 async def login(payload: LoginIn):
-    """Two success shapes: a full-scope pair when `device_id` names a live device
+    """Two success shapes: a session token when `device_id` names a live device
     of this account, and a register-scope token otherwise."""
     return await run_unit(
         services.login,
@@ -69,24 +67,20 @@ async def login(payload: LoginIn):
     )
 
 
-@anonymous.post(
-    "/auth/refresh",
-    response_model=TokenPairOut,
-    responses=errors(
-        "invalid_request",
-        "invalid_token",
-        "token_revoked",
-        "payload_too_large",
-        "throttled",
-    ),
-    dependencies=[Depends(rate_limit("refresh"))],
+@authenticated.post(
+    "/auth/renew",
+    response_model=SessionOut,
+    responses=errors(*FULL_DEVICE, "throttled"),
+    dependencies=[Depends(rate_limit("accounts"))],
 )
-async def refresh(payload: RefreshIn):
-    claims = decode_refresh(payload.refresh)
-    pair = await run_unit(services.refresh, claims)
-    if pair is None:
-        raise ApiError(401, "token_revoked", TOKEN_REVOKED)
-    return pair
+async def renew(principal: Principal = Depends(require_full_device)):
+    """Takes no body: the caller is identified by the token it presents, and the
+    requirement above has already re-read the device row and its owner. Nothing
+    is written, so a client that repeats the call after a dropped connection gets
+    another token and loses nothing — the one it presented stays good until its
+    own `exp`."""
+    token, expires_in = issue_session(principal.user, principal.device)
+    return {"token": token, "expires_in": expires_in}
 
 
 @authenticated.post(
@@ -96,9 +90,9 @@ async def refresh(payload: RefreshIn):
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def logout(principal: Principal = Depends(require_full_device)):
-    """Takes no body: the caller is identified by the access token it presents,
-    and the device row is what carries the revocation. The presented token dies
-    with the rest of the family, so a second call with it answers 401."""
+    """Takes no body: the caller is identified by the token it presents, and the
+    device row is what carries the revocation. The presented token dies with
+    every other token of the device, so a second call with it answers 401."""
     await run_unit(services.logout, principal.user.id, principal.device.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

@@ -1,6 +1,6 @@
 """Every answer `backend/openapi.json` declares, produced by the running surface.
 
-`core/tests/artefact.py` reads the committed document and lists the 217
+`core/tests/artefact.py` reads the committed document and lists the 216
 `(method, template, status)` triples it declares. A document may declare a status
 no code path can reach, and nothing in the drift gate would notice: the gate
 proves the document matches the *routes*, not that the surface can actually
@@ -39,7 +39,6 @@ from hypothesis import strategies as st
 from accounts.models import ProfileBlob, User
 from api import app as api_app
 from api.app import create_app, wrap
-from api.auth import issue_full
 from attachments.models import Attachment
 from config.asgi import api_application, application, django_asgi_app
 from conftest import PASSWORD, AsgiClient
@@ -181,10 +180,6 @@ class Stage:
         return self._register(self.user)
 
     @functools.cached_property
-    def refresh_token(self):
-        return issue_full(self.user, self.device)[1]
-
-    @functools.cached_property
     def peer(self):
         """A second activated account. It never authenticates, so it is created
         with no usable password rather than paying for an Argon2 hash."""
@@ -310,13 +305,9 @@ def _login(stage):
     )
 
 
-@sample("POST", f"{PREFIX}/auth/refresh", "200")
-def _refresh(stage):
-    return Call(
-        "POST",
-        f"{PREFIX}/auth/refresh",
-        body={"json": {"refresh": stage.refresh_token}},
-    )
+@sample("POST", f"{PREFIX}/auth/renew", "200")
+def _renew(stage):
+    return Call("POST", f"{PREFIX}/auth/renew", stage.auth)
 
 
 @sample("POST", f"{PREFIX}/auth/logout", "204")
@@ -679,11 +670,6 @@ def _account_awaiting_activation(stage):
     return stage.http.post(
         f"{PREFIX}/auth/login", json={"username": dormant.username, "password": PASSWORD}
     )
-
-
-@drives("POST", f"{PREFIX}/auth/refresh", "401")
-def _refresh_token_is_not_a_token(stage):
-    return stage.http.post(f"{PREFIX}/auth/refresh", json={"refresh": "not.a.token"})
 
 
 # --- The seams: one request, one thing changed -----------------------------------

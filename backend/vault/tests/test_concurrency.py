@@ -13,7 +13,7 @@ from django.db import connection, connections, transaction
 from django.test import TransactionTestCase
 
 from accounts.models import User
-from api.auth import issue_full
+from api.auth import issue_session
 from config.asgi import api_application, application
 from conftest import AsgiClient, flush_redis
 from vault.models import KeyBackup
@@ -35,8 +35,8 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
         self.owner = User.objects.create_user(
             username="alice", password=PASSWORD, is_active=True
         )
-        access_low, _ = issue_full(self.owner, make_device(self.owner, 1))
-        access_high, _ = issue_full(self.owner, make_device(self.owner, 2))
+        access_low, _ = issue_session(self.owner, make_device(self.owner, 1))
+        access_high, _ = issue_session(self.owner, make_device(self.owner, 2))
         self.low = {"Authorization": f"Bearer {access_low}"}
         self.high = {"Authorization": f"Bearer {access_high}"}
         self.status_lock = threading.Lock()
@@ -160,7 +160,7 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
         other = User.objects.create_user(
             username="bob", password=PASSWORD, is_active=True
         )
-        access, _ = issue_full(other, make_device(other, 3))
+        access, _ = issue_session(other, make_device(other, 3))
         statuses = {}
         barrier = threading.Barrier(2)
         threads = [

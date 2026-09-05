@@ -11,7 +11,7 @@ import pytest
 from httpx import ASGITransport
 
 from accounts.models import User
-from api.auth import issue_full
+from api.auth import issue_session
 from api.orm import run_unit
 from api.redis import close_client
 from config.asgi import application
@@ -53,10 +53,10 @@ def peer_device(peer):
     )
 
 
-async def mint_access(user, device):
-    """A valid full-scope access token for a test device. Off the loop because the
-    token reads the device's two generation counters off the row."""
-    return (await run_unit(issue_full, user, device))[0]
+async def mint_session(user, device):
+    """A valid session token for a test device. Off the loop because the token
+    reads the device's generation counter off the row."""
+    return (await run_unit(issue_session, user, device))[0]
 
 
 def envelope_blob(fill=b"e"):

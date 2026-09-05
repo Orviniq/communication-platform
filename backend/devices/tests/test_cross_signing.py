@@ -336,7 +336,7 @@ def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(
     )
     assert first.status_code == 201
     device_id = first.json()["device_id"]
-    full = {"Authorization": f"Bearer {first.json()['access']}"}
+    full = {"Authorization": f"Bearer {first.json()['token']}"}
 
     # Signing happens here, over the assigned device_id — the client is not
     # guessing, and the server never sees the private half.

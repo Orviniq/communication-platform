@@ -62,8 +62,7 @@ def test_the_whole_device_lifecycle_emits_no_identifier_or_key(
         "uploaded label blob": payload["label_blob"],
         "claimed identity key": bundle["ik_pub"],
         "claimed one-time prekey": bundle["otpk"]["pub"],
-        "issued access token": registered.json()["access"],
-        "issued refresh token": registered.json()["refresh"],
+        "issued session token": registered.json()["token"],
     }
     for line in lines:
         for label, secret in forbidden.items():

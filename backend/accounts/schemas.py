@@ -104,10 +104,6 @@ class LoginIn(RequestModel):
     device_id: Annotated[uuid.UUID | None, Field(strict=False)] = None
 
 
-class RefreshIn(RequestModel):
-    refresh: Annotated[str, Field(max_length=4096)]
-
-
 class ProfileIn(BlobIn):
     blob: Annotated[str, Field(max_length=MAX_PROFILE_CHARS)]
 
@@ -121,18 +117,21 @@ class RegisterOut(BaseModel):
     user_id: uuid.UUID
 
 
-class TokenPairOut(BaseModel):
-    access: str
-    refresh: str
+class SessionOut(BaseModel):
+    """What `POST /auth/renew` answers: the same session, on a later token."""
+
+    token: str
+    expires_in: int
 
 
 class RegisterScopeOut(BaseModel):
     """The login answer when the request named no live device of the account: a
-    short token whose only power is `POST /me/devices`. It carries no refresh
-    token, because the pair a refresh rotates is bound to a device."""
+    short token whose only power is `POST /me/devices`. It names no device,
+    because a session token is bound to one."""
 
     scope: Literal["register"]
-    access: str
+    token: str
+    expires_in: int
     user_id: uuid.UUID
 
 
@@ -140,8 +139,8 @@ class FullScopeOut(BaseModel):
     """The login answer when the request named a live device of the account."""
 
     scope: Literal["full"]
-    access: str
-    refresh: str
+    token: str
+    expires_in: int
     user_id: uuid.UUID
     device_id: uuid.UUID
 

@@ -9,7 +9,7 @@ import base64
 
 import pytest
 
-from api.auth import issue_full
+from api.auth import issue_session
 from core.buckets import ENVELOPE_BUCKETS
 from devices.models import Device, OneTimePrekey, PqOneTimePrekey
 from messaging.models import QueuedEnvelope
@@ -58,12 +58,12 @@ def test_revocation_returns_204_and_marks_the_row(
     assert doomed.revoked_date is not None
 
 
-def test_the_revoked_devices_access_token_is_rejected(
+def test_the_revoked_devices_session_token_is_rejected(
     http, active_user, device, bearer, doomed
 ):
     """(a) `token_generation` is bumped, so the authentication dependency refuses
-    every outstanding access token for it."""
-    access, _refresh = issue_full(active_user, doomed)
+    every outstanding token for it."""
+    access, _expires_in = issue_session(active_user, doomed)
     assert http.get(DEVICES_URL, headers=access_headers(access)).status_code == 200
 
     http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
@@ -73,15 +73,16 @@ def test_the_revoked_devices_access_token_is_rejected(
     assert response.json()["code"] == "token_revoked"
 
 
-def test_the_revoked_devices_refresh_token_fails(
+def test_the_revoked_device_cannot_renew_its_token(
     http, active_user, device, bearer, doomed
 ):
-    """(b) Refresh re-checks the device, so it cannot mint a fresh pair."""
-    _access, refresh = issue_full(active_user, doomed)
+    """(b) Renewal re-checks the device through the same requirement, so it
+    cannot mint a token that outlives the revocation."""
+    access, _expires_in = issue_session(active_user, doomed)
 
     http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
-    response = http.post("/api/v1/auth/refresh", json={"refresh": refresh})
+    response = http.post("/api/v1/auth/renew", headers=access_headers(access))
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
 
@@ -150,7 +151,7 @@ def test_the_device_list_etag_changes(
 def test_a_sibling_device_is_untouched(http, active_user, device, bearer, doomed):
     """The cascade is scoped to one device, not the account."""
     stock_prekeys(device, 2, start=500)
-    survivor_access, _ = issue_full(active_user, device)
+    survivor_access, _ = issue_session(active_user, device)
 
     http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
@@ -262,7 +263,7 @@ def test_a_revoked_device_cannot_replenish_its_own_prekeys(
     """The token generation bump reaches every route the device had, not just the
     list: a revoked device must not be able to refill the pool the revocation just
     emptied."""
-    access, _refresh = issue_full(active_user, doomed)
+    access, _expires_in = issue_session(active_user, doomed)
     http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
     response = http.put(

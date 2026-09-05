@@ -1,19 +1,20 @@
-"""Registration, login, and the token lifecycle.
+"""Registration, login, renewal, and logout.
 
-Every route here answers through FastAPI. The token semantics are ADR-0006's:
-no token is stored, and revocation is the two generation counters on the device
-row. `token_generation` kills every token of the device; `refresh_generation`
-kills every refresh token issued before the last rotation.
+Every route here answers through FastAPI. The token semantics are ADR-0023's:
+one device-bound session token, no token stored, and revocation is the one
+generation counter on the device row. `token_generation` kills every token of
+the device at once, and nothing else ends a token before its own `exp`.
 """
 
 from unittest import mock
 
 import pytest
+from django.conf import settings
 from django.contrib.auth.hashers import check_password
 
 from accounts.models import User
 from accounts.services import DUMMY_HASH
-from api.auth import issue_full, issue_register_scope
+from api.auth import decode, issue_session
 from conftest import PASSWORD
 from devices.models import Device
 
@@ -25,7 +26,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 GOOD_PASSWORD = "a-sufficiently-long-passphrase"
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
-REFRESH_URL = "/api/v1/auth/refresh"
+RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
 DIRECTORY_URL = "/api/v1/users"
 
@@ -165,9 +166,10 @@ class TestLogin:
         body = response.json()
         assert response.status_code == 200
         assert body["scope"] == "register"
-        assert set(body) == {"access", "user_id", "scope"}
+        assert set(body) == {"token", "expires_in", "user_id", "scope"}
+        assert body["expires_in"] == settings.REGISTER_SCOPE_ACCESS_MIN * 60
 
-    def test_with_a_live_device_a_full_scope_pair_is_issued(
+    def test_with_a_live_device_a_session_token_is_issued(
         self, http, active_user, device
     ):
         response = http.post(
@@ -181,16 +183,19 @@ class TestLogin:
 
         body = response.json()
         assert response.status_code == 200
+        assert set(body) == {"token", "expires_in", "user_id", "scope", "device_id"}
         assert body["scope"] == "full"
         assert body["device_id"] == str(device.id)
-        assert body["access"] and body["refresh"]
+        assert body["expires_in"] == settings.SESSION_TOKEN_DAYS * 86400
+        assert decode(body["token"])["typ"] == "session"
 
-    def test_login_retires_the_refresh_tokens_the_device_already_held(
+    def test_a_login_leaves_the_tokens_the_device_already_held_alive(
         self, http, active_user, device
     ):
-        """A login advances the refresh generation, so a refresh token minted
-        before it is a replay and dies with the rest of its family."""
-        _access, older = issue_full(active_user, device)
+        """No rotation: the token a client held before the login is still the
+        same session afterwards, so two clients of one device never race each
+        other out of it."""
+        older, _expires_in = issue_session(active_user, device)
 
         http.post(
             LOGIN_URL,
@@ -202,10 +207,9 @@ class TestLogin:
         )
 
         device.refresh_from_db()
-        assert device.refresh_generation == 2
-        replay = http.post(REFRESH_URL, json={"refresh": older})
-        assert replay.status_code == 401
-        assert replay.json()["code"] == "token_revoked"
+        assert device.token_generation == 1
+        still_live = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {older}"})
+        assert still_live.status_code == 200
 
     def test_revoked_device_falls_back_to_register_scope(self, http, active_user, device):
         device.revoked_date = "2026-01-01"
@@ -265,140 +269,95 @@ class TestLogin:
 
         assert response.json()["scope"] == "register"
         their_device.refresh_from_db()
-        assert their_device.refresh_generation == 1
+        assert their_device.token_generation == 1
 
 
-class TestRefresh:
-    def test_rotation_returns_a_new_pair_and_advances_the_generation(
-        self, http, active_user, device
+class TestRenew:
+    def test_a_session_token_buys_another_one_and_writes_nothing(
+        self, http, active_user, device, bearer
     ):
-        _access, original = issue_full(active_user, device)
+        response = http.post(RENEW_URL, headers=bearer(active_user, device))
 
-        rotated = http.post(REFRESH_URL, json={"refresh": original})
-
-        assert rotated.status_code == 200
-        assert set(rotated.json()) == {"access", "refresh"}
-        assert rotated.json()["refresh"] != original
+        body = response.json()
+        assert response.status_code == 200
+        assert set(body) == {"token", "expires_in"}
+        assert body["expires_in"] == settings.SESSION_TOKEN_DAYS * 86400
         device.refresh_from_db()
-        assert device.refresh_generation == 2
+        assert device.token_generation == 1
 
-    def test_the_rotated_pair_still_works(self, http, active_user, device, bearer):
-        _access, original = issue_full(active_user, device)
-        rotated = http.post(REFRESH_URL, json={"refresh": original}).json()
-
-        assert (
-            http.get(
-                DIRECTORY_URL,
-                headers={"Authorization": f"Bearer {rotated['access']}"},
-            ).status_code
-            == 200
-        )
-        assert (
-            http.post(REFRESH_URL, json={"refresh": rotated["refresh"]}).status_code
-            == 200
-        )
-
-    def test_replaying_a_rotated_refresh_kills_the_whole_family(
-        self, http, active_user, device
+    def test_the_presented_token_stays_valid_beside_the_new_one(
+        self, http, active_user, device, bearer
     ):
-        """Reuse detection. The device row is the family: a stale `rgen` with a
-        live `tgen` advances `token_generation`, so the access token and the
-        refresh token of the newest pair die alongside the replayed one."""
-        _access, original = issue_full(active_user, device)
-        newest = http.post(REFRESH_URL, json={"refresh": original}).json()
+        """The whole of the change from rotation: renewing invalidates nothing,
+        so a client that renews twice from two isolates keeps three working
+        tokens rather than losing its session to the loser of a race."""
+        headers = bearer(active_user, device)
 
-        replay = http.post(REFRESH_URL, json={"refresh": original})
+        first = http.post(RENEW_URL, headers=headers).json()["token"]
+        second = http.post(RENEW_URL, headers=headers).json()["token"]
 
-        assert replay.status_code == 401
-        assert replay.json()["code"] == "token_revoked"
-        device.refresh_from_db()
-        assert device.token_generation == 2
-        assert (
-            http.get(
-                DIRECTORY_URL, headers={"Authorization": f"Bearer {newest['access']}"}
-            ).status_code
-            == 401
-        )
-        assert (
-            http.post(REFRESH_URL, json={"refresh": newest["refresh"]}).status_code == 401
+        assert first != second
+        for token in (headers["Authorization"].split()[1], first, second):
+            live = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {token}"})
+            assert live.status_code == 200
+
+    def test_the_renewed_token_can_renew_again(self, http, active_user, device, bearer):
+        renewed = http.post(RENEW_URL, headers=bearer(active_user, device)).json()
+
+        again = http.post(
+            RENEW_URL, headers={"Authorization": f"Bearer {renewed['token']}"}
         )
 
-    def test_revoked_device_kills_the_refresh_immediately(
-        self, http, active_user, device
-    ):
-        _access, refresh = issue_full(active_user, device)
+        assert again.status_code == 200
+
+    def test_a_revoked_device_cannot_renew(self, http, active_user, device, bearer):
+        headers = bearer(active_user, device)
         device.revoked_date = "2026-01-01"
         device.save(update_fields=["revoked_date"])
 
-        response = http.post(REFRESH_URL, json={"refresh": refresh})
+        response = http.post(RENEW_URL, headers=headers)
 
         assert response.status_code == 401
         assert response.json()["code"] == "token_revoked"
 
-    def test_bumping_token_generation_kills_the_refresh(self, http, active_user, device):
-        _access, refresh = issue_full(active_user, device)
-        device.token_generation += 1
-        device.save(update_fields=["token_generation"])
+    def test_a_logged_out_device_cannot_renew(self, http, active_user, device, bearer):
+        headers = bearer(active_user, device)
+        assert http.post(LOGOUT_URL, headers=headers).status_code == 204
 
-        response = http.post(REFRESH_URL, json={"refresh": refresh})
-
-        assert response.status_code == 401
-        assert response.json()["code"] == "token_revoked"
-
-    def test_an_access_token_is_not_a_refresh_token(self, http, active_user, device):
-        """Both are signed with the same key; only the `typ` claim separates
-        them, and every decode pins it."""
-        access, _refresh = issue_full(active_user, device)
-
-        response = http.post(REFRESH_URL, json={"refresh": access})
-
-        assert response.status_code == 401
-        assert response.json()["code"] == "invalid_token"
-
-    def test_a_register_scope_token_never_rotates_up(self, http, active_user):
-        response = http.post(
-            REFRESH_URL, json={"refresh": issue_register_scope(active_user)}
-        )
-
-        assert response.status_code == 401
-        assert response.json()["code"] == "invalid_token"
-
-    def test_a_refresh_cannot_borrow_another_users_device(
-        self, http, active_user, device
-    ):
-        intruder = User.objects.create_user(
-            username="mallory", password=PASSWORD, is_active=True
-        )
-        their_device = Device.objects.create(
-            user=intruder,
-            ik_pub=b"ik",
-            spk_id=1,
-            spk_pub=b"spk",
-            spk_sig=b"sig",
-            registration_id=8,
-        )
-        _access, theirs = issue_full(intruder, their_device)
-        # The signature is valid; the device is simply not this account's.
-        assert http.post(REFRESH_URL, json={"refresh": theirs}).status_code == 200
-        their_device.delete()
-
-        response = http.post(REFRESH_URL, json={"refresh": theirs})
+        response = http.post(RENEW_URL, headers=headers)
 
         assert response.status_code == 401
         assert response.json()["code"] == "token_revoked"
 
-    def test_deactivated_account_cannot_refresh(self, http, active_user, device):
-        _access, refresh = issue_full(active_user, device)
+    def test_a_deactivated_account_cannot_renew(self, http, active_user, device, bearer):
+        headers = bearer(active_user, device)
         active_user.is_active = False
         active_user.save(update_fields=["is_active"])
 
-        response = http.post(REFRESH_URL, json={"refresh": refresh})
+        response = http.post(RENEW_URL, headers=headers)
 
         assert response.status_code == 401
         assert response.json()["code"] == "token_revoked"
 
+    def test_a_register_token_cannot_renew_its_way_to_a_session(
+        self, http, active_user, register_bearer
+    ):
+        """The register token is the one credential an account with no device
+        holds. Renewing with it would mint the device-bound token its holder was
+        deliberately not given."""
+        response = http.post(RENEW_URL, headers=register_bearer(active_user))
+
+        assert response.status_code == 403
+        assert response.json()["code"] == "scope_forbidden"
+
+    def test_renewal_requires_authentication(self, http):
+        response = http.post(RENEW_URL)
+
+        assert response.status_code == 401
+        assert response.json()["code"] == "unauthenticated"
+
     def test_a_garbage_token_is_an_invalid_token(self, http):
-        response = http.post(REFRESH_URL, json={"refresh": "not-a-jwt"})
+        response = http.post(RENEW_URL, headers={"Authorization": "Bearer not-a-jwt"})
 
         assert response.status_code == 401
         assert response.json()["code"] == "invalid_token"
@@ -409,7 +368,7 @@ class TestLogout:
         self, http, active_user, device, bearer
     ):
         headers = bearer(active_user, device)
-        access, refresh = issue_full(active_user, device)
+        sibling, _expires_in = issue_session(active_user, device)
 
         response = http.post(LOGOUT_URL, headers=headers)
 
@@ -419,15 +378,14 @@ class TestLogout:
         assert device.token_generation == 2
         assert (
             http.get(
-                DIRECTORY_URL, headers={"Authorization": f"Bearer {access}"}
+                DIRECTORY_URL, headers={"Authorization": f"Bearer {sibling}"}
             ).status_code
             == 401
         )
-        assert http.post(REFRESH_URL, json={"refresh": refresh}).status_code == 401
 
     def test_takes_no_body_and_ignores_one(self, http, active_user, device, bearer):
         response = http.post(
-            LOGOUT_URL, headers=bearer(active_user, device), json={"refresh": "junk"}
+            LOGOUT_URL, headers=bearer(active_user, device), json={"token": "junk"}
         )
 
         assert response.status_code == 204
@@ -435,8 +393,8 @@ class TestLogout:
     def test_the_presented_token_cannot_log_out_twice(
         self, http, active_user, device, bearer
     ):
-        """Logout advances the token generation, so the access token that
-        performed it is finished the moment it succeeds."""
+        """Logout advances the token generation, so the token that performed it
+        is finished the moment it succeeds."""
         headers = bearer(active_user, device)
 
         assert http.post(LOGOUT_URL, headers=headers).status_code == 204
@@ -457,13 +415,13 @@ class TestLogout:
             spk_sig=b"sig",
             registration_id=9,
         )
-        _victim_access, victim_refresh = issue_full(victim, victim_device)
+        victim_headers = bearer(victim, victim_device)
 
         assert (
             http.post(LOGOUT_URL, headers=bearer(active_user, device)).status_code == 204
         )
 
-        assert http.post(REFRESH_URL, json={"refresh": victim_refresh}).status_code == 200
+        assert http.post(RENEW_URL, headers=victim_headers).status_code == 200
 
     def test_requires_authentication(self, http):
         response = http.post(LOGOUT_URL)
@@ -573,46 +531,13 @@ class TestLoginLockout:
         assert response.json()["code"] == "unavailable"
 
 
-class TestTheAccountSideOfReplay:
-    """What a rotation, a revocation and a deactivation look like from the account
+class TestTheAccountSideOfRevocation:
+    """What a logout, a revocation and a deactivation look like from the account
     rather than from the token. The verifier's half — what a claim set must carry
     and how a signature is checked — is `test_device_auth.py`."""
 
-    def test_a_login_retires_the_refresh_but_leaves_the_access_token_alive(
-        self, http, active_user, device
-    ):
-        """The two counters draw a line ADR-0006 depends on: a login advances the
-        refresh generation only, so the pair a second client is holding keeps
-        working until its access token expires on its own."""
-        access, older = issue_full(active_user, device)
-
-        http.post(
-            LOGIN_URL,
-            json={
-                "username": "alice",
-                "password": PASSWORD,
-                "device_id": str(device.id),
-            },
-        )
-
-        device.refresh_from_db()
-        assert (device.token_generation, device.refresh_generation) == (1, 2)
-        assert (
-            http.get(
-                DIRECTORY_URL, headers={"Authorization": f"Bearer {access}"}
-            ).status_code
-            == 200
-        )
-
-        replay = http.post(REFRESH_URL, json={"refresh": older})
-
-        assert replay.status_code == 401
-        device.refresh_from_db()
-        # The replay ended the family; the login before it had not.
-        assert device.token_generation == 2
-
-    def test_a_login_on_one_device_never_touches_another_devices_pair(
-        self, http, active_user, device
+    def test_a_logout_on_one_device_never_ends_another_device_of_the_account(
+        self, http, active_user, device, bearer
     ):
         second = Device.objects.create(
             user=active_user,
@@ -622,26 +547,19 @@ class TestTheAccountSideOfReplay:
             spk_sig=b"sig",
             registration_id=2002,
         )
-        _access, untouched = issue_full(active_user, second)
+        untouched = bearer(active_user, second)
 
-        http.post(
-            LOGIN_URL,
-            json={
-                "username": "alice",
-                "password": PASSWORD,
-                "device_id": str(device.id),
-            },
-        )
+        http.post(LOGOUT_URL, headers=bearer(active_user, device))
 
-        assert http.post(REFRESH_URL, json={"refresh": untouched}).status_code == 200
+        assert http.get(DIRECTORY_URL, headers=untouched).status_code == 200
         second.refresh_from_db()
-        assert second.refresh_generation == 2  # advanced by its own rotation, not ours
+        assert second.token_generation == 1
 
     def test_logout_ends_the_session_without_ending_the_device(
         self, http, active_user, device, bearer
     ):
         """Logout is not revocation: the device row stays live, so the same device
-        signs in again and is handed a working pair."""
+        signs in again and is handed a working token."""
         http.post(LOGOUT_URL, headers=bearer(active_user, device))
 
         device.refresh_from_db()
@@ -660,36 +578,35 @@ class TestTheAccountSideOfReplay:
         assert (
             http.get(
                 DIRECTORY_URL,
-                headers={"Authorization": f"Bearer {again.json()['access']}"},
+                headers={"Authorization": f"Bearer {again.json()['token']}"},
             ).status_code
             == 200
         )
 
-    def test_a_replay_after_a_logout_escalates_nothing_further(
+    def test_a_dead_token_presented_after_a_logout_advances_nothing_further(
         self, http, active_user, device, bearer
     ):
-        """A refresh token whose generation is already behind the row is refused on
-        that alone, so replaying one after a logout cannot advance the counter a
+        """A token whose generation is already behind the row is refused on that
+        alone, so presenting one after a logout cannot advance the counter a
         second time and cut a session the account has since started."""
-        _access, stale = issue_full(active_user, device)
-        http.post(LOGOUT_URL, headers=bearer(active_user, device))
+        stale = bearer(active_user, device)
+        http.post(LOGOUT_URL, headers=stale)
 
-        replay = http.post(REFRESH_URL, json={"refresh": stale})
+        refused = http.post(LOGOUT_URL, headers=stale)
 
-        assert replay.status_code == 401
-        assert replay.json()["code"] == "token_revoked"
+        assert refused.status_code == 401
+        assert refused.json()["code"] == "token_revoked"
         device.refresh_from_db()
         assert device.token_generation == 2
 
     def test_deactivating_an_account_freezes_its_live_tokens_and_thaws_them_back(
-        self, http, active_user, device
+        self, http, active_user, device, bearer
     ):
         """Deactivation is a flag on the account, not a generation bump: every live
         token stops working while the flag is down and works again if the operator
         puts it back. The irreversible answer is revoking the devices, which is what
         the panel's other action does."""
-        access, refresh = issue_full(active_user, device)
-        auth = {"Authorization": f"Bearer {access}"}
+        auth = bearer(active_user, device)
         active_user.is_active = False
         active_user.save(update_fields=["is_active"])
 
@@ -697,13 +614,13 @@ class TestTheAccountSideOfReplay:
         device.refresh_from_db()
         assert frozen.status_code == 401
         assert frozen.json()["code"] == "token_revoked"
-        assert (device.token_generation, device.refresh_generation) == (1, 1)
+        assert device.token_generation == 1
 
         active_user.is_active = True
         active_user.save(update_fields=["is_active"])
 
         assert http.get(DIRECTORY_URL, headers=auth).status_code == 200
-        assert http.post(REFRESH_URL, json={"refresh": refresh}).status_code == 200
+        assert http.post(RENEW_URL, headers=auth).status_code == 200
 
     def test_a_deactivated_account_cannot_sign_in_to_mint_new_tokens(
         self, http, active_user, device
@@ -800,7 +717,7 @@ class TestRegistrationCannotTakeOverAName:
 
 
 def test_the_api_login_writes_no_login_timing(http, active_user, device):
-    """ADR-0006 stores no token because a per-device login record at rest is the
+    """ADR-0023 stores no token because a per-device login record at rest is the
     login history a seizure would otherwise yield. A `last_login` written by the
     client-facing login would be that record by another name, so this route must
     leave the column alone.

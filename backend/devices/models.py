@@ -56,10 +56,9 @@ class Device(models.Model):
     label_blob = OpaqueBlobField(bucket_set=LABEL_BUCKETS, null=True)
     # Bumping this invalidates every outstanding JWT for this device.
     token_generation = models.PositiveIntegerField(default=1)
-    # Bumping this invalidates every outstanding refresh token for this device.
-    # A login advances it, and so does each rotation; a refresh that presents an
-    # older value is a replay of a token that was already rotated, which is what
-    # makes reuse detectable with no token table.
+    # Retired by ADR-0023 with the refresh token it counted. Nothing reads it and
+    # nothing writes it; the column stays until the next run drops it, because a
+    # column leaves in two steps and this is the first.
     refresh_generation = models.PositiveIntegerField(default=1)
     created_date = models.DateField(auto_now_add=True)
     last_active_date = models.DateField(null=True)

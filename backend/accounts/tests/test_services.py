@@ -13,7 +13,6 @@ import pytest
 
 from accounts import services
 from accounts.models import ProfileBlob, User
-from api.auth import decode_refresh, issue_full
 from api.errors import ApiError
 from conftest import PASSWORD
 from core.buckets import PROFILE_BUCKETS
@@ -101,19 +100,19 @@ class TestLogin:
     def test_without_a_device_only_a_register_scope_token_comes_back(self, active_user):
         body = services.login("alice", PASSWORD, None)
 
-        assert set(body) == {"access", "user_id", "scope"}
+        assert set(body) == {"token", "expires_in", "user_id", "scope"}
         assert body["scope"] == "register"
         assert body["user_id"] == str(active_user.id)
 
-    def test_a_device_of_this_account_advances_its_refresh_generation_once(
+    def test_a_device_of_this_account_is_named_and_its_row_is_left_alone(
         self, active_user, device
     ):
         body = services.login("alice", PASSWORD, device.id)
 
         device.refresh_from_db()
+        assert set(body) == {"token", "expires_in", "user_id", "scope", "device_id"}
         assert body["scope"] == "full"
         assert body["device_id"] == str(device.id)
-        assert device.refresh_generation == 2
         assert device.token_generation == 1
 
     def test_a_revoked_device_falls_back_and_its_generation_is_left_alone(
@@ -126,16 +125,16 @@ class TestLogin:
 
         device.refresh_from_db()
         assert body["scope"] == "register"
-        assert device.refresh_generation == 1
+        assert device.token_generation == 1
 
-    def test_a_device_of_another_account_is_never_rotated(self, active_user):
+    def test_a_device_of_another_account_is_never_honoured(self, active_user):
         _owner, theirs = other_account_device("mallory", 7)
 
         body = services.login("alice", PASSWORD, theirs.id)
 
         theirs.refresh_from_db()
         assert body["scope"] == "register"
-        assert theirs.refresh_generation == 1
+        assert theirs.token_generation == 1
 
     def test_a_device_id_that_names_nothing_falls_back_to_register_scope(
         self, active_user
@@ -143,64 +142,6 @@ class TestLogin:
         body = services.login("alice", PASSWORD, uuid.uuid4())
 
         assert body["scope"] == "register"
-
-
-class TestRefresh:
-    def claims_for(self, user, device):
-        _access, token = issue_full(user, device)
-        return decode_refresh(token)
-
-    def test_a_rotation_advances_only_the_refresh_generation(self, active_user, device):
-        pair = services.refresh(self.claims_for(active_user, device))
-
-        device.refresh_from_db()
-        assert set(pair) == {"access", "refresh"}
-        assert device.refresh_generation == 2
-        assert device.token_generation == 1
-
-    def test_a_replayed_refresh_returns_nothing_and_ends_the_family(
-        self, active_user, device
-    ):
-        claims = self.claims_for(active_user, device)
-        services.refresh(claims)
-
-        assert services.refresh(claims) is None
-        device.refresh_from_db()
-        assert device.token_generation == 2
-
-    def test_a_stale_token_generation_returns_nothing_and_writes_nothing(
-        self, active_user, device
-    ):
-        claims = self.claims_for(active_user, device)
-        claims["tgen"] = device.token_generation - 1
-
-        assert services.refresh(claims) is None
-        device.refresh_from_db()
-        assert (device.token_generation, device.refresh_generation) == (1, 1)
-
-    def test_a_revoked_device_returns_nothing(self, active_user, device):
-        claims = self.claims_for(active_user, device)
-        device.revoked_date = "2026-01-01"
-        device.save(update_fields=["revoked_date"])
-
-        assert services.refresh(claims) is None
-
-    def test_a_deactivated_account_returns_nothing(self, active_user, device):
-        claims = self.claims_for(active_user, device)
-        active_user.is_active = False
-        active_user.save(update_fields=["is_active"])
-
-        assert services.refresh(claims) is None
-
-    def test_claims_naming_another_accounts_device_return_nothing(
-        self, active_user, device, bob
-    ):
-        claims = self.claims_for(active_user, device)
-        claims["user_id"] = str(bob.id)
-
-        assert services.refresh(claims) is None
-        device.refresh_from_db()
-        assert device.token_generation == 1
 
 
 class TestLogout:
