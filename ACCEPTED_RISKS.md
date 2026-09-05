@@ -735,6 +735,63 @@ revocation — which needs the record of issued credentials this design refuses 
 
 ---
 
+## AR-18 — A stolen session token is valid until it expires, and nothing detects the theft
+
+**What is exposed.** A session token lives `SESSION_TOKEN_DAYS`, 30 days by default, and
+nothing rotates it. Whoever holds a copy of one holds the calling device's whole
+authenticated surface for the rest of its lifetime: the directory, the profile and key
+backup blobs, the device list and the device-list log, the mailbox, the attachments, the
+relay credential and the WebSocket. Until
+[ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md) the refresh
+token rotated on every use and a second presentation of a rotated one was reported as a
+replay, which ended every token of the device. That detection is gone with the refresh
+token, so a stolen token now looks exactly like the honest one that was copied.
+
+**Why this is carried.** The detection cost the honest device more than it cost a thief.
+The client is one Flutter application whose two Dart isolates share one token from one
+encrypted store; at expiry both rotate, one loses, and the loser's presentation is
+indistinguishable from a replay — so the honest device was signed out. The client answered
+with an in-process ownership gate, a bounded re-read repair path and a three-owner
+arbitration (`frontend/docs/decisions.md` ADR-049 and ADR-050,
+`frontend/docs/sync-engine.md`), which is a consensus problem inside one process caused
+entirely by the server making one token unshareable.
+
+What the detection defended was also narrower than it looks. The adversary of this threat
+model holds live root on the VPS, and therefore `JWT_SIGNING_KEY`; that adversary mints
+whatever token it likes and never touches a refresh route. What is left is a token taken
+off a client, and the client stores it in a SQLCipher database under a Keystore-wrapped
+key and sends it only over TLS pinned to the provisioned private CA. Reuse detection
+defended the case those two already cover, and it ended honest sessions to do it.
+
+**What reduces it today.**
+
+- The token is device-bound. `tgen` is checked against `Device.token_generation` on every
+  request and at every socket bind, so a logout, a device revocation or an account
+  deactivation ends it at once, from any device of the account or from the admin panel.
+- Its power is bounded by what the server holds, which is opaque bucket-padded ciphertext,
+  public keys and no message history. It decrypts nothing: no content key reaches this
+  server.
+- It cannot escalate. `typ` is `session`, so it reaches no admin surface, and the panel is
+  a separate credential behind `ADMIN_PATH`.
+- 30 days is the whole exposure. It is a setting, `SESSION_TOKEN_DAYS`, and shortening it
+  costs only more frequent calls to `POST /api/v1/auth/renew`, which writes nothing and is
+  safe to repeat.
+
+**If it were exploited.** The holder reads and writes as that device until the lifetime
+runs out or the account revokes the device. They read the ciphertext addressed to it and
+can send ciphertext as it — which peers will reject, because the pairwise session keys are
+on the device and not in the token — and they can enumerate the account's devices and
+claim key material. No plaintext and no content key is reached from the token alone. The
+owner's remedy is immediate and total: revoke the device, and every token of it dies with
+the same counter that always ended them.
+
+**Trigger that ends the acceptance.** A client platform with a weaker token store than a
+Keystore-wrapped SQLCipher database, or evidence of a stolen token. The answer then is
+sender-constraining — a key the client holds and proves per request — rather than rotation,
+because rotation reintroduces the sign-out this row was written to remove.
+
+---
+
 ## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3

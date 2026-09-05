@@ -1,9 +1,15 @@
 # 0006. Device-bound tokens on PyJWT, with no token table
 
-- Status: Accepted
+- Status: Superseded
 - Phase: 2
 - Date: 2026-09-03
 - Landed: 2026-09-04, in the first run of phase 2
+- Superseded by [0023](0023-one-device-bound-session-token.md) on 2026-09-05: the
+  refresh token, the `rgen` claim, the `scope` claim, the rotation and its replay
+  detection are gone, and one device-bound session token renewed without rotation
+  replaces the pair. What that decision keeps from this one is the rest of it:
+  PyJWT with HS256, no token table, device binding through `tgen`, the algorithm
+  pin at every decode, and the register scope.
 
 ## Context
 
