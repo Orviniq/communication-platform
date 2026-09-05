@@ -37,7 +37,7 @@ can never clobber a newer backup — including two racing first uploads.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | PUT only | `application/json` |
 
 **Path parameters**

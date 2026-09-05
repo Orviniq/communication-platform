@@ -36,7 +36,7 @@ duplicate against its own quota.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | yes | `multipart/form-data` |
 
 **Path parameters**
@@ -135,7 +135,7 @@ visible.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 

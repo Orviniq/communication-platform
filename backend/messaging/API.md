@@ -65,7 +65,7 @@ deduplicates on its own message id; `CLIENT_CONTRACT.md` §H is where that duty 
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | yes | `application/json` |
 
 **Path parameters**
@@ -175,7 +175,7 @@ falls back to 100, a negative one clamps to 1.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, device-bound |
+| `Authorization` | yes | `Bearer <session token>`, device-bound |
 
 **Path parameters**
 
@@ -248,7 +248,7 @@ costs the client only the count.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, device-bound |
+| `Authorization` | yes | `Bearer <session token>`, device-bound |
 | `Content-Type` | yes | `application/json` |
 
 **Path parameters**
