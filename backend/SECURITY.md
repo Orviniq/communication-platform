@@ -71,7 +71,7 @@ holds *infrastructure* secrets:
 | DTLS-SRTP session keys (one per voice connection) | content | the two client endpoints of that connection | never (neither this server nor coturn holds one, and no application-level media key exists) | that connection's audio until it closes |
 | Recovery secret | content | user-held only | never | can unwrap the key backup → cross-signing private keys |
 | TLS private key | infrastructure | server (nginx) | yes (by definition) | impersonate transport (mitigated by client SPKI pinning); no message content |
-| JWT signing key | infrastructure | server env, at least 32 generated characters (`check --deploy` refuses less) | yes | mint tokens → account access; cannot decrypt any message |
+| JWT signing key | infrastructure | server env, at least 32 generated characters (`check --deploy` refuses less) | yes | mint session tokens → account access for `SESSION_TOKEN_DAYS` at a time; cannot decrypt any message |
 | coturn shared secret (`TURN_STATIC_AUTH_SECRET`) | infrastructure | server env, and `static-auth-secret` in the coturn configuration — one value in two places, at least 32 characters once `TURN_URLS` names a relay (`check --deploy` refuses less) | yes | mint relay credentials → relay bandwidth for each credential's lifetime (AR-17); cannot decrypt any audio, which is keyed by DTLS between the two client devices |
 | Django `SECRET_KEY`, Argon2 params | infrastructure | server env | yes | session/signing integrity; no message content |
 | Password hashes (Argon2id) | auth (not a key) | DB | yes (hash only) | offline guessing per account; no message content |
@@ -93,7 +93,9 @@ A full seizure of this server (disk + database) reveals, in total:
 - the **user list** — usernames, Argon2id password hashes, activation flags,
   day-granularity account creation (irreducible for an authenticating server);
 - per-user **device counts and public key material** — identity/prekey/ML-KEM public
-  keys, cross-signing public keys and their opaque signatures, day-granularity activity;
+  keys, cross-signing public keys and their opaque signatures, day-granularity activity,
+  and the device's revocation counter, one integer that says how many times its tokens
+  were ended and nothing about when or by whom;
 - per-user **device-list log records** — opaque client-signed blobs, day-coarse dates;
 - that **delivery happened, to which device, at hour granularity** — pending queue rows
   (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
@@ -251,14 +253,15 @@ None of these is ever described as one of the others.
   telemetry, no foreign STUN or TURN, no push relays — the system has no runtime
   dependency on any non-local network.
 - **Authentication vs encryption identity are never conflated.** The password authorizes
-  the account (Argon2id-hashed, device-bound short-lived JWTs with a rotating refresh);
-  a device's cryptographic identity is created client-side and only its public keys are
+  the account (Argon2id-hashed, and it issues one device-bound JWT of
+  `SESSION_TOKEN_DAYS`, renewed on demand and never rotated, ADR-0023); a device's
+  cryptographic identity is created client-side and only its public keys are
   uploaded. Five failed attempts on a name within fifteen minutes lock that name for
   fifteen minutes on both password surfaces — the API login and the admin panel —
   before any hash is computed, and a locked name answers the same whether or not an
   account holds it. Owner activation gates every account; revoking a device bumps its token
-  generation (access dies ≤ 15 min, refresh immediately) and deletes its queue and its
-  classical and PQ prekeys in one transaction.
+  generation, which kills every outstanding token of that device at once, and deletes its
+  queue and its classical and PQ prekeys in one transaction.
 - **A neighbouring process on the host is not trusted.** The VPS is shared, and
   loopback is reachable by every local process. Redis therefore requires a password
   in production (`manage.py check --deploy` refuses a `REDIS_URL` without one), and
@@ -268,12 +271,14 @@ None of these is ever described as one of the others.
   is kept off Redis entirely. What Redis holds is volatile and content-free either
   way; what the password protects is the integrity of the counters, the lockout, and
   the frames on the fan-out bus.
-- **No token is stored, so no login history exists at rest.** Revocation is two integers
-  on the device row: `token_generation`, checked on every request, and
-  `refresh_generation`, checked on every rotation. A refresh presented after it was
-  already rotated is a replay: it advances the token generation and every token of that
-  device dies. A token table would have been a per-device login record — which is to say
-  a login history — and this design refuses to keep one.
+- **No token is stored, so no login history exists at rest.** Revocation is one integer
+  on the device row: `token_generation`, checked on every request and at every socket
+  bind. A logout, a device revocation and an account deactivation each advance it, and
+  every outstanding token of that device dies at once. A token table would have been a
+  per-device login record — which is to say a login history — and this design refuses to
+  keep one. The price is stated in `ACCEPTED_RISKS.md` AR-18: nothing rotates, so a
+  token stolen from a device stays valid until its own expiry, and the server cannot
+  tell the copy from the original.
 
 ## Verification
 

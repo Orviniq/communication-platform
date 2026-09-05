@@ -234,11 +234,20 @@ a **cross-signature change** to any peer that polled in between, and §D require
 block the conversation and demand re-verification over it. Null is the state that means
 "not yet"; there is no signature-shaped value that means the same.
 
+Both flows begin with a login that names no device, and end holding one session
+token. There is one token in this system: `POST /auth/login` and `POST /me/devices`
+each answer `token` and `expires_in`, `POST /auth/renew` issues another without
+retiring the one you presented, and nothing rotates. A device may therefore hold
+several live tokens at once, and two of your isolates may renew concurrently without
+coordinating — the loser of that race keeps a working token rather than losing the
+session.
+
 **First device on a new account:**
 
-1. `POST /auth/login` → register-scope token (10 min; its only power is step 2).
+1. `POST /auth/login` with no `device_id` → `scope: "register"` and a register token
+   (10 min; its only power is step 2).
 2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201` with the assigned
-   `device_id` and a full-scope token pair.
+   `device_id` and a session token bound to it.
 3. `PUT /me/identity` — publish the cross-signing identity. Required before any *later*
    device can register, so do not defer it.
 4. `PUT /me/devices/{device_id}/prekeys` with `cross_sig` (over the bundle for the
@@ -250,11 +259,13 @@ block the conversation and demand re-verification over it. Null is the state tha
 
 **Every later device:**
 
-1. `POST /auth/login` → register-scope token.
-2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201`, `device_id`,
-   full-scope tokens. The account's identity must already be published or this is
-   `400 {"code":"identity_required"}`.
-3. `GET /me/keybackup` (needs the full scope from step 2) → unwrap with the user's
+1. `POST /auth/login` with no `device_id` → register token. A login that names an
+   existing device of the account answers that device's session token instead, which
+   is the sign-in path rather than the enrollment path.
+2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201`, `device_id`, and
+   the new device's session token. The account's identity must already be published or
+   this is `400 {"code":"identity_required"}`.
+3. `GET /me/keybackup` (needs the session token from step 2) → unwrap with the user's
    recovery secret → the account's **self-signing private key**. This is the only path to
    it; a device that cannot unwrap the backup can never be cross-signed, and the user
    must verify it out-of-band from an existing device instead.
@@ -335,12 +346,14 @@ is [`../CLIENT_WORK.md`](../CLIENT_WORK.md); what follows is the protocol.
 
 ## O. The `/ws` handshake
 
-- The token goes on the upgrade request, as `Authorization: Bearer <access token>`.
+- The token goes on the upgrade request, as `Authorization: Bearer <session token>`.
   There is one handshake path and this is it: the server refuses a handshake that
   carries no header, and there is no in-band authentication frame to fall back on.
 - A refusal is decided **before** the accept, so it reaches you as a failed upgrade
-  (`403 Forbidden`) and never as a close code. Read one as "refresh the access token
+  (`403 Forbidden`) and never as a close code. Read one as "renew the session token
   and reconnect"; a handler that waits for a close code there will never fire.
+- A token that expires while its socket is open does not close the socket. Only a
+  revocation does, as close code `4003`.
 - Treat a socket as a wake-up hint and never as the delivery contract. The durable
   queue is authoritative (§H), so reconnect with backoff and drain over REST rather
   than trusting a frame to arrive.
