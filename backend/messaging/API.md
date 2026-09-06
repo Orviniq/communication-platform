@@ -158,7 +158,14 @@ Returns the calling device's queued envelopes in ascending sequence order. `has_
 signals a further page. Envelopes stay queued until acked, so a crash between drain
 and processing loses nothing; clients drain, decrypt, persist locally, then ack.
 Undelivered envelopes are pruned after `ENVELOPE_TTL_DAYS` (default **7**), so a
-device offline longer than that loses whatever was queued for it.
+device offline longer than that loses whatever was queued for it. The window is
+counted in whole UTC days: an envelope carries the day it was enqueued on, and it is
+deleted once that day is more than `ENVELOPE_TTL_DAYS` behind today. An envelope
+therefore survives for the rest of the day its window ends on — up to one day longer
+than an hour-precise window would have kept it, never less — which is what the server
+records instead of the hour a device was addressed in ([ADR-0025](../../docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)).
+Read `envelope_ttl_days` from `GET /api/v1/config` rather than assuming 7, and treat
+it as a floor.
 
 `pruned_through` is the queue-gap signal that makes that loss detectable: it is the
 highest sequence number the TTL prune has ever deleted from this mailbox (0 if

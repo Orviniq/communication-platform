@@ -101,10 +101,12 @@ A full seizure of this server (disk + database) reveals, in total:
   seizure cannot separate a device in daily use from one that has not connected since
   the day it was added;
 - per-user **device-list log records** — opaque client-signed blobs and nothing else;
-- that **delivery happened, to which device, at hour granularity** — pending queue rows
-  (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
-  blob to a recipient device, never to a sender or a conversation; acked rows are
-  deleted outright;
+- that **delivery is pending, to which device, at day granularity** — pending queue
+  rows (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an
+  opaque blob to a recipient device, never to a sender or a conversation; acked rows
+  are deleted outright. The row carries the UTC day it was enqueued on and nothing
+  finer (ADR-0025), so a seizure cannot say which part of a day a device was addressed
+  in — the waking pattern an hour column carried is not recorded;
 - **attachment rows** — a capability id, a bucketed size and the day of upload, and
   nothing that names an account. The column that used to carry the uploader is written
   by nothing (ADR-0025), so a seizure cannot say whose file a stored blob is, how many

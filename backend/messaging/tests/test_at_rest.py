@@ -6,8 +6,7 @@ separate connection, so it sees only committed rows.
 """
 
 import base64
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import date, timedelta
 from io import StringIO
 
 import pytest
@@ -24,7 +23,14 @@ from .conftest import PASSWORD, envelope_blob, make_device
 TABLE = "messaging_queuedenvelope"
 
 # The routing minimum and nothing else. A column added here fails this test on purpose.
-EXPECTED_COLUMNS = {"id", "recipient_device_id", "seq", "blob", "queued_hour"}
+EXPECTED_COLUMNS = {
+    "id",
+    "recipient_device_id",
+    "seq",
+    "blob",
+    "queued_hour",  # retired by ADR-0025; run 08 drops it
+    "queued_day",
+}
 
 
 def copy_block(dump, table):
@@ -76,8 +82,8 @@ def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
 
     # (b) Three independent rows. The only thing tying a row to anyone is its own
     # recipient device; no shared row id and no shared blob to join co-recipients on.
-    # `seq` and `queued_hour` coincide across the three rows by design: seq is
-    # per-device (every fresh mailbox starts at 1) and the hour is deliberately coarse.
+    # `seq` and `queued_day` coincide across the three rows by design: seq is
+    # per-device (every fresh mailbox starts at 1) and the day is deliberately coarse.
     # Neither links co-recipients; a third party's row would carry the same values.
     assert len(rows) == 3
     assert len({r["recipient_device_id"] for r in rows}) == 3
@@ -91,13 +97,14 @@ def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
         assert hexed.startswith("x"), f"unexpected bytea rendering: {hexed[:8]}"
         assert len(hexed[1:]) // 2 in set(ENVELOPE_BUCKETS)
 
-    # (d) Nothing finer than the hour is recorded. pg_dump renders timestamptz in the
-    # session's timezone, which need not be UTC (a +03:30 offset renders as :30), so
-    # normalise before asserting rather than reading the wall clock.
+    # (d) Nothing finer than the day is recorded (ADR-0025). A date column carries
+    # no time at all, and the column that used to carry an hour is written by
+    # nothing — so a dump can say which day a device was addressed on and never
+    # which part of it.
     for row in rows:
-        stamp = datetime.fromisoformat(row["queued_hour"]).astimezone(dt_timezone.utc)
-        assert (stamp.minute, stamp.second, stamp.microsecond) == (0, 0, 0), (
-            f"timestamp is finer than the hour: {stamp.isoformat()}"
+        assert date.fromisoformat(row["queued_day"]) == timezone.now().date()
+        assert row["queued_hour"] == "\\N", (
+            f"the retired hour column was written: {row['queued_hour']}"
         )
 
     # The sender is in none of it: alice sent all three and appears nowhere.
@@ -146,7 +153,14 @@ def test_the_model_declares_no_sender_or_recipient_list_field():
 
     names = {f.name for f in QueuedEnvelope._meta.get_fields()}
 
-    assert names == {"id", "recipient_device", "seq", "blob", "queued_hour"}
+    assert names == {
+        "id",
+        "recipient_device",
+        "seq",
+        "blob",
+        "queued_hour",
+        "queued_day",
+    }
     assert not any("sender" in n for n in names)
 
 
@@ -173,7 +187,7 @@ def test_a_ttl_pruned_envelope_leaves_no_trace_in_a_raw_table_dump(
     assert resp.status_code == 202
     stored = QueuedEnvelope.objects.get(recipient_device_id=recipient.id)
     QueuedEnvelope.objects.filter(id=stored.id).update(
-        queued_hour=timezone.now() - timedelta(days=8)
+        queued_day=timezone.now().date() - timedelta(days=8)
     )
 
     call_command("prune", stdout=StringIO())

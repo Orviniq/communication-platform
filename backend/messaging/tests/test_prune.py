@@ -35,7 +35,7 @@ def queue_row(device, seq, age_days=0):
     )
     if age_days:
         QueuedEnvelope.objects.filter(id=row.id).update(
-            queued_hour=timezone.now() - timedelta(days=age_days)
+            queued_day=timezone.now().date() - timedelta(days=age_days)
         )
     return row
 
@@ -234,7 +234,7 @@ def test_pruning_a_device_out_of_existence_takes_its_queue(active_user, settings
 
 @pytest.mark.django_db
 def test_the_retention_filter_column_carries_an_index():
-    """The sweep runs hourly and filters the largest table on `queued_hour` alone.
+    """The sweep runs hourly and filters the largest table on `queued_day` alone.
 
     Without an index that filter is a sequential scan of the whole table on every
     pass, including the common pass where nothing has expired at all. Measured on
@@ -249,7 +249,7 @@ def test_the_retention_filter_column_carries_an_index():
         )
         definitions = [row[0] for row in cursor.fetchall()]
 
-    assert any("(queued_hour" in definition for definition in definitions), definitions
+    assert any("(queued_day" in definition for definition in definitions), definitions
 
 
 # --- The sweep as background work -------------------------------------------------
@@ -463,8 +463,8 @@ def stopped_clock(monkeypatch):
     return instant
 
 
-def at(row, stamp):
-    QueuedEnvelope.objects.filter(id=row.id).update(queued_hour=stamp)
+def at(row, day):
+    QueuedEnvelope.objects.filter(id=row.id).update(queued_day=day)
     return row
 
 
@@ -472,15 +472,15 @@ def at(row, stamp):
 def test_the_envelope_cutoff_keeps_the_row_that_lands_exactly_on_it(
     device, settings, stopped_clock
 ):
-    """`queued_hour < cutoff`, strictly. The boundary matters because the column is
-    coarsened to the hour: with `<=` the whole hour that lands on the cutoff would
-    go a full hour early, and the client would be told it lost envelopes whose TTL
-    had not run out."""
+    """`queued_day < cutoff`, strictly. The boundary matters because the column is
+    coarsened to the day (ADR-0025): with `<=` the whole day that lands on the
+    cutoff would go a day early, and the client would be told it lost envelopes
+    whose TTL had not run out."""
     settings.ENVELOPE_TTL_DAYS = 7
-    cutoff = stopped_clock - timedelta(days=7)
-    outside = at(queue_row(device, 1), cutoff - timedelta(microseconds=1))
+    cutoff = stopped_clock.date() - timedelta(days=7)
+    outside = at(queue_row(device, 1), cutoff - timedelta(days=1))
     on_it = at(queue_row(device, 2), cutoff)
-    inside = at(queue_row(device, 3), cutoff + timedelta(microseconds=1))
+    inside = at(queue_row(device, 3), cutoff + timedelta(days=1))
 
     output = run_prune()
 
