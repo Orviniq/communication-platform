@@ -37,6 +37,13 @@ STRONG = "g" * 32
 # `TURN_URLS` is read, never what it names, and 198.51.100.0/24 is the
 # documentation range so nothing resolves it.
 RELAY = ["turn:198.51.100.10:3478"]
+# A signing key that passes the length floor, pinned by every test below that reads
+# the whole error list. Without it those tests weigh the ambient `JWT_SIGNING_KEY`
+# too: `config/settings/dev.py` falls back to a twenty-character value, so a
+# developer running the suite on the dev default got a second `core.E005` the
+# assertion had not budgeted for, and five tests failed for the environment rather
+# than the code. CI exports a long key and hid it.
+STRONG = "s" * 32
 
 
 def ids(errors):
@@ -193,20 +200,26 @@ class TestInfrastructureSecrets:
         it a value would refuse a deployment that is correct. `TURN_URLS` is what
         says whether voice is served, and it is empty by default."""
         for secret in ("", "far-too-short"):
-            with override_settings(TURN_URLS=[], TURN_STATIC_AUTH_SECRET=secret):
+            with override_settings(
+                JWT_SIGNING_KEY=STRONG, TURN_URLS=[], TURN_STATIC_AUTH_SECRET=secret
+            ):
                 assert infrastructure_secrets_are_strong(None) == []
 
     def test_a_relay_secret_below_the_key_size_is_weak_once_a_relay_is_named(self):
         """The secret is the HMAC key every relay credential is signed under, and
         a holder of it mints credentials for this deployment's coturn until the
         value is rotated in both of the two places that carry it."""
-        with override_settings(TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31):
+        with override_settings(
+            JWT_SIGNING_KEY=STRONG, TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31
+        ):
             assert ids(infrastructure_secrets_are_strong(None)) == ["core.E005"]
 
     def test_a_relay_secret_at_the_key_size_passes(self):
         """The boundary: thirty-two characters is the first acceptable length, the
         same floor the signing key is held to."""
-        with override_settings(TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 32):
+        with override_settings(
+            JWT_SIGNING_KEY=STRONG, TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 32
+        ):
             assert infrastructure_secrets_are_strong(None) == []
 
     def test_both_secrets_weak_at_once_are_reported_as_two_errors(self):
@@ -227,7 +240,9 @@ class TestInfrastructureSecrets:
         """Two variables can fail this check and they are rotated differently: the
         relay secret is one value in two places, so a message that named neither
         would leave an operator to guess which."""
-        with override_settings(TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31):
+        with override_settings(
+            JWT_SIGNING_KEY=STRONG, TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31
+        ):
             (error,) = infrastructure_secrets_are_strong(None)
 
         assert "TURN_STATIC_AUTH_SECRET" in error.msg

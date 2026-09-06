@@ -4,15 +4,22 @@ Like the messaging/devices suites, capture must bypass the configured ScrubFilte
 assert the code never emits an identifier in the first place. caplog is not enough:
 the filter mutates records in place, so the console handler launders the message
 before caplog's later-attached handler stores it, and a leak would grade its own
-homework. So, like assertLogs, all root handlers are swapped out for the capture
-window."""
+homework.
+
+Swapping the *root* handlers is not enough either, which is why this file uses the
+shared `capture_all_logging` rather than a local capture of its own. `django.request`,
+`uvicorn.access`, `uvicorn.error`, `websockets` and `push_response` each carry
+`propagate = False` and a handler of their own, and those are exactly the loggers a
+socket path writes to — a root-only swap sees none of them. `capture_all_logging`
+replaces the handlers of every logger that owns any, so a leak on one of the five
+lands in the capture instead of on the console."""
 
 import logging
 import uuid
-from contextlib import contextmanager
 
 import pytest
 
+from ops.audit.log_silence import capture_all_logging
 from realtime import bus, gateway
 
 from .conftest import (
@@ -33,29 +40,6 @@ CONTROL_BLOB = "ciphertext\x00\x01\x1f-with-control-characters"
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-class _RawCapture(logging.Handler):
-    def __init__(self):
-        super().__init__(level=logging.DEBUG)
-        self.lines = []
-
-    def emit(self, record):
-        self.lines.append(record.getMessage())
-
-
-@contextmanager
-def raw_root_capture():
-    root = logging.getLogger()
-    handler = _RawCapture()
-    old_handlers, old_level = root.handlers[:], root.level
-    root.handlers[:] = [handler]
-    root.setLevel(logging.DEBUG)
-    try:
-        yield handler.lines
-    finally:
-        root.handlers[:] = old_handlers
-        root.setLevel(old_level)
-
-
 async def test_every_socket_scenario_emits_no_identifier_or_payload(
     active_user, device, peer, peer_device
 ):
@@ -65,7 +49,7 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
     push_blob = envelope_blob(b"l")
     offline_target = str(uuid.uuid4())
 
-    with raw_root_capture() as lines:
+    with capture_all_logging() as lines:
         logging.getLogger("test.canary").debug("canary")
 
         # Two authenticated sockets, one for each account.
@@ -138,7 +122,7 @@ async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
     """
     access = await mint_session(active_user, device)
 
-    with raw_root_capture() as lines:
+    with capture_all_logging() as lines:
         logging.getLogger("test.canary").debug("canary")
 
         comm = await connect_ok(bearer(access))
@@ -188,7 +172,7 @@ async def test_a_slow_consumer_close_names_neither_the_device_nor_its_backlog(
     monkeypatch.setattr(gateway, "SEND_QUEUE_MAX", 2)
     blob = envelope_blob(b"q")
 
-    with raw_root_capture() as lines:
+    with capture_all_logging() as lines:
         logging.getLogger("test.canary").debug("canary")
         # The wire holds one frame, so a peer that never reads blocks the send loop
         # after the first and everything behind it piles up in the send queue.

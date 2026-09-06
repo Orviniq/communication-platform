@@ -697,12 +697,23 @@ class BasePostureTests(SimpleTestCase):
         # 198.51.100.0/24 is the documentation range: the check reads only whether
         # `TURN_URLS` is empty, and nothing resolves this.
         relay = ["turn:198.51.100.10:3478"]
+        # Pinned, because two settings raise `core.E005` and this test is about one
+        # of them: `config/settings/dev.py` falls back to a twenty-character
+        # `JWT_SIGNING_KEY`, and the first assertion below then read that key's error
+        # as the relay's. It failed for the environment rather than the code.
+        strong = "s" * 32
 
-        with override_settings(TURN_URLS=[], TURN_STATIC_AUTH_SECRET=""):
+        with override_settings(
+            JWT_SIGNING_KEY=strong, TURN_URLS=[], TURN_STATIC_AUTH_SECRET=""
+        ):
             self.assertNotIn("core.E005", deploy_check_ids())
-        with override_settings(TURN_URLS=relay, TURN_STATIC_AUTH_SECRET="t" * 31):
+        with override_settings(
+            JWT_SIGNING_KEY=strong, TURN_URLS=relay, TURN_STATIC_AUTH_SECRET="t" * 31
+        ):
             self.assertIn("core.E005", deploy_check_ids())
-        with override_settings(TURN_URLS=relay, TURN_STATIC_AUTH_SECRET="t" * 32):
+        with override_settings(
+            JWT_SIGNING_KEY=strong, TURN_URLS=relay, TURN_STATIC_AUTH_SECRET="t" * 32
+        ):
             self.assertNotIn("core.E005", deploy_check_ids())
 
 
