@@ -717,6 +717,75 @@ class BasePostureTests(SimpleTestCase):
             self.assertNotIn("core.E005", deploy_check_ids())
 
 
+class RedisPostureTests(SimpleTestCase):
+    """The volatile store, read from the file that runs it.
+
+    Invariant 6 — volatile data never touches disk — has two halves. The Python
+    half is that nothing writes a counter, a lockout or a bus frame to a table, and
+    the suite covers that. The other half is this file, and until now nothing
+    asserted it: an edit that set `save 900 1` or `appendonly yes` would put the
+    throttle counters, the login lockout and the fan-out bus on the disk of the
+    host the threat model says the adversary already has, and every gate would
+    stay green.
+
+    Read as directives rather than as text, so a re-ordering or a re-comment of
+    the file changes nothing here and a changed value fails.
+    """
+
+    @staticmethod
+    def directives():
+        """Every directive the file actually sets, as (key, value) pairs. A
+        commented line sets nothing, which is what keeps the `#requirepass`
+        placeholder from reading as a password this deployment ships."""
+        conf = (settings.BASE_DIR / "ops" / "redis" / "redis-chatapp.conf").read_text()
+        return dict(
+            (line.split(None, 1) + [""])[:2]
+            for line in (raw.split("#", 1)[0].strip() for raw in conf.splitlines())
+            if line
+        )
+
+    def test_nothing_this_store_holds_is_written_to_disk(self):
+        """`save ""` disables every RDB snapshot point and `appendonly no` the
+        journal. Together they are the whole of the on-disk half of invariant 6 for
+        Redis: what this instance holds exists in memory and dies with it."""
+        directives = self.directives()
+
+        self.assertEqual(directives["save"], '""')
+        self.assertEqual(directives["appendonly"], "no")
+
+    def test_the_store_answers_only_this_host(self):
+        directives = self.directives()
+
+        self.assertEqual(directives["bind"], "127.0.0.1")
+        self.assertEqual(directives["protected-mode"], "yes")
+
+    def test_the_store_is_bounded_and_refuses_rather_than_evicts(self):
+        """Redis shares 1 GB with PostgreSQL, nginx, coturn and a uvicorn worker
+        that already holds around 200 MB, so an unbounded instance is a host the
+        kernel eventually kills.
+
+        The policy is the security half. Every key here is a control — a throttle
+        counter, a login lockout, a day's upload allowance — so an eviction is one
+        of those silently resetting. `noeviction` refuses the write instead, and
+        `api/ratelimit.py` turns a store that refuses into `503 unavailable`, which
+        is the fail-closed posture of ADR-0010.
+        """
+        directives = self.directives()
+
+        self.assertIn("maxmemory", directives)
+        self.assertNotEqual(directives["maxmemory"], "0")
+        self.assertEqual(directives["maxmemory-policy"], "noeviction")
+
+    def test_the_password_is_a_placeholder_the_deploy_fills_and_never_a_value(self):
+        """The file ships no credential. `core.E004` is the other half: it refuses a
+        `REDIS_URL` that carries no password, so a deployment cannot leave the line
+        commented and still pass its own gate."""
+        conf = (settings.BASE_DIR / "ops" / "redis" / "redis-chatapp.conf").read_text()
+
+        self.assertNotIn("requirepass", self.directives())
+        self.assertIn("#requirepass FILL_AT_DEPLOY", conf)
+
+
 class CoturnPostureTests(SimpleTestCase):
     """The only media service of this deployment, read from the file that runs it.
 

@@ -212,7 +212,12 @@ def test_a_batch_send_publishes_every_copy_in_one_round_trip(
     real_execute, real_command = Pipeline.execute, Redis.execute_command
 
     async def counted_execute(self, *args, **kwargs):
-        executes.append(1)
+        # The fan-out's own pipeline, and not every pipeline the request opens:
+        # `api/ratelimit.py` also batches its counter and its expiry into one, and
+        # counting that one here would make this assertion about the limiter.
+        queued = [entry[0][0] for entry in self.command_stack if entry and entry[0]]
+        if "PUBLISH" in queued:
+            executes.append(1)
         return await real_execute(self, *args, **kwargs)
 
     async def counted_command(self, *args, **kwargs):

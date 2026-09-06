@@ -116,10 +116,46 @@ def test_an_unreachable_store_fails_closed(
     throttled`: one is an outage, the other is backoff."""
 
     class Unreachable:
-        async def incr(self, key):
+        def pipeline(self, transaction=False):
             raise RedisConnectionError("refused")
 
     monkeypatch.setattr("api.ratelimit.get_client", lambda: Unreachable())
+
+    response = http.get(DIRECTORY_URL, headers=bearer(active_user, device))
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "unavailable"
+
+
+def test_a_store_that_dies_mid_pipeline_fails_closed(
+    http, active_user, device, bearer, monkeypatch
+):
+    """The counter and its expiry are one pipeline, and the whole of it is inside
+    the guard. A `RedisError` raised once the commands are queued — the store
+    going away between the connection and the round trip — is the same outage as
+    one raised before them, and answering it with a `500` would turn a documented
+    refusal into an unhandled failure."""
+
+    class Broken:
+        def pipeline(self, transaction=False):
+            return self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def incr(self, key):
+            return self
+
+        def expire(self, key, period, nx=False):
+            return self
+
+        async def execute(self):
+            raise RedisConnectionError("refused")
+
+    monkeypatch.setattr("api.ratelimit.get_client", Broken)
 
     response = http.get(DIRECTORY_URL, headers=bearer(active_user, device))
 

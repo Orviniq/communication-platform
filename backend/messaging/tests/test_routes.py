@@ -974,7 +974,7 @@ class TestTheMachineryBelowTheRoute:
         parsed — the send body here would otherwise be a 400."""
 
         class Unreachable:
-            async def incr(self, key):
+            def pipeline(self, transaction=False):
                 raise RedisConnectionError("refused")
 
         monkeypatch.setattr("api.ratelimit.get_client", lambda: Unreachable())
