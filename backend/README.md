@@ -176,7 +176,7 @@ Tests use `config.settings.dev` (see `pytest.ini`) and require both services run
 The dev settings fall back to insecure dev keys for `DJANGO_SECRET_KEY` and
 `JWT_SIGNING_KEY` when unset; everything else reads from the environment.
 
-Branch coverage is gated at 95 percent over `backend/`. `pytest` on its own does not
+Branch coverage is gated at 98 percent over `backend/`. `pytest` on its own does not
 measure it, so the inner loop stays fast and a single file can be run alone; the gate
 is `pytest --cov --cov-branch`, which is what CI runs and what `pytest.ini` binds the
 floor to. `pyproject.toml` carries what is measured and what is excluded.

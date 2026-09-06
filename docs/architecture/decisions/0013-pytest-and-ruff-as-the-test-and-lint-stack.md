@@ -23,7 +23,8 @@ gives every run a random order. `httpx` drives the API in tests. `hypothesis`
 drives property-based tests. `ruff` is the only linter and formatter. No type
 checker is added.
 
-Phase 4 sets a branch-coverage gate of 95 percent in CI. It landed in run 13.
+Phase 4 sets a branch-coverage gate in CI. It landed in run 13 at 95 percent, and
+phase 10 run 08 raised it to 98.
 
 ## Position fields
 
@@ -61,9 +62,12 @@ Phase 4 sets a branch-coverage gate of 95 percent in CI. It landed in run 13.
   tree would fail a floor it was never meant to meet. pytest-cov ignores the
   option when coverage is not running, so `pytest` costs nothing and
   `pytest --cov --cov-branch` is bound.
-- The floor is 95 and not the figure the suite reaches. A floor set at the
-  measurement fails on the next honest refactor; one set below it says what the
-  project will not go under, and the gap is the room a change is allowed to use.
+- The floor is not the figure the suite reaches. A floor set at the measurement
+  fails on the next honest refactor; one set below it says what the project will
+  not go under, and the gap is the room a change is allowed to use. It was 95 from
+  run 13 and is 98 from phase 10 run 08, which raised it to the largest integer at
+  least one below the measured 99.97 — a rule that keeps the gap from widening
+  until the floor gates nothing.
 - Run 12 installed both tools and measured the figure the gate was set against.
   Branch coverage was already 96.4 percent — above the 95 this decision names —
   before that run added a test, which is why it was scoped to the missing test

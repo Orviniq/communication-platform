@@ -119,6 +119,8 @@ with `--no-index` and `--require-hashes`.
 | [docs/admin/PANEL-RECORD.md](docs/admin/PANEL-RECORD.md) | The system of record for the operator back office: the pinned release, the override ledger, the role model, and the deferrals |
 | [backend/ops/RUNBOOK.md](backend/ops/RUNBOOK.md) | The operator runbook: host setup, the offline install, the database, the units, nginx and TLS, coturn, the checks after a deploy, the rollback, and the maintenance timer |
 | [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
+| [.github/SECURITY.md](.github/SECURITY.md) | How to report a vulnerability privately, and which findings are in scope. It states the scope and routes the reader to [backend/SECURITY.md](backend/SECURITY.md) for what the system claims |
+| [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) | The split between the two maintainers, and which side of it a change belongs to |
 
 ## Current status
 
