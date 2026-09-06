@@ -17,11 +17,26 @@ class Migration(migrations.Migration):
     (`docs/architecture/GROUND-TRUTH.md` §4). The values already in the heap stay
     there until a rewrite; the drop is a schema change and never an erasure.
 
-    Code deploys before the migration. The previous release names none of these
-    columns, so it serves against either schema, and each reverse restores a
-    column with no values in it — `refresh_generation` to its default of 1 for
-    every row, which is the number it would have carried had it never been
-    incremented.
+    **This migration runs before the code, and it is the only one of the six that
+    cannot go the other way.** Five of these columns are nullable, so a release
+    that stops naming them inserts against either schema. `refresh_generation` is
+    `NOT NULL` with no database default — `CreateModel` never persists a field
+    default — so a release that has stopped naming it cannot insert a device at
+    all until this migration has run: measured, every `Device` insert against the
+    pre-drop schema raises `null value in column "refresh_generation" ... violates
+    not-null constraint`, which is `POST /api/v1/me/devices` answering `500` for
+    as long as the window is open.
+
+    That window does not exist on this deployment — one `chat.service` on one host
+    cannot serve two releases at once, and the release procedure stops it before
+    `migrate` — and `core/tests/test_migrations.py` records the constraint in
+    `MIGRATE_FIRST` rather than leaving it to this paragraph. The previous release
+    serves against the new schema either way, because it names none of these
+    columns.
+
+    Each reverse restores a column with no values in it — `refresh_generation` to
+    its default of 1 for every row, which is the number it would have carried had
+    it never been incremented.
     """
 
     dependencies = [

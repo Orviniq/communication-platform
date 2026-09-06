@@ -428,6 +428,15 @@ ALLOWED_ALTERATIONS = (
 # admitted form in the same statement. Each of these is a rewrite or a scan under
 # ACCESS EXCLUSIVE whose cost grows with the table.
 FORBIDDEN_ALTERATIONS = (
+    # `DROP COLUMN` and `DROP CONSTRAINT` are admitted above as catalogue writes,
+    # and `CASCADE` is what makes either one stop being only that: it drops the
+    # dependent objects too, in whatever app owns them, and the substring match
+    # that admits the base form would admit this with them. The lock probe would
+    # catch the extra relation on an atomic migration — a `RunSQL` in a
+    # non-atomic one is the case neither the probe nor the same-table check
+    # reaches, which is what this entry closes. Django emits `CASCADE` only on
+    # `DROP TABLE`, which is not an `ALTER TABLE` and never reaches this list.
+    "CASCADE",
     "SET NOT NULL",
     "SET DEFAULT",
     "SET TABLESPACE",
@@ -837,6 +846,89 @@ def test_the_backfill_updates_in_batches_that_bound_its_lock_time(
         if query["sql"].startswith('UPDATE "messaging_queuedenvelope"')
     ]
     assert len(updates) == 2  # four rows carry an hour, two at a time
+
+
+# --- Which way round a column removal may be deployed -------------------------------
+# A `RemoveField` is the second step of a two-step removal, so the release that
+# stopped naming the column is usually already out and the order looks free. It is
+# free only where the column the old schema still carries can be left unwritten:
+# nullable, or holding a database default. A `NOT NULL` column with no default is
+# the other case, and it is a strict `migrate`-then-code — the release that stopped
+# naming it cannot insert that table's rows at all until the column is gone.
+#
+# `CreateModel` never persists a field default into the database, so a field
+# declared `default=1` in an initial migration is `NOT NULL DEFAULT NULL` at rest.
+# That is how `Device.refresh_generation` came to be the one entry here: measured
+# against the pre-drop schema, every `Device` insert from this release raises
+# `null value in column "refresh_generation" ... violates not-null constraint`,
+# which is `POST /api/v1/me/devices` answering `500` for the length of the window.
+#
+# The map is the deploy instruction. An entry means the migration goes first; an
+# absence means either order serves.
+MIGRATE_FIRST = {
+    ("devices", "0003_drop_the_retired_columns"): {"refresh_generation"},
+}
+
+
+def removed_columns(node):
+    """The database columns each `RemoveField` of `node` drops, from the state that
+    precedes it — which is the only state where those columns still exist."""
+    # `at_end=False`, so the state is the one this migration is about to change and
+    # not the one it leaves: at_end the field is already removed and there is no
+    # column to ask the catalogue about.
+    loader = MigrationLoader(None, ignore_no_migrations=True)
+    state = loader.project_state(node, at_end=False)
+    columns = {}
+    for operation in loaded(*node).operations:
+        if type(operation).__name__ != "RemoveField":
+            continue
+        model = state.apps.get_model(node[0], operation.model_name)
+        field = model._meta.get_field(operation.name)
+        columns[field.column] = model._meta.db_table
+    return columns
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    ("app", "name"),
+    [node for node in migration_nodes() if removed_columns(node)],
+)
+def test_a_column_removal_that_forces_a_deploy_order_is_recorded_as_one(
+    empty_database, app, name
+):
+    """The gate on the half of a two-step removal that is not free.
+
+    Read from the catalogue at the state before the drop, because the model says
+    what Django would write and the column says what PostgreSQL will refuse. A
+    removal whose column is `NOT NULL` with no default is one the operator has to
+    sequence, and an unrecorded one is a `500` on the route that writes that table
+    for the length of a deploy.
+    """
+    apply_the_state_before((app, name), empty_database)
+    columns = removed_columns((app, name))
+
+    with connections[empty_database].cursor() as cursor:
+        # By table, then paired in Python: a row-value `IN` list is not something
+        # psycopg adapts, and the pairing has to survive the query.
+        cursor.execute(
+            """
+            SELECT table_name, column_name FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = ANY(%s)
+              AND is_nullable = 'NO' AND column_default IS NULL
+            """,
+            [sorted(set(columns.values()))],
+        )
+        not_nullable = set(cursor.fetchall())
+
+    forced = {
+        column for column, table in columns.items() if (table, column) in not_nullable
+    }
+
+    assert forced == MIGRATE_FIRST.get((app, name), set()), (
+        f"{app}.{name} drops {sorted(forced)}, which the release that stopped "
+        "naming them cannot insert against — record it in MIGRATE_FIRST"
+    )
 
 
 # --- The locks each migration actually takes ---------------------------------------
