@@ -122,7 +122,7 @@ def _seed(count, prefix="user"):
             spk_sig=b"s" * 64,
             registration_id=index,
         )
-        Attachment.objects.create(uploader=person, size=65536)
+        Attachment.objects.create(size=65536)
 
 
 # --- The registry is the boundary ----------------------------------------------

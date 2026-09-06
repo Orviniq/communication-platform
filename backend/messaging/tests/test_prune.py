@@ -40,8 +40,8 @@ def queue_row(device, seq, age_days=0):
     return row
 
 
-def stored_attachment(user, root, age_days=0):
-    attachment = Attachment.objects.create(uploader=user, size=min(ATTACHMENT_BUCKETS))
+def stored_attachment(root, age_days=0):
+    attachment = Attachment.objects.create(size=min(ATTACHMENT_BUCKETS))
     path = root / attachment.id[:2] / attachment.id
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\x01" * min(ATTACHMENT_BUCKETS))
@@ -89,12 +89,10 @@ def test_expired_queue_rows_go_and_fresh_ones_stay(device, settings):
 
 
 @pytest.mark.django_db
-def test_expired_attachments_lose_both_row_and_bytes(
-    active_user, attachments_root, settings
-):
+def test_expired_attachments_lose_both_row_and_bytes(attachments_root, settings):
     settings.ATTACH_TTL_DAYS = 30
-    fresh, fresh_path = stored_attachment(active_user, attachments_root)
-    expired, expired_path = stored_attachment(active_user, attachments_root, age_days=31)
+    fresh, fresh_path = stored_attachment(attachments_root)
+    expired, expired_path = stored_attachment(attachments_root, age_days=31)
 
     output = run_prune()
 
@@ -105,11 +103,9 @@ def test_expired_attachments_lose_both_row_and_bytes(
 
 
 @pytest.mark.django_db
-def test_a_missing_file_does_not_stop_the_row_being_cleared(
-    active_user, attachments_root, settings
-):
+def test_a_missing_file_does_not_stop_the_row_being_cleared(attachments_root, settings):
     settings.ATTACH_TTL_DAYS = 30
-    expired, path = stored_attachment(active_user, attachments_root, age_days=31)
+    expired, path = stored_attachment(attachments_root, age_days=31)
     path.unlink()  # a previous run died between unlink and delete
 
     output = run_prune()
@@ -120,13 +116,13 @@ def test_a_missing_file_does_not_stop_the_row_being_cleared(
 
 @pytest.mark.django_db
 def test_one_unremovable_file_does_not_stall_the_whole_sweep(
-    active_user, attachments_root, settings, monkeypatch
+    attachments_root, settings, monkeypatch
 ):
     """Rows are cleared in one pass after the loop, so an escaping OSError would stop
     retention altogether."""
     settings.ATTACH_TTL_DAYS = 30
-    stuck, stuck_path = stored_attachment(active_user, attachments_root, age_days=31)
-    ok, ok_path = stored_attachment(active_user, attachments_root, age_days=31)
+    stuck, stuck_path = stored_attachment(attachments_root, age_days=31)
+    ok, ok_path = stored_attachment(attachments_root, age_days=31)
     real_remove = os.remove
 
     def refuse_one(path, *args, **kwargs):
@@ -191,11 +187,11 @@ def test_the_watermark_is_idempotent_and_never_regresses(active_user, settings):
 
 
 @pytest.mark.django_db
-def test_prune_is_safe_to_run_repeatedly(device, active_user, attachments_root, settings):
+def test_prune_is_safe_to_run_repeatedly(device, attachments_root, settings):
     settings.ENVELOPE_TTL_DAYS = 30
     settings.ATTACH_TTL_DAYS = 30
     queue_row(device, 1, age_days=31)
-    stored_attachment(active_user, attachments_root, age_days=31)
+    stored_attachment(attachments_root, age_days=31)
 
     first = run_prune()
     second = run_prune()
@@ -213,7 +209,7 @@ def test_prune_prints_counts_but_never_an_identifier(
     settings.ENVELOPE_TTL_DAYS = 30
     settings.ATTACH_TTL_DAYS = 30
     row = queue_row(device, 1, age_days=31)
-    attachment, _path = stored_attachment(active_user, attachments_root, age_days=31)
+    attachment, _path = stored_attachment(attachments_root, age_days=31)
 
     output = run_prune()
 
@@ -494,7 +490,7 @@ def test_the_envelope_cutoff_keeps_the_row_that_lands_exactly_on_it(
 
 @pytest.mark.django_db
 def test_the_attachment_cutoff_keeps_the_row_that_lands_exactly_on_it(
-    active_user, attachments_root, settings, stopped_clock
+    attachments_root, settings, stopped_clock
 ):
     """A date, not an instant: the column holds the upload's day, so the window is
     whole days and the day on the cutoff is still inside it."""
@@ -506,7 +502,7 @@ def test_the_attachment_cutoff_keeps_the_row_that_lands_exactly_on_it(
         ("on_it", cutoff),
         ("inside", cutoff + timedelta(days=1)),
     ):
-        attachment, path = stored_attachment(active_user, attachments_root)
+        attachment, path = stored_attachment(attachments_root)
         Attachment.objects.filter(id=attachment.id).update(created_date=created)
         rows[label] = (attachment, path)
 
@@ -575,7 +571,7 @@ def test_the_watermark_takes_the_highest_seq_of_the_whole_run_not_of_one_batch(
 
 @pytest.mark.django_db(transaction=True)
 def test_the_attachment_sweep_also_deletes_in_batches(
-    active_user, attachments_root, settings, monkeypatch
+    attachments_root, settings, monkeypatch
 ):
     """The same bound as the other two sweeps, and for the same reason: one
     unbounded pass would hold a row lock on every expired attachment while it
@@ -583,7 +579,7 @@ def test_the_attachment_sweep_also_deletes_in_batches(
     settings.ATTACH_TTL_DAYS = 30
     monkeypatch.setattr(prune, "BATCH", 2)
     for _ in range(5):
-        stored_attachment(active_user, attachments_root, age_days=31)
+        stored_attachment(attachments_root, age_days=31)
 
     with CaptureQueriesContext(connection) as context:
         output = run_prune()
@@ -602,9 +598,7 @@ def test_a_batch_whose_files_all_refuse_to_unlink_ends_the_sweep_instead_of_spin
     the same loop for ever. They keep their rows and the next run retries them,
     which is the contract a single stuck file already has."""
     settings.ATTACH_TTL_DAYS = 30
-    stuck = [
-        stored_attachment(active_user, attachments_root, age_days=31) for _ in range(2)
-    ]
+    stuck = [stored_attachment(attachments_root, age_days=31) for _ in range(2)]
 
     def refuse_everything(path, *args, **kwargs):
         raise PermissionError(13, "Permission denied")
@@ -668,7 +662,7 @@ def test_an_ack_between_the_scan_and_the_watermark_leaves_the_mark_where_it_was(
     ],
 )
 def test_a_failed_step_names_the_step_and_the_exception_class_and_nothing_else(
-    active_user, settings, step, manager
+    settings, step, manager
 ):
     """The whole message, not a substring of it. A database error carries the
     statement that raised it, and the statements here carry envelope ids, so
@@ -706,7 +700,7 @@ def test_the_output_carries_no_identifier_no_payload_and_no_path(
     device = make_device(active_user, 112)
     row = queue_row(device, 1, age_days=8)
     blob = bytes(QueuedEnvelope.objects.get(id=row.id).blob)
-    attachment, path = stored_attachment(active_user, attachments_root, age_days=31)
+    attachment, path = stored_attachment(attachments_root, age_days=31)
     entry = LogEntry.objects.create(
         user=active_user, object_repr="x", action_flag=ADDITION, change_message=""
     )

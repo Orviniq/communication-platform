@@ -237,7 +237,7 @@ class Stage:
 
     @functools.cached_property
     def attachment(self):
-        return Attachment.objects.create(uploader=self.user, size=min(ATTACHMENT_BUCKETS))
+        return Attachment.objects.create(size=min(ATTACHMENT_BUCKETS))
 
 
 @pytest.fixture

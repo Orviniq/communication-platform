@@ -63,15 +63,25 @@ class TestReserve:
     async def test_a_second_reservation_does_not_push_the_expiry_out_again(
         self, account, store
     ):
-        """Only the increment that created the key sets the expiry. A busy account
-        that re-armed it on every upload would hold a counter for two days after
-        its last upload rather than two days after the day it counts."""
+        """`EXPIRE … NX` sets the expiry only where the key has none. A busy account
+        that re-armed it on every upload would hold a counter for two days after its
+        last upload rather than two days after the day it counts."""
         key = await allowance.reserve(account, SMALLEST)
         store.expire(key, 30)
 
         await allowance.reserve(account, SMALLEST)
 
         assert store.ttl(key) <= 30
+
+    async def test_a_charge_that_lands_always_carries_an_expiry(self, account, store):
+        """The counter and its expiry are one round trip, so there is no window in
+        which a key exists without a TTL. Two calls would leave one: an `INCRBY`
+        that landed and an `EXPIRE` that did not would spend the account's allowance
+        for good, because no later upload would set the expiry either."""
+        key = await allowance.reserve(account, SMALLEST)
+
+        assert store.ttl(key) > 0
+        assert int(store.get(key)) == SMALLEST
 
     async def test_the_reservation_that_lands_exactly_on_the_allowance_passes(
         self, account, store, settings
@@ -149,7 +159,7 @@ class TestReserve:
         `503 unavailable` and not `413`, because the caller should retry."""
 
         class Unreachable:
-            async def incrby(self, key, amount):
+            def pipeline(self, transaction=False):
                 raise RedisConnectionError("refused")
 
         monkeypatch.setattr(allowance, "get_client", Unreachable)
@@ -159,21 +169,32 @@ class TestReserve:
 
         assert refusal(exc_info) == (503, "unavailable", allowance.UNAVAILABLE)
 
-    async def test_a_store_that_dies_between_the_charge_and_the_expiry_fails_closed(
+    async def test_a_store_that_dies_mid_pipeline_fails_closed(
         self, account, monkeypatch
     ):
-        """The second round trip is inside the same guard as the first. Left out,
-        an `EXPIRE` that failed would raise a `RedisError` through the route and
-        become a `500` on a path whose refusal is a documented `503`."""
+        """The whole reservation is inside one guard. A `RedisError` escaping it
+        would become a `500` on a path whose refusal is a documented `503`."""
 
-        class HalfUp:
-            async def incrby(self, key, amount):
-                return amount
+        class Broken:
+            def pipeline(self, transaction=False):
+                return self
 
-            async def expire(self, key, seconds):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def incrby(self, key, amount):
+                return self
+
+            def expire(self, key, seconds, nx=False):
+                return self
+
+            async def execute(self):
                 raise RedisConnectionError("refused")
 
-        monkeypatch.setattr(allowance, "get_client", HalfUp)
+        monkeypatch.setattr(allowance, "get_client", Broken)
 
         with pytest.raises(ApiError) as exc_info:
             await allowance.reserve(account, SMALLEST)
