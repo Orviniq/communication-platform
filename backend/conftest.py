@@ -1,4 +1,6 @@
 import logging
+import time
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -10,6 +12,7 @@ from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 
 from accounts.models import User
+from api import ratelimit
 from api.auth import issue_register_scope, issue_session
 from config.asgi import api_application, application
 from core.tests import artefact
@@ -118,6 +121,33 @@ def flush_redis():
         store.flushdb()
     finally:
         store.close()
+
+
+@pytest.fixture
+def one_rate_limit_window(monkeypatch):
+    """Hold every request of one test inside a single rate-limit window.
+
+    `api/ratelimit.py` keys its counter on `int(time.time()) // period` — a fixed
+    calendar window and not a sliding one, which is the design rather than a defect.
+    Every test that spends a limit and then asserts on the refusal makes two or more
+    requests, and two requests that straddle a boundary land under different keys:
+    the second is the first hit of a new window, and it is served. Measured with the
+    clock stepped 60 s between the two calls, the expected `429` came back `200`.
+
+    That is the worst rate a flake can have — often enough to break a gate on a full
+    run, rare enough to look like something else. Pinning the limiter's own clock
+    leaves the assertion about the counter and nothing else. It does not weaken what
+    those tests hold: the counter, its key and its refusal are unchanged, and the
+    window arithmetic itself is held by
+    `test_the_counter_lives_in_redis_under_a_key_that_names_the_window`, which
+    deliberately does not take this fixture and reads the real clock.
+
+    The stub replaces the module attribute rather than `time.time` itself, so it
+    reaches `api.ratelimit` and nothing else in the process.
+    """
+    frozen = time.time()
+    monkeypatch.setattr(ratelimit, "time", SimpleNamespace(time=lambda: frozen))
+    return frozen
 
 
 @pytest.fixture(autouse=True)

@@ -242,7 +242,18 @@ class Stage:
 
 @pytest.fixture
 def stage(
-    http, monkeypatch, settings, tmp_path, active_user, device, bearer, register_bearer
+    http,
+    monkeypatch,
+    settings,
+    tmp_path,
+    active_user,
+    device,
+    bearer,
+    register_bearer,
+    # Every `429` driver spends a scope and then asserts on the refusal, so every
+    # one of them straddles a rate-limit window boundary unless the window is
+    # pinned. See the fixture: the counter is unchanged, its clock is not.
+    one_rate_limit_window,
 ):
     """Uploads land in a temp directory, never the repository's `media_root`."""
     settings.ATTACHMENTS_ROOT = tmp_path

@@ -47,7 +47,7 @@ def test_every_declared_scope_has_a_rate():
 
 
 def test_the_limit_answers_429_with_a_retry_after(
-    http, active_user, device, bearer, settings
+    http, active_user, device, bearer, settings, one_rate_limit_window
 ):
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "2/min"}
     headers = bearer(active_user, device)
@@ -63,7 +63,7 @@ def test_the_limit_answers_429_with_a_retry_after(
 
 
 def test_an_authenticated_limit_follows_the_account_across_its_devices(
-    http, active_user, device, bearer, settings
+    http, active_user, device, bearer, settings, one_rate_limit_window
 ):
     """Keyed on the account, so a caller cannot buy a second allowance by adding
     a device."""
@@ -84,7 +84,9 @@ def test_an_authenticated_limit_follows_the_account_across_its_devices(
     assert http.get(DIRECTORY_URL, headers=bearer(active_user, second)).status_code == 429
 
 
-def test_an_anonymous_limit_counts_the_caller_address(http, settings):
+def test_an_anonymous_limit_counts_the_caller_address(
+    http, settings, one_rate_limit_window
+):
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "login": "1/min"}
     body = {"username": "ghost", "password": "a-sufficiently-long-passphrase"}
 
@@ -93,7 +95,9 @@ def test_an_anonymous_limit_counts_the_caller_address(http, settings):
     assert http.post(LOGIN_URL, json=body).status_code == 429
 
 
-def test_a_scope_counts_only_itself(http, active_user, device, bearer, settings):
+def test_a_scope_counts_only_itself(
+    http, active_user, device, bearer, settings, one_rate_limit_window
+):
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "1/min"}
     headers = bearer(active_user, device)
 
@@ -166,7 +170,7 @@ def test_every_rate_this_deployment_carries_parses():
 
 
 def test_the_last_request_inside_the_window_is_served_and_the_next_is_not(
-    http, active_user, device, bearer, settings
+    http, active_user, device, bearer, settings, one_rate_limit_window
 ):
     """The boundary itself. `count > rate` is what refuses, so the request that
     makes the count equal to the limit is the last one served — an off-by-one here
@@ -182,7 +186,7 @@ def test_the_last_request_inside_the_window_is_served_and_the_next_is_not(
 
 
 def test_a_throttled_answer_carries_the_envelope_and_echoes_no_input(
-    http, active_user, device, bearer, settings
+    http, active_user, device, bearer, settings, one_rate_limit_window
 ):
     """`429` is a refusal like any other on this surface: one envelope, a fixed
     detail, and nothing of the request that was refused."""
@@ -199,7 +203,7 @@ def test_a_throttled_answer_carries_the_envelope_and_echoes_no_input(
 
 
 def test_the_retry_after_never_exceeds_the_window_it_names(
-    http, active_user, device, bearer, settings
+    http, active_user, device, bearer, settings, one_rate_limit_window
 ):
     """The header is what a client waits on. Longer than the window and every
     client backs off past the point the counter reset; zero and they all return at
