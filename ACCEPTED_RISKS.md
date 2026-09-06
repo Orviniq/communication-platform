@@ -11,7 +11,9 @@ risk and becomes work.
 Threats that are *structurally* out of reach — the social graph under live root,
 timing, voice connection metadata — are not here. They live in
 [`backend/SECURITY.md`](backend/SECURITY.md) under residual risk, because no decision
-of this project would remove them.
+of this project would remove them. A defence that was considered and turned down is
+not here either: [`REJECTED_PROPOSALS.md`](REJECTED_PROPOSALS.md) holds those, with the
+trigger that reopens each one.
 
 ---
 

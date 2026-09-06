@@ -114,6 +114,7 @@ with `--no-index` and `--require-hashes`.
 | [docs/architecture/GROUND-TRUTH.md](docs/architecture/GROUND-TRUTH.md) | The measured facts of the deployment: topology, configuration deviations, scale facts, and the domain rules the code must hold |
 | [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
 | [ACCEPTED_RISKS.md](ACCEPTED_RISKS.md) | Every risk the project has looked at and decided to carry, each with what it exposes, what reduces it, and the event that ends the acceptance |
+| [REJECTED_PROPOSALS.md](REJECTED_PROPOSALS.md) | Every defence the project considered and turned down, each with what it would have protected, why it is not built, and the event that reopens it |
 | [CLIENT_WORK.md](CLIENT_WORK.md) | What the client developer owes, when a server change lands work under `frontend/` that the server cannot make itself |
 | [docs/admin/PANEL-RECORD.md](docs/admin/PANEL-RECORD.md) | The system of record for the operator back office: the pinned release, the override ledger, the role model, and the deferrals |
 | [backend/ops/RUNBOOK.md](backend/ops/RUNBOOK.md) | The operator runbook: host setup, the offline install, the database, the units, nginx and TLS, coturn, the checks after a deploy, the rollback, and the maintenance timer |
