@@ -39,8 +39,8 @@ looks like from this host, holds them indefinitely.
 key, the Django secret key, the TURN shared secret and the database and Redis
 passwords, plus whatever routing metadata and ciphertext is in flight.
 `ProtectSystem=strict` does not stop a dump: the kernel writes it wherever
-`kernel.core_pattern` points, which on this distribution is `systemd-coredump`,
-outside every path the units may write. The units set no limit, and the inherited one
+`kernel.core_pattern` points, which is a handler these units do not configure and a
+path they may not write. The units set no limit, and the inherited one
 is the host's — systemd's PID 1 raises `RLIMIT_CORE` to infinity for its children,
 and `DefaultLimitCORE=` differs between distributions and between releases of one.
 Swap is the same exposure without the crash, and nothing in the runbook decided it.

@@ -522,8 +522,8 @@ class BasePostureTests(SimpleTestCase):
         JWT signing key, the Django secret key, the TURN shared secret and the
         database and Redis passwords, plus whatever routing metadata and ciphertext
         is in flight. `ProtectSystem=strict` does not stop one — the kernel writes
-        it wherever `kernel.core_pattern` points, and on this distribution that is
-        `systemd-coredump`, outside every path the units may write.
+        it wherever `kernel.core_pattern` points, which is a handler these units do
+        not configure and a path they may not write.
 
         Stated rather than inherited because the inherited value is the host's:
         systemd's PID 1 raises `RLIMIT_CORE` to infinity for its children, and
