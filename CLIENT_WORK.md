@@ -245,3 +245,70 @@ which closes with `4003`. A token that merely expires does not close its socket.
 register token keeps its name, its ten-minute lifetime and its one route, and a
 register token presented anywhere else — `POST /api/v1/auth/renew` included — is still
 `403 scope_forbidden`.
+
+## Take the contract cost off the client
+
+[ADR-0024](docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)
+removes four costs the client was carrying and one column it could read. One entry
+below is required; the rest are the client developer's call.
+
+The observable changes, each with its old and new behaviour, are in
+[`API_CHANGES.md`](API_CHANGES.md) § "The client stops paying for the contract".
+
+### Required — the linked-devices screen loses the last-active value
+
+`GET /api/v1/me/devices` no longer carries `last_active_date` on a device item. A
+DTO that requires the field will fail to parse the response.
+
+| Path | What is there |
+|---|---|
+| The linked-devices DTO and the screen that renders it | The `lastActiveDate` field, its parse, and whatever the screen shows with it — a "last seen" line, a sort by recency, or an idle-device warning |
+
+There is no replacement value, by decision. The server records no activity day for
+a device at all: the socket bind stopped writing one, and no other column stands in
+for it. `backend/SECURITY.md` states the new seizure yield — a creation day, a
+revocation day, and nothing about when a device was last seen. A screen that needs
+to tell the user which device this is has `label_blob`, `created_date` and
+`this_device`.
+
+### Optional — one call for a fan-out, and a conditional identity read
+
+`frontend/docs/decisions.md` ADR-060 and ADR-065 and `frontend/docs/sync-engine.md`
+record what verifying a send costs today: three reads for each recipient, 107 to
+137 ms a round trip, 150 round trips for a 50-member group, and a 30-second
+in-memory cache built to survive the rate limit. That cache is a correctness
+compromise — for those thirty seconds the client encrypts against state it has not
+re-checked — and it exists because of a server shape that is now gone.
+
+`POST /api/v1/peers` answers up to 64 peers in one call, each under a tag the
+client can send back to get `unchanged` and no body. It serves the same bytes the
+per-user routes serve, so the verification code that already reads those answers
+reads these without a change.
+
+`GET /api/v1/users/{user_id}/identity` now carries an `ETag` and answers `304` to a
+matching `If-None-Match`, for the case where one peer is read on its own.
+
+The per-user routes are unchanged and are not deprecated: a client that wants one
+peer's devices should keep using them. What is worth reconsidering is the cache
+built around their cost.
+
+### Recommended — read the limits rather than hard-coding them
+
+`GET /api/v1/config` publishes the retention windows, the storage and device
+ceilings, the batch sizes, the padding bucket sets and whether this deployment
+serves voice. `envelope_ttl_days` is the one the client cannot get any other way:
+`frontend/docs/sync-engine.md` records that the retention window is an operator
+setting the client cannot state, and the queue-gap disclosure of
+`backend/CLIENT_CONTRACT.md` §H needs it.
+
+Every other value is one the client learns today from a refusal — a `413`, a
+`409`, a `400 bad_bucket` — or has hard-coded against this deployment's defaults. An
+operator may change any of them.
+
+### What did not change
+
+The per-user identity, device-list, device-log and claim routes keep their paths,
+their bodies and their semantics. `THROTTLE_ACCOUNTS` rose from `120/min` to
+`300/min`, which is more headroom rather than less. The server's WebSocket ping
+interval moved from 20 seconds to 240; the client's own four-minute keepalive is
+untouched and stays the client's decision.

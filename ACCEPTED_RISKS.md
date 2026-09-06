@@ -138,7 +138,25 @@ the rate limiter, none of which fills the disk:
   account; the dashboard lists them for the operator;
 - upload at its attachment quota. The bytes reach the disk before the quota refuses
   them and the refusal unlinks the file, so the transient disk cost is the in-flight
-  uploads times 64 MiB.
+  uploads times 64 MiB;
+- pull bytes through `POST /api/v1/peers`, which the `accounts` scope counts as one
+  request whatever it answers. Measured on the developer machine at the route's own
+  ceiling — 64 peers, ten live devices each, an identity and a log head for every one
+  — a 3.4 kB request answers 222 kB, and the scope admits 300 of those a minute, so
+  one account can pull roughly 66 MB a minute of public key material. The same bytes
+  were reachable before through the per-user reads, at roughly 130 kB a minute,
+  because each of those cost a request of its own: what changed is the volume per
+  unit of rate limit, not what a caller may read. It is bounded by a hard product —
+  `MAX_PEERS` times `MAX_DEVICES_PER_USER` times fixed field lengths — so it grows
+  with neither the population nor anything stored, and it touches no disk;
+- hold connections against `--limit-concurrency`, which is 1024 and counts a live
+  WebSocket as one. A socket the client closes is released at once; one whose peer
+  vanishes without closing the connection is held until the keepalive gives up on it,
+  which [ADR-0024](docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)
+  moved from at most 40 seconds to at most 300 — the 240-second ping interval plus the
+  60-second pong timeout. Exhausting the budget therefore needs roughly a seventh of
+  the rate it needed before, though it still needs a caller that can blackhole its own
+  connections rather than close them.
 
 **Why this is carried.** At band 0 every account is activated by hand by the operator,
 who knows the person behind it. The two durable surfaces a member could have used to
@@ -149,16 +167,24 @@ offers: deactivate the account, and the rest stops.
 
 **What reduces it today.** The per-account and per-address rate limits; the `4008`
 close, which costs the target a reconnect and nothing else; the dashboard's pending
-list; the quota, which holds the durable total.
+list; the quota, which holds the durable total; and, for the connection budget, the
+headroom itself — 1024 against a band of 500 devices, so the budget is twice the
+population it serves.
 
-**If it were exploited.** A targeted member's socket drops and reconnects while the
-flood lasts; a member who mints credentials and allocates against them takes the relay
+**If it were exploited.** An account pulling peer state at its ceiling takes about
+1.1 MB a second of uplink, so a handful of them contend for it; the bytes are public
+key material every authenticated caller may read, so nothing is disclosed that a
+slower caller could not have read anyway. A targeted member's socket drops and
+reconnects while the flood lasts; a member who mints credentials and allocates against them takes the relay
 towards `total-quota`, at which point calls that are not theirs fail to allocate; the
 operator skims a longer pending list; the disk carries a transient spike bounded by
 concurrency.
 
-**Trigger that ends the acceptance.** Open registration, a second operator, band 1, or
-a relay that reaches `total-quota` outside a real call load.
+**Trigger that ends the acceptance.** Open registration, a second operator, band 1, a
+relay that reaches `total-quota` outside a real call load, a worker that reaches
+`--limit-concurrency` while the live device count is well below it, or sustained
+egress from the `accounts` scope that is not a real fan-out — the answer to which is a
+byte budget beside the request counter, not a smaller batch.
 
 ---
 

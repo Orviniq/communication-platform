@@ -625,6 +625,57 @@ around, in `ACCEPTED_RISKS.md` AR-18.
 `Device.refresh_generation` keeps its column with no reader and no writer until the
 next run drops it; nothing a client can observe depends on it.
 
+## The client stops paying for the contract
+
+Four costs the client was carrying, and one column it can no longer read
+([ADR-0024](docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)).
+
+### `POST /api/v1/peers` — one call for a whole fan-out
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Verifying the recipients of a send | Three reads for each recipient: `GET /api/v1/users/{user_id}/identity`, `GET /api/v1/users/{user_id}/devices` and the device log. A 50-member group was 150 round trips before one message | `POST /api/v1/peers` with 1 to 64 `{user_id, etag?}` items answers each peer's `identity`, `devices` and `log_head_seq` in one call, in request order | Optional. Replace the per-recipient loop with one call. The per-user routes are unchanged and stay, so nothing is forced |
+| The bytes of each answer | — | The same bytes the per-user routes serve: `identity` is the whole body of the identity read or `null`, and `devices` holds the items of the device list | None. Whatever already verifies the per-user answers verifies these unchanged |
+| Repeating the call | — | Send the `etag` the previous answer carried for that peer. A peer whose state has not moved answers `{user_id, etag, unchanged: true}` and no body | Optional. Branch on the presence of `unchanged`, never on its value — it is never `false` |
+| What the tag covers | — | The identity, the live device set, every device's `bundle_version`, and the log head. It is **this route's own tag** and is not the `ETag` of either per-user route | Keep it separate from the other two. Sending one where another belongs costs a full answer, never a wrong `304` |
+| A user that does not exist, is not activated, or was deactivated | Each per-user route answered separately: `404` from the identity read, an empty list from the device list | **Omitted** from `peers` entirely. The three cases are not told apart | Match the answer to the request by `user_id`; do not assume the list is the same length as the request |
+| The rate cost | 150 requests against `accounts` for a 50-member fan-out | One | Optional. The 30-second peer cache built to survive the old cost is no longer needed |
+
+### `GET /api/v1/users/{user_id}/identity` — a conditional read
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The response | `{master_pub, self_signing_pub, user_signing_pub, master_sig, version}`, always a full `200` | The same five fields plus `etag`, and an `ETag` header carrying the same value | Optional. The added field is additive; a client that ignores it is unaffected |
+| `If-None-Match` | Not read | A matching value answers `304` with an empty body | Optional. Send the tag you last received and skip the body while the identity is unchanged |
+| What the tag covers | — | The four public byte fields and the version, and nothing else | Note that the identity's tag and the peer-state tag are different values for different routes; the peer-state answer carries both |
+| An identity that was never published | `404 not_found` | Unchanged, whatever `If-None-Match` carries — there is no tag for a row that does not exist | None |
+
+### `GET /api/v1/config` — the limits, published
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The retention window | Not published anywhere. `ENVELOPE_TTL_DAYS` is an operator setting, so a client telling a user how long an undelivered message survives was guessing | `envelope_ttl_days` in the response | Recommended. Read it once at startup and use it in the queue-gap disclosure (`backend/CLIENT_CONTRACT.md` §H) |
+| Every other limit | Learned from a `413`, a `409` or a `400 bad_bucket` | `attachment_ttl_days`, `mailbox_max_bytes`, `max_devices_per_user`, `max_devicelog_records`, `session_token_days`, `send_batch_max`, `ack_max`, `drain_page_max`, `claim_max`, `envelope_buckets`, `attachment_buckets`, `signal_buckets` | Recommended. Prefer these over hard-coded numbers: an operator may change any of them |
+| Whether the deployment serves voice | Discovered by calling `POST /api/v1/me/relay` and reading `503 voice_unconfigured` | `voice_configured`, a boolean | Recommended. Hide the call control rather than offering one that fails |
+
+Every value is read from the setting or the constant the enforcing route reads, so
+none of them can describe a server that behaves differently. Authenticated: the
+route takes a full-scope token.
+
+### `last_active_date` is gone — this is the breaking one
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `GET /api/v1/me/devices` | Each item carried `device_id`, `label_blob`, `created_date`, `last_active_date` and `this_device` | `last_active_date` is gone from the item. The other four are unchanged | **Required.** Remove the field from the DTO and from the linked-devices screen. A DTO that requires it will fail to parse |
+| What the server records about activity | The socket bind wrote `Device.last_active_date` on the day it changed, and six other columns carried a day-coarse write timestamp | Nothing. No route serves any of the seven, and the socket bind writes no row at all | None. There is no replacement, by decision: `backend/SECURITY.md` states the new seizure yield |
+
+### The rate limit and the socket keepalive
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `THROTTLE_ACCOUNTS` | `120/min` per account | `300/min` per account. Every route on the `accounts` scope shares it, including the two new ones | None. More headroom, not less |
+| The server's WebSocket ping | uvicorn's default: a ping every 20 s, given up on after 20 s | A ping every 240 s, given up on after 60 s | None. The client's own four-minute keepalive is unaffected and stays its decision. A socket the server has stopped hearing from is closed within 300 s rather than 40 s |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they
