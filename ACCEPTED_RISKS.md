@@ -1187,3 +1187,133 @@ than acted on — the unmeasurable half of ADR-0002's flip trigger, in the desig
   a reading and not a diff.
 - **Anything on the VPS.** No review here ran against a serving host, so every edge
   row remains "configured" rather than "observed", `access_log off` included.
+
+## Appendix D — The audits of phase 10 run 08
+
+The nine audits of phase 10 ran on 2026-09-06 over the tree at the merge of phase 9
+(`3c921ad`) plus this run's own contract step. Method: each audit's skill, run
+sequentially by one session rather than in parallel, with every claim measured
+against a running PostgreSQL 16.14 and Redis 7 on the developer machine. Scratch
+databases were created and dropped per audit; `chatapp`, `chatperf` and
+`test_chatapp` were not touched. This appendix keeps *examined and clean* apart from
+*not examined*, as A to C do: a surface named in neither was overlooked.
+
+### What the audits closed
+
+| Finding | Severity | Closed by |
+|---|---|---|
+| The rate limiter issued `INCR` then `EXPIRE` guarded by `count == 1`, so anything that stopped the coroutine between them left the key with no expiry and nothing ever re-armed it. Measured twice: a `RedisError` on the second command left `TTL -1` and recovery did not repair it; **a cancelled handler did the same with no Redis failure at all**, which an unauthenticated caller reaches on `login` and `register` by hanging up, once per request | High | `69faade` — one pipeline, `EXPIRE … NX`, so neither command lands without the other and a key that lost its expiry is re-armed by the next request of its window |
+| Redis had no `maxmemory` on a 1 GB host it shares with PostgreSQL, nginx, coturn and a worker already holding ~200 MB | Medium | `69faade` — `maxmemory 128mb` with `maxmemory-policy noeviction`, because every key in that store is a control and an eviction is a rate limit or a login lockout silently resetting |
+| Nothing in 248 files asserted the Redis on-disk posture. `save ""` and `appendonly no` are the Redis half of invariant 6 and were enforced by a committed file alone | Medium | `69faade` — `RedisPostureTests`; turning persistence back on and swapping `noeviction` for an eviction policy each fail it |
+| `vault/tests/test_log_silence.py` asserted on `caplog`, whose handler is appended behind the root `StreamHandler` that carries `ScrubFilter`. The filter mutates the record in place, so every assertion in the file read text the scrubber had already redacted | High | `2214a64` — `capture_all_logging`. Measured against one injected leak: the `caplog` shape passed, the new shape failed two tests |
+| `realtime/tests/test_log_silence.py` swapped only the root handlers, and `django.request`, `uvicorn.access`, `uvicorn.error`, `websockets` and `push_response` each carry `propagate = False` and a handler of their own — every logger a socket path writes to | Medium | `2214a64` — the same shared capture; the three other realtime modules that imported the root-only helper moved with it |
+| The suite was five tests red for anyone running on `config/settings/dev.py`'s own 20-character `JWT_SIGNING_KEY` fallback, and green in CI, which exports a long one | High | `2214a64` — each relay test pins a strong key inside its own `override_settings` and holds the relay branch alone |
+| Six tests could not report the defect they were named for: one asserted a delete that is structurally incapable of reaching the row, two carried no assertion at all, one counted queries and discarded the response, and two were dead setup | Low | `adbd9f7` |
+| The at-rest suites are the executable proof that no plaintext is stored, and `test_no_invariant_suite_is_quarantined` does not walk them — it cannot, because each legitimately carries a `pg_dump` guard its own pattern matches | Medium | `adbd9f7` — the guard is asserted to be the only marker in either file, and `pg_dump` must exist whenever `CI` is set |
+| `devices/0003_drop_the_retired_columns` said "Code deploys before the migration". `refresh_generation` is `NOT NULL` with no database default, so a release that has stopped naming it cannot insert a device at all until the column is gone: measured, every insert raises a not-null violation, which is `POST /api/v1/me/devices` answering `500` for the length of the window | High (deploy correctness) | `1d940bf` — the docstring states the real order, and `MIGRATE_FIRST` plus a catalogue-derived test now name any future removal of a `NOT NULL` column with no default |
+| `CASCADE` slipped through the statement gate this run widened: `DROP COLUMN` and `DROP CONSTRAINT` were admitted as catalogue writes and exempted from the same-table check, and `CASCADE` matched the same substring | Low | `1d940bf` — added to `FORBIDDEN_ALTERATIONS`; Django emits it only on `DROP TABLE`, which that list never sees |
+| The panel's rule — the attachment capability never becomes visible text and never enters a URL — was proven against `list_display`, `list_display_links` and the permission hooks, and never against a rendered page | Medium | `b08ff32` — asserted against the rendered bodies of the two pages that carry a per-row identifier; adding `id` to `list_display` and restoring `list_display_links` each fail it |
+| "What the client can build against now" described how the contract is published and never what the surface is | Low | `b08ff32` — it states the surface, and every figure in it is derived from the generated document and the route table by three tests |
+
+Every fix landed with a test that failed on the code before it, and each new gate was
+mutation-proved against the change it exists to catch.
+
+### Examined and found clean
+
+- **The token issuer and verifier** (`api/auth.py`, invariant 9). `algorithms` pinned,
+  so no `alg: none` and no algorithm confusion; the `require` list turns a missing
+  claim into a failure rather than a skipped check; a `typ` outside the two minted
+  values is refused at decode; a register token on a session route is `403` and not
+  `401`. `load_device` filters on the device id **and** the owner **and** not-revoked,
+  then checks the token generation and the owner's active flag, and reports all four
+  failures identically.
+- **Path traversal on the attachment download.** `services.locate` returns the id read
+  back from the row, never the request value, so the `X-Accel-Redirect` path cannot be
+  steered by input; a NUL is refused ahead of the query. The nginx `internal` location
+  uses `alias` with trailing slashes on both sides, which is the safe form.
+- **The client address every anonymous rate limit keys on.** uvicorn runs
+  `--proxy-headers --forwarded-allow-ips 127.0.0.1`, and nginx sets
+  `X-Forwarded-For $remote_addr` — replacing, not appending — so the header cannot be
+  spoofed.
+- **The relay credential.** The username is an expiry and sixteen random bytes: no
+  account id, no device id, nothing derived from either, so two credentials of one
+  device are unlinkable to the relay that checks them. HMAC-SHA1 is coturn's required
+  construction, and the security rests on the key rather than on SHA-1 collisions.
+- **The identity backup script.** `set -euo pipefail`; the password reaches `pg_dump`
+  through a command prefix and never argv, which is the right mitigation for the
+  world-readable `/proc/*/cmdline` on a shared VPS; `umask 077`; age public-key
+  encryption with the private half offline; `--data-only` with a table allowlist a
+  test enforces; `.partial` then rename; rotation by ISO date.
+- **Both systemd units**, apart from the absent `SystemCallFilter` recorded below.
+- **The whole migration history, replayed independently of the suite.** Forward onto
+  an empty database, every app to zero in reverse dependency order (no project table
+  and no ledger row left), and forward again: 91 columns either side, identical, and
+  no dropped column returns.
+- **Every lock class of the six new migrations, re-derived from `pg_locks`** rather
+  than read off the record. All five atomic ones match, including the two-sided
+  ACCESS EXCLUSIVE that `DROP CONSTRAINT` takes on `accounts_user` as well as
+  `attachments_attachment`.
+- **Out-of-band execution.** The dispatch inventory is **zero**: no Celery, no RQ, no
+  django-q2, no Channels, so five of the async-jobs mandate's eight items are vacuous
+  here and are recorded as vacuous rather than as passed. The retention sweep holds a
+  session-scoped advisory lock for its whole run — proved end to end, a second
+  `manage.py prune` printed the skip line and exited `0`, and the lock survived five
+  batch transactions on the same pooled connection before releasing. The gateway
+  releases its bus subscription on a bind failure and again in a `finally` on every
+  other exit path, its `deliver` sink is synchronous so one slow socket cannot hold up
+  the fan-out, and its per-connection state is bounded.
+- **The contract, in both directions.** Every route of the document has a section and
+  no section documents a route the surface does not serve; every route publishes the
+  statuses it can answer and no route publishes one the code cannot; every route names
+  its throttle scope; **every route documents its retry semantics — all 32, not only
+  the mutating ones.** `openapi --check` reports an empty diff.
+- **The panel, rendered signed in.** Dashboard and every changelist, filter, search and
+  permitted change form answered `200`; every per-object delete answered `403`; no page
+  raised. `unfold_surface_check.py` against the installed 0.105.0 reports **0 unknown
+  `UNFOLD` keys**, and its one flagged attribute is a project attribute the panel
+  defines and reads itself. The pinned release, the registered set of four and the
+  hidden-model list all match the panel record.
+- **Performance against the recorded shape.** Peer state is 5 queries flat at 1, 8 and
+  64 peers. The sweep on `queued_day` is 5.58 s for 100 000 expired of 200 000 against
+  5.95 s recorded, and both retention queries still index-scan. The §4.1 load curve
+  re-ran to the same shape at all sixteen cells with every response a `200`.
+
+### Not examined
+
+- **The `/ws` gateway's frame handling end to end.** The handshake was read and reuses
+  the one verifier; the ack and signal frame bodies, the bucket checks and the close
+  codes were not traced statement by statement.
+- **The nginx site beyond the proxy headers, the internal attachment location and the
+  body caps.** TLS parameters, the admin location and the rate and connection limits
+  were not read this pass.
+- **`ops/postgres/README.md`**, and `ops/audit/postgres_posture.sh` was not run in the
+  security pass; it is a release gate and runs there.
+- **Active attack traffic against the HTTP surface.** No request-level probing was run;
+  the security findings rest on reading plus targeted measurement of the limiter and
+  the store.
+- **Dependency vetting (A03).** No `pip-audit` run.
+- **`sqlmigrate --backwards` statement by statement.** Reversibility was proved by
+  running the whole history down and up instead.
+- **Any migration against a populated table at production scale.** There is no
+  production database; the row counts used are the seeded 200 000-row copy.
+- **The timers on a real host.** The schedule, overlap and catch-up claims come from
+  the unit files plus systemd's documented semantics; only the advisory lock was
+  measured against a real PostgreSQL. DST behaviour of `OnCalendar=daily` was reasoned
+  about and not exercised on a DST-observing clock.
+- **The panel at a phone width or under `dir=rtl`.** This deployment ships an English
+  panel and the record's localization state is unchanged.
+- **p99, and `EXPLAIN` for the routes outside the retention path.** The load harness
+  reports p50 and p95, as the recorded run does.
+- **The gateway's per-unit query counts**, which were run through the existing suite
+  rather than re-derived.
+
+### Accepted rather than closed
+
+| Finding | Why it is carried | The trigger that ends the acceptance |
+|---|---|---|
+| Neither systemd unit sets `SystemCallFilter`. Both are otherwise hardened — `NoNewPrivileges`, `ProtectSystem=strict`, the `ProtectKernel*` set, `RestrictAddressFamilies`, `LockPersonality`, `MemoryDenyWriteExecute` on the serving unit, and scoped `ReadWritePaths` | Adding it can break a service at runtime and it cannot be exercised on the developer machine, so shipping it unverified would trade a hardening gap for an availability risk on the one host | The first deploy where the unit can be started and its journal read |
+| Two concurrent runs of the suite corrupt each other: `conftest.py`'s autouse `flush_redis_state` flushes a shared Redis database before every test | CI runs one suite per job, and the isolation the audits needed was obtained with a per-run Redis index. It also rules out `pytest-xdist` for this suite | Any move to parallel test execution, or a second suite run on one machine becoming routine |
+| `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` have no default anywhere, so `pytest` on a fresh clone errors at import rather than collecting | The two secrets have dev fallbacks and the database triple deliberately does not, so no run silently reaches the wrong database | A contributor who is not the author needs the suite to run from a clone with no environment |
+| The realtime log-silence pass never drives the `bus.CLOSE` → 4003 close, the one close the server initiates with the device bound | The path is exercised by `realtime/tests/test_revoke_close.py`, which installs no capture; the gap is the capture, not the path | The next change to the gateway's close handling |
+| `core/tests/test_log_silence.py` subtracts the paths Django serves, so the admin panel is the one served surface no log-silence test drives | `django.request` fires there and `LogEntry.object_repr` flows there, but the panel's own suite holds what each page renders | The panel gaining a page that writes a log line, or an operator-facing error path |
+
