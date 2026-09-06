@@ -136,11 +136,18 @@ checking and signing were two separate steps, so a malicious homeserver could
 substitute the key between them. The canonical encodings in this API are
 self-contained so no such indirection exists.
 
+The response carries an `ETag` over the four key fields and the version, mirrored as
+`etag` in the body, and answers `304` to a matching `If-None-Match`. The tag is
+derived from the row rather than stored beside it, so a `304` costs the server the
+same one query a `200` does; what it saves is the body, which is four base64 key
+fields on every recipient of every send.
+
 **Headers**
 
 | Header | Required | Value |
 |---|---|---|
 | `Authorization` | yes | `Bearer <session token>` |
+| `If-None-Match` | no | Previous `ETag` value |
 
 **Path parameters**
 
@@ -150,7 +157,8 @@ self-contained so no such indirection exists.
 
 **Retry semantics.** Safe to repeat: the route writes nothing. `version` moves when the
 user rotates the identity, and a client that has pinned one compares that rather than
-the key bytes.
+the key bytes. A retry carrying the `ETag` of the first answer gets `304` while the
+identity is unchanged.
 
 **Responses**
 
@@ -162,9 +170,17 @@ the key bytes.
   "self_signing_pub": "c1NlbGZTaWdu…",
   "user_signing_pub": "dVVzZXJTaWdu…",
   "master_sig": "Z01hc3RlclNpZw…",
-  "version": 3
+  "version": 3,
+  "etag": "\"9f2c4b7a1e6d3058c4a1b2e7f0d93a65\""
 }
 ```
+
+Header: `ETag: "9f2c4b7a1e6d3058c4a1b2e7f0d93a65"`. The tag changes when any of the
+four key fields or the version changes, and never otherwise.
+
+### Not modified — `304 Not Modified`
+
+Empty body.
 
 ### Malformed id — `400 Bad Request`
 
@@ -824,6 +840,164 @@ Empty body.
 ```json
 { "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
 ```
+
+### Rate limited — `429 Too Many Requests`
+
+```json
+{ "code": "throttled", "detail": "Request was throttled." }
+```
+
+Scope `accounts`, default 120/min.
+
+## Peer state for a set of users
+
+**Method:** `POST`
+**Path:** `/api/v1/peers`
+
+Everything a sender needs to verify a set of recipients, in one call: for each peer
+its published identity, its live devices and the head of its device-list log — the
+same bytes `GET /api/v1/users/{user_id}/identity` and
+`GET /api/v1/users/{user_id}/devices` serve, verbatim. A client that verifies the
+per-user answers verifies these without changing a line of that code.
+
+It exists because verifying a fan-out cost three reads for each recipient. A
+50-member group was 150 round trips before a single send, against a scope that
+counts every one of them; this is one.
+
+A `POST` because the request carries a body — up to 64 ids, each with the tag the
+client already holds — and a query string will not carry 64 of those. It reads state
+and writes none.
+
+Each answer carries **this route's own tag**, which is not the tag of either
+per-user route: it covers the identity, the live device set, every device's
+`bundle_version` and the log head together, so one comparison replaces three. Send
+the tag back on the next cycle and a peer whose state has not moved answers with
+three fields and no body.
+
+An unknown, inactive or deactivated user is **omitted** from the answer rather than
+distinguished — the same refusal to tell those apart that the per-user routes make.
+A `user_id` repeated in the request is answered once for each entry, each against
+its own `etag`.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <session token>` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `peers` | array | yes | 1 to 64 items |
+| `peers[].user_id` | UUID | yes | Account to read |
+| `peers[].etag` | string | no | The tag this route gave for that peer earlier; max 64 characters |
+
+An unknown field anywhere in the body is refused.
+
+```json
+{
+  "peers": [
+    { "user_id": "0f8b2c11-6a5e-4f3d-9c27-1e8a5b0d4c73" },
+    {
+      "user_id": "7c1d9e40-3b62-4a08-9f51-2d6c8a3b7e19",
+      "etag": "\"3d5f81a0c26b47e9138a5c0d2f7b46e1\""
+    }
+  ]
+}
+```
+
+**Retry semantics.** Safe to repeat: the route writes nothing. A retry that carries
+the tags of the first answer gets `unchanged` for every peer that has not moved,
+which is the cheap way to poll before a send. Its cost to the server does not grow
+with the number of peers: one call is four queries whether it names one peer or
+sixty-four.
+
+**Responses**
+
+### Read — `200 OK`
+
+```json
+{
+  "peers": [
+    {
+      "user_id": "0f8b2c11-6a5e-4f3d-9c27-1e8a5b0d4c73",
+      "etag": "\"a1b2c3d4e5f60718293a4b5c6d7e8f90\"",
+      "identity": {
+        "master_pub": "bU1hc3RlcktleQ…",
+        "self_signing_pub": "c1NlbGZTaWdu…",
+        "user_signing_pub": "dVVzZXJTaWdu…",
+        "master_sig": "Z01hc3RlclNpZw…",
+        "version": 3,
+        "etag": "\"9f2c4b7a1e6d3058c4a1b2e7f0d93a65\""
+      },
+      "devices": [
+        {
+          "device_id": "2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f",
+          "ik_pub": "mNfJ2kLxWQ…",
+          "registration_id": 4242,
+          "cross_sig": "eENyb3NzU2ln…",
+          "bundle_version": 2
+        }
+      ],
+      "log_head_seq": 4
+    },
+    {
+      "user_id": "7c1d9e40-3b62-4a08-9f51-2d6c8a3b7e19",
+      "etag": "\"3d5f81a0c26b47e9138a5c0d2f7b46e1\"",
+      "unchanged": true
+    }
+  ]
+}
+```
+
+Items are in request order, and only users that exist and are active appear.
+
+Two item shapes, and `unchanged` is what tells them apart. It is present only on the
+short one and is always `true`; branch on its presence, never on its value.
+
+- **Unchanged** — `user_id`, `etag`, `unchanged`. The `etag` the request carried is
+  still the current one, so the peer's identity, live device set, bundle versions
+  and log head are all as the client last read them.
+- **Full** — `user_id`, `etag`, `identity`, `devices`, `log_head_seq`. `identity` is
+  the whole body of `GET /api/v1/users/{user_id}/identity`, or `null` when the user
+  has published none. `devices` holds the items of
+  `GET /api/v1/users/{user_id}/devices`, ordered by device id, and is `[]` for a user
+  with no live device. `log_head_seq` is `null` for an empty log.
+
+`cross_sig` is `null` on a device that was never cross-signed, exactly as it is on
+the per-user list: an unsigned device must look unsigned, and the client — never the
+server — decides what to do about it.
+
+### Malformed body — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "peers.0.user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+An empty `peers`, more than 64 items, an unknown field, or a `user_id` that is not a
+UUID all land here.
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+Cap: `BODY_CAP_JSON_BYTES`, 16 KiB by default, which is well above 64 ids and their
+tags.
 
 ### Rate limited — `429 Too Many Requests`
 

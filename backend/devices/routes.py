@@ -31,6 +31,8 @@ from devices.schemas import (
     OtpkCountOut,
     OwnDeviceListOut,
     PeerDeviceListOut,
+    PeerStateIn,
+    PeerStateOut,
     PrekeyCountOut,
     PrekeyReplenishIn,
     RegisterDeviceIn,
@@ -204,11 +206,42 @@ async def publish_identity(
 @authenticated.get(
     "/users/{user_id}/identity",
     response_model=IdentityOut,
-    responses=errors(*FULL_DEVICE, "invalid_request", "not_found", "throttled"),
+    responses={
+        status.HTTP_304_NOT_MODIFIED: {
+            "description": "`If-None-Match` carried the current ETag."
+        },
+        **errors(*FULL_DEVICE, "invalid_request", "not_found", "throttled"),
+    },
     dependencies=[Depends(rate_limit("accounts"))],
 )
-async def peer_identity(user_id: uuid.UUID):
-    return await run_unit(services.peer_identity, user_id)
+async def peer_identity(
+    user_id: uuid.UUID,
+    response: Response,
+    if_none_match: Annotated[str | None, Header()] = None,
+):
+    result = await run_unit(services.peer_identity, user_id, if_none_match)
+    if result is None:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+    etag, body = result
+    response.headers["ETag"] = etag
+    return body
+
+
+@authenticated.post(
+    "/peers",
+    response_model=PeerStateOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "payload_too_large", "throttled"),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
+async def peer_state(payload: PeerStateIn):
+    """Everything a sender needs to verify a set of recipients, in one call.
+
+    A POST because the request carries a body — a list of ids each with the tag the
+    client already holds — and a query string would not hold 64 of those. It reads
+    state and writes none, which is what the retry paragraph of
+    `devices/API.md` states and what keeps it on the `accounts` scope.
+    """
+    return await run_unit(services.peer_state, payload.peers)
 
 
 @authenticated.post(

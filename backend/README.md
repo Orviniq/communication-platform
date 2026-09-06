@@ -33,7 +33,13 @@ base64-encoded. Errors share one envelope: `{"code": "...", "detail": ...}`, whe
 `detail` is a string except for `invalid_request`, which maps a field path to its
 messages. No error body echoes request input. A request that fails validation is
 `400 invalid_request`, a body above the route's cap is `413 payload_too_large`, and a
-request past its deadline is `503 unavailable`.
+request past its deadline is `503 unavailable`. `GET /api/v1/config` publishes the
+limits a client cannot derive — the retention windows, the storage and device
+ceilings, the batch sizes and the padding buckets — read from the settings and
+constants the routes enforce, and `POST /api/v1/peers` answers identity, live devices
+and log head for up to 64 peers in one call so that verifying a fan-out costs one
+round trip rather than three per recipient
+([ADR-0024](../docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)).
 
 **Authentication.** Bearer JWTs (PyJWT, HS256, a dedicated `JWT_SIGNING_KEY`). No
 token is ever stored: a token table would be a per-device login record at rest, so

@@ -40,6 +40,58 @@ def _stale_version():
     return ApiError(409, "stale_version", "Version must increase.")
 
 
+def _tag(*inputs):
+    """A quoted entity tag over the values a route's own tag is built from.
+
+    Truncated to 128 bits, which is what a comparison needs: the tag decides a
+    `304`, so a collision costs a client a stale read of public key material it
+    verifies for itself, and nothing here authenticates anything.
+    """
+    return f'"{hashlib.sha256(repr(inputs).encode()).hexdigest()[:32]}"'
+
+
+def _identity_etag(identity):
+    """The tag of one published identity: the four public byte fields and the
+    version, and nothing else. A row exists for a user or it does not, so there is
+    no tag for an absent identity — that answer is a 404."""
+    return _tag(
+        bytes(identity.master_pub),
+        bytes(identity.self_signing_pub),
+        bytes(identity.user_signing_pub),
+        bytes(identity.master_sig),
+        identity.version,
+    )
+
+
+def _identity_body(identity):
+    """The bytes `GET /users/{user_id}/identity` serves, built in one place so the
+    peer-state route serves them verbatim rather than by a second description."""
+    return {
+        "master_pub": _b64(identity.master_pub),
+        "self_signing_pub": _b64(identity.self_signing_pub),
+        "user_signing_pub": _b64(identity.user_signing_pub),
+        "master_sig": _b64(identity.master_sig),
+        "version": identity.version,
+        "etag": _identity_etag(identity),
+    }
+
+
+def _peer_device_body(device):
+    """One item of `GET /users/{user_id}/devices`, shared with the peer-state route
+    for the same reason `_identity_body` is."""
+    return {
+        "device_id": str(device.id),
+        "ik_pub": _b64(device.ik_pub),
+        "registration_id": device.registration_id,
+        # Verbatim, null included: a device that was never cross-signed must be
+        # visible as such so peers can refuse it. Substituting or defaulting
+        # anything here would forge exactly the attestation the design keeps out of
+        # the server's hands.
+        "cross_sig": _b64_or_none(device.cross_sig),
+        "bundle_version": device.bundle_version,
+    }
+
+
 def _device_list_etag(user_id):
     """One query over the account's live device set, one over its log head.
     Returns (etag, log_head_seq) so callers surface the head without re-querying.
@@ -73,8 +125,7 @@ def _device_list_etag(user_id):
         .first()
     )
     head_hash = hashlib.sha256(bytes(head[1])).hexdigest() if head else None
-    digest = hashlib.sha256(repr((rows, head_hash)).encode()).hexdigest()
-    return f'"{digest[:32]}"', (head[0] if head else None)
+    return _tag(rows, head_hash), (head[0] if head else None)
 
 
 def publish_identity(user_id, payload):
@@ -106,32 +157,103 @@ def publish_identity(user_id, payload):
         )
 
 
-def peer_identity(user_id):
+IDENTITY_FIELDS = (
+    "master_pub",
+    "self_signing_pub",
+    "user_signing_pub",
+    "master_sig",
+    "version",
+)
+
+
+def peer_identity(user_id, if_none_match):
     """Serve a user's cross-signing identity verbatim. No smoothing, no history:
     if the stored master key changed, peers get the new bytes and must raise their
     own alarm — hiding or merging a change here would defeat exactly the check the
-    clients are required to make."""
+    clients are required to make.
+
+    Returns None when the caller's tag still holds. The tag is derived from the row
+    rather than stored beside it, so a `304` costs the same one query a `200` does;
+    what it saves is the body, which is four base64 key fields on every send.
+    """
     # user__is_active matches peer_devices: a deactivated account publishes nothing.
     identity = (
         UserIdentity.objects.filter(user_id=user_id, user__is_active=True)
-        .only(
-            "master_pub",
-            "self_signing_pub",
-            "user_signing_pub",
-            "master_sig",
-            "version",
-        )
+        .only(*IDENTITY_FIELDS)
         .first()
     )
     if identity is None:
         raise ApiError(404, "not_found", "No published identity.")
-    return {
-        "master_pub": _b64(identity.master_pub),
-        "self_signing_pub": _b64(identity.self_signing_pub),
-        "user_signing_pub": _b64(identity.user_signing_pub),
-        "master_sig": _b64(identity.master_sig),
-        "version": identity.version,
+    body = _identity_body(identity)
+    if if_none_match == body["etag"]:
+        return None
+    return body["etag"], body
+
+
+def peer_state(items):
+    """Identity, live devices and log head for up to 64 peers, in four queries.
+
+    The four are one for the accounts, one for their devices, one for their
+    identities and one for their log heads, and none of them scales with the peer
+    count — which is the whole point of the route: the per-user reads it replaces
+    cost three round trips for each recipient of a send.
+
+    Each answer carries this route's own tag over exactly the three things it
+    serves, so a client that holds a tag from the last cycle gets `unchanged` for
+    that peer and no body. A user that does not exist, or is not active, is omitted
+    rather than distinguished: an unknown id and a deactivated account answer alike,
+    exactly as they do on the per-user routes.
+    """
+    requested = {item.user_id for item in items}
+    live = set(
+        User.objects.filter(id__in=requested, is_active=True).values_list("id", flat=True)
+    )
+    devices = {}
+    for device in (
+        Device.objects.filter(user_id__in=live, revoked_date__isnull=True)
+        .only("id", "user", "ik_pub", "registration_id", "cross_sig", "bundle_version")
+        .order_by("user_id", "id")
+    ):
+        devices.setdefault(device.user_id, []).append(_peer_device_body(device))
+    identities = {
+        identity.user_id: _identity_body(identity)
+        for identity in UserIdentity.objects.filter(user_id__in=live).only(
+            *IDENTITY_FIELDS
+        )
     }
+    # DISTINCT ON, so one statement carries every peer's head record instead of one
+    # statement for each. The blob rides along because it is an input to the tag:
+    # the seq alone would be enough for an append-only log, and hashing the head
+    # bytes as well costs nothing and does not depend on that staying true.
+    heads = {
+        user_id: (seq, hashlib.sha256(bytes(blob)).hexdigest())
+        for user_id, seq, blob in DeviceLogRecord.objects.filter(user_id__in=live)
+        .order_by("user", "-seq")
+        .distinct("user")
+        .values_list("user_id", "seq", "blob")
+    }
+
+    peers = []
+    for item in items:
+        if item.user_id not in live:
+            continue
+        head = heads.get(item.user_id)
+        identity = identities.get(item.user_id)
+        listed = devices.get(item.user_id, [])
+        etag = _tag(identity, listed, head)
+        if item.etag == etag:
+            peers.append({"user_id": str(item.user_id), "etag": etag, "unchanged": True})
+            continue
+        peers.append(
+            {
+                "user_id": str(item.user_id),
+                "etag": etag,
+                "identity": identity,
+                "devices": listed,
+                "log_head_seq": head[0] if head else None,
+            }
+        )
+    return {"peers": peers}
 
 
 def register_device(user, payload):
@@ -248,21 +370,8 @@ def peer_devices(user_id, if_none_match):
         .only("id", "ik_pub", "registration_id", "cross_sig", "bundle_version")
         .order_by("id")
     )
-    # cross_sig is surfaced verbatim, null included: a device that was never
-    # cross-signed must be visible as such so peers can refuse it. Substituting or
-    # defaulting anything here would forge exactly the attestation the design keeps
-    # out of the server's hands.
     body = {
-        "devices": [
-            {
-                "device_id": str(device.id),
-                "ik_pub": _b64(device.ik_pub),
-                "registration_id": device.registration_id,
-                "cross_sig": _b64_or_none(device.cross_sig),
-                "bundle_version": device.bundle_version,
-            }
-            for device in devices
-        ],
+        "devices": [_peer_device_body(device) for device in devices],
         "etag": etag,
         "log_head_seq": log_head_seq,
     }

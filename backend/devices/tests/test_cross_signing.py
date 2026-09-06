@@ -67,6 +67,9 @@ def test_a_published_identity_reads_back_byte_identical(
     body = http.get(
         peer_identity_url(active_user.id), headers=bearer(peer, peer_device)
     ).json()
+    # `etag` is the one field the read adds that the write did not carry: it is
+    # derived from the four key fields and the version, never stored.
+    assert body.pop("etag").startswith('"')
     assert body == payload
 
 
@@ -205,8 +208,9 @@ def test_a_substituted_master_key_is_served_verbatim_not_smoothed_over(
     body = http.get(
         peer_identity_url(active_user.id), headers=bearer(peer, peer_device)
     ).json()
-    assert body == replaced
     assert body["version"] == 2
+    body.pop("etag")
+    assert body == replaced
 
 
 def test_a_prekey_replenish_can_refresh_the_cross_signature(

@@ -184,3 +184,100 @@ it while the rest of the surface is refusing.
 
 There are no other responses of its own. If the service is down, the request fails at
 the transport level instead.
+
+## Server limits
+
+**Method:** `GET`
+**Path:** `/api/v1/config`
+
+Every limit a client has to know and cannot derive: the retention windows, the
+storage and device ceilings, the batch sizes each route accepts, the padding bucket
+sets, and whether this deployment serves voice. Each value is read from the setting
+or the constant the route already enforces, so nothing here is a second statement of
+a limit — a client that ignores this route learns the same numbers from a `413`, a
+`409` or a `400 bad_bucket`.
+
+It exists mainly for the retention window. `envelope_ttl_days` is an operator
+setting, and a client that tells a user how long an undelivered message survives has
+no other way to know it ([`../CLIENT_CONTRACT.md`](../CLIENT_CONTRACT.md) §H).
+
+Authenticated: none of it is a secret, and none of it is anyone's business before
+they hold a session. The values change only when the operator edits the environment
+file and restarts, so read it once at startup and cache it for the session.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <session token>` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing and reads no row. It
+takes no database connection, so it answers while the database is refusing — but it
+counts against `accounts` like every other route on that scope, so poll it on
+startup rather than on a timer.
+
+**Responses**
+
+### Limits — `200 OK`
+
+```json
+{
+  "envelope_ttl_days": 7,
+  "attachment_ttl_days": 30,
+  "mailbox_max_bytes": 33554432,
+  "max_devices_per_user": 10,
+  "max_devicelog_records": 10000,
+  "session_token_days": 30,
+  "send_batch_max": 256,
+  "ack_max": 200,
+  "drain_page_max": 100,
+  "claim_max": 100,
+  "envelope_buckets": [1024, 4096, 16384, 65536, 262144],
+  "attachment_buckets": [65536, 262144, 1048576, 4194304, 16777216, 67108864],
+  "signal_buckets": [1024, 4096, 16384],
+  "voice_configured": true
+}
+```
+
+| Field | What it bounds |
+|---|---|
+| `envelope_ttl_days` | How long an undelivered envelope survives in a mailbox before the sweep deletes it |
+| `attachment_ttl_days` | How long an uploaded attachment survives before the sweep deletes its bytes |
+| `mailbox_max_bytes` | The undelivered bytes one device's mailbox holds before a send naming it is refused |
+| `max_devices_per_user` | Live devices for one account; a further registration is `409 device_limit` |
+| `max_devicelog_records` | Records in one account's device-list log; a further append is `409 devicelog_limit` |
+| `session_token_days` | The session token's lifetime, the same number `expires_in` carries in seconds |
+| `send_batch_max` | Items in one `POST /api/v1/envelopes` body |
+| `ack_max` | Ids in one `POST /api/v1/me/envelopes/ack` body |
+| `drain_page_max` | The ceiling on `GET /api/v1/me/envelopes?limit=`, and its default |
+| `claim_max` | Device ids in one `POST /api/v1/users/{user_id}/keys/claim` body |
+| `envelope_buckets` | The exact byte lengths an envelope blob may decode to |
+| `attachment_buckets` | The exact byte lengths an attachment upload may be |
+| `signal_buckets` | The exact byte lengths a `/ws` `signal` blob may decode to |
+| `voice_configured` | Whether `POST /api/v1/me/relay` mints a credential; `false` means this deployment serves no voice and the route answers `503 voice_unconfigured` |
+
+The values are this deployment's, not the defaults: an operator may set any of them.
+
+### Rate limited — `429 Too Many Requests`
+
+```json
+{ "code": "throttled", "detail": "Request was throttled." }
+```
+
+Scope `accounts`, default 300/min.

@@ -164,6 +164,12 @@ async def _scripted_device_traffic(client, s):
     assert r.status_code == 200, f"identity publish: {r.status_code}"
     r = await client.get(f"/api/v1/users/{s['user id']}/identity", headers=auth)
     assert r.status_code == 200, f"identity read: {r.status_code}"
+    s["identity tag"] = r.headers["etag"]
+    r = await client.get(
+        f"/api/v1/users/{s['user id']}/identity",
+        headers={**auth, "If-None-Match": s["identity tag"]},
+    )
+    assert r.status_code == 304, f"conditional identity read: {r.status_code}"
 
     # A second device, so the revocation below ends something other than the
     # device this pass is authenticated as. Its own key material joins the set.
@@ -213,6 +219,23 @@ async def _scripted_device_traffic(client, s):
     assert r.status_code == 200, f"devicelog read: {r.status_code}"
     r = await client.get(f"/api/v1/users/{s['user id']}/devices", headers=auth)
     assert r.status_code == 200, f"peer device list: {r.status_code}"
+    # The peer-state batch, and then the same call carrying the tag it answered
+    # with, so both branches of the route are driven: the full answer and the
+    # unchanged one. The tag is a hash of what the route serves, so it goes into
+    # the secret set with everything else the pass generated.
+    r = await client.post(
+        "/api/v1/peers",
+        json={"peers": [{"user_id": s["user id"]}]},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"peer state: {r.status_code}"
+    s["peer state tag"] = r.json()["peers"][0]["etag"]
+    r = await client.post(
+        "/api/v1/peers",
+        json={"peers": [{"user_id": s["user id"], "etag": s["peer state tag"]}]},
+        headers=auth,
+    )
+    assert r.json()["peers"][0]["unchanged"] is True, "the peer tag did not hold"
     r = await client.post(
         f"/api/v1/users/{s['user id']}/keys/claim", json={}, headers=auth
     )
@@ -269,6 +292,8 @@ async def _scripted_account_state_traffic(client, s):
 
     r = await client.get("/api/v1/health")
     assert r.status_code == 200, f"health: {r.status_code}"
+    r = await client.get("/api/v1/config", headers=auth)
+    assert r.status_code == 200, f"config: {r.status_code}"
     r = await client.get("/api/v1/users", headers=auth)
     assert r.status_code == 200, f"directory: {r.status_code}"
 

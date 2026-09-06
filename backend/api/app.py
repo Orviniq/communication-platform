@@ -68,6 +68,7 @@ def route_limits():
     )
     per_route = {
         f"{API_PREFIX}/health": json_class,
+        f"{API_PREFIX}/config": json_class,
         f"{API_PREFIX}/auth/register": json_class,
         f"{API_PREFIX}/auth/login": json_class,
         f"{API_PREFIX}/auth/renew": json_class,
@@ -85,6 +86,7 @@ def route_limits():
         f"{API_PREFIX}/me/devicelog": batch_class,
         f"{API_PREFIX}/users/{{user_id}}/devicelog": json_class,
         f"{API_PREFIX}/users/{{user_id}}/devices": json_class,
+        f"{API_PREFIX}/peers": json_class,
         f"{API_PREFIX}/users/{{user_id}}/keys/claim": batch_class,
         f"{API_PREFIX}/envelopes": batch_class,
         f"{API_PREFIX}/me/envelopes": batch_class,

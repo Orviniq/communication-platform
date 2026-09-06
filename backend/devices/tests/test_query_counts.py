@@ -11,14 +11,19 @@ rather than savepoints, and they are excluded here so the number is the database
 work itself.
 """
 
+import uuid
+
 import pytest
+from django.conf import settings
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from accounts.models import User
 from devices.models import DeviceLogRecord
 
 from .conftest import (
     DEVICES_URL,
+    PASSWORD,
     label_blob,
     make_device,
     pubkey,
@@ -62,6 +67,14 @@ def peer_url(user_id):
 
 def claim_url(user_id):
     return f"/api/v1/users/{user_id}/keys/claim"
+
+
+PEERS_URL = "/api/v1/peers"
+# The accounts that exist and are active, their live devices, their identities and
+# their log heads. Four statements, none of which scales with the number of peers
+# named: the ids go in as one `IN` list and the log heads come back through one
+# `DISTINCT ON`.
+PEER_STATE_QUERIES = 4
 
 
 @pytest.mark.parametrize("device_count", [1, 5, 10])
@@ -498,3 +511,151 @@ def test_pq_material_at_registration_adds_exactly_one_insert(
     )
 
     assert response.status_code == 201
+
+
+@pytest.mark.parametrize("peer_count", [1, 5, 32, 64])
+def test_the_peer_state_route_is_constant_query_in_the_number_of_peers(
+    http, active_user, device, bearer, peer_count
+):
+    """The whole reason the route exists. The per-user reads it replaces cost three
+    round trips for each recipient — 150 for a 50-member group — and this must cost
+    the same four statements at one peer and at sixty-four.
+    """
+    peers = [
+        User.objects.create_user(username=f"peer{i}", password=PASSWORD, is_active=True)
+        for i in range(peer_count)
+    ]
+    for i, target in enumerate(peers):
+        make_device(target, registration_id=2000 + i)
+        publish_identity(target)
+        DeviceLogRecord.objects.create(user=target, seq=0, blob=b"r" * 256)
+
+    response = counted(
+        http,
+        "POST",
+        PEERS_URL,
+        AUTH_QUERY + PEER_STATE_QUERIES,
+        json={"peers": [{"user_id": str(target.id)} for target in peers]},
+        headers=bearer(active_user, device),
+    )
+
+    assert len(response.json()["peers"]) == peer_count
+
+
+@pytest.mark.parametrize("device_count", [1, 5, 10])
+def test_the_peer_state_route_is_constant_query_in_the_devices_of_one_peer(
+    http, active_user, device, bearer, peer, peer_device, device_count
+):
+    """The other axis. One peer with ten devices must cost what one peer with one
+    device costs, or a client sending to a well-equipped account pays for it."""
+    for i in range(device_count - 1):
+        make_device(peer, registration_id=2100 + i)
+
+    response = counted(
+        http,
+        "POST",
+        PEERS_URL,
+        AUTH_QUERY + PEER_STATE_QUERIES,
+        json={"peers": [{"user_id": str(peer.id)}]},
+        headers=bearer(active_user, device),
+    )
+
+    assert len(response.json()["peers"][0]["devices"]) == device_count
+
+
+@pytest.mark.parametrize("log_length", [0, 5, 60])
+def test_the_peer_state_route_reads_only_the_head_of_the_log(
+    http, active_user, device, bearer, peer, peer_device, log_length
+):
+    """`DISTINCT ON` takes one record per user, so a longer log must not add a
+    query — or the tag becomes a scan of the whole log on every poll."""
+    DeviceLogRecord.objects.bulk_create(
+        [DeviceLogRecord(user=peer, seq=i, blob=b"r" * 256) for i in range(log_length)]
+    )
+
+    response = counted(
+        http,
+        "POST",
+        PEERS_URL,
+        AUTH_QUERY + PEER_STATE_QUERIES,
+        json={"peers": [{"user_id": str(peer.id)}]},
+        headers=bearer(active_user, device),
+    )
+
+    expected_head = log_length - 1 if log_length else None
+    assert response.json()["peers"][0]["log_head_seq"] == expected_head
+
+
+def test_a_peer_state_call_that_names_only_unknown_users_stops_at_the_lookup(
+    http, active_user, device, bearer
+):
+    """Django resolves an `__in` against an empty set without going to the
+    database, so a call naming nobody who exists costs the one account query and
+    stops there."""
+    response = counted(
+        http,
+        "POST",
+        PEERS_URL,
+        AUTH_QUERY + 1,
+        json={"peers": [{"user_id": str(uuid.uuid4())} for _ in range(8)]},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json() == {"peers": []}
+
+
+def test_an_unchanged_peer_costs_the_same_queries_and_less_body(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The tag is computed from what the route serves, so an `unchanged` answer
+    reads exactly what a full one reads. What it saves is the body — which is the
+    identity and every device of every recipient, on every send."""
+    publish_identity(peer)
+    headers = bearer(active_user, device)
+    body = {"peers": [{"user_id": str(peer.id)}]}
+    full = http.post(PEERS_URL, json=body, headers=headers)
+    etag = full.json()["peers"][0]["etag"]
+
+    unchanged = counted(
+        http,
+        "POST",
+        PEERS_URL,
+        AUTH_QUERY + PEER_STATE_QUERIES,
+        json={"peers": [{"user_id": str(peer.id), "etag": etag}]},
+        headers=headers,
+    )
+
+    assert unchanged.json()["peers"][0]["unchanged"] is True
+    assert len(unchanged.content) < len(full.content)
+
+
+def test_the_conditional_identity_read_costs_the_one_query_a_200_costs(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The tag is derived from the row, not stored beside it, so there is nothing
+    cheaper to read first. The saving is the body, and this records that the query
+    count is not part of it."""
+    publish_identity(peer)
+    headers = bearer(active_user, device)
+    url = f"/api/v1/users/{peer.id}/identity"
+    etag = http.get(url, headers=headers).headers["ETag"]
+
+    response = counted(
+        http,
+        "GET",
+        url,
+        AUTH_QUERY + 1,
+        headers={**headers, "If-None-Match": etag},
+    )
+
+    assert response.status_code == 304
+
+
+def test_the_limits_route_reads_no_row_at_all(http, active_user, device, bearer):
+    """Every value it serves is a setting or a module constant, so the only query
+    it may cost is the one the authentication dependency makes."""
+    response = counted(
+        http, "GET", "/api/v1/config", AUTH_QUERY, headers=bearer(active_user, device)
+    )
+
+    assert response.json()["envelope_ttl_days"] == settings.ENVELOPE_TTL_DAYS

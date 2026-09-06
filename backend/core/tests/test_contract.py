@@ -287,6 +287,11 @@ def _health(stage):
     return Call("GET", f"{PREFIX}/health")
 
 
+@sample("GET", f"{PREFIX}/config", "200")
+def _config(stage):
+    return Call("GET", f"{PREFIX}/config", stage.auth)
+
+
 @sample("POST", f"{PREFIX}/auth/register", "201")
 def _register(stage):
     return Call(
@@ -432,6 +437,17 @@ def _peer_log(stage):
 def _peer_devices(stage):
     stage.peer_device
     return Call("GET", f"{PREFIX}/users/{stage.peer.id}/devices", stage.auth)
+
+
+@sample("POST", f"{PREFIX}/peers", "200")
+def _peer_state(stage):
+    stage.peer_device
+    return Call(
+        "POST",
+        f"{PREFIX}/peers",
+        stage.auth,
+        {"json": {"peers": [{"user_id": str(stage.peer.id)}]}},
+    )
 
 
 @sample("POST", PREFIX + "/users/{user_id}/keys/claim", "200")
@@ -647,6 +663,12 @@ def _own_devices_unchanged(stage):
 def _peer_devices_unchanged(stage):
     stage.peer_device
     return _repeat_with_the_tag(stage, f"{PREFIX}/users/{stage.peer.id}/devices")
+
+
+@drives("GET", PREFIX + "/users/{user_id}/identity", "304")
+def _peer_identity_unchanged(stage):
+    stage.peer_identity
+    return _repeat_with_the_tag(stage, f"{PREFIX}/users/{stage.peer.id}/identity")
 
 
 # --- The three refusals the anonymous routes carry themselves --------------------

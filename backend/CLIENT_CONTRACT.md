@@ -190,6 +190,9 @@ group key; a group exists only in its members' clients.
 - `GET /me/envelopes` returns `pruned_through`. If the client's last acked seq is
   **below** `pruned_through`, envelopes were lost to the `ENVELOPE_TTL_DAYS` cap, and
   the server cannot re-create them.
+- `GET /api/v1/config` is the source of that window: `envelope_ttl_days` is this
+  deployment's value, and it is the only way the client can state it. Read it once at
+  startup and use it when telling a user how long an undelivered message survives.
 - A lost envelope may have carried a ratchet message or a group control event. Repair
   each affected pairwise session through its authenticated repair path, then ask a
   member for the current group control state. Client-to-client history transfer (§G)
@@ -219,6 +222,14 @@ group key; a group exists only in its members' clients.
 ## L. Polling
 
 - No foreign push (FCM/APNs) is available. Background polling only.
+- `GET /api/v1/config` publishes the batch and page ceilings a poll works against —
+  `drain_page_max`, `ack_max`, `send_batch_max`, `claim_max` — and the retention
+  windows behind them. It is the source for every one of those numbers; nothing else
+  states them, and a client that hard-codes one will disagree with a deployment whose
+  operator changed it.
+- Before a send, `POST /api/v1/peers` verifies up to 64 recipients in one call and
+  answers `unchanged` for each peer whose tag the client already holds. It is the
+  route to poll on, rather than the three per-user reads for each recipient.
 
 ## M. Enrollment ordering (load-bearing — read before implementing registration)
 
