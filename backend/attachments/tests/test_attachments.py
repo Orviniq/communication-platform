@@ -124,22 +124,24 @@ def test_no_error_body_echoes_the_request(http, active_user, device, bearer):
     assert "canary-value-that-must-not-come-back" not in resp.text
 
 
-def test_the_quota_is_enforced_per_user(
+def test_the_daily_allowance_is_spent_per_account(
     http, active_user, device, bearer, settings, bob, bob_device, attachments_root
 ):
-    settings.ATTACH_USER_QUOTA_BYTES = SMALLEST
+    """The allowance is the account's for the day, so a second account is
+    unaffected — and the row that lands names neither of them."""
+    settings.ATTACH_DAILY_BYTES = SMALLEST
 
     first = upload(http, bearer(active_user, device))
     second = upload(http, bearer(active_user, device))
-    # The quota is per uploader, so another account is unaffected.
     other = upload(http, bearer(bob, bob_device))
 
     assert first.status_code == 201
     assert second.status_code == 413
     assert second.json()["code"] == "quota_exceeded"
     assert other.status_code == 201
-    assert Attachment.objects.filter(uploader_id=active_user.id).count() == 1
-    # The refused upload's bytes are gone: one file for each of the two rows.
+    assert Attachment.objects.count() == 2
+    assert list(Attachment.objects.values_list("uploader_id", flat=True)) == [None, None]
+    # The refused upload left no bytes: one file for each of the two rows.
     assert len([p for p in attachments_root.rglob("*") if p.is_file()]) == 2
 
 

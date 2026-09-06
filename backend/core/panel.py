@@ -151,12 +151,12 @@ def dashboard(request, context):
     page every login lands on. The pending list is the same query as its own count,
     and it carries the rows the one-click activation posts back.
     """
-    from django.conf import settings
     from django.db.models import Sum
     from django.urls import reverse
 
     from accounts.models import User
     from attachments.models import Attachment
+    from attachments.services import disk_space
     from devices.models import Device
 
     # `AdminSite.index_title` is "Site administration", which names the software
@@ -175,10 +175,11 @@ def dashboard(request, context):
     active_accounts = User.objects.filter(is_active=True).count()
     live_devices = Device.objects.filter(revoked_date__isnull=True).count()
     stored = Attachment.objects.aggregate(total=Sum("size"))["total"] or 0
-
-    # The quota is per account, so the ceiling this deployment has sold is the
-    # quota times the number of accounts that can fill one.
-    ceiling = settings.ATTACH_USER_QUOTA_BYTES * (active_accounts + len(pending))
+    # The filesystem is the ceiling now that no account carries a lifetime quota
+    # (ADR-0025): what stops an upload is `ATTACH_MIN_FREE_BYTES` of free space, so
+    # the number the operator has to watch is how full the disk is rather than how
+    # much of a per-account allowance is spent.
+    free, capacity = disk_space()
 
     context.update(
         {
@@ -193,8 +194,10 @@ def dashboard(request, context):
             "attachments_url": reverse("admin:attachments_attachment_changelist"),
             "live_devices": live_devices,
             "storage_used": storage_label(stored),
-            "storage_ceiling": storage_label(ceiling),
-            "storage_percent": round(stored * 100 / ceiling, 1) if ceiling else 0,
+            "storage_free": storage_label(free),
+            "storage_percent": round((capacity - free) * 100 / capacity, 1)
+            if capacity
+            else 0,
         }
     )
     return context

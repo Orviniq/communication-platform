@@ -47,6 +47,7 @@ async def config():
     return {
         "envelope_ttl_days": settings.ENVELOPE_TTL_DAYS,
         "attachment_ttl_days": settings.ATTACH_TTL_DAYS,
+        "attachment_daily_bytes": settings.ATTACH_DAILY_BYTES,
         "mailbox_max_bytes": settings.MAILBOX_MAX_BYTES,
         "max_devices_per_user": settings.MAX_DEVICES_PER_USER,
         "max_devicelog_records": settings.MAX_DEVICELOG_RECORDS,

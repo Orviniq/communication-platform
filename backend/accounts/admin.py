@@ -9,7 +9,6 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.models import CHANGE
 from django.db import transaction
-from django.db.models import Sum
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -19,7 +18,7 @@ from unfold.forms import BaseDialogForm
 from unfold.widgets import UnfoldAdminPasswordWidget
 
 from accounts.models import User
-from core.panel import PanelModelAdmin, audit, storage_label
+from core.panel import PanelModelAdmin, audit
 from devices.models import Device
 from devices.services import revoke as revoke_device
 from realtime.bus import close_device_sockets
@@ -117,15 +116,8 @@ class AccountAdmin(PanelModelAdmin):
         "created_date",
         "last_login",
         "live_devices",
-        "storage_used",
     )
-    readonly_fields = (
-        "username",
-        "created_date",
-        "last_login",
-        "live_devices",
-        "storage_used",
-    )
+    readonly_fields = ("username", "created_date", "last_login", "live_devices")
     actions = ("activate_accounts", "deactivate_accounts", "revoke_all_devices")
     actions_detail = ("set_password",)
 
@@ -150,11 +142,6 @@ class AccountAdmin(PanelModelAdmin):
     @display(description=_("Live devices"))
     def live_devices(self, obj):
         return Device.objects.filter(user=obj, revoked_date__isnull=True).count()
-
-    @display(description=_("Attachment storage"))
-    def storage_used(self, obj):
-        total = obj.attachments.aggregate(total=Sum("size"))["total"] or 0
-        return storage_label(total)
 
     def has_change_permission(self, request, obj=None):
         # The staff flag and the activation state are the two editable values.

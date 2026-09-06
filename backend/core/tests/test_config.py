@@ -26,6 +26,7 @@ CONFIG_URL = "/api/v1/config"
 SOURCES = {
     "envelope_ttl_days": lambda: settings.ENVELOPE_TTL_DAYS,
     "attachment_ttl_days": lambda: settings.ATTACH_TTL_DAYS,
+    "attachment_daily_bytes": lambda: settings.ATTACH_DAILY_BYTES,
     "mailbox_max_bytes": lambda: settings.MAILBOX_MAX_BYTES,
     "max_devices_per_user": lambda: settings.MAX_DEVICES_PER_USER,
     "max_devicelog_records": lambda: settings.MAX_DEVICELOG_RECORDS,

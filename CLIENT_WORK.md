@@ -312,3 +312,26 @@ their bodies and their semantics. `THROTTLE_ACCOUNTS` rose from `120/min` to
 `300/min`, which is more headroom rather than less. The server's WebSocket ping
 interval moved from 20 seconds to 240; the client's own four-minute keepalive is
 untouched and stays the client's decision.
+
+## The attachment allowance, disclosed
+
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+replaces the per-account lifetime attachment quota with an allowance for the UTC day.
+Nothing on a stored attachment names an account any more.
+
+The observable changes, each with its old and new behaviour, are in
+[`API_CHANGES.md`](API_CHANGES.md) § "The attachment store stops naming accounts".
+
+### Recommended — say what the day's allowance is, before the refusal
+
+`GET /api/v1/config` now carries `attachment_daily_bytes`, the value
+`POST /api/v1/attachments` enforces. A client that shows a storage figure at all
+should show this one: what is left of today rather than a lifetime total, which the
+server no longer keeps.
+
+| Path | What changes |
+|---|---|
+| Any screen that said "X of 2 GiB used" | There is no lifetime total behind it. Either drop the figure or show today's allowance, and remember that deleting an attachment gives nothing back |
+| The upload failure path | `413 quota_exceeded` now means "spent for today". Its `detail` string changed; branch on `code`, which the contract has always required. A retry before 00:00 UTC answers the same way, so hold the attachment rather than retrying at once |
+| The same failure path | `503 storage_full` is a new code: the server's disk is low, not the account's allowance. Treat it as retry later with backoff and say so in different words from a quota message — the operator has to free space before it clears |
+

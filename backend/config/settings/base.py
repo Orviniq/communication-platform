@@ -168,7 +168,17 @@ MULTIPART_OVERHEAD_BYTES = env_int("MULTIPART_OVERHEAD_BYTES", default=8 * 1024)
 
 # Storage limits and retention.
 ATTACHMENTS_ROOT = Path(env("ATTACHMENTS_ROOT", default=str(BASE_DIR / "media_root")))
-ATTACH_USER_QUOTA_BYTES = env_int("ATTACH_USER_QUOTA_BYTES", default=2 * 1024**3)
+# What one account may upload in one UTC day. It replaces the lifetime sum over an
+# uploader column, which was the one thing that tied stored bytes to an account
+# (ADR-0025): the counter lives in Redis, names the account and the day, expires
+# after two days and never reaches disk. A day is the unit because the cost this
+# bounds is a burst against the disk, not a balance an account carries.
+ATTACH_DAILY_BYTES = env_int("ATTACH_DAILY_BYTES", default=256 * 1024**2)
+# The free space `ATTACHMENTS_ROOT` must still have for an upload to be admitted.
+# The daily allowance bounds one account; nothing bounds the sum of every account,
+# so this is what stands between a busy day and a full disk — and a full disk on
+# this host is PostgreSQL and Redis losing their writes, not one refused upload.
+ATTACH_MIN_FREE_BYTES = env_int("ATTACH_MIN_FREE_BYTES", default=2 * 1024**3)
 ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
 # 7 days bounds what a live seizure captures to at most a week of *undelivered*
 # ciphertext (delivery deletes on ack). It is also the window an offline device

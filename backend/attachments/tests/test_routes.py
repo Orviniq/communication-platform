@@ -19,11 +19,16 @@ import stat
 from urllib.parse import quote
 
 import pytest
+import redis
+from django.conf import settings as configured
+from django.db import OperationalError
+from django.utils import timezone
 from hypothesis import given
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
 
 from api import app as api_app
+from attachments import allowance
 from attachments.models import Attachment
 from config.asgi import api_application, application
 from conftest import AsgiClient
@@ -46,6 +51,18 @@ def envelope(response, code):
 
 def files_under(root):
     return [path for path in root.rglob("*") if path.is_file()]
+
+
+def spent_today(user):
+    """The bytes this account has charged against today's allowance.
+
+    Read from Redis rather than from a row, because that is the only place the
+    count exists: a refund that did not happen is invisible to every assertion the
+    database can make.
+    """
+    store = redis.Redis.from_url(configured.REDIS_URL)
+    charged = store.get(allowance._key(user.id, timezone.now().date()))
+    return int(charged) if charged else 0
 
 
 # Every shape of upload body the route has to refuse, and none of them is a `500`.
@@ -337,13 +354,12 @@ def test_the_failure_names_no_path_no_capability_and_no_traceback_anywhere(
     assert leaked == []
 
 
-def test_a_quota_refusal_unlinks_the_bytes_it_already_wrote(
+def test_an_allowance_refusal_writes_no_row_and_no_file(
     http, active_user, device, bearer, attachments_root, settings
 ):
-    """The row is refused after the file is written, so the file has to be dropped
-    by hand: the disk the quota protects would otherwise fill with bytes no row
-    names and nothing can reach."""
-    settings.ATTACH_USER_QUOTA_BYTES = SMALLEST - 1
+    """The reservation is taken before the copy, so a refused upload never reaches
+    the disk at all — the case the refund path exists for is a failure after it."""
+    settings.ATTACH_DAILY_BYTES = SMALLEST - 1
 
     response = http.post(
         UPLOAD_URL,
@@ -352,7 +368,68 @@ def test_a_quota_refusal_unlinks_the_bytes_it_already_wrote(
     )
 
     assert response.status_code == 413
-    assert envelope(response, "quota_exceeded")["detail"] == "Storage quota exhausted."
+    assert envelope(response, "quota_exceeded")["detail"] == allowance.DAY_SPENT
+    assert Attachment.objects.count() == 0
+    assert files_under(attachments_root) == []
+
+
+def test_a_failure_after_the_reservation_gives_the_allowance_and_the_bytes_back(
+    reading_http, active_user, device, bearer, attachments_root, settings, monkeypatch
+):
+    """The window the refund exists for: the reservation is spent, the bytes are on
+    disk, and the row write fails. Both have to be given back — the allowance
+    because the account stored nothing, and the file because no row names it and
+    the sweep only ever walks rows."""
+    settings.ATTACH_DAILY_BYTES = SMALLEST * 2
+    monkeypatch.setattr(
+        "attachments.services.record",
+        lambda attachment: (_ for _ in ()).throw(OperationalError("gone")),
+    )
+
+    response = reading_http.post(
+        UPLOAD_URL,
+        files={"blob": ("blob", b"\x01" * SMALLEST)},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 500
+    assert Attachment.objects.count() == 0
+    assert files_under(attachments_root) == []
+    assert spent_today(active_user) == 0
+
+
+def test_a_copy_that_cannot_reach_the_disk_gives_the_allowance_back(
+    reading_http, active_user, device, bearer, unwritable_root
+):
+    """The earlier half of the same window, through the real failure rather than a
+    stub: the reservation is spent and the copy itself raises. An account whose
+    disk write failed must not lose the day's allowance for it."""
+    response = reading_http.post(
+        UPLOAD_URL,
+        files={"blob": ("blob", b"\x01" * SMALLEST)},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 500
+    assert spent_today(active_user) == 0
+
+
+def test_a_disk_below_the_floor_refuses_the_upload_before_it_writes(
+    http, active_user, device, bearer, attachments_root, settings
+):
+    """The guard the per-account allowance does not give: nothing bounds the sum of
+    every account, and a full disk on this host is PostgreSQL and Redis losing
+    their writes rather than one refused upload."""
+    settings.ATTACH_MIN_FREE_BYTES = 2**62
+
+    response = http.post(
+        UPLOAD_URL,
+        files={"blob": ("blob", b"\x01" * SMALLEST)},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 503
+    assert envelope(response, "storage_full")["detail"] == "Attachment storage is full."
     assert Attachment.objects.count() == 0
     assert files_under(attachments_root) == []
 

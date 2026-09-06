@@ -45,9 +45,10 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 409 | `prekey_limit` | A prekey pool cap is reached. |
 | 409 | `devicelog_limit` | The account's device-list log holds `MAX_DEVICELOG_RECORDS` records. |
 | 413 | `payload_too_large` | The body exceeds the route cap. |
-| 413 | `quota_exceeded` | The attachment quota is exhausted. |
+| 413 | `quota_exceeded` | The account's upload allowance for this UTC day is spent. |
 | 429 | `throttled` | Rate limit reached, or a login name in its cool-off. `Retry-After` carries the seconds to wait. |
 | 500 | `server_error` | Unhandled failure. `detail` is `"Internal error."`. |
+| 503 | `storage_full` | Attachment storage has less free space than `ATTACH_MIN_FREE_BYTES`, so `POST /api/v1/attachments` stores nothing. Retry later; the request itself is not at fault, and no allowance was spent on it. |
 | 503 | `unavailable` | The server is saturated or a store it needs is gone: the rate-limit store is unreachable, the request exceeded its deadline, or the database connection pool had nothing free. Retry with backoff; the request itself is not at fault. |
 | 503 | `voice_unconfigured` | This deployment serves no voice relay: `TURN_URLS` is empty, so `POST /api/v1/me/relay` has no credential to mint. Not a fault and not a backoff — a client reads it as "this server does not do voice". |
 
@@ -79,7 +80,8 @@ A route with no authentication requirement — `GET /api/v1/health`, and the thr
 `/auth` routes a client reaches before it holds a token — answers neither `401
 unauthenticated` nor `403 scope_forbidden` for that reason. Where one of these
 statuses carries a code of its own, the route does list it: `403 forbidden` on the
-two prekey routes, and `503 voice_unconfigured` on the relay route.
+two prekey routes, `503 voice_unconfigured` on the relay route, and `503
+storage_full` on the attachment upload.
 
 Three refusals belong to no route at all, because the surface answers them before it
 has chosen one: `400 invalid_request` for a `Host` that `DJANGO_ALLOWED_HOSTS` does
@@ -240,6 +242,7 @@ startup rather than on a timer.
 {
   "envelope_ttl_days": 7,
   "attachment_ttl_days": 30,
+  "attachment_daily_bytes": 268435456,
   "mailbox_max_bytes": 33554432,
   "max_devices_per_user": 10,
   "max_devicelog_records": 10000,
@@ -259,6 +262,7 @@ startup rather than on a timer.
 |---|---|
 | `envelope_ttl_days` | How long an undelivered envelope survives in a mailbox before the sweep deletes it |
 | `attachment_ttl_days` | How long an uploaded attachment survives before the sweep deletes its bytes |
+| `attachment_daily_bytes` | What one account may upload in one UTC day; an upload past it is `413 quota_exceeded` until the day turns |
 | `mailbox_max_bytes` | The undelivered bytes one device's mailbox holds before a send naming it is refused |
 | `max_devices_per_user` | Live devices for one account; a further registration is `409 device_limit` |
 | `max_devicelog_records` | Records in one account's device-list log; a further append is `409 devicelog_limit` |

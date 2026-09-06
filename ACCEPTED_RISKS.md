@@ -68,7 +68,7 @@ has been closed instead:
   history and any bookmark;
 - Django's `delete_selected` is removed, because its confirmation page prints
   `str(obj)` for every selected row;
-- the audit row names the attachment by uploader and size, never by `str()`.
+- the audit row names the attachment by its size and its day, never by `str()`.
 
 What remains is the one place Django's action machinery cannot avoid. Removing it
 would mean a per-session surrogate for the primary key — an indirection that breaks
@@ -280,29 +280,34 @@ counter worth its four write paths.
 
 ---
 
-## AR-8 — The attachment quota aggregate scales with the account's attachment count
+## AR-8 — The attachment quota aggregate scales with the account's attachment count (closed)
 
-**What is exposed.** Every upload sums the sizes an account already stores, to charge
-the upload against `ATTACH_USER_QUOTA_BYTES` before its row is written. The sum reads
-one row for each attachment the account holds.
+**Closed on 2026-09-06, by the design change below rather than by the trigger.**
 
-**Why this is carried.** The attachment table is four narrow columns, so even at the
-quota ceiling the scan is small: measured at 32 400 attachments for one uploader
-(2 GiB at the smallest bucket), a sequential scan of 694 buffers — 5.4 MB — in 1.82 ms.
-A covering index on `(uploader_id) INCLUDE (size)` makes it 4 buffers and 0.046 ms, and
-costs 640 kB at 20 000 rows plus maintenance on every upload. That index buys 1.8 ms on
-a route the limiter caps at 60 requests a minute.
+**What it was.** Every upload summed the sizes an account already stored, to charge
+the upload against `ATTACH_USER_QUOTA_BYTES` before its row was written. The sum read
+one row for each attachment the account held: measured at 32 400 attachments for one
+uploader (2 GiB at the smallest bucket), a sequential scan of 694 buffers — 5.4 MB —
+in 1.82 ms. The recorded trigger was the table above 200 000 rows or the upload
+route's p95 above 100 ms, at which point a covering index on `(uploader_id) INCLUDE
+(size)` would have landed with its plan.
 
-**What reduces it today.** The per-account quota, which bounds the row count; the
-retention sweep, which removes rows after `ATTACH_TTL_DAYS`; and the throttle scope,
-which bounds how often the sum runs.
+**What closed it.** Neither the index nor the trigger.
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+removed the lifetime quota itself, because the column it summed was the one thing
+that said whose bytes a stored attachment is — a link a seizure reads directly. What
+bounds an upload now is a per-account counter for the UTC day, held in Redis under a
+key that names the account and the day, plus a free-space floor on the attachment
+root. Neither reads the attachment table at all, so the cost does not grow with what
+is stored: the upload is one `INSERT` and nothing else, pinned by
+`attachments/tests/test_query_counts.py::test_the_upload_is_one_insert_however_many_files_exist`
+at 0 and at 25 stored rows. The row lock the aggregate needed went with it.
 
-**If it were exploited.** An account at its quota ceiling makes each of its own uploads
-read 5.4 MB. It affects that account's uploads and nothing else.
+The row keeps its number rather than being deleted: AR-12 cites it as one of the two
+statements whose ceiling has never been measured, and a reader who follows that needs
+to land on what it was and how it ended. AR-12's trigger now rests on AR-7 alone.
 
-**Trigger that ends the acceptance.** The attachment table above 200 000 rows, or the
-upload route's p95 above 100 ms with the aggregate named as the cost. Then the covering
-index lands with its plan.
+What replaced it is not free of its own risk, and that risk is AR-19 below.
 
 ---
 
@@ -464,12 +469,13 @@ the reproduction is the record and the assertion was removed
 (`test(core): drop the deadline test that raced on reaching its unit`).
 
 **Why this is carried.** A `statement_timeout` applies to every query the system
-makes, so the number has to sit above the slowest legitimate statement — and the two
-slowest are the ones this register already says grow with the data: the mailbox
-ceiling aggregate of AR-7 and the attachment quota aggregate of AR-8. Neither has
-been measured at its ceiling. Setting the value before that measurement would be
-guessing at the point where guessing turns a working request into an error, and run
-13's scope is fixed by its own decision 1 to the test suite and the coverage gate.
+makes, so the number has to sit above the slowest legitimate statement — and the
+slowest is the one this register still says grows with the data: the mailbox ceiling
+aggregate of AR-7. It has not been measured at its ceiling. (The attachment quota
+aggregate of AR-8 was the other, until ADR-0025 removed the statement rather than
+indexing it.) Setting the value before that measurement would be guessing at the
+point where guessing turns a working request into an error, and run 13's scope is
+fixed by its own decision 1 to the test suite and the coverage gate.
 
 **What reduces it today.**
 
@@ -491,9 +497,9 @@ every request after that answers `503` until PostgreSQL releases them. Nothing i
 written and no data is at risk: the surface is availability alone, on a host the
 operator holds.
 
-**Trigger that ends the acceptance.** The AR-7 and AR-8 aggregates are measured at
-their ceilings, or a second application host appears, or any statement is observed
-above one second in normal operation. Any of the three buys a `statement_timeout`
+**Trigger that ends the acceptance.** The AR-7 aggregate is measured at its ceiling,
+or a second application host appears, or any statement is observed above one second
+in normal operation. Any of the three buys a `statement_timeout`
 set above the measured worst case, and a test that a statement above it is refused
 by the database rather than waited out — which is the form that does not race,
 because the refusal comes from PostgreSQL and not from a clock in the process.
@@ -818,6 +824,51 @@ because rotation reintroduces the sign-out this row was written to remove.
 
 ---
 
+## AR-19 — A Redis restart forgets the day's upload allowance
+
+**What is exposed.** The per-account upload allowance of
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+is one integer in Redis under a key that names the account and the UTC day. Redis on
+this host runs with persistence off (`save ""`, `appendonly no`), because volatile
+data never touches disk — so a restart of the instance drops every counter, and an
+account that had spent its whole allowance for the day starts the day again. The
+worst case is `ATTACH_DAILY_BYTES` of extra uploads per account per restart.
+
+**Why this is carried.** The alternative is a counter at rest, and a counter at rest
+is a per-account record of upload activity by day — which is a smaller version of the
+`Attachment.uploader` link that ADR-0025 removed, kept in the one place the design
+says volatile data may not go. The allowance exists to bound a burst against the
+disk, not to meter a balance an account owns, and a bound that is occasionally
+generous still bounds the burst. Redis restarts on this deployment are an operator
+action or a host reboot, not a routine event: the instance is on loopback, is not
+reachable from outside the host, and nothing else restarts it.
+
+**What reduces it today.**
+
+- The free-space guard does not live in Redis. `ATTACH_MIN_FREE_BYTES` is read from
+  the filesystem on every upload, so however many allowances a restart hands back,
+  the disk still refuses uploads with `503 storage_full` before it fills.
+- The retention sweep does not live in Redis either. Every attachment is deleted
+  after `ATTACH_TTL_DAYS` whatever the counters said when it was stored, so the
+  effect of a forgiven allowance is bounded in time as well as in bytes.
+- The `attachments` throttle scope is a second bound on the rate, at 60 requests a
+  minute per account — and it fails closed when Redis is unreachable, so a Redis that
+  is down refuses uploads rather than admitting them uncounted.
+- The reservation itself fails closed: an unreachable Redis answers `503 unavailable`
+  and stores nothing. The exposure is a Redis that came *back*, not one that is gone.
+
+**If it were exploited.** An account that watched for a restart could upload more in
+one day than the allowance names. It buys disk on the operator's own host, bounded by
+the free-space floor and cleared by the sweep, and it reveals nothing: the bytes are
+ciphertext this server cannot open, and the rows they land in name nobody.
+
+**Trigger that ends the acceptance.** An operator who has to restart Redis often
+enough that the allowance stops bounding anything, or the first day the free-space
+guard actually fires. Either buys a persisted counter — which is a schema change and
+a seizure-yield change, and would need an ADR of its own.
+
+---
+
 ## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3
@@ -933,7 +984,8 @@ Every measurement is in [`docs/architecture/GROUND-TRUTH.md`](docs/architecture/
 | The migration history was gated only by a one-file-per-app assertion, which refuses a second migration rather than reviewing it; the lock class of every operation was prose in the ground truth and nothing failed when it stopped being true | Migration | `22a7ad4` — a recorded history, a lock class for every operation, the `atomic` flag checked against what the migration carries, and `sqlmigrate` run rather than remembered |
 
 Every fix landed with a test that failed on the code before it. Two findings were
-accepted rather than closed: AR-7 and AR-8 above.
+accepted rather than closed: AR-7 and AR-8 above. AR-8 has since closed — ADR-0025
+removed the aggregate rather than indexing it.
 
 ### Examined and clean
 

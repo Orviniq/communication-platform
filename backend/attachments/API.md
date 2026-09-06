@@ -16,9 +16,18 @@ is the `{code, detail}` envelope defined in `core/API.md`.
 
 Multipart upload of one already-encrypted, already-padded file under the field name
 `blob`. The byte size must equal one attachment bucket exactly; the server checks
-nothing else about the content. Uploads count against a per-account quota (default
-2 GiB); stored attachments expire after a server-side TTL (default 30 days), so
-recipients should fetch promptly.
+nothing else about the content.
+
+Nothing on the stored row names the account that uploaded it. What bounds an upload
+instead is two things the row does not carry: the account's allowance for the current
+UTC day (`attachment_daily_bytes` in `GET /api/v1/config`, default 256 MiB), and the
+free space of the server's attachment storage. The allowance is charged before the
+bytes are written and given back whenever the upload fails after that, so a refused
+or failed upload spends nothing. It resets at 00:00 UTC and carries nothing forward:
+an account that uploads nothing today has the same allowance tomorrow.
+
+Stored attachments expire after a server-side TTL (default 30 days), so recipients
+should fetch promptly.
 
 The body must carry exactly one part, and that part must be a file part named `blob`.
 A second part of any kind, a non-file field, or a body that is not multipart is
@@ -29,8 +38,8 @@ payload_too_large`.
 **Retry semantics.** Not idempotent: a retry after a lost response stores the bytes a
 second time under a second capability id, and both ids remain fetchable until the
 attachment TTL prunes them. Nothing links the two, because nothing links an
-attachment to a message. The client discards the id it never received and counts the
-duplicate against its own quota.
+attachment to a message. The client discards the id it never received; the duplicate
+is charged against the day's allowance like any other upload.
 
 **Headers**
 
@@ -96,14 +105,28 @@ other part beside it.
 { "code": "payload_too_large", "detail": "Request body is too large." }
 ```
 
-### Quota exhausted — `413 Payload Too Large`
+### The day's allowance is spent — `413 Payload Too Large`
 
 ```json
-{ "code": "quota_exceeded", "detail": "Storage quota exhausted." }
+{ "code": "quota_exceeded", "detail": "The day's upload allowance is spent." }
 ```
 
-Branch on `code`: both refusals are `413`. The bytes of a refused upload are not
-kept.
+Branch on `code`: both refusals are `413`. Nothing was stored and nothing was
+charged, so retrying this upload before 00:00 UTC answers the same way. A client
+that has an attachment to send should hold it and retry after the day turns, or send
+a smaller bucket if the remainder of the allowance fits one.
+
+### Storage is full — `503 Service Unavailable`
+
+```json
+{ "code": "storage_full", "detail": "Attachment storage is full." }
+```
+
+The server's attachment storage is below `ATTACH_MIN_FREE_BYTES` of free space. It
+is not the account's allowance and not this request's fault: no allowance was spent
+and nothing was written. Treat it as retry later, with backoff, and distinguish it
+from `unavailable` only if the message to the user differs — the operator has to free
+space before it clears.
 
 ### Rate limited — `429 Too Many Requests`
 
@@ -113,8 +136,6 @@ kept.
 
 Scope `attachments`, default 60/min per account, shared by the upload and the
 download. `Retry-After` carries the seconds to wait.
-
-`Retry-After` carries the seconds to wait.
 
 ## Download an attachment
 

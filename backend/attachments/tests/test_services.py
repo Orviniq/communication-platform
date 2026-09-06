@@ -2,9 +2,12 @@
 
 Each function here is one transaction or one sweep, and what it leaves behind is a
 row, a file, or a raised `ApiError`. Driving them without a request is what makes
-the disk half observable at the point the unit commits it: the quota refusal and
-the purge order are both about a file and a row that must never disagree, and a
-`purge` that met an unreadable file has to keep sweeping.
+the disk half observable at the point the unit commits it: the purge order is
+about a file and a row that must never disagree, and a `purge` that met an
+unreadable file has to keep sweeping.
+
+The day's allowance is not here. It is counted in Redis rather than in a row
+(`attachments/allowance.py`), and `test_allowance.py` drives it.
 
 The same paths as they look through the HTTP surface are in `test_attachments.py`
 and `test_routes.py`.
@@ -41,70 +44,43 @@ def stored_file(attachment, payload=b"ciphertext"):
 
 
 class TestRecord:
-    def test_the_row_lands_charged_to_its_uploader(self, active_user):
-        attachment = Attachment(uploader_id=active_user.id, size=SMALLEST)
+    def test_the_row_lands_naming_nobody(self):
+        """The insert carries a size and a capability id and no account: the
+        column that used to say whose bytes these are is written by nothing
+        (ADR-0025)."""
+        attachment = Attachment(size=SMALLEST)
 
         services.record(attachment)
 
         stored = Attachment.objects.get(id=attachment.id)
-        assert (stored.uploader_id, stored.size) == (active_user.id, SMALLEST)
+        assert (stored.uploader_id, stored.size) == (None, SMALLEST)
 
-    def test_an_upload_that_lands_exactly_on_the_quota_is_accepted(
-        self, active_user, settings
+
+class TestDiskSpace:
+    def test_it_reports_free_space_inside_the_filesystem_it_measures(self):
+        """The two numbers are the guard's whole input: free must be positive on a
+        writable temporary directory, and never larger than the filesystem."""
+        free, capacity = services.disk_space()
+
+        assert 0 < free <= capacity
+
+    def test_a_root_that_does_not_exist_yet_is_created_rather_than_raising(
+        self, settings, tmp_path
     ):
-        """The boundary is inclusive: `used + size > quota` refuses, so the upload
-        that fills the account to the last byte is the last one that passes."""
-        settings.ATTACH_USER_QUOTA_BYTES = SMALLEST * 2
-        Attachment.objects.create(uploader=active_user, size=SMALLEST)
-        attachment = Attachment(uploader_id=active_user.id, size=SMALLEST)
+        """The upload path calls this before it copies anything, so a deployment
+        whose attachment root has never been written to must measure the
+        filesystem rather than answer that there is none."""
+        settings.ATTACHMENTS_ROOT = tmp_path / "never-created"
 
-        services.record(attachment)
+        free, _capacity = services.disk_space()
 
-        assert Attachment.objects.filter(uploader_id=active_user.id).count() == 2
-
-    def test_an_upload_one_byte_past_the_quota_is_refused_without_a_row(
-        self, active_user, settings
-    ):
-        settings.ATTACH_USER_QUOTA_BYTES = SMALLEST * 2 - 1
-        Attachment.objects.create(uploader=active_user, size=SMALLEST)
-        attachment = Attachment(uploader_id=active_user.id, size=SMALLEST)
-
-        with pytest.raises(ApiError) as exc_info:
-            services.record(attachment)
-
-        assert refusal(exc_info) == (413, "quota_exceeded", "Storage quota exhausted.")
-        assert Attachment.objects.filter(uploader_id=active_user.id).count() == 1
-
-    def test_the_quota_is_charged_in_bytes_rather_than_in_rows(
-        self, active_user, settings
-    ):
-        """One large stored blob exhausts the account, however few rows it is: the
-        aggregate is a SUM over `size`, and a count would let it through."""
-        settings.ATTACH_USER_QUOTA_BYTES = SMALLEST * 4
-        Attachment.objects.create(uploader=active_user, size=SMALLEST * 4)
-
-        with pytest.raises(ApiError) as exc_info:
-            services.record(Attachment(uploader_id=active_user.id, size=SMALLEST))
-
-        assert refusal(exc_info)[1] == "quota_exceeded"
-
-    def test_an_account_with_nothing_stored_is_refused_by_a_quota_below_one_bucket(
-        self, active_user, settings
-    ):
-        """The rare configuration: a quota smaller than the smallest bucket refuses
-        the very first upload rather than accepting one and then refusing."""
-        settings.ATTACH_USER_QUOTA_BYTES = SMALLEST - 1
-
-        with pytest.raises(ApiError) as exc_info:
-            services.record(Attachment(uploader_id=active_user.id, size=SMALLEST))
-
-        assert refusal(exc_info)[0] == 413
-        assert Attachment.objects.count() == 0
+        assert free > 0
+        assert (tmp_path / "never-created").is_dir()
 
 
 class TestLocate:
     def test_a_stored_capability_reads_back_as_itself(self, active_user):
-        attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+        attachment = Attachment.objects.create(size=SMALLEST)
 
         assert services.locate(attachment.id) == attachment.id
 
@@ -119,7 +95,7 @@ class TestLocate:
     ):
         """A distinguishable answer would turn the download into an oracle for
         which capabilities were ever issued."""
-        attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+        attachment = Attachment.objects.create(size=SMALLEST)
         Attachment.objects.filter(id=attachment.id).delete()
 
         with pytest.raises(ApiError) as gone:
@@ -143,10 +119,7 @@ class TestLocate:
 
 class TestPurge:
     def test_the_rows_and_their_bytes_both_go(self, active_user, attachments_root):
-        rows = [
-            Attachment.objects.create(uploader=active_user, size=SMALLEST)
-            for _ in range(2)
-        ]
+        rows = [Attachment.objects.create(size=SMALLEST) for _ in range(2)]
         paths = [stored_file(row) for row in rows]
 
         deleted, removed_files = services.purge(rows)
@@ -158,7 +131,7 @@ class TestPurge:
     def test_a_file_that_is_already_gone_still_clears_its_row(self, active_user):
         """The rare case a crash between the unlink and the delete leaves behind,
         and the case the next retention pass has to be able to finish."""
-        attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+        attachment = Attachment.objects.create(size=SMALLEST)
 
         deleted, removed_files = services.purge([attachment])
 
@@ -170,11 +143,8 @@ class TestPurge:
     ):
         """An escaping error here would stall retention entirely: the rows go in one
         pass at the end, so the whole batch would come back unswept for ever."""
-        stuck = Attachment.objects.create(uploader=active_user, size=SMALLEST)
-        rest = [
-            Attachment.objects.create(uploader=active_user, size=SMALLEST)
-            for _ in range(2)
-        ]
+        stuck = Attachment.objects.create(size=SMALLEST)
+        rest = [Attachment.objects.create(size=SMALLEST) for _ in range(2)]
         stuck_path = stored_file(stuck)
         paths = [stored_file(row) for row in rest]
         real_remove = os.remove
@@ -198,10 +168,7 @@ class TestPurge:
     ):
         """The panel's own deletion audits what it removed. Handed the rows before
         the delete, because afterwards there is nothing left to name."""
-        rows = [
-            Attachment.objects.create(uploader=active_user, size=SMALLEST)
-            for _ in range(3)
-        ]
+        rows = [Attachment.objects.create(size=SMALLEST) for _ in range(3)]
         for row in rows:
             stored_file(row)
         seen = []
@@ -215,8 +182,8 @@ class TestPurge:
     ):
         """A row whose file refused to unlink keeps its row, so auditing it would
         record a deletion that did not happen."""
-        kept = Attachment.objects.create(uploader=active_user, size=SMALLEST)
-        taken = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+        kept = Attachment.objects.create(size=SMALLEST)
+        taken = Attachment.objects.create(size=SMALLEST)
         kept_path = stored_file(kept)
         stored_file(taken)
         real_remove = os.remove
@@ -238,10 +205,7 @@ class TestPurge:
     ):
         """Every file refused: no row goes, so no administrative act happened and
         the log must stay empty."""
-        rows = [
-            Attachment.objects.create(uploader=active_user, size=SMALLEST)
-            for _ in range(2)
-        ]
+        rows = [Attachment.objects.create(size=SMALLEST) for _ in range(2)]
         for row in rows:
             stored_file(row)
 
@@ -266,12 +230,11 @@ class TestPurge:
         assert (deleted, removed_files) == (0, 0)
         assert seen == []
 
-    def test_a_purge_leaves_the_uploader_account_alone(
-        self, active_user, attachments_root
-    ):
-        """The sweep removes storage, never people: the uploader is a foreign key
-        this pass must not follow."""
-        attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+    def test_a_purge_leaves_every_account_alone(self, active_user, attachments_root):
+        """The sweep removes storage, never people. Nothing on the row points at an
+        account any more, and this is the assertion that the delete stays that
+        way."""
+        attachment = Attachment.objects.create(size=SMALLEST)
         stored_file(attachment)
 
         services.purge([attachment])

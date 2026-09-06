@@ -225,7 +225,8 @@ Every environment variable the code reads, with its default:
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |
 | `THROTTLE_RELAY` | `60/min` | Rate limit: relay-credential minting, per account |
 | `ATTACHMENTS_ROOT` | `<repo>/media_root` | Directory for attachment bytes |
-| `ATTACH_USER_QUOTA_BYTES` | `2147483648` | Per-user attachment quota (2 GiB) |
+| `ATTACH_DAILY_BYTES` | `268435456` | What one account may upload in one UTC day (256 MiB), counted in Redis; an upload past it is `413 quota_exceeded`. No lifetime total is kept, because no attachment row names an account |
+| `ATTACH_MIN_FREE_BYTES` | `2147483648` | Free space `ATTACHMENTS_ROOT` must still have for an upload to be admitted (2 GiB); below it every upload answers `503 storage_full` |
 | `ATTACH_TTL_DAYS` | `30` | Attachment retention, days |
 | `ENVELOPE_TTL_DAYS` | `7` | Undelivered-envelope retention, days (delivered rows are deleted on ack; pruning records the per-device `pruned_through` watermark) |
 | `MAILBOX_MAX_BYTES` | `33554432` | Ceiling on the undelivered bytes of one mailbox (32 MiB); a send that would pass it is refused for that device and reported in `full_devices` |

@@ -676,6 +676,35 @@ route takes a full-scope token.
 | `THROTTLE_ACCOUNTS` | `120/min` per account | `300/min` per account. Every route on the `accounts` scope shares it, including the two new ones | None. More headroom, not less |
 | The server's WebSocket ping | uvicorn's default: a ping every 20 s, given up on after 20 s | A ping every 240 s, given up on after 60 s | None. The client's own four-minute keepalive is unaffected and stays its decision. A socket the server has stopped hearing from is closed within 300 s rather than 40 s |
 
+## The attachment store stops naming accounts
+
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+removed the column that said which account uploaded a stored attachment. The
+per-account lifetime quota went with it, because that column was what the quota summed.
+
+### `POST /api/v1/attachments` — a daily allowance replaces the lifetime quota
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| What bounds an upload | A lifetime sum of the account's stored bytes against `ATTACH_USER_QUOTA_BYTES`, default 2 GiB. Deleting an attachment, or letting the TTL expire it, gave the space back | What the account has uploaded so far today, against `ATTACH_DAILY_BYTES`, default 256 MiB. It resets at 00:00 UTC and carries nothing forward; deleting an attachment gives nothing back, because nothing is being counted at rest | **Required if the client showed a quota.** "X of 2 GiB used" has no server-side value behind it any more. What the client can show is the day's allowance from `GET /api/v1/config` |
+| The refusal | `413 {"code": "quota_exceeded", "detail": "Storage quota exhausted."}` | The same status and the same code, with `detail` `"The day's upload allowance is spent."` | None if the client branches on `code`, which the contract has always required. A client that matched the `detail` string breaks |
+| What a refusal costs | The bytes were written and then unlinked | Nothing is written and nothing is charged. A retry before the day turns answers the same way | Optional. Hold the attachment and retry after 00:00 UTC rather than retrying immediately |
+| An upload that fails after it is admitted | — | The allowance is given back, so a failed upload never costs the account its day | None |
+| Storage below its free-space floor | Not distinguished: an upload the disk could not take was `500 server_error` | `503 {"code": "storage_full", "detail": "Attachment storage is full."}`, a new code in `backend/core/API.md` | Recommended. Treat it as retry later with backoff, like `unavailable`. It is not the account's fault and no allowance was spent |
+
+### `GET /api/v1/config` — the allowance is published
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The upload bound | Not published. `ATTACH_USER_QUOTA_BYTES` was an operator setting a client could only learn from a `413` | `attachment_daily_bytes`, the same value the upload route enforces | Recommended. Read it at startup and disclose it before a large send, rather than after a refusal |
+
+### What the server no longer records
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Which account uploaded a stored attachment | `Attachment.uploader`, a foreign key to the account | Written by nothing and read by nothing. No route ever served it, so no response shape changes | None. It is stated because `backend/SECURITY.md` states the new seizure yield: an attachment row now names a size and a day and nobody |
+| The panel's view of an attachment | The operator saw the uploader, could filter by it, and saw each account's stored bytes on its page | The operator sees the size and the day. `docs/admin/PANEL-RECORD.md` §10 records the reversal | None — no client surface |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

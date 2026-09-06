@@ -105,8 +105,12 @@ A full seizure of this server (disk + database) reveals, in total:
   (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
   blob to a recipient device, never to a sender or a conversation; acked rows are
   deleted outright;
-- per-user **attachment upload counts, bucketed sizes, and days** — no recipient data
-  of any kind;
+- **attachment rows** — a capability id, a bucketed size and the day of upload, and
+  nothing that names an account. The column that used to carry the uploader is written
+  by nothing (ADR-0025), so a seizure cannot say whose file a stored blob is, how many
+  files an account uploaded, or that two blobs came from the same person. What bounds
+  an upload instead is a per-account counter for the UTC day, which lives in Redis with
+  persistence off and is therefore not in a seizure of the disk at all;
 - the **admin audit log** — one row per administrative act the operator performed
   through the panel, holding the operator's account, a timestamp, the affected object
   and a plain-language sentence. It names what the operator did, so it shows which
