@@ -705,6 +705,29 @@ per-account lifetime quota went with it, because that column was what the quota 
 | Which account uploaded a stored attachment | `Attachment.uploader`, a foreign key to the account | Written by nothing and read by nothing. No route ever served it, so no response shape changes | None. It is stated because `backend/SECURITY.md` states the new seizure yield: an attachment row now names a size and a day and nobody |
 | The panel's view of an attachment | The operator saw the uploader, could filter by it, and saw each account's stored bytes on its page | The operator sees the size and the day. `docs/admin/PANEL-RECORD.md` §10 records the reversal | None — no client surface |
 
+## An attachment download resumes
+
+The edge, not the application: `proxy_request_buffering` and `client_body_timeout`
+are now stated on the `/api/` location, and the internal location the download
+redirects to has always been able to serve a byte range. Both are measured in
+[`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) §4.
+
+### `GET /api/v1/attachments/{attachment_id}` — `Range` and `206`
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| A `Range` request | Undocumented. nginx has always honoured it, and no document said so, so no client could rely on it | Documented: `Range: bytes=<first>-<last>` answers `206 Partial Content` with `Content-Range` and exactly those bytes. The full response carries `Accept-Ranges: bytes`, an `ETag` and a `Last-Modified` | Optional. The shipped download path requires `200` and one full bucket in one response, so it declines a `206` today |
+| Resuming after a dropped transfer | The whole bucket again, up to 64 MiB | The bytes after the offset already written, under `If-Range` with the `ETag` of the first response | Optional. An attachment is immutable and its id is never reused, so the tag can only fail after the retention sweep deleted the object — and the answer is then the whole body, never bytes from another file |
+| What the application does | Answers `200` with an empty body and `X-Accel-Redirect` | Unchanged. The range is nginx's work, from the internal location, so no route, status or schema of this API moved | None |
+| Talking to the application directly | The body is empty and the redirect header is visible | Unchanged, and `Range` does nothing: the process that would honour it is not there | None. A development client cannot test the resume path |
+
+### The upload body, at the edge
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Where a slow upload is paid for | nginx buffered the request body by default and nothing said so, so the application's 120 s deadline read as a bound on the client's link | `proxy_request_buffering on` is stated: nginx absorbs the body first and the application's deadline covers the loopback hop alone. Measured — with buffering off the upstream spent 3.5 s of its own deadline reading a 200 KiB body trickled over 5 s | None. The behaviour is unchanged; what changed is that it is now pinned by a test rather than inherited |
+| A client that stalls mid-body | nginx's default 60 s between two reads of the body | 30 s, at the edge. A live link trickles and never approaches it | None |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

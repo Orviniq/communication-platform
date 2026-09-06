@@ -188,7 +188,7 @@ server. `TURN_STATIC_AUTH_SECRET` is read by the backend as well from this
 release: the backend signs a relay credential under it, and coturn verifies that
 credential under `static-auth-secret` in step 7. The two copies are one value and
 must be the same string — a mismatch is a relay that refuses every allocation,
-and check 9 of step 8 is what catches it.
+and check 10 of step 8 is what catches it.
 
 `TURN_URLS` beside it is what serves voice at all. Left empty,
 `POST /api/v1/me/relay` answers `503 voice_unconfigured` and no client can place
@@ -399,7 +399,20 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/un
 # 8. Redis answers, with the password the check above insisted on.
 as_deploy sh -c 'redis-cli -u "$REDIS_URL" ping'     # PONG
 
-# 9. coturn accepts a credential this backend minted. Skip only if TURN_URLS is
+# 9. A stored attachment serves a byte range, so a client can resume a download.
+#    Needs one capability id of an attachment that is still inside its TTL; take
+#    it from the client that uploaded it, never from the database, because the id
+#    IS the capability and reading it out is a download anyone can then perform.
+#    The token is a full-scope session token of any account.
+curl -sS -D- -o /dev/null \
+    -H "Authorization: Bearer $token" -H 'Range: bytes=0-9' \
+    "https://chat.nimashadloo.dev/api/v1/attachments/$capability"
+# HTTP/1.1 206 Partial Content, with Content-Range: bytes 0-9/<bucket size> and
+# Content-Length: 10. A 200 with the whole bucket means the internal location is
+# not serving the file — X-Accel-Redirect fell through, and the application's own
+# empty body is what came back. A 404 means the id is spent or mistyped.
+
+# 10. coturn accepts a credential this backend minted. Skip only if TURN_URLS is
 #    empty. `turnutils_uclient` ships with coturn. The secret itself is never
 #    passed to it — the tool's own -W flag would put it in world-readable
 #    /proc/*/cmdline, which is the reason step 7 keeps it out of coturn's own
@@ -424,7 +437,7 @@ turnutils_uclient -y -c -X -n 10 -l 100 -p 3478 -u "$turn_user" -w "$turn_pass" 
 # the unit, the drop-in of step 7, and the firewall rule of step 1.
 ```
 
-Check 9 is the one check with no second source. The relay writes no log at all
+Check 10 is the one check with no second source. The relay writes no log at all
 (AR-15), so `journalctl -u coturn.service` will not confirm or contradict it: the
 client's own output is the whole of the evidence, which is why the pass and the
 fail above are distinguished by the line and never by the exit status — both of
@@ -436,7 +449,7 @@ one host with an in-place deploy has no rotation to gate, and a request-scoped
 log on this host would be the social graph the schema exists to exclude. AR-9 in
 [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) carries what that costs and
 the trigger that ends it. The checks above are what stands in its place, so
-running all nine is not optional.
+running all ten is not optional.
 
 `journalctl -u chat.service` carries the process's own output. It holds no
 request line, no path and no identifier — that is the invariant, not an

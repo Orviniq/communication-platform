@@ -363,6 +363,29 @@ class BasePostureTests(SimpleTestCase):
         self.assertGreater(waits["/api/"], settings.UPLOAD_DEADLINE_SECONDS)
         self.assertGreater(waits["/admin/"], settings.REQUEST_DEADLINE_SECONDS)
 
+    def test_the_body_of_a_slow_upload_is_absorbed_by_the_edge(self):
+        """The two directives that decide where a slow client's upload is paid for.
+
+        With `proxy_request_buffering on` nginx reads the whole body before it
+        opens the loopback connection, so `UPLOAD_DEADLINE_SECONDS` covers the
+        loopback hop alone. Turned off, the same body is read inside the
+        application's own deadline and a slow link on a 64 MiB upload becomes a
+        `503` the client cannot act on. It is nginx's default, which is exactly why
+        it is stated: nothing else in this tree would report it changing.
+
+        `client_body_timeout` is the other half. Once nginx owns the read, the
+        bound on a client that stalls mid-body lives here and nowhere else, and
+        the default 60 s is twice what a live link ever needs between two reads.
+        """
+        api = nginx_locations((settings.BASE_DIR / "ops" / "nginx" / SITE).read_text())[
+            "/api/"
+        ]
+
+        self.assertIn("proxy_request_buffering on;", api)
+        self.assertLess(
+            nginx_seconds(re.search(r"client_body_timeout\s+(\S+);", api).group(1)), 60
+        )
+
     def test_one_layer_owns_the_transport_security_header(self):
         """`add_header` appends; it never replaces. Django's SecurityMiddleware
         emits HSTS on the admin path it serves, and SECURE_HSTS_SECONDS has to stay

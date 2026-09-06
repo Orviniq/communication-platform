@@ -149,14 +149,36 @@ avoids. The server authorizes the request and answers with an empty body plus an
 response is marked non-cacheable and non-renderable, since the bytes are ciphertext.
 
 Behind the deployed nginx the client simply receives the bytes. Talking to the
-application directly (development), the body is empty and the redirect header is
-visible.
+application directly (development), the body is empty, the redirect header is
+visible, and a `Range` does nothing — the process that would honour it is not there.
+
+**Resuming.** Behind the deployed nginx a download honours a `Range` request. The
+application never sees it: it answers `200` with an empty body and the redirect
+header, and nginx's static handler serves the range from the internal location. A
+full response therefore carries `Accept-Ranges: bytes`, an `ETag` and a
+`Last-Modified`, and `Range: bytes=<first>-<last>` answers `206 Partial Content` with
+`Content-Range: bytes <first>-<last>/<total>` and exactly those bytes. `If-Range` with
+the `ETag` from the first response is what makes a resume safe: an attachment is
+immutable and the id is never reused, so the tag can only fail to match after the
+retention sweep deleted the object, and the answer is then the whole body rather than
+bytes from another file.
+
+The chunk format is unaffected: an attachment is a fixed 66-byte header followed by
+64 KiB secretstream chunks, padded to a bucket, so any byte offset a client resumes
+from is one it already knows. The bucket-length rule is unchanged too — what a client
+must end up with is exactly one bucket, however many responses it took to collect it.
+
+Resuming is client work that has not been done. The shipped download path requires
+`200` and refuses anything but a full bucket in one response, so it declines a `206`
+today; `../../CLIENT_WORK.md` carries what changes.
 
 **Headers**
 
 | Header | Required | Value |
 |---|---|---|
 | `Authorization` | yes | `Bearer <session token>` |
+| `Range` | no | `bytes=<first>-<last>`, to resume. Honoured by nginx, never by the application |
+| `If-Range` | no | The `ETag` of the earlier response, so a resume that cannot be satisfied returns the whole body instead of the wrong bytes |
 
 **Path parameters**
 
@@ -192,7 +214,14 @@ Cache-Control: private, no-store
 X-Accel-Redirect: /_protected_attachments/Xk/Xk3vT9qLm2WnPzR8sYb4cJdF6hA1gE5uV7iO0wQtN_M
 ```
 
-nginx replaces the empty body with the file bytes.
+nginx replaces the empty body with the file bytes and adds `Accept-Ranges: bytes`,
+`Content-Length`, an `ETag` and a `Last-Modified` of its own.
+
+The answer to a `Range` this route never produces itself is under **Resuming** above:
+nginx serves it from the internal location as `206 Partial Content` with a
+`Content-Range`, and an unsatisfiable range as its own `416` with no envelope,
+because no route of this API produced either. Neither is in `backend/openapi.json`
+for that reason — the generated document describes what these routes answer.
 
 ### Unknown id — `404 Not Found`
 

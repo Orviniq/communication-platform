@@ -232,6 +232,13 @@ async def download_attachment(attachment_id: str):
     Any live token may fetch by id; the unguessable id is the gate. The path is
     built from the id the row holds, which is server-generated, so no request
     value ever steers it.
+
+    A `Range` header is not read here and is not passed on by hand: nginx carries
+    the client's request headers into the internal redirect, and the static
+    handler there answers the range with a `206`. This route declares no such
+    status, because the document of this surface describes what these routes
+    answer and this one always answers `200` — `attachments/API.md` is where the
+    edge's half of the download is written down.
     """
     stored = await run_unit(services.locate, attachment_id)
     return Response(

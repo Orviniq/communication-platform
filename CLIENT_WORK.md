@@ -335,3 +335,26 @@ server no longer keeps.
 | The upload failure path | `413 quota_exceeded` now means "spent for today". Its `detail` string changed; branch on `code`, which the contract has always required. A retry before 00:00 UTC answers the same way, so hold the attachment rather than retrying at once |
 | The same failure path | `503 storage_full` is a new code: the server's disk is low, not the account's allowance. Treat it as retry later with backoff and say so in different words from a quota message — the operator has to free space before it clears |
 
+
+## Optional — resume an attachment download
+
+`GET /api/v1/attachments/{attachment_id}` honours a `Range` request through nginx
+and answers `206 Partial Content`. Nothing in the API moved; what moved is that the
+behaviour is now documented and measured, so a client may rely on it.
+
+The observable changes are in [`API_CHANGES.md`](API_CHANGES.md) § "An attachment
+download resumes", and `backend/attachments/API.md` carries the headers.
+
+`frontend/lib/features/attachments/infrastructure/attachment_transport.dart` refuses
+any status but `200` and requires the streamed byte count to equal the bucket exactly,
+so it declines a `206` as it stands. What a resume needs there:
+
+| Path | What changes |
+|---|---|
+| The download call | Send `Range: bytes=<bytes already written>-` and `If-Range: <ETag of the first response>` when a partial file exists for this capability id |
+| The status check | Accept `206` beside `200`. A `200` in answer to a `Range` means the server chose to send the whole object — truncate the partial file and start again rather than appending |
+| The length check | Count from the resume offset, not from zero. The rule is unchanged: what ends up on disk must be exactly one bucket, and anything else is refused |
+| The partial file | Keep it only while the `ETag` matches. An attachment is immutable and its id is never reused, so a mismatch means the retention sweep deleted the object — discard the partial and report the attachment as gone |
+
+Worth doing only for the two largest buckets. A 64 KiB or 256 KiB attachment costs
+less to fetch again than the bookkeeping costs to maintain.
