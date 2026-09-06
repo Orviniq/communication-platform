@@ -165,6 +165,29 @@ devices hold a socket and when, and which device signals which device. The serve
 no presence of any kind: a client learns that a peer is reachable from its own
 signalling and its own timeout, never from anything this server keeps.
 
+Also at rest, below the live-root bar: **a deleted row is not erased.** PostgreSQL
+marks the tuple dead and leaves its bytes in the page; the space becomes reusable only
+after a vacuum, and the bytes are gone only when a later insert takes that space. The
+same row is in the write-ahead log twice, as its insert and as its delete, and a WAL
+segment holds what it holds until it is recycled and written over. Nothing in this
+deployment zeroes a page, and the proposal to do so on a schedule is rejected rather
+than deferred ([`REJECTED_PROPOSALS.md`](../REJECTED_PROPOSALS.md) 17).
+
+This is a routine path and not an edge case: the queue table deletes a row on every
+acknowledgement. What persists there is exactly what the row held — bucketed
+ciphertext this server cannot open, a recipient device id, a sequence number, and the
+UTC day it was enqueued on. No sender, no conversation and no content key, because
+none of those is in the row to begin with.
+
+What is bounded is the window, not the residue.
+`messaging.0006_reclaim_the_queue_promptly` sets autovacuum storage parameters on the
+queue table so its space is reclaimed at 100 dead tuples plus one percent of the live
+ones, where the stock trigger is 50 plus a fifth — 2100 against 40 050 at the 200 000
+row shape, measured in
+[`docs/architecture/GROUND-TRUTH.md`](../docs/architecture/GROUND-TRUTH.md) §4. The
+WAL has no equivalent bound here: how long a segment holds an old row follows write
+volume and checkpoint activity, and this deployment sets nothing to shorten it.
+
 ## Voice
 
 Voice is served by this revision, and the audio content of a call is protected on the

@@ -46,6 +46,7 @@ HISTORY = {
         "0003_expand_the_queue_to_a_day",
         BACKFILL_THE_DAY,
         "0005_index_the_day_filter",
+        "0006_reclaim_the_queue_promptly",
     ],
     "vault": [INITIAL, RETIRE_DATES],
     "voicerooms": [INITIAL, "0002_delete_room"],
@@ -309,6 +310,14 @@ LOCK_CLASSES = {
         "writer. It is held for one batch and not for the migration, which is what "
         "`atomic = False` and the per-batch transaction buy"
     ),
+    "RunSQL": (
+        "whatever the statement takes, which is why this entry names none: the "
+        "operation is raw SQL and the operation name says nothing at all. The "
+        "statement gate below is the whole of the classification for it — every "
+        "form but the ones `ALLOWED_ALTERATIONS` admits fails there. The one in "
+        "the tree is `ALTER TABLE … SET (autovacuum_…)`, measured at SHARE UPDATE "
+        "EXCLUSIVE on PostgreSQL 16.14 with `relfilenode` unchanged either side"
+    ),
 }
 
 # The operations that cannot run inside a transaction block. A migration carrying
@@ -346,10 +355,39 @@ ALLOWED_STATEMENTS = (
 # * `DROP DEFAULT` is the statement Django emits right after that one, and it
 #   removes a catalogue entry.
 #
+# * `SET (` is a storage parameter and nothing else — the parenthesis is what
+#   separates it from `SET NOT NULL`, `SET DEFAULT`, `SET TABLESPACE` and
+#   `SET LOGGED`, each of which rewrites or scans and none of which matches it. It
+#   writes `pg_class.reloptions` and reads no row: measured at SHARE UPDATE
+#   EXCLUSIVE with `relfilenode` unchanged either side of a 200 000-row table.
+#
 # Every other form — `TYPE`, `SET NOT NULL`, `SET DEFAULT`, `DROP COLUMN` — rewrites
 # or scans, and each one fails here. `ADD COLUMN` with a *volatile* default would
 # rewrite too, and is caught by the `DEFAULT` check beside it.
-ALLOWED_ALTERATIONS = ("ADD CONSTRAINT", "DROP NOT NULL", "ADD COLUMN", "DROP DEFAULT")
+ALLOWED_ALTERATIONS = (
+    "ADD CONSTRAINT",
+    "DROP NOT NULL",
+    "ADD COLUMN",
+    "DROP DEFAULT",
+    "SET (",
+)
+
+# The forms the classification does not cover, named rather than left to the absence
+# of an allowed one. Every operation Django writes emits one action per `ALTER TABLE`,
+# so an allowed form present was an allowed form alone — until `RunSQL` entered the
+# tree, which can write `ALTER TABLE t DROP COLUMN c, SET (…)` and carry a rewrite and
+# an admitted form in the same statement. Each of these is a rewrite or a scan under
+# ACCESS EXCLUSIVE whose cost grows with the table.
+FORBIDDEN_ALTERATIONS = (
+    "DROP COLUMN",
+    "SET NOT NULL",
+    "SET DEFAULT",
+    "SET TABLESPACE",
+    "SET LOGGED",
+    "SET UNLOGGED",
+    "RENAME",
+    "TYPE ",
+)
 
 # A default PostgreSQL will not put in `attmissingval`. `random()`, `nextval()` and
 # `clock_timestamp()` are each volatile, and `ADD COLUMN` with one of them rewrites
@@ -358,7 +396,7 @@ VOLATILE_DEFAULTS = ("RANDOM(", "NEXTVAL(", "CLOCK_TIMESTAMP(", "GEN_RANDOM_UUID
 
 # The `ALTER TABLE` forms whose cost is a catalogue write and never a scan, so they
 # may name a table the migration did not create.
-CATALOGUE_ONLY = ("DROP NOT NULL", "ADD COLUMN", "DROP DEFAULT")
+CATALOGUE_ONLY = ("DROP NOT NULL", "ADD COLUMN", "DROP DEFAULT", "SET (")
 
 
 def migration_nodes():
@@ -457,6 +495,8 @@ def test_the_generated_sql_is_only_the_statements_the_classification_covers(app,
         assert statement.startswith(ALLOWED_STATEMENTS), statement
         if statement.startswith("ALTER TABLE"):
             assert any(form in statement for form in ALLOWED_ALTERATIONS), statement
+            carried = [form for form in FORBIDDEN_ALTERATIONS if form in statement]
+            assert carried == [], statement
         if "ADD COLUMN" in statement and "DEFAULT" in statement:
             # The one form whose lock class depends on the value beside it: a
             # volatile default is evaluated per row, which is a rewrite.
@@ -779,7 +819,10 @@ LOCK_STRENGTH = [
 # `ADD COLUMN` with its evaluated default, the `DROP DEFAULT` behind it, and the
 # `DROP NOT NULL` on the column it replaces — and reads no row of the table for any
 # of them. `0005` is the concurrent index build the probe below cannot measure, and
-# `0004` carries no DDL at all, so neither appears in this map.
+# `0004` carries no DDL at all, so neither appears in this map. `0006` is the fourth
+# kind and the weakest entry here: SHARE UPDATE EXCLUSIVE on the queue table for one
+# write to `pg_class.reloptions`, which blocks no reader and no writer — only a
+# concurrent DDL or vacuum on the same table.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
@@ -796,6 +839,9 @@ BLOCKING_LOCKS = {
     ("messaging", INITIAL): {"devices_device": "ShareRowExclusiveLock"},
     ("messaging", "0003_expand_the_queue_to_a_day"): {
         "messaging_queuedenvelope": "AccessExclusiveLock"
+    },
+    ("messaging", "0006_reclaim_the_queue_promptly"): {
+        "messaging_queuedenvelope": "ShareUpdateExclusiveLock"
     },
     ("vault", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("vault", RETIRE_DATES): {"vault_keybackup": "AccessExclusiveLock"},
@@ -998,12 +1044,14 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
     check would pass it. The same goes for a plain `CREATE INDEX`: on a new table
     it is free, on a populated one it takes SHARE for the whole build.
 
-    Four statements are allowed to name a table they did not create. The concurrent
+    Five statements are allowed to name a table they did not create. The concurrent
     index build blocks nothing at all. `ALTER COLUMN … DROP NOT NULL`, `ADD COLUMN`
     with a non-volatile default and the `DROP DEFAULT` that follows it each block
     everything for a catalogue write and read no row, so unlike the two above their
     cost does not grow with the table — which is the whole reason they are the shapes
-    a column is retired and introduced in.
+    a column is retired and introduced in. `SET (` is the fifth and the cheapest: a
+    storage parameter is one write to `pg_class.reloptions` under a lock that blocks
+    no reader and no writer.
     """
     out = StringIO()
     call_command("sqlmigrate", app, name, stdout=out)
