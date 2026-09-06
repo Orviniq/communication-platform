@@ -244,6 +244,58 @@ def test_no_invariant_suite_is_quarantined(name):
     assert body.count("def test_") > 0, name
 
 
+# The two files that prove invariant 2 against a real `pg_dump` of the tables. They
+# are not in `INVARIANT_SUITES` above and cannot be: each carries the conditional
+# marker assembled below, which `QUARANTINE` matches by design, and that guard is
+# legitimate — a developer machine without `pg_dump` cannot run them. What must not
+# happen is the proof leaving a run silently, so the two assertions below take the
+# place of membership: the only quarantine marker in either file is that one guard,
+# and on CI `pg_dump` has to be there.
+AT_REST_SUITES = (
+    "accounts/tests/test_at_rest.py",
+    "messaging/tests/test_at_rest.py",
+)
+# Assembled rather than written out, for the reason the comment above `QUARANTINE`
+# gives: this file is itself in `INVARIANT_SUITES`, so a marker spelled literally in
+# its source would fail its own gate.
+PG_DUMP_GUARD = "@pytest.mark." + 'skipif(PG_DUMP is None, reason="pg_dump not on PATH")'
+
+
+@pytest.mark.parametrize("name", AT_REST_SUITES)
+def test_the_at_rest_suites_carry_no_marker_but_the_recorded_pg_dump_guard(name):
+    """A bare skip added to either file would drop the "no plaintext at rest" proof
+    out of every run, and `test_no_invariant_suite_is_quarantined` does not walk
+    these two."""
+    from django.conf import settings
+
+    path = settings.BASE_DIR / name
+
+    assert path.exists(), name
+    body = path.read_text()
+    assert body.count("def test_") > 0, name
+    markers = QUARANTINE.findall(body)
+    assert markers, name  # the guard itself, so a rewrite that lost it fails here
+    assert body.count(PG_DUMP_GUARD) == len(markers), name
+
+
+def test_the_at_rest_proof_cannot_leave_a_ci_run():
+    """`pg_dump` is what those seven tests shell out to, and its absence skips them
+    with a recorded reason and a green run. That is right on a developer machine and
+    wrong on the gate: the proof would leave CI with nothing to say so.
+
+    Written as one implication rather than a skip, because this file is in
+    `INVARIANT_SUITES` and may hold no marker of its own. Off CI it asserts that the
+    runner is off CI, which is true and says so; on CI it is the whole check.
+    """
+    import os
+    import shutil
+
+    assert shutil.which("pg_dump") or not os.environ.get("CI"), (
+        "pg_dump is absent on a CI runner, so the at-rest suites would skip and the "
+        "no-plaintext-at-rest proof would leave this run"
+    )
+
+
 def test_the_offline_rehearsal_is_present_and_runnable():
     """The eighth invariant's proof is a shell script rather than a test, so the
     suite cannot run it — what it can do is fail when it goes missing or stops

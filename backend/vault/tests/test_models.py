@@ -93,14 +93,13 @@ def test_no_save_stamps_a_time_of_any_kind(active_user):
     """A day the account last wrote its backup is a presence signal, and ADR-0024
     stopped recording one. `vault.0003_drop_the_retired_date` took the column with
     it, so a seizure of this table has no column to read a when from at all."""
-    stamps = [
-        field.name
-        for field in KeyBackup._meta.concrete_fields
-        if field.get_internal_type() in ("DateField", "DateTimeField")
-    ]
+    stored = store(active_user)
 
-    assert stamps == []
-    store(active_user)
+    assert [
+        field.name
+        for field in type(stored)._meta.concrete_fields
+        if field.get_internal_type() in ("DateField", "DateTimeField")
+    ] == []
 
 
 @pytest.mark.parametrize(

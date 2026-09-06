@@ -138,20 +138,24 @@ def test_reading_a_profile_is_one_lookup(http, active_user, device, bearer):
         user=active_user, blob=b"\x01" * PROFILE_BUCKETS[0], version=1
     )
 
-    counted(
+    peer = counted(
         http,
         "GET",
         f"/api/v1/users/{active_user.id}/profile",
         AUTH_QUERY + 1,
         headers=bearer(active_user, device),
     )
-    counted(
+    own = counted(
         http,
         "GET",
         MY_PROFILE_URL,
         AUTH_QUERY + 1,
         headers=bearer(active_user, device),
     )
+
+    # `counted` weighs the statements and returns the answer; without this a route
+    # that regressed to a `404` at the same cost would pass here.
+    assert (peer.status_code, own.status_code) == (200, 200)
 
 
 def test_a_profile_write_reads_the_row_once(http, active_user, device, bearer):

@@ -11,7 +11,6 @@ import os
 
 import pytest
 
-from accounts.models import User
 from attachments.models import Attachment, _new_capability_id
 from core.buckets import ATTACHMENT_BUCKETS
 
@@ -74,20 +73,6 @@ def test_the_path_follows_the_configured_root_rather_than_a_value_baked_at_impor
     assert attachment.disk_path().startswith(str(tmp_path / "somewhere-else"))
 
 
-def test_a_removed_account_leaves_its_attachments_fetchable(active_user):
-    """The capability travelled to recipients inside their messages, so erasing the
-    account that uploaded the bytes must not break their download. Nothing on the
-    row names an account since `attachments.0002_drop_the_uploader_link`, so no
-    cascade can reach it — this is what proves the row survives the delete rather
-    than the `SET_NULL` that used to."""
-    attachment = Attachment.objects.create(size=SMALLEST)
-
-    User.objects.filter(pk=active_user.pk).delete()
-
-    attachment.refresh_from_db()
-    assert Attachment.objects.filter(id=attachment.id).exists()
-
-
 def test_the_largest_bucket_round_trips_through_the_size_column():
     """The boundary the column has to hold: the biggest bucket a client may
     upload, read back as the integer it was stored as."""
@@ -103,7 +88,5 @@ def test_no_relation_reaches_an_attachment_from_an_account(active_user):
     read. ADR-0025 removed both and run 08 dropped the column, so an account has no
     path to a stored file: the only handle on one is the capability id a recipient
     was given inside an end-to-end encrypted message."""
-    Attachment.objects.create(size=SMALLEST)
-
     assert not hasattr(active_user, "attachments")
     assert [f.name for f in Attachment._meta.get_fields() if f.is_relation] == []

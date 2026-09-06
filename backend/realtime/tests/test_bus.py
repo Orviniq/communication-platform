@@ -21,9 +21,8 @@ import uuid
 import pytest
 import redis
 
+from ops.audit.log_silence import capture_all_logging
 from realtime import bus
-
-from .test_log_silence import raw_root_capture
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -364,7 +363,7 @@ async def test_the_push_handler_returns_the_response_and_writes_no_log_line():
     the first time a PubSub is built without one. Passing this suppresses both."""
     push = [b"message", b"ws:dev:2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f", b"kzXhc-blob"]
 
-    with raw_root_capture() as lines:
+    with capture_all_logging() as lines:
         logging.getLogger("test.canary").debug("canary")
         returned = await bus._keep(push)
 

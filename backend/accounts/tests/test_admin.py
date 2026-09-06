@@ -14,6 +14,7 @@ those tests state, and nothing looser.
 
 import re
 from datetime import timedelta
+from io import StringIO
 
 import pytest
 from django.apps import apps
@@ -916,8 +917,17 @@ def test_no_template_or_collected_asset_fetches_from_another_host():
 
 def test_collectstatic_can_run():
     """Gate 8 of this run, and the step the panel's CSS and fonts depend on: without
-    it nginx serves an empty `static_root` and the panel renders unstyled."""
-    call_command("collectstatic", "--noinput", "--dry-run", verbosity=0)
+    it nginx serves an empty `static_root` and the panel renders unstyled.
+
+    The count is asserted rather than the absence of an exception. A finder
+    configuration that resolved to nothing would raise nothing either, and the panel
+    would render unstyled exactly as if the step had never run — which is the failure
+    this is here to catch."""
+    out = StringIO()
+    call_command("collectstatic", "--noinput", "--dry-run", verbosity=1, stdout=out)
+
+    assert "0 static files" not in out.getvalue(), out.getvalue()
+    assert "unfold" in out.getvalue().lower() or "static files" in out.getvalue()
 
 
 # --- Retention -------------------------------------------------------------------

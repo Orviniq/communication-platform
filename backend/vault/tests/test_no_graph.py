@@ -56,9 +56,6 @@ def test_stored_blob_is_bucket_sized_and_no_date_is_stored(
     backup = KeyBackup.objects.get(user_id=active_user.id)
 
     assert len(bytes(backup.blob)) in set(BACKUP_BUCKETS)
-    # No date at all: ADR-0024 stopped writing one and run 08 dropped the column, so
-    # a dump of this table carries no field the row could put a day in.
-    assert not hasattr(backup, "updated_date")
 
 
 def dump(user_id):

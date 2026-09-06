@@ -18,9 +18,8 @@ import time
 import pytest
 from django.apps import apps
 
+from ops.audit.log_silence import capture_all_logging
 from realtime import relay
-
-from .test_log_silence import raw_root_capture
 
 # transaction=True because the ORM bracket of `api.orm.run_unit` closes the
 # connection around every unit of work, which under a wrapping test transaction
@@ -255,7 +254,7 @@ def test_no_credential_and_no_secret_reaches_a_log_line(
     because a refusal is where a logger normally appears."""
     headers = bearer(active_user, device)
 
-    with raw_root_capture() as lines:
+    with capture_all_logging() as lines:
         logging.getLogger("test.canary").debug("canary")
         minted = http.post(RELAY_URL, headers=headers).json()
         anonymous = http.post(RELAY_URL)
