@@ -69,15 +69,21 @@ def test_a_new_device_is_born_never_cross_signed_and_never_used(active_user):
     assert device.pq_spk_updated_date is None
 
 
-def test_the_dates_a_device_is_stamped_with_are_day_coarse(active_user):
-    """`created_date` and `spk_updated_date` are dates, not timestamps: the own-list
-    orders by `(created_date, id)` precisely because the date alone leaves same-day
-    devices in an arbitrary order."""
-    device = make_device(active_user, registration_id=12)
-    today = timezone.now().date()
+def test_the_only_date_a_device_is_stamped_with_is_day_coarse(active_user):
+    """`created_date` is a date, not a timestamp: the own-list orders by
+    `(created_date, id)` precisely because the date alone leaves same-day devices in
+    an arbitrary order.
 
-    assert device.created_date == today
-    assert device.spk_updated_date == today
+    It is also the only stamp left. ADR-0024 stopped writing every other date on
+    this row, so a new device carries a creation day and nothing else — the columns
+    survive with no writer until run 08 drops them.
+    """
+    device = make_device(active_user, registration_id=12)
+
+    assert device.created_date == timezone.now().date()
+    assert device.spk_updated_date is None
+    assert device.last_active_date is None
+    assert device.pq_spk_updated_date is None
 
 
 def test_two_devices_of_one_account_hold_independent_key_material(active_user):

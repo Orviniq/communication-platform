@@ -93,10 +93,14 @@ A full seizure of this server (disk + database) reveals, in total:
 - the **user list** — usernames, Argon2id password hashes, activation flags,
   day-granularity account creation (irreducible for an authenticating server);
 - per-user **device counts and public key material** — identity/prekey/ML-KEM public
-  keys, cross-signing public keys and their opaque signatures, day-granularity activity,
-  and the device's revocation counter, one integer that says how many times its tokens
-  were ended and nothing about when or by whom;
-- per-user **device-list log records** — opaque client-signed blobs, day-coarse dates;
+  keys, cross-signing public keys and their opaque signatures, the day each device was
+  added, the day each revoked device was revoked, and the device's revocation counter,
+  one integer that says how many times its tokens were ended and nothing about when or
+  by whom. **No activity day**: the server records nothing about when a device was last
+  seen, when a key was last rotated or when a blob was last written (ADR-0024), so a
+  seizure cannot separate a device in daily use from one that has not connected since
+  the day it was added;
+- per-user **device-list log records** — opaque client-signed blobs and nothing else;
 - that **delivery happened, to which device, at hour granularity** — pending queue rows
   (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
   blob to a recipient device, never to a sender or a conversation; acked rows are

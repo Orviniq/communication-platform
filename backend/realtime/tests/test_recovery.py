@@ -94,31 +94,6 @@ async def test_a_socket_that_crashes_still_gives_its_topic_back(
     assert gateway.LIVE == set()
 
 
-async def test_a_bind_that_fails_after_its_subscribe_gives_its_topic_back(
-    active_user, device, monkeypatch
-):
-    """`_bind` subscribes the device topic and then touches the device row. A
-    database that goes away between the two — or a pool with nothing free for the
-    second query — raises out of the bind before the accept. Until this was pinned
-    the sink the bind had registered stayed in the subscriber for the life of the
-    worker: never unsubscribed, because a later socket of the same device joins the
-    holders and its own cleanup leaves the leaked one behind, and filling a dead
-    outbox with every frame published to the device."""
-
-    async def explode(*_args, **_kwargs):
-        raise RuntimeError("the database went away between the token check and the touch")
-
-    monkeypatch.setattr(auth, "touch_active", explode)
-    topic = bus.device_topic(str(device.id))
-    comm = ws(bearer(await mint_session(active_user, device)))
-
-    with pytest.raises(RuntimeError):
-        await comm.connect(timeout=2)
-
-    assert topic not in bus.get_subscriber()._sinks
-    assert gateway.LIVE == set()
-
-
 async def test_a_bind_whose_subscribe_fails_leaves_no_sink_behind(
     active_user, device, monkeypatch
 ):

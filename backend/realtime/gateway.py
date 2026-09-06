@@ -280,7 +280,6 @@ class Connection:
         self.user, self.device = result
         self.device_topic = bus.device_topic(self.device.id)
         await bus.get_subscriber().subscribe(self.device_topic, self.deliver)
-        await auth.touch_active(self.device.id)
         return True
 
     def _rate_ok(self):

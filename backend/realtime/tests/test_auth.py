@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import pytest
 from django.conf import settings
+from django.forms.models import model_to_dict
 from django.utils import timezone as django_timezone
 
 from api.auth import issue_register_scope
@@ -55,13 +56,17 @@ async def test_header_auth_path_connects(active_user, device):
     await comm.disconnect()
 
 
-async def test_connect_touches_last_active_date(active_user, device):
-    assert device.last_active_date is None
+async def test_a_connect_records_nothing_about_the_device(active_user, device):
+    """ADR-0024: the bind stopped writing the day the device was last seen, and no
+    other column stands in for it. A socket that came up must leave the row exactly
+    as it found it, or the seizure yield gains an activity day again."""
+    before = await run_unit(type(device).objects.get, id=device.id)
     comm = await connect_ok(bearer(await mint_session(active_user, device)))
     await probe(comm, device.id)
 
-    refreshed = await run_unit(type(device).objects.get, id=device.id)
-    assert refreshed.last_active_date == django_timezone.now().date()
+    after = await run_unit(type(device).objects.get, id=device.id)
+    assert after.last_active_date is None
+    assert model_to_dict(after) == model_to_dict(before)
     await comm.disconnect()
 
 

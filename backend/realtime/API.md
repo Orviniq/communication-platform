@@ -35,9 +35,9 @@ to send one on. Treat a failed handshake as "renew the session token and reconne
 
 The token is validated with the same strength as REST: signature and expiry, `typ`
 `session` (a register token opens no socket), a live device whose `token_generation`
-matches, and an active account. On success the socket subscribes
-to the device's delivery topic and the device's `last_active_date` is touched (day
-precision).
+matches, and an active account. On success the socket subscribes to the device's
+delivery topic, and that is the whole of the bind: it writes no row, so connecting
+records nothing about the device (ADR-0024).
 
 Every accepted socket is therefore already bound to a device: there is no
 unauthenticated state, no in-band authentication frame and no deadline to meet.

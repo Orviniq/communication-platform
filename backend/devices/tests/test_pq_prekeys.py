@@ -295,7 +295,7 @@ def test_rotating_the_pq_signed_prekey_replaces_it_and_dates_it(
     device.refresh_from_db()
     assert device.pq_spk_id == 2
     assert bytes(device.pq_spk_pub) == (b"G" * PQ_PUBKEY_LEN)
-    assert device.pq_spk_updated_date is not None
+    assert device.pq_spk_updated_date is None  # retired by ADR-0024
     claimed = http.post(
         claim_url(active_user.id),
         json={"device_ids": [str(device.id)]},

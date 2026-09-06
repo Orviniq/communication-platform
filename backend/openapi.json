@@ -791,18 +791,6 @@
             ],
             "title": "Label Blob"
           },
-          "last_active_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Active Date"
-          },
           "this_device": {
             "title": "This Device",
             "type": "boolean"
@@ -812,7 +800,6 @@
           "device_id",
           "label_blob",
           "created_date",
-          "last_active_date",
           "this_device"
         ],
         "title": "OwnDeviceOut",

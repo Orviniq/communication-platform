@@ -180,7 +180,7 @@ def write_profile(user_id, raw, version):
             else:
                 profile.blob = raw
                 profile.version = version
-                profile.save(update_fields=["blob", "version", "updated_date"])
+                profile.save(update_fields=["blob", "version"])
     except IntegrityError:
         # select_for_update locks nothing when the row does not exist yet, so two
         # concurrent first writes can both clear the version check above.

@@ -372,7 +372,6 @@ cross-signs the new device with; there is nothing further to exchange.
       "device_id": "9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611",
       "label_blob": "cGFkZGVkLWxhYmVs…",
       "created_date": "2026-07-20",
-      "last_active_date": "2026-07-23",
       "this_device": true
     }
   ],
@@ -380,8 +379,11 @@ cross-signs the new device with; there is nothing further to exchange.
 }
 ```
 
-`label_blob`, `last_active_date`, and `log_head_seq` may be `null`. Header:
-`ETag: "5b3a9c…"`.
+`label_blob` and `log_head_seq` may be `null`. Header: `ETag: "5b3a9c…"`.
+
+There is no last-active value. The server records no activity day for a device
+(ADR-0024), so this list carries the day it was added and nothing about when it was
+last seen.
 
 ### Not modified — `304 Not Modified` (GET)
 

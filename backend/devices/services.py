@@ -176,9 +176,8 @@ def register_device(user, payload):
             pq_spk_id=pq_spk.spk_id if pq_spk else None,
             pq_spk_pub=pq_spk.pub if pq_spk else None,
             pq_spk_sig=pq_spk.sig if pq_spk else None,
-            pq_spk_updated_date=timezone.now().date() if pq_spk else None,
             label_blob=payload.label_raw,
-        )  # spk_updated_date is auto_now_add
+        )
         if payload.otpks:
             OneTimePrekey.objects.bulk_create(
                 [
@@ -218,7 +217,6 @@ def own_devices(user_id, this_device_id, if_none_match):
             "id",
             "label_blob",
             "created_date",
-            "last_active_date",
         )
         .order_by("created_date", "id")
     )
@@ -228,9 +226,6 @@ def own_devices(user_id, this_device_id, if_none_match):
                 "device_id": str(device.id),
                 "label_blob": _b64_or_none(device.label_blob),
                 "created_date": device.created_date.isoformat(),
-                "last_active_date": device.last_active_date.isoformat()
-                if device.last_active_date
-                else None,
                 "this_device": (device.id == this_device_id),
             }
             for device in devices
@@ -337,14 +332,12 @@ def replenish(device_id, payload):
                 spk_id=payload.spk.spk_id,
                 spk_pub=payload.spk.pub,
                 spk_sig=payload.spk.sig,
-                spk_updated_date=timezone.now().date(),
             )
         if payload.pq_spk:
             bundle.update(
                 pq_spk_id=payload.pq_spk.spk_id,
                 pq_spk_pub=payload.pq_spk.pub,
                 pq_spk_sig=payload.pq_spk.sig,
-                pq_spk_updated_date=timezone.now().date(),
             )
         if "cross_sig" in payload.model_fields_set:
             bundle["cross_sig"] = payload.cross_sig

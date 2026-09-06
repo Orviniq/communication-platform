@@ -1,13 +1,13 @@
 """No-graph proof for vault_keybackup, the vault's only remaining table.
 
 A dump of the table shows only {user_id, blob, version, updated_date}: the blob is
-an exact bucket length, updated_date is day-coarse, and the single user reference
-is the backup's owner. No column links a second user, and no history table exists
-in this app at all (vault/tests/test_no_history.py proves that removal).
+an exact bucket length, updated_date is always null since ADR-0024 stopped writing
+it, and the single user reference is the backup's owner. No column links a second
+user, and no history table exists in this app at all (vault/tests/test_no_history.py
+proves that removal).
 """
 
 import base64
-import datetime
 
 import pytest
 from django.db import connection
@@ -55,9 +55,9 @@ def test_stored_blob_is_bucket_sized_and_date_is_day_coarse(
     backup = KeyBackup.objects.get(user_id=active_user.id)
 
     assert len(bytes(backup.blob)) in set(BACKUP_BUCKETS)
-    # A pure date, never a timestamp (datetime is a subclass of date, so exclude it).
-    assert isinstance(backup.updated_date, datetime.date)
-    assert not isinstance(backup.updated_date, datetime.datetime)
+    # No date at all since ADR-0024: the column has no writer left, so the dump
+    # carries a NULL where it used to carry the day of the last write.
+    assert backup.updated_date is None
 
 
 def dump(user_id):

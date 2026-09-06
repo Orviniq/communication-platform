@@ -21,7 +21,7 @@ from django.test.utils import CaptureQueriesContext
 from api.auth import issue_register_scope, issue_session
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
-from realtime.auth import _authenticate_session, _delete_envelopes, _touch_active
+from realtime.auth import _authenticate_session, _delete_envelopes
 
 pytestmark = pytest.mark.django_db
 
@@ -52,13 +52,6 @@ def test_authenticate_session_is_one_joined_query(active_user, device):
     assert "JOIN" in queries[0]
 
 
-def test_touch_active_is_one_update(device):
-    queries = _count(_touch_active, device.id)
-
-    assert len(queries) == 1
-    assert queries[0].startswith("UPDATE")
-
-
 def test_ack_delete_is_one_statement(active_user, device):
     """One DELETE regardless of ack size (fast-delete path; the BEGIN/COMMIT pair is
     Django's own atomic wrapper, not extra round-trip work)."""
@@ -81,16 +74,16 @@ def test_ack_delete_is_one_statement(active_user, device):
     assert QueuedEnvelope.objects.filter(recipient_device=device).count() == 0
 
 
-def test_a_bind_costs_the_token_check_and_the_activity_stamp(active_user, device):
+def test_a_bind_costs_the_token_check_and_nothing_else(active_user, device):
     """The whole database cost of bringing a socket up: one joined read to verify
-    the token, one UPDATE to stamp the device active. Nothing here may grow with
-    the mailbox or the account's device count, because it runs on every reconnect
-    of every client."""
+    the token, and no second statement since ADR-0024 removed the activity stamp.
+    Nothing here may grow with the mailbox or the account's device count, because it
+    runs on every reconnect of every client."""
     access, _ = issue_session(active_user, device)
 
-    queries = _count(_authenticate_session, access) + _count(_touch_active, device.id)
+    queries = _count(_authenticate_session, access)
 
-    assert len(queries) == 2
+    assert len(queries) == 1
 
 
 def test_a_token_that_fails_verification_costs_no_query_at_all(db):

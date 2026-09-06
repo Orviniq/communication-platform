@@ -351,7 +351,6 @@ class OwnDeviceOut(BaseModel):
     device_id: uuid.UUID
     label_blob: str | None
     created_date: datetime.date
-    last_active_date: datetime.date | None
     this_device: bool
 
 

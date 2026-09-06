@@ -6,10 +6,8 @@ the blob column is declared with the bucket set the route enforces; and the
 timestamp is a date, so the row cannot say when in the day a device was awake.
 """
 
-import datetime
-
 import pytest
-from django.db import IntegrityError, models
+from django.db import IntegrityError
 
 from core.buckets import BACKUP_BUCKETS
 from core.fields import OpaqueBlobField
@@ -91,15 +89,16 @@ def test_the_version_column_starts_at_zero_and_refuses_a_negative(active_user):
         KeyBackup.objects.filter(pk=row.pk).update(version=-1)
 
 
-def test_the_timestamp_is_a_day_coarse_date_written_on_every_save(active_user):
-    """A time of day is a presence signal. The column is a `DateField` with
-    `auto_now`, so a seizure of this table learns the day and nothing finer."""
+def test_no_save_stamps_a_time_of_any_kind(active_user):
+    """A day the account last wrote its backup is a presence signal, and ADR-0024
+    stopped recording one: the column has no automatic value and no writer, so a
+    seizure of this table learns nothing about when. It survives with the row until
+    run 08 drops it, because a column leaves in two steps."""
     field = KeyBackup._meta.get_field("updated_date")
 
-    assert isinstance(field, models.DateField)
-    assert not isinstance(field, models.DateTimeField)
-    assert field.auto_now is True
-    assert store(active_user).updated_date == datetime.date.today()
+    assert field.auto_now is False
+    assert field.null is True
+    assert store(active_user).updated_date is None
 
 
 @pytest.mark.parametrize(

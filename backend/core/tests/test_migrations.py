@@ -31,12 +31,13 @@ ALIAS = "migration_replay"
 # that is not written here fails `test_every_app_owns_the_migrations_recorded_here`,
 # which is what forces a new migration through the classification below rather than
 # into the tree unreviewed.
+RETIRE_DATES = "0002_retire_the_activity_dates"
 HISTORY = {
-    "accounts": [INITIAL],
+    "accounts": [INITIAL, RETIRE_DATES],
     "attachments": [INITIAL],
-    "devices": [INITIAL],
+    "devices": [INITIAL, RETIRE_DATES],
     "messaging": [INITIAL, "0002_index_the_retention_filter"],
-    "vault": [INITIAL],
+    "vault": [INITIAL, RETIRE_DATES],
     "voicerooms": [INITIAL, "0002_delete_room"],
 }
 
@@ -264,10 +265,21 @@ def test_the_whole_history_unapplies_in_reverse_dependency_order(empty_database)
 # not a scan, so the hold is milliseconds rather than a function of the row count.
 # `AddIndexConcurrently` takes SHARE UPDATE EXCLUSIVE and blocks neither, at the
 # price of two table scans and a migration that cannot be atomic.
+# `AlterField` is the one entry here whose lock depends on what the field became:
+# a type change rewrites the table under ACCESS EXCLUSIVE for as long as the scan
+# takes, and `SET NOT NULL` scans it under the same lock. Naming the operation is
+# therefore not enough on its own, and the statement gate below is the other half:
+# `ALTER TABLE` is narrowed to `ADD CONSTRAINT` and `ALTER COLUMN … DROP NOT NULL`,
+# so every other form of `AlterField` fails there rather than passing here.
 LOCK_CLASSES = {
     "CreateModel": "ACCESS EXCLUSIVE on a relation this migration creates",
     "DeleteModel": "ACCESS EXCLUSIVE on a relation this migration drops",
     "AddIndexConcurrently": "SHARE UPDATE EXCLUSIVE",
+    "AlterField": (
+        "ACCESS EXCLUSIVE on a relation that already exists, for the length of a "
+        "catalogue write — DROP NOT NULL clears one flag in `pg_attribute` and "
+        "reads no row of the table"
+    ),
 }
 
 # The operations that cannot run inside a transaction block. A migration carrying
@@ -283,8 +295,17 @@ ALLOWED_STATEMENTS = (
     "CREATE INDEX",
     "CREATE UNIQUE INDEX",
     "DROP TABLE",
-    "ALTER TABLE",  # narrowed below: ADD CONSTRAINT only
+    "ALTER TABLE",  # narrowed below: ADD CONSTRAINT and DROP NOT NULL only
 )
+
+# The two `ALTER TABLE` forms the classification covers. `ADD CONSTRAINT` is judged
+# against the table it names — free on one this migration created, a validating scan
+# on one that was already there. `DROP NOT NULL` is judged for itself: PostgreSQL
+# clears `pg_attribute.attnotnull` and touches no row, so the ACCESS EXCLUSIVE it
+# takes is held for a catalogue write whatever the table holds. Every other form —
+# `TYPE`, `SET NOT NULL`, `SET DEFAULT`, `DROP COLUMN` — rewrites or scans, and each
+# one fails here.
+ALLOWED_ALTERATIONS = ("ADD CONSTRAINT", "DROP NOT NULL")
 
 
 def migration_nodes():
@@ -366,7 +387,7 @@ def test_the_generated_sql_is_only_the_statements_the_classification_covers(app,
     for statement in statements:
         assert statement.startswith(ALLOWED_STATEMENTS), statement
         if statement.startswith("ALTER TABLE"):
-            assert "ADD CONSTRAINT" in statement, statement
+            assert any(form in statement for form in ALLOWED_ALTERATIONS), statement
 
 
 @pytest.mark.django_db(transaction=True)
@@ -497,15 +518,29 @@ LOCK_STRENGTH = [
 # ACCESS EXCLUSIVE on a table that is already there. It costs nothing on this
 # deployment because the same release removed every reader of it and because the
 # service is stopped before `migrate` runs.
+#
+# The `0002_retire_the_activity_dates` rows are the other kind: they create and drop
+# nothing, so every lock in them is on a relation that already exists. Each is an
+# ACCESS EXCLUSIVE for one `DROP NOT NULL`, which blocks reads as well as writes —
+# for the length of a catalogue write, because the statement clears a flag and reads
+# no row. A concurrent statement in flight still has to finish before the lock is
+# granted, so the deploy takes it with the service stopped like every other.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
         "auth_permission": "ShareRowExclusiveLock",
     },
+    ("accounts", RETIRE_DATES): {"accounts_profileblob": "AccessExclusiveLock"},
     ("attachments", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("devices", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
+    ("devices", RETIRE_DATES): {
+        "devices_device": "AccessExclusiveLock",
+        "devices_devicelogrecord": "AccessExclusiveLock",
+        "devices_useridentity": "AccessExclusiveLock",
+    },
     ("messaging", INITIAL): {"devices_device": "ShareRowExclusiveLock"},
     ("vault", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
+    ("vault", RETIRE_DATES): {"vault_keybackup": "AccessExclusiveLock"},
     ("voicerooms", INITIAL): {},
     ("voicerooms", "0002_delete_room"): {"voicerooms_room": "AccessExclusiveLock"},
 }
@@ -641,9 +676,12 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
         if mode in ("AccessExclusiveLock", "ExclusiveLock")
     }
 
-    assert created or dropped, "the migration changed no relation at all"
-    assert pre_existing == BLOCKING_LOCKS[(app, name)]
-    assert exclusive <= created | dropped, sorted(exclusive - created - dropped)
+    recorded = BLOCKING_LOCKS[(app, name)]
+    assert created or dropped or pre_existing, "the migration changed no relation"
+    assert pre_existing == recorded
+    assert exclusive <= created | dropped | set(recorded), sorted(
+        exclusive - created - dropped - set(recorded)
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -693,9 +731,13 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
     table the same migration creates it costs nothing. On a table that was already
     there it is a validating scan under a lock that blocks writes, and the prefix
     check would pass it. The same goes for a plain `CREATE INDEX`: on a new table
-    it is free, on a populated one it takes SHARE for the whole build. The one
-    statement allowed to name a table it did not create is the concurrent index
-    build, which blocks nothing.
+    it is free, on a populated one it takes SHARE for the whole build.
+
+    Two statements are allowed to name a table they did not create. The concurrent
+    index build blocks nothing at all. `ALTER COLUMN … DROP NOT NULL` blocks
+    everything for a catalogue write and reads no row, so unlike the two above its
+    cost does not grow with the table — which is the whole reason it is the shape a
+    column is retired in.
     """
     out = StringIO()
     call_command("sqlmigrate", app, name, stdout=out)
@@ -710,6 +752,7 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
         target.group(1)
         for statement in statements
         if not statement.startswith("CREATE INDEX CONCURRENTLY")
+        and "DROP NOT NULL" not in statement
         for target in [TARGET.match(statement)]
         if target is not None and target.group(1) not in created
     }
