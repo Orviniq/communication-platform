@@ -313,7 +313,7 @@ A register token names no device, so there is no session to renew.
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `accounts`, default 120/min per account.
+Scope `accounts`, default 300/min per account.
 
 ## Log out
 
@@ -366,7 +366,7 @@ Empty body.
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `accounts`, default 120/min per account.
+Scope `accounts`, default 300/min per account.
 
 ## List users
 
@@ -425,7 +425,7 @@ between them; the directory is a current answer, never a stable one.
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `accounts`, default 120/min per account.
+Scope `accounts`, default 300/min per account.
 
 ## Read a user's profile
 
@@ -493,7 +493,7 @@ Also returned when the user does not exist or is deactivated.
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `accounts`, default 120/min per account.
+Scope `accounts`, default 300/min per account.
 
 ## Read or write my profile
 
@@ -594,4 +594,4 @@ The cap on this route is 16 KiB, counted as the bytes arrive rather than read fr
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `accounts`, default 120/min per account.
+Scope `accounts`, default 300/min per account.

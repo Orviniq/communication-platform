@@ -117,7 +117,7 @@ Sent when `version` ≤ the stored version; the stored identity is unchanged.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Fetch a user's cross-signing identity
 
@@ -202,7 +202,7 @@ A `user_id` that is not a UUID never reaches the lookup.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## The canonical device-bundle encoding (client-computed; the server never parses it)
 
@@ -467,7 +467,7 @@ admits; the list caps of the schema refuse a larger body long before it.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Relabel or revoke a device
 
@@ -569,7 +569,7 @@ Another account's device id is a `404`, not a `403`, so existence is not confirm
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Replenish prekeys
 
@@ -687,7 +687,7 @@ admits; the list caps of the schema refuse a larger body long before it.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Prekey count
 
@@ -751,7 +751,7 @@ A `device_id` that is not a UUID never reaches the lookup.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## List a user's devices
 
@@ -847,7 +847,7 @@ Empty body.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Peer state for a set of users
 
@@ -1005,7 +1005,7 @@ tags.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Claim prekey bundles
 
@@ -1222,7 +1222,7 @@ Nothing of the batch is stored.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.
 
 ## Read a user's device-list log
 
@@ -1301,4 +1301,4 @@ A `user_id` that is not a UUID never reaches the lookup.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 300/min.

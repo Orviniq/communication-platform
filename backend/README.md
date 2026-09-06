@@ -214,7 +214,7 @@ Every environment variable the code reads, with its default:
 | `MULTIPART_OVERHEAD_BYTES` | `8192` | Added to the largest attachment bucket to give `POST /api/v1/attachments` its cap |
 | `THROTTLE_REGISTER` | `10/hour` | Rate limit: account registration |
 | `THROTTLE_LOGIN` | `20/hour` | Rate limit: login |
-| `THROTTLE_ACCOUNTS` | `120/min` | Rate limit: general account and device endpoints |
+| `THROTTLE_ACCOUNTS` | `300/min` | Rate limit: general account and device endpoints, the peer-state batch and the limits route |
 | `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey-bundle claims |
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |

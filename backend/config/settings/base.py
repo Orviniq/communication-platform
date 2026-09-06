@@ -142,7 +142,10 @@ REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 THROTTLE_RATES = {
     "register": env("THROTTLE_REGISTER", default="10/hour"),
     "login": env("THROTTLE_LOGIN", default="20/hour"),
-    "accounts": env("THROTTLE_ACCOUNTS", default="120/min"),
+    # 300/min: a 50-member fan-out with per-user reads reached the old 120 in one
+    # cycle, and the peer-state route removes most of those reads (ADR-0024) while
+    # the raise covers the rest.
+    "accounts": env("THROTTLE_ACCOUNTS", default="300/min"),
     "claim": env("THROTTLE_CLAIM", default="120/min"),
     "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
     "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),
