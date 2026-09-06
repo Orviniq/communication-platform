@@ -11,10 +11,11 @@ during a shutdown stops the run instead of continuing past it.
 `ops/offline_install.sh` is what the operator runs when the network is gone. Neither
 has a second chance at that moment.
 
-One of them carries more than syntax, and the second half of this file reads its
+Two of them carry more than syntax, and the second half of this file reads their
 content. `ops/audit/postgres_posture.sh` is the only expression in this repository of
-a posture that lives in a file on a host, so the notes that give the reason for each
-setting and the script that checks it are held to the same list here.
+a posture that lives in a file on a host, and `ops/backup/identity_backup.sh` decides
+what a seizure of the backup directory yields — a table added to its list is a table
+copied out of the retention windows the rest of the design is built on.
 """
 
 import re
@@ -22,6 +23,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from django.apps import apps
 from django.conf import settings
 
 OPS = Path(settings.BASE_DIR) / "ops"
@@ -33,7 +35,29 @@ SCRIPTS = sorted(path.relative_to(OPS).as_posix() for path in OPS.rglob("*.sh"))
 REQUIRED = ("audit/offline_rehearsal.sh", "offline_install.sh")
 
 POSTURE = OPS / "audit" / "postgres_posture.sh"
+BACKUP = OPS / "backup" / "identity_backup.sh"
 PG_NOTES = OPS / "postgres" / "README.md"
+
+# The eight tables a restore of identity needs. `user_id` is inside every signed
+# device bundle, so a lost database is a new identity and a fresh verification with
+# every contact for every account — that, and nothing else, is what the backup exists
+# for.
+BACKED_UP = {
+    "accounts_user",
+    "accounts_profileblob",
+    "devices_useridentity",
+    "devices_device",
+    "devices_onetimeprekey",
+    "devices_pqonetimeprekey",
+    "devices_devicelogrecord",
+    "vault_keybackup",
+}
+
+# The tables of this project that the backup deliberately does not copy, each because
+# a copy of it outlives the retention window that bounds the original.
+# `test_the_backup_decides_about_every_table_this_project_owns` is what makes a new
+# model land in one set or the other rather than in neither.
+NOT_BACKED_UP = {"messaging_queuedenvelope", "attachments_attachment"}
 
 # The settings the posture names, read out of the script rather than repeated here.
 # The two below are the ones that are not already a PostgreSQL default, which is what
@@ -79,6 +103,64 @@ def test_every_operator_script_arms_the_shell_before_it_acts(script):
     code = [line for line in body if line.strip() and not line.startswith("#")]
 
     assert code[0] == "set -euo pipefail"
+
+
+def test_the_backup_dumps_exactly_the_identity_tables():
+    """The list, and the one place it is written. A table added here is a table
+    copied into a directory the retention sweep does not reach and kept for seven
+    days past every window the design states."""
+    listed = bash_array(BACKUP.read_text(), "TABLES")
+
+    assert set(listed) == BACKED_UP
+    assert len(listed) == len(BACKED_UP), listed
+
+
+def test_the_backup_dumps_no_table_it_does_not_list():
+    """The array is the whole of the selection: one `--table=`, inside the loop that
+    reads it. A second one written beside `pg_dump` would carry a table past the
+    assertion above, which reads the array alone."""
+    source = BACKUP.read_text()
+
+    assert source.count("--table=") == 1
+    assert 'selection+=(--table="$table")' in source
+    for table in NOT_BACKED_UP:
+        assert f"--table={table}" not in source
+
+
+def test_the_backup_decides_about_every_table_this_project_owns():
+    """Neither set is a guess about the schema: together they are every table this
+    project declares a model for, so a model added in a later phase fails here until
+    somebody decides which side it belongs on."""
+    owned = {
+        model._meta.db_table
+        for model in apps.get_models()
+        if not model._meta.app_config.name.startswith(("django.", "unfold"))
+    }
+
+    assert BACKED_UP | NOT_BACKED_UP == owned
+    assert BACKED_UP & NOT_BACKED_UP == set()
+
+
+def test_the_backup_is_encrypted_to_a_key_this_host_cannot_read():
+    """The dump is piped into `age` and never staged: with `pipefail` a failed
+    `pg_dump` fails the run, and the plaintext never touches the disk of the host it
+    is being protected from. The recipient is the public half of a key whose private
+    half is generated and kept off this machine."""
+    source = BACKUP.read_text()
+
+    assert "| age --encrypt --recipients-file" in source
+    assert "RECIPIENT=/etc/chat/backup.pub" in source
+    assert "umask 077" in source
+
+
+def test_the_backup_keeps_seven():
+    """Seven days of the newest identity state. The rotation reads the ISO date in
+    the name rather than an mtime, so a file that was copied or touched does not
+    reorder the set."""
+    source = BACKUP.read_text()
+
+    assert re.search(r"^KEEP=7$", source, re.M) is not None
+    assert 'tail -n "+$((KEEP + 1))"' in source
 
 
 def test_the_posture_script_checks_every_setting_the_notes_name():

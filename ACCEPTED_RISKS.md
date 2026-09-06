@@ -869,6 +869,65 @@ a seizure-yield change, and would need an ADR of its own.
 
 ---
 
+## AR-20 — The identity backup has never run on a host, and no encrypted file has ever been decrypted
+
+**What is exposed.** [`backend/ops/backup/identity_backup.sh`](backend/ops/backup/identity_backup.sh)
+dumps the eight identity tables, pipes them into `age`, and keeps the newest seven;
+`chat-backup.timer` fires it daily. Every part of that is untried on a host. No VPS
+serves this system, so the unit has never fired, no `.sql.age` file has ever existed,
+and no `age --decrypt` has ever been run against one. What the backup protects is the
+one thing this deployment cannot rebuild — `user_id` is inside every signed device
+bundle, so a lost database is a new identity and a fresh verification with every
+contact for every account — and the first proof that the file can be opened would
+otherwise come during the incident that needs it.
+
+**Why this is carried.** The half that could be rehearsed has been. The dump and the
+restore were drilled end to end against scratch databases on a developer machine: the
+eight tables selected, `pg_dump` ordering the data of a `--data-only` dump by the
+foreign keys between them, a restore into a separately migrated database with
+`ON_ERROR_STOP=on`, and application-level assertions afterwards — the same `user_id`,
+the same device ids, and a password that still verifies under `check_password`. The
+queue and the attachment tables were seeded in the source database and were absent from
+the restore, which is the exclusion working. What could **not** be rehearsed is the
+encryption step: the developer machine carries no `age`, and installing one to
+manufacture a rehearsal on a machine that is not the host would rehearse the wrong
+thing. `backend/ops/RUNBOOK.md` §11 carries the drill that was run, so the procedure is
+written while the reasoning is fresh rather than authored under pressure.
+
+**What reduces it today.**
+
+- The dump and restore path is proven; only the `age` hop is not. It is one pipe and
+  one flag, `age --encrypt --recipients-file`, against `age --decrypt --identity`.
+- Ubuntu 24.04 packages `age` 1.1.1 in universe, so the host installs the same tool
+  from its own repository with no network dependency at run time
+  ([ADR-0026](docs/architecture/decisions/0026-host-posture-and-the-identity-backup.md)).
+- The script fails closed at every step that could produce a file nobody can open: a
+  missing or unreadable `/etc/chat/backup.pub` exits 1 before `pg_dump` runs, there is
+  no fallback to an unencrypted dump, and `set -o pipefail` makes a `pg_dump` failure
+  fail the run rather than encrypt a truncated dump.
+- Nothing partial is ever kept. The output is written to `.partial` and renamed only on
+  success, so the rotation cannot count a truncated file as one of the seven.
+- There is nothing to lose yet: zero production accounts, and no production database.
+- The private key is the operator's, kept with the offline CA key, and the runbook
+  states plainly that a backup whose key is lost is not a backup.
+
+**If it were exploited.** This is an operational risk, not an attacker-facing one. The
+failure it admits is a backup directory full of files nobody can open, discovered at
+the moment the database is gone — which is indistinguishable, for every account, from
+having had no backup at all: a new identity and a new verification with every contact,
+for a circle whose members have no other channel during a shutdown.
+
+**Trigger that ends the acceptance.** The first `chat-backup.service` run on the
+serving host. Its file is then decrypted on the operator's machine and restored into a
+scratch database with the assertions of `backend/ops/RUNBOOK.md` §11, **before the
+first serving deploy is trusted** — the same rule the rollback of AR-13 is under. Its
+measured duration and outcome become a row in
+[`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) §4, which
+today records the drill against scratch databases rather than a number from a real
+backup.
+
+---
+
 ## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3

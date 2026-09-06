@@ -517,6 +517,39 @@ class BasePostureTests(SimpleTestCase):
             ):
                 self.assertIn(directive, unit)
 
+    def test_the_backup_unit_writes_the_backup_directory_and_nothing_else(self):
+        """`ReadWritePaths` is the whole of what a compromised backup run can change
+        on a `ProtectSystem=strict` host, and this one holds the only encrypted copy
+        of every account's identity. It reads the database and writes one directory;
+        it never touches `media_root`, which is where the attachment bytes it
+        deliberately does not dump live."""
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat-backup.service").read_text()
+        maintenance = (
+            settings.BASE_DIR / "ops" / "systemd" / "chat-maintenance.service"
+        ).read_text()
+
+        self.assertEqual(
+            re.findall(r"^ReadWritePaths=(\S+)$", unit, re.M), ["/srv/chat/backups"]
+        )
+        hardening = re.findall(
+            r"^(?:Protect|Restrict|Lock|NoNew)\S+=\S+$", maintenance, re.M
+        )
+        self.assertTrue(hardening)
+        for directive in hardening:
+            self.assertIn(directive, unit)
+
+    def test_the_backup_timer_survives_a_missed_run_and_lands_off_the_hour(self):
+        """`Persistent=true` fires one missed run after a reboot rather than
+        skipping the day — the dump is idempotent, so replaying it costs a file the
+        retention rotation then removes. `RandomizedDelaySec` keeps the run off a
+        predictable wall-clock edge, which is the same reason the maintenance timer
+        carries one."""
+        timer = (settings.BASE_DIR / "ops" / "systemd" / "chat-backup.timer").read_text()
+
+        self.assertIsNotNone(re.search(r"^OnCalendar=daily$", timer, re.M))
+        self.assertIsNotNone(re.search(r"^RandomizedDelaySec=\S+$", timer, re.M))
+        self.assertIsNotNone(re.search(r"^Persistent=true$", timer, re.M))
+
     def test_the_example_environment_lists_every_variable_the_code_reads(self):
         """An operator fills in `.env.example` and expects a working deployment. A
         variable the code reads and the example omits is a default nobody chose."""

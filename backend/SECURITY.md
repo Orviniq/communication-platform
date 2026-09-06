@@ -127,6 +127,16 @@ A full seizure of this server (disk + database) reveals, in total:
   in `object_id`, which is the capability that used to download it — the row and its
   bytes are gone by the time the audit row exists, so it opens nothing.
 
+- the **encrypted identity backups** under `/srv/chat/backups/` — at most seven files,
+  each the eight identity tables `backend/ops/backup/identity_backup.sh` names and
+  nothing else. They are opaque: encrypted to a public key, whose private half is
+  generated on the operator's own machine and never exists on this host, so root here
+  can read every one of them and open none. What a seizure does learn is their
+  **count, their sizes and the dates in their names** — roughly how many accounts and
+  devices exist, and that the host was running on each of the last seven days. No
+  envelope, no attachment and no audit row is in any of them, by decision and not by
+  chance.
+
 No plaintext, no content key, no sender↔recipient pair, no group roster — anywhere at
 rest.
 
