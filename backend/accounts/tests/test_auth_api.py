@@ -310,6 +310,27 @@ class TestRenew:
 
         assert again.status_code == 200
 
+    def test_a_token_renew_issued_dies_with_the_next_revocation(
+        self, http, active_user, device, bearer
+    ):
+        """Renewal must not put a token beyond the one counter that ends them.
+
+        The route mints at the generation the row carries now, so a logout that
+        lands after it kills the new token exactly as it kills the old one. A
+        token minted outside that counter would be a session no revocation could
+        reach for `SESSION_TOKEN_DAYS`.
+        """
+        headers = bearer(active_user, device)
+        renewed = http.post(RENEW_URL, headers=headers).json()["token"]
+        renewed_headers = {"Authorization": f"Bearer {renewed}"}
+        assert http.get(DIRECTORY_URL, headers=renewed_headers).status_code == 200
+
+        assert http.post(LOGOUT_URL, headers=headers).status_code == 204
+
+        dead = http.get(DIRECTORY_URL, headers=renewed_headers)
+        assert dead.status_code == 401
+        assert dead.json()["code"] == "token_revoked"
+
     def test_a_revoked_device_cannot_renew(self, http, active_user, device, bearer):
         headers = bearer(active_user, device)
         device.revoked_date = "2026-01-01"

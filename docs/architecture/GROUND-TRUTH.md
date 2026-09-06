@@ -210,7 +210,7 @@ trigger that produces the first of these rows.
 | Volatile data never touches disk: signals, rate counters and lockout state | Redis runs with `save ""` and `appendonly no` | A seized disk yields the traffic pattern | 2026-09-03 |
 | No runtime foreign dependency exists; the system runs through a total national internet shutdown | The operating environment | The platform stops working at the moment it is most needed | 2026-09-03 |
 | The server keeps no group state, no roster, and no group key | [ADR 0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md) | A seizure yields the membership of every group | 2026-09-03 |
-| No token is stored. Revocation is `Device.token_generation` and `Device.refresh_generation`, two integers on the device row | [ADR 0006](decisions/0006-device-bound-tokens-on-pyjwt.md); `core/tests/test_manifest.py` fails on a `token`, `jti` or blacklist column | A token table is a per-device login record at rest, which is the login history a seizure would otherwise yield | 2026-09-04 |
+| No token is stored. Revocation is `Device.token_generation`, one integer on the device row; `Device.refresh_generation` still exists as a column and has no reader and no writer until run 08 drops it | [ADR 0023](decisions/0023-one-device-bound-session-token.md), superseding [ADR 0006](decisions/0006-device-bound-tokens-on-pyjwt.md); `core/tests/test_manifest.py` fails on a `token`, `jti` or blacklist column | A token table is a per-device login record at rest, which is the login history a seizure would otherwise yield | 2026-09-05 |
 
 ## 6. The seam between the two runtimes
 

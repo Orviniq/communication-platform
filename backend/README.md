@@ -37,17 +37,18 @@ request past its deadline is `503 unavailable`.
 
 **Authentication.** Bearer JWTs (PyJWT, HS256, a dedicated `JWT_SIGNING_KEY`). No
 token is ever stored: a token table would be a per-device login record at rest, so
-revocation lives in two counters on the device row instead. Login with a known device
-id yields a short-lived access token and a rotating refresh token. Tokens are
-device-scoped: a `full`-scope token is bound to one device and carries a `tgen`
-(token-generation) claim checked against the device row on every request, so revoking a
-device — which bumps the generation — kills all its outstanding tokens immediately. A
-refresh token also carries `rgen`; a rotation advances `refresh_generation`, and a
-refresh that presents an older value is a replay, which advances `token_generation` and
-ends the whole family. Logout does the same for the calling device. Login without a
-device yields a narrow `register`-scope token whose only power is registering a device
-at `POST /api/v1/me/devices`. Both runtimes verify through the same module, so a token
-one revokes is dead on the other.
+revocation lives in one counter on the device row instead. There is one token, and its
+`typ` claim carries its power (ADR-0023). Login with a known device id yields a session
+token of `SESSION_TOKEN_DAYS`, bound to that device and carrying a `tgen`
+(token-generation) claim checked against the device row on every request and at every
+socket bind, so revoking a device — which bumps the generation — kills all its
+outstanding tokens immediately. Logout does the same for the calling device.
+`POST /api/v1/auth/renew` issues another token and retires none, so nothing rotates and
+the token presented stays valid until its own expiry; the cost of that is
+[`../ACCEPTED_RISKS.md`](../ACCEPTED_RISKS.md) AR-18. Login without a device yields a
+narrow `register` token whose only power is registering a device at
+`POST /api/v1/me/devices`. Both runtimes verify through the same module, so a token one
+revokes is dead on the other.
 
 **WebSocket.** One gateway at `/ws`, a Starlette WebSocket route of the same FastAPI
 application, with one handshake path: an `Authorization: Bearer` header on the upgrade
@@ -131,7 +132,7 @@ online to transfer it. There is no server history API.
 | Path | Owns |
 |---|---|
 | `api` | The FastAPI runtime and the seam: the composed application, token issue and verification, the error envelope, the shared Redis client and the rate limiter over it, the ORM unit-of-work helper, the pure-ASGI request limits |
-| `accounts` | User model, register/login/refresh/logout, user directory, encrypted profile blobs |
+| `accounts` | User model, register/login/renew/logout, user directory, encrypted profile blobs |
 | `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, device-list log, peer bundles and claims, revocation cascade |
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |

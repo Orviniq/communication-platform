@@ -90,7 +90,7 @@ async def server():
 async def test_a_refused_token_is_a_failed_handshake(server, db):
     """The gateway binds before the accept, so a token that fails ends the
     handshake: there is no accepted socket to carry a close code, and a client
-    must read a failed upgrade as "refresh the access token and reconnect"
+    must read a failed upgrade as "renew the session token and reconnect"
     rather than wait for one."""
     with pytest.raises(InvalidStatus) as refusal:
         await websockets.connect(
