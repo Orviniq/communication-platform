@@ -368,6 +368,125 @@ Empty body.
 
 Scope `accounts`, default 300/min per account.
 
+## Erase this account
+
+**Method:** `DELETE`
+**Path:** `/api/v1/me`
+
+Deletes the account and every row that depends on it, in one transaction: the
+devices, the one-time prekeys of both kinds, the published identity, the key backup,
+the device-list log, the profile blob, and every queued envelope of every device. The
+username becomes free again. Every live socket of the account's devices closes with
+`4003`.
+
+**What this does not erase.** Copies peers already hold. Every message this account
+ever sent was decrypted on the recipient's device and is stored there; deleting the
+account removes what this server holds and reaches no other device. A client that
+offers this action has to say so in those words
+([`../../CLIENT_WORK.md`](../../CLIENT_WORK.md)).
+
+**Attachments** stay until `ATTACH_TTL_DAYS` expires them. Nothing on an attachment
+row names an account ([`../attachments/API.md`](../attachments/API.md)), so there is
+no set of attachments this call could identify as the account's — and the capability
+ids that reach them travel only inside end-to-end encrypted messages, which are gone
+from this server with the mailbox.
+
+**No audit row is written.** The panel's audit log records what the operator did, and
+the operator did nothing here.
+
+One consequence is worth stating rather than discovering. Django's `LogEntry.user`
+cascades, so an account that can open the admin panel takes its own audit rows with
+it — and, being the only such account, leaves the deployment with no operator. The
+route does not refuse it: whoever reaches this call holds that account's password,
+which is already the whole panel, and the operator recovers with
+`manage.py createsuperuser` over SSH. A client account, which is every account that
+is not the owner's, has no audit rows at all.
+
+**The password is required and is checked.** A session token lives
+`SESSION_TOKEN_DAYS` days and nothing detects its theft, so the one irreversible act
+of this API asks for the secret a stolen token does not carry. A wrong password
+counts against the same per-name cool-off `POST /api/v1/auth/login` counts against:
+five failures on a username inside fifteen minutes lock it for fifteen minutes on
+both routes, and the lock answers `429 throttled` with `Retry-After`.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <session token>` |
+| `Content-Type` | yes | `application/json` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `password` | string | yes | The account's own sign-in password, at most 256 characters. Any other field is `400 invalid_request` |
+
+```json
+{ "password": "correct-horse-battery-staple" }
+```
+
+**Retry semantics.** A retry with the same token answers `401 token_revoked`: the
+device the token names is gone with the account. A client treats that as success. The
+call is otherwise not idempotent in any way a client can observe — there is nothing
+left to delete and no username to conflict with.
+
+**Responses**
+
+### Erased — `204 No Content`
+
+Empty body. Every token of the account is dead, its sockets are closed, and the
+username is available for registration again.
+
+### Malformed body — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "password": ["Field required."] } }
+```
+
+### Wrong password — `401 Unauthorized`
+
+```json
+{ "code": "invalid_credentials", "detail": "Username or password is incorrect." }
+```
+
+The same body `POST /api/v1/auth/login` answers, so a caller learns nothing here it
+could not learn there.
+
+### Register token — `403 Forbidden`
+
+```json
+{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
+```
+
+### Body above the route cap — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+### Rate limited, or the name is in its cool-off — `429 Too Many Requests`
+
+```json
+{ "code": "throttled", "detail": "Request was throttled." }
+```
+
+Scope `accounts`, default 300/min per account. The same code carries the per-name
+cool-off, whose `detail` reads "Too many sign-in attempts for this name. Wait and try
+again." Both set `Retry-After`.
+
 ## List users
 
 **Method:** `GET`

@@ -231,6 +231,10 @@
             "title": "Attachment Buckets",
             "type": "array"
           },
+          "attachment_daily_bytes": {
+            "title": "Attachment Daily Bytes",
+            "type": "integer"
+          },
           "attachment_ttl_days": {
             "title": "Attachment Ttl Days",
             "type": "integer"
@@ -289,6 +293,7 @@
         "required": [
           "envelope_ttl_days",
           "attachment_ttl_days",
+          "attachment_daily_bytes",
           "mailbox_max_bytes",
           "max_devices_per_user",
           "max_devicelog_records",
@@ -522,6 +527,22 @@
           "blob"
         ],
         "title": "EnvelopeOut",
+        "type": "object"
+      },
+      "EraseIn": {
+        "additionalProperties": false,
+        "description": "The body of `DELETE /api/v1/me`: the account's own password, and nothing\nelse. `extra=\"forbid\"` is what makes a mistyped field a refusal rather than an\nerasure performed with a field the caller thought was a confirmation.",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "EraseIn",
         "type": "object"
       },
       "ErrorOut": {
@@ -1591,7 +1612,7 @@
   "paths": {
     "/api/v1/attachments": {
       "post": {
-        "description": "Store one already-encrypted, already-padded blob under a fresh capability id.\n\nThe bytes reach the disk before any row names them, which is the order that\nkeeps a failed write off the download path: no row exists for a file that was\nnever finished. The reverse order would publish a capability id for bytes that\nare not there.",
+        "description": "Store one already-encrypted, already-padded blob under a fresh capability id.\n\nThe row names no account (ADR-0025). What bounds the upload instead is the\nfree-space floor and the account's allowance for the UTC day, and both are\nsettled before a byte is copied: the disk because it is the shared resource,\nthen the allowance, because a reservation taken for an upload the disk would\nhave refused anyway is one an account has to be given back.\n\nThe bytes reach the disk before any row names them, which is the order that\nkeeps a failed write off the download path: no row exists for a file that was\nnever finished. The reverse order would publish a capability id for bytes that\nare not there.",
         "operationId": "upload_attachment",
         "requestBody": {
           "content": {
@@ -1692,7 +1713,7 @@
                 }
               }
             },
-            "description": "`unavailable`"
+            "description": "`storage_full`, `unavailable`"
           }
         },
         "summary": "Upload Attachment",
@@ -1703,7 +1724,7 @@
     },
     "/api/v1/attachments/{attachment_id}": {
       "get": {
-        "description": "Hand the bytes to nginx. This process never streams a file.\n\nAny live token may fetch by id; the unguessable id is the gate. The path is\nbuilt from the id the row holds, which is server-generated, so no request\nvalue ever steers it.",
+        "description": "Hand the bytes to nginx. This process never streams a file.\n\nAny live token may fetch by id; the unguessable id is the gate. The path is\nbuilt from the id the row holds, which is server-generated, so no request\nvalue ever steers it.\n\nA `Range` header is not read here and is not passed on by hand: nginx carries\nthe client's request headers into the internal redirect, and the static\nhandler there answers the range with a `206`. This route declares no such\nstatus, because the document of this surface describes what these routes\nanswer and this one always answers `200` \u2014 `attachments/API.md` is where the\nedge's half of the download is written down.",
         "operationId": "download_attachment",
         "parameters": [
           {
@@ -2353,6 +2374,101 @@
         "summary": "Health",
         "tags": [
           "core"
+        ]
+      }
+    },
+    "/api/v1/me": {
+      "delete": {
+        "description": "Delete this account and every row that depends on it.\n\nThe one irreversible act the API offers, and the only authenticated route that\nasks for a password: the token that reached it lives thirty days and nothing\ndetects its theft (AR-18). A wrong password counts against the same per-name\ncool-off `POST /auth/login` counts against.\n\nNo audit row is written. The operator did nothing, and a row saying that this\nusername erased itself on this day is exactly the record the erasure removes.",
+        "operationId": "erase_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`, `invalid_credentials`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Erase Account",
+        "tags": [
+          "accounts"
         ]
       }
     },

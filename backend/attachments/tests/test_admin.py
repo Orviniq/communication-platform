@@ -33,13 +33,8 @@ def owner(client):
 
 
 @pytest.fixture
-def alice(db):
-    return User.objects.create_user(username="alice", password=PASSWORD)
-
-
-@pytest.fixture
-def attachment(alice, attachments_root):
-    row = Attachment.objects.create(uploader=alice, size=SMALLEST)
+def attachment(db, attachments_root):
+    row = Attachment.objects.create(size=SMALLEST)
     stored = attachments_root / row.id[:2] / row.id
     stored.parent.mkdir(parents=True, exist_ok=True)
     stored.write_bytes(b"ciphertext")
@@ -62,48 +57,27 @@ def messages_of(response):
     return [str(message) for message in get_messages(response.wsgi_request)]
 
 
-def test_the_changelist_shows_who_and_how_much_and_links_nowhere(page):
+def test_the_changelist_shows_the_size_and_the_day_and_links_nowhere(page):
     """A link would put the capability in the address bar, the browser history and
-    any bookmark, so the page has no link and no column that could carry one."""
-    assert page.list_display == ("uploader_name", "size_bucket", "created_date")
+    any bookmark, so the page has no link and no column that could carry one. The
+    account column left with the uploader the row no longer names (ADR-0025)."""
+    assert page.list_display == ("size_bucket", "created_date")
     assert page.list_display_links is None
     assert "id" not in page.list_display
-
-
-def test_a_row_whose_account_was_removed_still_names_its_uploader_column(
-    page, attachment
-):
-    """`SET_NULL` leaves the row behind, and a column that read `None` would render
-    an empty cell the operator cannot act on."""
-    Attachment.objects.filter(pk=attachment.pk).update(uploader=None)
-
-    assert str(page.uploader_name(Attachment.objects.get(pk=attachment.pk))) == (
-        "(account removed)"
-    )
+    assert page.list_filter == ("created_date",)
 
 
 def test_the_size_column_reads_as_the_bucket_the_operator_recognises(page, attachment):
     assert page.size_bucket(attachment) == "64 KiB"
 
 
-def test_the_audit_label_names_the_size_and_the_account_and_never_the_capability(
+def test_the_audit_label_names_the_size_and_the_day_and_never_the_capability(
     page, attachment
 ):
     """The audit row outlives the attachment, so what it holds is decided here."""
     label = page.panel_repr(attachment)
 
-    assert label == "64 KiB attachment of alice"
-    assert attachment.pk not in label
-
-
-def test_the_audit_label_of_a_removed_account_still_avoids_the_capability(
-    page, attachment
-):
-    Attachment.objects.filter(pk=attachment.pk).update(uploader=None)
-
-    label = page.panel_repr(Attachment.objects.get(pk=attachment.pk))
-
-    assert label == "64 KiB attachment of a removed account"
+    assert label == f"64 KiB attachment of {attachment.created_date}"
     assert attachment.pk not in label
 
 
@@ -122,11 +96,11 @@ def test_the_page_is_the_list_and_never_one_row(page, attachment, client, owner)
 
 
 def test_the_confirmation_states_the_count_and_the_bytes_and_deletes_nothing_yet(
-    client, owner, attachment, alice, attachments_root
+    client, owner, attachment, attachments_root
 ):
     """The two numbers the operator is deciding on, and no identifier. Nothing has
     happened yet: the row and its bytes are still there."""
-    second = Attachment.objects.create(uploader=alice, size=SMALLEST)
+    second = Attachment.objects.create(size=SMALLEST)
 
     response = purge_post(client, [attachment.pk, second.pk])
     rendered = response.content.decode()
@@ -150,9 +124,9 @@ def test_a_confirmed_purge_reports_the_rows_and_the_files_it_removed(
 
 
 def test_a_purge_of_several_reports_them_in_the_plural(
-    client, owner, attachment, alice, attachments_root
+    client, owner, attachment, attachments_root
 ):
-    second = Attachment.objects.create(uploader=alice, size=SMALLEST)
+    second = Attachment.objects.create(size=SMALLEST)
     stored = attachments_root / second.id[:2] / second.id
     stored.parent.mkdir(parents=True, exist_ok=True)
     stored.write_bytes(b"ciphertext")

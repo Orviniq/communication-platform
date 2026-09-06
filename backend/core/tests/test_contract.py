@@ -237,12 +237,23 @@ class Stage:
 
     @functools.cached_property
     def attachment(self):
-        return Attachment.objects.create(uploader=self.user, size=min(ATTACHMENT_BUCKETS))
+        return Attachment.objects.create(size=min(ATTACHMENT_BUCKETS))
 
 
 @pytest.fixture
 def stage(
-    http, monkeypatch, settings, tmp_path, active_user, device, bearer, register_bearer
+    http,
+    monkeypatch,
+    settings,
+    tmp_path,
+    active_user,
+    device,
+    bearer,
+    register_bearer,
+    # Every `429` driver spends a scope and then asserts on the refusal, so every
+    # one of them straddles a rate-limit window boundary unless the window is
+    # pinned. See the fixture: the counter is unchanged, its clock is not.
+    one_rate_limit_window,
 ):
     """Uploads land in a temp directory, never the repository's `media_root`."""
     settings.ATTACHMENTS_ROOT = tmp_path
@@ -318,6 +329,13 @@ def _renew(stage):
 @sample("POST", f"{PREFIX}/auth/logout", "204")
 def _logout(stage):
     return Call("POST", f"{PREFIX}/auth/logout", stage.auth)
+
+
+@sample("DELETE", f"{PREFIX}/me", "204")
+def _erase(stage):
+    return Call(
+        "DELETE", f"{PREFIX}/me", stage.auth, body={"json": {"password": PASSWORD}}
+    )
 
 
 @sample("GET", f"{PREFIX}/users", "200")
@@ -752,6 +770,9 @@ def _burn_the_accounts_scope(stage):
 BURNERS = {
     ("POST", f"{PREFIX}/auth/logout"): _burn_the_accounts_scope,
     ("DELETE", PREFIX + "/me/devices/{device_id}"): _burn_the_accounts_scope,
+    # Its sample deletes the account, so the token the next call would present
+    # names a device that no longer exists.
+    ("DELETE", f"{PREFIX}/me"): _burn_the_accounts_scope,
 }
 
 

@@ -107,8 +107,8 @@ def device(alice):
 
 
 @pytest.fixture
-def attachment(alice):
-    return Attachment.objects.create(uploader=alice, size=65536)
+def attachment(db):
+    return Attachment.objects.create(size=65536)
 
 
 def _seed(count, prefix="user"):
@@ -122,7 +122,7 @@ def _seed(count, prefix="user"):
             spk_sig=b"s" * 64,
             registration_id=index,
         )
-        Attachment.objects.create(uploader=person, size=65536)
+        Attachment.objects.create(size=65536)
 
 
 # --- The registry is the boundary ----------------------------------------------
@@ -549,7 +549,7 @@ def test_purging_an_attachment_deletes_the_file_and_audits_without_the_capabilit
     assert not stored.exists()
     row = LogEntry.objects.get(action_flag=DELETION)
     assert attachment.pk not in row.object_repr
-    assert row.object_repr == "64 KiB attachment of alice"
+    assert row.object_repr == f"64 KiB attachment of {attachment.created_date}"
 
 
 def test_the_audit_log_never_shows_the_object_id_column(
@@ -949,7 +949,7 @@ def test_the_maintenance_command_deletes_only_audit_rows_past_their_window(owner
 def test_the_retention_window_is_configured_and_documented():
     from django.conf import settings
 
-    assert settings.ADMIN_AUDIT_RETENTION_DAYS == 90
+    assert settings.ADMIN_AUDIT_RETENTION_DAYS == 30
     assert (
         "ADMIN_AUDIT_RETENTION_DAYS" in (settings.BASE_DIR / ".env.example").read_text()
     )

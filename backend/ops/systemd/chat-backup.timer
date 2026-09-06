@@ -1,0 +1,18 @@
+[Unit]
+Description=Run the chat backend identity backup daily
+
+[Timer]
+OnCalendar=daily
+# Randomised so the dump does not land on midnight UTC, which is when the retention
+# sweep's day boundary moves and when the other two projects on this VPS run their
+# own cron work. It is a spread, not a spacing: the unit itself is what refuses to
+# run twice at once.
+RandomizedDelaySec=30m
+# One missed run fires after a reboot, and only one. The dump is idempotent within a
+# UTC day — the file name carries the day and the run replaces it — so replaying
+# every missed day would write one file seven times and buy nothing.
+Persistent=true
+Unit=chat-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -363,6 +363,29 @@ class BasePostureTests(SimpleTestCase):
         self.assertGreater(waits["/api/"], settings.UPLOAD_DEADLINE_SECONDS)
         self.assertGreater(waits["/admin/"], settings.REQUEST_DEADLINE_SECONDS)
 
+    def test_the_body_of_a_slow_upload_is_absorbed_by_the_edge(self):
+        """The two directives that decide where a slow client's upload is paid for.
+
+        With `proxy_request_buffering on` nginx reads the whole body before it
+        opens the loopback connection, so `UPLOAD_DEADLINE_SECONDS` covers the
+        loopback hop alone. Turned off, the same body is read inside the
+        application's own deadline and a slow link on a 64 MiB upload becomes a
+        `503` the client cannot act on. It is nginx's default, which is exactly why
+        it is stated: nothing else in this tree would report it changing.
+
+        `client_body_timeout` is the other half. Once nginx owns the read, the
+        bound on a client that stalls mid-body lives here and nowhere else, and
+        the default 60 s is twice what a live link ever needs between two reads.
+        """
+        api = nginx_locations((settings.BASE_DIR / "ops" / "nginx" / SITE).read_text())[
+            "/api/"
+        ]
+
+        self.assertIn("proxy_request_buffering on;", api)
+        self.assertLess(
+            nginx_seconds(re.search(r"client_body_timeout\s+(\S+);", api).group(1)), 60
+        )
+
     def test_one_layer_owns_the_transport_security_header(self):
         """`add_header` appends; it never replaces. Django's SecurityMiddleware
         emits HSTS on the admin path it serves, and SECURE_HSTS_SECONDS has to stay
@@ -493,6 +516,82 @@ class BasePostureTests(SimpleTestCase):
                 "SystemCallArchitectures=native",
             ):
                 self.assertIn(directive, unit)
+
+    def test_neither_unit_can_write_a_core_dump(self):
+        """A core dump of either process is its whole address space on disk: the
+        JWT signing key, the Django secret key, the TURN shared secret and the
+        database and Redis passwords, plus whatever routing metadata and ciphertext
+        is in flight. `ProtectSystem=strict` does not stop one — the kernel writes
+        it wherever `kernel.core_pattern` points, which is a handler these units do
+        not configure and a path they may not write.
+
+        Stated rather than inherited because the inherited value is the host's:
+        systemd's PID 1 raises `RLIMIT_CORE` to infinity for its children, and
+        `DefaultLimitCORE=` differs between distributions and between releases of
+        one. A single value sets the soft and the hard limit together, so the
+        process cannot raise it back.
+        """
+        units = settings.BASE_DIR / "ops" / "systemd"
+
+        for name in ("chat.service", "chat-maintenance.service", "chat-backup.service"):
+            unit = (units / name).read_text()
+
+            self.assertIsNotNone(
+                re.search(r"^LimitCORE=0$", unit, re.M), f"{name} sets no LimitCORE"
+            )
+
+    def test_the_edge_resumes_no_tls_session(self):
+        """Both halves of resumption, off.
+
+        A session ticket is encrypted under a key nginx generates at startup and
+        rotates only on reload, so it is a long-lived symmetric secret in worker
+        memory that opens the resumption state of every session it covers — on a
+        box whose threat model grants the adversary live root.
+        `ssl_session_tickets` is on by default, and `ssl_session_cache` is the
+        stateful half whose compiled default, `none`, still advertises resumption
+        to the client; `off` refuses it outright.
+
+        The cost is one full handshake per connection, which is what makes this
+        deployment the one that can afford it: one Android client holding one
+        long-lived socket, not a browser opening a connection per asset.
+        """
+        conf = (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+
+        self.assertIn("ssl_session_tickets off;", conf)
+        self.assertIn("ssl_session_cache off;", conf)
+
+    def test_the_backup_unit_writes_the_backup_directory_and_nothing_else(self):
+        """`ReadWritePaths` is the whole of what a compromised backup run can change
+        on a `ProtectSystem=strict` host, and this one holds the only encrypted copy
+        of every account's identity. It reads the database and writes one directory;
+        it never touches `media_root`, which is where the attachment bytes it
+        deliberately does not dump live."""
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat-backup.service").read_text()
+        maintenance = (
+            settings.BASE_DIR / "ops" / "systemd" / "chat-maintenance.service"
+        ).read_text()
+
+        self.assertEqual(
+            re.findall(r"^ReadWritePaths=(\S+)$", unit, re.M), ["/srv/chat/backups"]
+        )
+        hardening = re.findall(
+            r"^(?:Protect|Restrict|Lock|NoNew)\S+=\S+$", maintenance, re.M
+        )
+        self.assertTrue(hardening)
+        for directive in hardening:
+            self.assertIn(directive, unit)
+
+    def test_the_backup_timer_survives_a_missed_run_and_lands_off_the_hour(self):
+        """`Persistent=true` fires one missed run after a reboot rather than
+        skipping the day — the dump is idempotent, so replaying it costs a file the
+        retention rotation then removes. `RandomizedDelaySec` keeps the run off a
+        predictable wall-clock edge, which is the same reason the maintenance timer
+        carries one."""
+        timer = (settings.BASE_DIR / "ops" / "systemd" / "chat-backup.timer").read_text()
+
+        self.assertIsNotNone(re.search(r"^OnCalendar=daily$", timer, re.M))
+        self.assertIsNotNone(re.search(r"^RandomizedDelaySec=\S+$", timer, re.M))
+        self.assertIsNotNone(re.search(r"^Persistent=true$", timer, re.M))
 
     def test_the_example_environment_lists_every_variable_the_code_reads(self):
         """An operator fills in `.env.example` and expects a working deployment. A

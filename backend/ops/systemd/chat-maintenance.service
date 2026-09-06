@@ -33,6 +33,10 @@ ExecStart=/srv/chat/backend/.venv/bin/python manage.py prune
 # fire resumes from what is left.
 TimeoutStartSec=15min
 
+# The same rule as the serving unit: the sweep opens the database with the same
+# credentials and holds the same environment, so a dump of it is the same yield.
+LimitCORE=0
+
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

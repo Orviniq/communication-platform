@@ -676,6 +676,76 @@ route takes a full-scope token.
 | `THROTTLE_ACCOUNTS` | `120/min` per account | `300/min` per account. Every route on the `accounts` scope shares it, including the two new ones | None. More headroom, not less |
 | The server's WebSocket ping | uvicorn's default: a ping every 20 s, given up on after 20 s | A ping every 240 s, given up on after 60 s | None. The client's own four-minute keepalive is unaffected and stays its decision. A socket the server has stopped hearing from is closed within 300 s rather than 40 s |
 
+## The attachment store stops naming accounts
+
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+removed the column that said which account uploaded a stored attachment. The
+per-account lifetime quota went with it, because that column was what the quota summed.
+
+### `POST /api/v1/attachments` — a daily allowance replaces the lifetime quota
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| What bounds an upload | A lifetime sum of the account's stored bytes against `ATTACH_USER_QUOTA_BYTES`, default 2 GiB. Deleting an attachment, or letting the TTL expire it, gave the space back | What the account has uploaded so far today, against `ATTACH_DAILY_BYTES`, default 256 MiB. It resets at 00:00 UTC and carries nothing forward; deleting an attachment gives nothing back, because nothing is being counted at rest | **Required if the client showed a quota.** "X of 2 GiB used" has no server-side value behind it any more. What the client can show is the day's allowance from `GET /api/v1/config` |
+| The refusal | `413 {"code": "quota_exceeded", "detail": "Storage quota exhausted."}` | The same status and the same code, with `detail` `"The day's upload allowance is spent."` | None if the client branches on `code`, which the contract has always required. A client that matched the `detail` string breaks |
+| What a refusal costs | The bytes were written and then unlinked | Nothing is written and nothing is charged. A retry before the day turns answers the same way | Optional. Hold the attachment and retry after 00:00 UTC rather than retrying immediately |
+| An upload that fails after it is admitted | — | The allowance is given back, so a failed upload never costs the account its day | None |
+| Storage below its free-space floor | Not distinguished: an upload the disk could not take was `500 server_error` | `503 {"code": "storage_full", "detail": "Attachment storage is full."}`, a new code in `backend/core/API.md` | Recommended. Treat it as retry later with backoff, like `unavailable`. It is not the account's fault and no allowance was spent |
+
+### `GET /api/v1/config` — the allowance is published
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The upload bound | Not published. `ATTACH_USER_QUOTA_BYTES` was an operator setting a client could only learn from a `413` | `attachment_daily_bytes`, the same value the upload route enforces | Recommended. Read it at startup and disclose it before a large send, rather than after a refusal |
+
+### What the server no longer records
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Which account uploaded a stored attachment | `Attachment.uploader`, a foreign key to the account | Written by nothing and read by nothing. No route ever served it, so no response shape changes | None. It is stated because `backend/SECURITY.md` states the new seizure yield: an attachment row now names a size and a day and nobody |
+| The panel's view of an attachment | The operator saw the uploader, could filter by it, and saw each account's stored bytes on its page | The operator sees the size and the day. `docs/admin/PANEL-RECORD.md` §10 records the reversal | None — no client surface |
+
+## An attachment download resumes
+
+The edge, not the application: `proxy_request_buffering` and `client_body_timeout`
+are now stated on the `/api/` location, and the internal location the download
+redirects to has always been able to serve a byte range. Both are measured in
+[`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) §4.
+
+### `GET /api/v1/attachments/{attachment_id}` — `Range` and `206`
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| A `Range` request | Undocumented. nginx has always honoured it, and no document said so, so no client could rely on it | Documented: `Range: bytes=<first>-<last>` answers `206 Partial Content` with `Content-Range` and exactly those bytes. The full response carries `Accept-Ranges: bytes`, an `ETag` and a `Last-Modified` | Optional. The shipped download path requires `200` and one full bucket in one response, so it declines a `206` today |
+| Resuming after a dropped transfer | The whole bucket again, up to 64 MiB | The bytes after the offset already written, under `If-Range` with the `ETag` of the first response | Optional. An attachment is immutable and its id is never reused, so the tag can only fail after the retention sweep deleted the object — and the answer is then the whole body, never bytes from another file |
+| What the application does | Answers `200` with an empty body and `X-Accel-Redirect` | Unchanged. The range is nginx's work, from the internal location, so no route, status or schema of this API moved | None |
+| Talking to the application directly | The body is empty and the redirect header is visible | Unchanged, and `Range` does nothing: the process that would honour it is not there | None. A development client cannot test the resume path |
+
+### The upload body, at the edge
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Where a slow upload is paid for | nginx buffered the request body by default and nothing said so, so the application's 120 s deadline read as a bound on the client's link | `proxy_request_buffering on` is stated: nginx absorbs the body first and the application's deadline covers the loopback hop alone. Measured — with buffering off the upstream spent 3.5 s of its own deadline reading a 200 KiB body trickled over 5 s | None. The behaviour is unchanged; what changed is that it is now pinned by a test rather than inherited |
+| A client that stalls mid-body | nginx's default 60 s between two reads of the body | 30 s, at the edge. A live link trickles and never approaches it | None |
+
+## An account can erase itself
+
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+adds the one irreversible route this API has. It is additive: no existing route,
+field or status changed.
+
+### `DELETE /api/v1/me` — a new route
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Leaving the service | No route. A user who wanted their account gone asked the operator, who could deactivate it from the panel but never delete it | `DELETE /api/v1/me` with a full-scope token and `{"password": "…"}` answers `204` and deletes the account row, the devices, the one-time prekeys of both kinds, the identity, the key backup, the device-list log, the profile blob and every queued envelope of every device. The username is free again | **Required before release.** The settings screen needs the action, and its wording must say what it does not erase — see [`CLIENT_WORK.md`](CLIENT_WORK.md) |
+| The password | — | Required and checked. A wrong one is `401 {"code": "invalid_credentials"}`, the same body login answers | Ask for it in the confirmation dialog. Do not cache it for this call |
+| Guessing at it | — | Counted against the same per-name cool-off `POST /api/v1/auth/login` feeds: five failures on a username inside fifteen minutes lock it for fifteen on **both** routes, answering `429 throttled` with `Retry-After` | Show the wait. A user locked here cannot log in either, on any device |
+| The token afterwards | — | Dead. Every socket of the account's devices closes with `4003`, and any later call answers `401 {"code": "token_revoked"}` | Treat a `401` on a retry as success: the first call landed and the response was lost |
+| Attachments this account uploaded | — | Left in place until `ATTACH_TTL_DAYS` expires them. Nothing on an attachment row names an account, so there is no set of them this call could identify | None. Say "up to N days" if the screen mentions it; `attachment_ttl_days` is in `GET /api/v1/config` |
+| Copies peers hold | — | Untouched, and unreachable from here. Every message this account sent was decrypted on the recipient's device | **Required in the wording.** A dialog that says "delete my data" without this is a false claim |
+| The audit log | — | No row is written. The operator performed nothing | None |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

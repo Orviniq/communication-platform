@@ -73,6 +73,7 @@ def route_limits():
         f"{API_PREFIX}/auth/login": json_class,
         f"{API_PREFIX}/auth/renew": json_class,
         f"{API_PREFIX}/auth/logout": json_class,
+        f"{API_PREFIX}/me": json_class,
         f"{API_PREFIX}/users": json_class,
         f"{API_PREFIX}/users/{{user_id}}/profile": json_class,
         f"{API_PREFIX}/me/profile": json_class,

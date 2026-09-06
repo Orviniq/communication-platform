@@ -13,6 +13,8 @@ schema.
 
 import copy
 import re
+from datetime import datetime
+from importlib import import_module
 from io import StringIO
 
 import pytest
@@ -23,6 +25,7 @@ from django.db import connections, transaction
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.utils import load_backend
+from django.test.utils import CaptureQueriesContext
 
 INITIAL = "0001_initial"
 ALIAS = "migration_replay"
@@ -32,14 +35,28 @@ ALIAS = "migration_replay"
 # which is what forces a new migration through the classification below rather than
 # into the tree unreviewed.
 RETIRE_DATES = "0002_retire_the_activity_dates"
+BACKFILL_THE_DAY = "0004_backfill_the_queued_day"
 HISTORY = {
     "accounts": [INITIAL, RETIRE_DATES],
     "attachments": [INITIAL],
     "devices": [INITIAL, RETIRE_DATES],
-    "messaging": [INITIAL, "0002_index_the_retention_filter"],
+    "messaging": [
+        INITIAL,
+        "0002_index_the_retention_filter",
+        "0003_expand_the_queue_to_a_day",
+        BACKFILL_THE_DAY,
+        "0005_index_the_day_filter",
+        "0006_reclaim_the_queue_promptly",
+    ],
     "vault": [INITIAL, RETIRE_DATES],
     "voicerooms": [INITIAL, "0002_delete_room"],
 }
+
+# The migrations that carry data operations and no schema operation. They produce
+# no SQL at all, so every gate below that reads `sqlmigrate` output has to know
+# which files are allowed to be silent — the alternative is a gate that passes a
+# schema migration whose SQL failed to generate.
+DATA_MIGRATIONS = {("messaging", BACKFILL_THE_DAY)}
 
 # The apps of this project that own a table. `core` and `realtime` declare no
 # model, and `voicerooms` stopped declaring one when ADR-0021 removed the room
@@ -280,11 +297,39 @@ LOCK_CLASSES = {
         "catalogue write — DROP NOT NULL clears one flag in `pg_attribute` and "
         "reads no row of the table"
     ),
+    "AddField": (
+        "ACCESS EXCLUSIVE on a relation that already exists, for the length of a "
+        "catalogue write — PostgreSQL 11 and later evaluate a non-volatile default "
+        "once at DDL time and store it in `pg_attribute.attmissingval` rather than "
+        "rewriting the table. Measured at 1.7 ms against a 200 000-row, 111.6 MB "
+        "copy with `relfilenode` unchanged either side"
+    ),
+    "RunPython": (
+        "ROW EXCLUSIVE on the relation it updates, one batch at a time — the lock "
+        "every INSERT, UPDATE and DELETE already holds, so it blocks no other "
+        "writer. It is held for one batch and not for the migration, which is what "
+        "`atomic = False` and the per-batch transaction buy"
+    ),
+    "RunSQL": (
+        "whatever the statement takes, which is why this entry names none: the "
+        "operation is raw SQL and the operation name says nothing at all. The "
+        "statement gate below is the whole of the classification for it — every "
+        "form but the ones `ALLOWED_ALTERATIONS` admits fails there. The one in "
+        "the tree is `ALTER TABLE … SET (autovacuum_…)`, measured at SHARE UPDATE "
+        "EXCLUSIVE on PostgreSQL 16.14 with `relfilenode` unchanged either side"
+    ),
 }
 
 # The operations that cannot run inside a transaction block. A migration carrying
 # one declares `atomic = False`, and Django raises NotSupportedError otherwise.
 NON_ATOMIC_OPERATIONS = {"AddIndexConcurrently", "RemoveIndexConcurrently"}
+
+# The operations that MAY leave the transaction, and the reason each one does. A
+# batched backfill inside one transaction holds a row lock on every row it has
+# touched until the last batch commits, which is the whole thing the batching
+# exists to avoid — so `RunPython` is allowed to declare `atomic = False` where the
+# operations above require it.
+NON_ATOMIC_BY_CHOICE = {"RunPython"}
 
 # The statement forms the classification above admits. `sqlmigrate` output is read
 # against this rather than trusted: an operation name says what Django meant, and
@@ -295,17 +340,63 @@ ALLOWED_STATEMENTS = (
     "CREATE INDEX",
     "CREATE UNIQUE INDEX",
     "DROP TABLE",
-    "ALTER TABLE",  # narrowed below: ADD CONSTRAINT and DROP NOT NULL only
+    "ALTER TABLE",  # narrowed below to four forms
 )
 
-# The two `ALTER TABLE` forms the classification covers. `ADD CONSTRAINT` is judged
+# The four `ALTER TABLE` forms the classification covers. `ADD CONSTRAINT` is judged
 # against the table it names — free on one this migration created, a validating scan
-# on one that was already there. `DROP NOT NULL` is judged for itself: PostgreSQL
-# clears `pg_attribute.attnotnull` and touches no row, so the ACCESS EXCLUSIVE it
-# takes is held for a catalogue write whatever the table holds. Every other form —
-# `TYPE`, `SET NOT NULL`, `SET DEFAULT`, `DROP COLUMN` — rewrites or scans, and each
-# one fails here.
-ALLOWED_ALTERATIONS = ("ADD CONSTRAINT", "DROP NOT NULL")
+# on one that was already there. The other three are judged for themselves, because
+# each one is a catalogue write whose cost does not grow with the table:
+#
+# * `DROP NOT NULL` clears `pg_attribute.attnotnull` and touches no row;
+# * `ADD COLUMN … DEFAULT <constant> NOT NULL` stores the evaluated default in
+#   `pg_attribute.attmissingval` on PostgreSQL 11 and later and rewrites nothing —
+#   measured, `relfilenode` unchanged (`docs/architecture/GROUND-TRUTH.md` §4);
+# * `DROP DEFAULT` is the statement Django emits right after that one, and it
+#   removes a catalogue entry.
+#
+# * `SET (` is a storage parameter and nothing else — the parenthesis is what
+#   separates it from `SET NOT NULL`, `SET DEFAULT`, `SET TABLESPACE` and
+#   `SET LOGGED`, each of which rewrites or scans and none of which matches it. It
+#   writes `pg_class.reloptions` and reads no row: measured at SHARE UPDATE
+#   EXCLUSIVE with `relfilenode` unchanged either side of a 200 000-row table.
+#
+# Every other form — `TYPE`, `SET NOT NULL`, `SET DEFAULT`, `DROP COLUMN` — rewrites
+# or scans, and each one fails here. `ADD COLUMN` with a *volatile* default would
+# rewrite too, and is caught by the `DEFAULT` check beside it.
+ALLOWED_ALTERATIONS = (
+    "ADD CONSTRAINT",
+    "DROP NOT NULL",
+    "ADD COLUMN",
+    "DROP DEFAULT",
+    "SET (",
+)
+
+# The forms the classification does not cover, named rather than left to the absence
+# of an allowed one. Every operation Django writes emits one action per `ALTER TABLE`,
+# so an allowed form present was an allowed form alone — until `RunSQL` entered the
+# tree, which can write `ALTER TABLE t DROP COLUMN c, SET (…)` and carry a rewrite and
+# an admitted form in the same statement. Each of these is a rewrite or a scan under
+# ACCESS EXCLUSIVE whose cost grows with the table.
+FORBIDDEN_ALTERATIONS = (
+    "DROP COLUMN",
+    "SET NOT NULL",
+    "SET DEFAULT",
+    "SET TABLESPACE",
+    "SET LOGGED",
+    "SET UNLOGGED",
+    "RENAME",
+    "TYPE ",
+)
+
+# A default PostgreSQL will not put in `attmissingval`. `random()`, `nextval()` and
+# `clock_timestamp()` are each volatile, and `ADD COLUMN` with one of them rewrites
+# the whole table under the lock the classification calls a catalogue write.
+VOLATILE_DEFAULTS = ("RANDOM(", "NEXTVAL(", "CLOCK_TIMESTAMP(", "GEN_RANDOM_UUID(")
+
+# The `ALTER TABLE` forms whose cost is a catalogue write and never a scan, so they
+# may name a table the migration did not create.
+CATALOGUE_ONLY = ("DROP NOT NULL", "ADD COLUMN", "DROP DEFAULT", "SET (")
 
 
 def migration_nodes():
@@ -333,16 +424,26 @@ def test_every_operation_takes_a_classified_lock(app, name):
 
 @pytest.mark.parametrize(("app", "name"), migration_nodes())
 def test_the_atomic_flag_matches_the_operations_the_migration_carries(app, name):
-    """A concurrent index build outside a transaction, everything else inside one.
-    Django raises NotSupportedError for the first mismatch; the second — an atomic
-    migration downgraded to `atomic = False` for no reason — it accepts silently,
-    and a failure part-way then leaves half the schema applied."""
-    migration = loaded(app, name)
-    needs_own_transaction = {
-        type(operation).__name__ for operation in migration.operations
-    } & NON_ATOMIC_OPERATIONS
+    """A concurrent index build outside a transaction, everything else inside one
+    unless it is a batched backfill. Django raises NotSupportedError for the first
+    mismatch; the second — a schema migration downgraded to `atomic = False` for no
+    reason — it accepts silently, and a failure part-way then leaves half the schema
+    applied.
 
-    assert migration.atomic is not bool(needs_own_transaction)
+    A batched `RunPython` is the one case that leaves the transaction by choice
+    rather than by requirement, so it is admitted by name: batching inside a single
+    transaction holds a row lock on every row the backfill has touched until the
+    last batch commits, which is what the batching exists to avoid.
+    """
+    migration = loaded(app, name)
+    carried = {type(operation).__name__ for operation in migration.operations}
+
+    if carried & NON_ATOMIC_OPERATIONS:
+        assert migration.atomic is False
+    elif migration.atomic is False:
+        assert carried <= NON_ATOMIC_BY_CHOICE, sorted(carried)
+    else:
+        assert migration.atomic is True
 
 
 def statements_of(sql):
@@ -382,12 +483,25 @@ def test_the_generated_sql_is_only_the_statements_the_classification_covers(app,
     sql = out.getvalue()
     statements = statements_of(sql)
 
+    if (app, name) in DATA_MIGRATIONS:
+        # A `RunPython` reduces to no SQL at all, so the assertion is the other
+        # way round: this file carries data and no schema, and a schema operation
+        # that appeared in it would be one this gate never read.
+        assert statements == []
+        return
     assert statements
     assert ("BEGIN;" in sql) is loaded(app, name).atomic
     for statement in statements:
         assert statement.startswith(ALLOWED_STATEMENTS), statement
         if statement.startswith("ALTER TABLE"):
             assert any(form in statement for form in ALLOWED_ALTERATIONS), statement
+            carried = [form for form in FORBIDDEN_ALTERATIONS if form in statement]
+            assert carried == [], statement
+        if "ADD COLUMN" in statement and "DEFAULT" in statement:
+            # The one form whose lock class depends on the value beside it: a
+            # volatile default is evaluated per row, which is a rewrite.
+            upper = statement.upper()
+            assert not any(call in upper for call in VOLATILE_DEFAULTS), statement
 
 
 @pytest.mark.django_db(transaction=True)
@@ -481,6 +595,181 @@ def test_the_whole_history_returns_to_head_after_a_full_unapply(empty_database):
     )
 
 
+# --- The one backfill in the history -----------------------------------------------
+
+
+def rows_of(alias, statement, params=()):
+    with connections[alias].cursor() as cursor:
+        cursor.execute(statement, params)
+        return cursor.fetchall()
+
+
+def execute(alias, statement, params=()):
+    with connections[alias].cursor() as cursor:
+        cursor.execute(statement, params)
+
+
+def migrate_to(target, alias):
+    call_command("migrate", "messaging", target, database=alias, verbosity=0)
+
+
+def backfill_module():
+    """The backfill's own module. Imported by path rather than by name, because a
+    migration file starts with a digit and is not an identifier."""
+    return import_module(f"messaging.migrations.{BACKFILL_THE_DAY}")
+
+
+def seed_the_queue_before_the_day(alias, hours):
+    """Rows as `0003` leaves them: a real `queued_hour`, and a `queued_day` that
+    carries the day the migration ran rather than the day the row was enqueued.
+
+    Written as SQL against the replay database rather than through the ORM. The
+    models this project ships are the state *after* the whole history, and what
+    the backfill runs against is the state at `0003`.
+    """
+    account = rows_of(
+        alias,
+        """
+        INSERT INTO accounts_user (id, password, is_superuser, username, is_active,
+                                   is_staff, created_date)
+        VALUES (gen_random_uuid(), '', false, 'backfill', true, false, CURRENT_DATE)
+        RETURNING id
+        """,
+    )[0][0]
+    device = rows_of(
+        alias,
+        """
+        INSERT INTO devices_device (id, user_id, ik_pub, spk_id, spk_pub, spk_sig,
+                                    registration_id, bundle_version, token_generation,
+                                    refresh_generation, created_date, queue_seq,
+                                    queue_pruned_through)
+        VALUES (gen_random_uuid(), %s, ''::bytea, 1, ''::bytea, ''::bytea, 1, 0, 1, 1,
+                CURRENT_DATE, 0, 0)
+        RETURNING id
+        """,
+        [account],
+    )[0][0]
+    for seq, hour in enumerate(hours, start=1):
+        execute(
+            alias,
+            """
+            INSERT INTO messaging_queuedenvelope
+                (id, recipient_device_id, seq, blob, queued_hour, queued_day)
+            VALUES (gen_random_uuid(), %s, %s, ''::bytea, %s, CURRENT_DATE)
+            """,
+            [device, seq, hour],
+        )
+
+
+BACKFILL_HOURS = [
+    "2026-01-01 23:59:00+00",
+    "2026-01-02 00:00:00+00",
+    "2026-03-09 17:00:00+00",
+    None,  # written by the code that came after `0003`, and already correct
+    "2026-08-31 12:00:00+00",
+]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_backfill_gives_every_row_the_day_of_its_own_hour(empty_database):
+    """What `0003` leaves behind and `0004` corrects. `ADD COLUMN … DEFAULT` stores
+    one evaluated value for every existing row, so without this pass the whole table
+    would expire on one day — the day the migration ran."""
+    call_command("migrate", "messaging", "0003", database=empty_database, verbosity=0)
+    seed_the_queue_before_the_day(empty_database, BACKFILL_HOURS)
+
+    call_command(
+        "migrate", "messaging", BACKFILL_THE_DAY, database=empty_database, verbosity=0
+    )
+
+    stored = rows_of(
+        empty_database,
+        "SELECT queued_hour, queued_day FROM messaging_queuedenvelope ORDER BY seq",
+    )
+    assert [(hour.date() if hour else None) for hour, _day in stored] == [
+        hour.date() if hour else None
+        for hour in [
+            None if raw is None else datetime.fromisoformat(raw) for raw in BACKFILL_HOURS
+        ]
+    ]
+    for hour, day in stored:
+        if hour is not None:
+            assert day == hour.date()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_backfill_leaves_a_row_with_no_hour_alone(empty_database):
+    """Only the code that came after `0003` writes NULL there, and it writes the
+    correct day beside it. Guessing a day for that row would be inventing one."""
+    call_command("migrate", "messaging", "0003", database=empty_database, verbosity=0)
+    seed_the_queue_before_the_day(empty_database, [None])
+    before = rows_of(empty_database, "SELECT queued_day FROM messaging_queuedenvelope")
+
+    call_command(
+        "migrate", "messaging", BACKFILL_THE_DAY, database=empty_database, verbosity=0
+    )
+
+    assert (
+        rows_of(empty_database, "SELECT queued_day FROM messaging_queuedenvelope")
+        == before
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_backfill_is_idempotent(empty_database):
+    """A crash part-way through leaves a mix of filled and unfilled rows, and the
+    repair is to run it again. Re-running must be a no-op on the rows it already
+    settled — which is what the `exclude` on the mismatch buys."""
+    from django.apps import apps as global_apps
+
+    migrate_to(BACKFILL_THE_DAY, empty_database)
+    seed_the_queue_before_the_day(empty_database, BACKFILL_HOURS)
+    backfill = backfill_module()
+    editor = connections[empty_database].schema_editor()
+    backfill.fill_the_day_from_the_hour(global_apps, editor)
+    once = rows_of(
+        empty_database,
+        "SELECT seq, queued_day FROM messaging_queuedenvelope ORDER BY seq",
+    )
+
+    backfill.fill_the_day_from_the_hour(global_apps, editor)
+
+    assert once
+    assert (
+        rows_of(
+            empty_database,
+            "SELECT seq, queued_day FROM messaging_queuedenvelope ORDER BY seq",
+        )
+        == once
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_backfill_updates_in_batches_that_bound_its_lock_time(
+    empty_database, monkeypatch
+):
+    """One unbounded `UPDATE` holds a row lock on every row it touches until it
+    commits, against the largest table in the schema and the one every send writes
+    to. Five rows at a batch of two is three statements, not one."""
+    from django.apps import apps as global_apps
+
+    migrate_to(BACKFILL_THE_DAY, empty_database)
+    seed_the_queue_before_the_day(empty_database, BACKFILL_HOURS)
+    backfill = backfill_module()
+    monkeypatch.setattr(backfill, "BATCH", 2)
+    editor = connections[empty_database].schema_editor()
+
+    with CaptureQueriesContext(connections[empty_database]) as context:
+        backfill.fill_the_day_from_the_hour(global_apps, editor)
+
+    updates = [
+        query["sql"]
+        for query in context.captured_queries
+        if query["sql"].startswith('UPDATE "messaging_queuedenvelope"')
+    ]
+    assert len(updates) == 2  # four rows carry an hour, two at a time
+
+
 # --- The locks each migration actually takes ---------------------------------------
 # `LOCK_CLASSES` above says what an operation is meant to take. This section runs the
 # statements and reads `pg_locks`, because the operation name is a claim and the lock
@@ -525,6 +814,15 @@ LOCK_STRENGTH = [
 # for the length of a catalogue write, because the statement clears a flag and reads
 # no row. A concurrent statement in flight still has to finish before the lock is
 # granted, so the deploy takes it with the service stopped like every other.
+# The `messaging` day-granularity rows are the third kind: `0003` takes ACCESS
+# EXCLUSIVE on the queue table for three catalogue writes in one transaction — the
+# `ADD COLUMN` with its evaluated default, the `DROP DEFAULT` behind it, and the
+# `DROP NOT NULL` on the column it replaces — and reads no row of the table for any
+# of them. `0005` is the concurrent index build the probe below cannot measure, and
+# `0004` carries no DDL at all, so neither appears in this map. `0006` is the fourth
+# kind and the weakest entry here: SHARE UPDATE EXCLUSIVE on the queue table for one
+# write to `pg_class.reloptions`, which blocks no reader and no writer — only a
+# concurrent DDL or vacuum on the same table.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
@@ -539,6 +837,12 @@ BLOCKING_LOCKS = {
         "devices_useridentity": "AccessExclusiveLock",
     },
     ("messaging", INITIAL): {"devices_device": "ShareRowExclusiveLock"},
+    ("messaging", "0003_expand_the_queue_to_a_day"): {
+        "messaging_queuedenvelope": "AccessExclusiveLock"
+    },
+    ("messaging", "0006_reclaim_the_queue_promptly"): {
+        "messaging_queuedenvelope": "ShareUpdateExclusiveLock"
+    },
     ("vault", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("vault", RETIRE_DATES): {"vault_keybackup": "AccessExclusiveLock"},
     ("voicerooms", INITIAL): {},
@@ -706,6 +1010,13 @@ def test_the_index_built_outside_a_transaction_is_built_concurrently(
     call_command("sqlmigrate", app, name, database=empty_database, stdout=out)
     statements = statements_of(out.getvalue())
 
+    if (app, name) in DATA_MIGRATIONS:
+        # It leaves the transaction to commit one batch at a time, not to run a
+        # statement PostgreSQL refuses inside one. It emits no DDL, which is what
+        # `test_the_generated_sql_is_only_the_statements_the_classification_covers`
+        # holds, and its lock is `ROW EXCLUSIVE` for the length of one batch.
+        assert statements == []
+        return
     assert statements
     assert "BEGIN;" not in out.getvalue()
     for statement in statements:
@@ -733,11 +1044,14 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
     check would pass it. The same goes for a plain `CREATE INDEX`: on a new table
     it is free, on a populated one it takes SHARE for the whole build.
 
-    Two statements are allowed to name a table they did not create. The concurrent
-    index build blocks nothing at all. `ALTER COLUMN … DROP NOT NULL` blocks
-    everything for a catalogue write and reads no row, so unlike the two above its
-    cost does not grow with the table — which is the whole reason it is the shape a
-    column is retired in.
+    Five statements are allowed to name a table they did not create. The concurrent
+    index build blocks nothing at all. `ALTER COLUMN … DROP NOT NULL`, `ADD COLUMN`
+    with a non-volatile default and the `DROP DEFAULT` that follows it each block
+    everything for a catalogue write and read no row, so unlike the two above their
+    cost does not grow with the table — which is the whole reason they are the shapes
+    a column is retired and introduced in. `SET (` is the fifth and the cheapest: a
+    storage parameter is one write to `pg_class.reloptions` under a lock that blocks
+    no reader and no writer.
     """
     out = StringIO()
     call_command("sqlmigrate", app, name, stdout=out)
@@ -752,10 +1066,13 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
         target.group(1)
         for statement in statements
         if not statement.startswith("CREATE INDEX CONCURRENTLY")
-        and "DROP NOT NULL" not in statement
+        and not any(form in statement for form in CATALOGUE_ONLY)
         for target in [TARGET.match(statement)]
         if target is not None and target.group(1) not in created
     }
 
+    if (app, name) in DATA_MIGRATIONS:
+        assert statements == []
+        return
     assert statements
     assert foreign == set()

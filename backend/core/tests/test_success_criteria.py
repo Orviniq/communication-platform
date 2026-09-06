@@ -148,7 +148,7 @@ def test_fanout_writes_independent_copies_and_never_a_sender(
     for row in rows:
         stored = {
             str(value)
-            for value in (row.id, row.recipient_device_id, row.seq, row.queued_hour)
+            for value in (row.id, row.recipient_device_id, row.seq, row.queued_day)
         }
         assert stored & sender_traces == set(), "a stored value identifies the sender"
 

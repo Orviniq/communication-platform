@@ -14,7 +14,8 @@ from django.contrib import admin as django_admin
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
-from django.test import RequestFactory, override_settings
+from django.test import RequestFactory
+from django.utils import timezone
 
 from accounts.models import User
 from attachments.models import Attachment
@@ -142,7 +143,7 @@ class TestAudit:
     def test_the_object_is_named_by_the_hook_and_never_by_str(self, owner):
         """`str(Attachment)` is the capability id that downloads the bytes, and the
         audit log outlives the row it describes."""
-        attachment = Attachment.objects.create(uploader=owner, size=65536)
+        attachment = Attachment.objects.create(size=65536)
 
         audit(
             request_for(owner),
@@ -170,6 +171,27 @@ class TestAudit:
 
         row = LogEntry.objects.get()
         assert row.content_type_id == ContentType.objects.get_for_model(User).pk
+
+    def test_the_row_carries_the_day_of_the_act_and_never_the_second(self, owner):
+        """`LogEntry.action_time` is Django's own second-granularity column, and
+        the schema of a contributed application is not this project's to change —
+        so the coarsening is at the write. Two acts on one day are not orderable
+        from the log, which is what `backend/SECURITY.md` states (ADR-0025)."""
+        audit(request_for(owner), [owner], CHANGE, "Activated.")
+
+        stamped = LogEntry.objects.get().action_time
+
+        assert stamped == timezone.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+    def test_two_acts_on_one_day_carry_the_same_stamp(self, owner):
+        """The property the coarsening exists for. Two rows a minute apart that
+        differed by a minute would put the operator's working pattern in the log."""
+        audit(request_for(owner), [owner], CHANGE, "Activated.")
+        audit(request_for(owner), [owner], CHANGE, "Deactivated.")
+
+        assert len(set(LogEntry.objects.values_list("action_time", flat=True))) == 1
 
 
 class TestIsOwner:
@@ -227,8 +249,7 @@ class TestPanelModelAdminDefaults:
         `log_deletions` covers the bulk action, the single-object delete view and
         anything either grows into."""
         stored = [
-            Attachment.objects.create(uploader=owner, size=min(ATTACHMENT_BUCKETS))
-            for _ in range(2)
+            Attachment.objects.create(size=min(ATTACHMENT_BUCKETS)) for _ in range(2)
         ]
 
         written = panel_admin.log_deletions(
@@ -238,6 +259,21 @@ class TestPanelModelAdminDefaults:
 
         assert written == 2
         assert LogEntry.objects.filter(action_flag=DELETION).count() == 2
+
+    def test_a_change_form_save_is_audited_by_the_panel_at_day_granularity(
+        self, panel_admin, owner
+    ):
+        """The one write path the framework still owned. Django's `log_change`
+        calls `LogEntry.objects.log_actions`, which stamps `action_time` from the
+        model default — the second the save happened."""
+        written = panel_admin.log_change(request_for(owner), owner, "Changed.")
+
+        row = LogEntry.objects.get(action_flag=CHANGE)
+        assert written == 1
+        assert row.object_repr == panel_admin.panel_repr(owner)
+        assert row.action_time == timezone.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
 
     def test_the_default_label_of_an_object_is_its_own_string(self, panel_admin, owner):
         """`panel_repr` is the hook a page overrides where `str(obj)` would be a
@@ -285,30 +321,30 @@ class TestDashboard:
         assert context["active_accounts"] == 1
         assert context["live_devices"] == 1  # the revoked one is not live
 
-    @override_settings(ATTACH_USER_QUOTA_BYTES=1000)
-    def test_the_ceiling_is_the_quota_times_every_account_that_could_fill_one(
-        self, owner
-    ):
-        """Pending accounts count: the operator activates them, and the ceiling
-        they will then occupy is the number the page is for."""
-        User.objects.create_user(username="waiting", password=PASSWORD)
-        Attachment.objects.create(uploader=owner, size=500)
+    def test_the_storage_card_reads_the_disk_rather_than_a_per_account_quota(self, owner):
+        """No account carries a lifetime quota any more (ADR-0025), so the number
+        the operator watches is how full the filesystem is: that is what
+        `ATTACH_MIN_FREE_BYTES` refuses uploads against."""
+        Attachment.objects.create(size=500)
 
         context = dashboard(request_for(owner), {})
 
         assert context["storage_used"] == "500 B"
-        assert context["storage_ceiling"] == "2.0 KiB"
-        assert context["storage_percent"] == 25.0
+        assert context["storage_free"].endswith(("KiB", "MiB", "GiB"))
+        assert 0 <= context["storage_percent"] <= 100
 
-    @override_settings(ATTACH_USER_QUOTA_BYTES=0)
-    def test_a_ceiling_of_zero_reports_zero_rather_than_dividing_by_it(self, owner):
-        """The boundary the page would crash on. A quota of zero is a deployment
-        that stores no attachments, not a `ZeroDivisionError` on the first page
-        after every sign-in."""
+    def test_a_filesystem_of_zero_bytes_reports_zero_rather_than_dividing_by_it(
+        self, owner, monkeypatch
+    ):
+        """The boundary the page would crash on. `statvfs` reports zero blocks for
+        some pseudo-filesystems, and the first page after every sign-in must not be
+        a `ZeroDivisionError`."""
+        monkeypatch.setattr("attachments.services.disk_space", lambda: (0, 0))
+
         context = dashboard(request_for(owner), {})
 
         assert context["storage_percent"] == 0
-        assert context["storage_ceiling"] == "0 B"
+        assert context["storage_free"] == "0 B"
 
     def test_every_number_is_a_link_to_the_list_behind_it(self, owner):
         context = dashboard(request_for(owner), {})

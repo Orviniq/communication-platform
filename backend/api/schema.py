@@ -49,6 +49,7 @@ VOCABULARY = {
     "throttled": 429,
     "server_error": 500,
     "unavailable": 503,
+    "storage_full": 503,
     "voice_unconfigured": 503,
 }
 

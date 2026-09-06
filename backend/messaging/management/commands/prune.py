@@ -102,16 +102,20 @@ class Command(BaseCommand):
 
     @staticmethod
     def _prune_envelopes():
-        cutoff = timezone.now() - timedelta(days=settings.ENVELOPE_TTL_DAYS)
+        # A day, not an instant: the row carries the UTC day it was enqueued on
+        # (ADR-0025), so an envelope expires once its day is older than the window
+        # rather than once its hour is. At a seven-day window that keeps a row for
+        # up to one day longer than the hour did, and holds nothing finer.
+        cutoff = timezone.now().date() - timedelta(days=settings.ENVELOPE_TTL_DAYS)
         pruned = 0
         while True:
             with transaction.atomic():
-                # Oldest first, through the `queued_hour` index. With nothing
+                # Oldest first, through the `queued_day` index. With nothing
                 # expired — the common pass — the probe is two buffers and never
                 # reaches the table at all; a full batch of a thousand costs 991.
                 ids = list(
-                    QueuedEnvelope.objects.filter(queued_hour__lt=cutoff)
-                    .order_by("queued_hour")
+                    QueuedEnvelope.objects.filter(queued_day__lt=cutoff)
+                    .order_by("queued_day")
                     .values_list("id", flat=True)[:BATCH]
                 )
                 if not ids:
@@ -181,10 +185,11 @@ class Command(BaseCommand):
     def _prune_audit():
         """Retention on the admin audit log (ADR-0011).
 
-        The rows name an operator, a time and an object, and for a deleted
-        attachment the object id is that attachment's spent capability. Ninety days
-        is long enough to answer "what did I change last quarter" and short enough
-        that a seizure takes one quarter rather than the life of the deployment.
+        The rows name an operator, a UTC day and an object, and for a deleted
+        attachment the object id is that attachment's spent capability. Thirty days
+        is long enough to answer "what did I change last month" and short enough
+        that a seizure takes one month rather than the life of the deployment
+        (ADR-0025 shortened it from ninety when the rows stopped carrying a time).
         """
         cutoff = timezone.now() - timedelta(days=settings.ADMIN_AUDIT_RETENTION_DAYS)
         pruned = 0

@@ -1,0 +1,58 @@
+[Unit]
+Description=chat backend encrypted identity backup
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=www-data
+UMask=0027
+WorkingDirectory=/srv/chat/backend
+EnvironmentFile=/srv/chat/backend/.env.production
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+# Dumps the eight identity tables and nothing else, encrypts the dump to the
+# operator's public key at /etc/chat/backup.pub, and keeps the newest seven. The
+# script names every table and every exclusion; `ops/tests/test_scripts.py` fails if
+# that list moves. The private half of the key never exists on this host, so this
+# process writes files it cannot read back.
+#
+# No Django here: the script is pg_dump and age, so it needs no interpreter, no
+# settings module and no ORM. `DJANGO_SETTINGS_MODULE` is set anyway because the
+# environment file is shared with the two units that do need it, and an operator
+# reading three units in a row should find the same block in each.
+ExecStart=/usr/bin/bash /srv/chat/backend/ops/backup/identity_backup.sh
+
+# Overlap is systemd's, not the script's: it will not start a second instance of a
+# oneshot unit while one is active, so a run that has not returned holds the timer's
+# next fire behind it rather than dumping the same tables twice. What the bound is
+# for is the other case — a run that never returns holds every later fire too, and
+# the distribution default of 90 s would instead kill a dump partway and mark the
+# unit failed. The dump is the eight identity tables of fewer than 50 accounts, so
+# fifteen minutes is orders of magnitude of headroom. Being killed costs nothing: the
+# file is written to `.partial` and renamed only on success.
+TimeoutStartSec=15min
+
+# A core dump of this process holds the database password and, in flight, the
+# plaintext of every identity row this backup exists to protect.
+LimitCORE=0
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+# The backup directory, and nothing else. Not `media_root`: the attachment bytes are
+# the one thing on this host this unit deliberately does not copy.
+ReadWritePaths=/srv/chat/backups

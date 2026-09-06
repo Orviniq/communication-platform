@@ -62,15 +62,30 @@ def _live_device(user_id, device_id):
     )
 
 
-def login(username, password, device_id):
-    # The cool-off is checked before the password is hashed, so a locked name
-    # buys no Argon2 work, and it fails closed like the address limiter above it.
+def _refuse_a_locked_name(username):
+    """The per-name cool-off, checked before any password is hashed.
+
+    Shared by the two surfaces of this API that take a password — `POST
+    /auth/login` and `DELETE /me` — so five failures on a name inside fifteen
+    minutes lock it on both. A guesser who could spend the lock on one and then
+    move to the other would have twice the budget the counter is written for, and
+    the erasure route is the more valuable of the two to guess at.
+
+    It fails closed like the address limiter above it: a control whose whole
+    purpose is to refuse an attempt cannot answer "allow" when it cannot read its
+    state (ADR-0010).
+    """
     try:
         wait = lockout.locked_for(username, lockout.API)
     except lockout.LockoutUnavailable:
         raise ApiError(503, "unavailable", "The service is temporarily unavailable.")
     if wait:
         raise ApiError(429, "throttled", NAME_LOCKED, {"Retry-After": str(wait)})
+
+
+def login(username, password, device_id):
+    # Before the password is hashed, so a locked name buys no Argon2 work.
+    _refuse_a_locked_name(username)
     if "\x00" in username:
         # PostgreSQL text carries no NUL, so psycopg refuses the lookup outright
         # rather than returning no row, and the route answers an unauthenticated
@@ -120,6 +135,58 @@ def login(username, password, device_id):
         "device_id": str(device.id),
         "scope": "full",
     }
+
+
+def erase(user, password):
+    """Delete the account and every row that depends on it, in one transaction.
+
+    The password is proved first, under the same per-name lockout `login` runs. A
+    session token is enough to read this account and deliberately not enough to
+    end it: the token lives thirty days and nothing detects its theft (AR-18), so
+    the one irreversible act the API offers asks for the secret a thief does not
+    have.
+
+    `check_password` rather than `user.check_password`: the model method carries a
+    setter that re-hashes when the configured Argon2 cost has moved, and a row
+    this call is about to delete must not be written on its way out.
+
+    The delete is one statement to the ORM and a cascade underneath it: the
+    devices, the one-time prekeys of both kinds, the identity, the key backup, the
+    device-log records, the profile blob, and every queued envelope of every
+    device. Nothing is read into this process — each of those is a fast delete —
+    so no ciphertext crosses the boundary on the way out. The username is free
+    again the moment it commits.
+
+    Attachments stay. `Attachment.uploader` is written by nothing and read by
+    nothing (ADR-0025), so no row of that table says these bytes were this
+    account's; the retention sweep removes them on its own schedule, and there is
+    nothing here that could find them sooner.
+
+    The sockets close after the commit, on state that is already gone: a device
+    told `4003` while the transaction could still roll back would be a device that
+    reconnects to an account that still exists.
+    """
+    # Both columns in one statement. The authentication requirement loads a
+    # device joined to `only("id", "is_active")` of its owner, so the name and the
+    # hash are deferred on the instance it hands over and reading them off it is a
+    # `refresh_from_db` each — two queries for two columns of a row already read.
+    username, hashed = (
+        User.objects.filter(pk=user.id).values_list("username", "password").first()
+    )
+    _refuse_a_locked_name(username)
+    if not check_password(password, hashed):
+        lockout.note_failure(username, lockout.API)
+        raise ApiError(401, "invalid_credentials", INVALID_CREDENTIALS)
+    lockout.clear(username, lockout.API)
+    with transaction.atomic():
+        device_ids = list(
+            Device.objects.filter(user_id=user.id, revoked_date__isnull=True).values_list(
+                "id", flat=True
+            )
+        )
+        User.objects.filter(pk=user.id).delete()
+    for device_id in device_ids:
+        close_device_sockets(device_id)
 
 
 def logout(user_id, device_id):

@@ -19,9 +19,11 @@ pytestmark = pytest.mark.django_db(transaction=True)
 TRANSACTION_STATEMENTS = ("BEGIN", "COMMIT", "SAVEPOINT", "RELEASE", "ROLLBACK")
 
 AUTH_QUERY = 1  # the device row, joined to its owner
-# The uploader's row lock, one SUM aggregate, one insert. Fixed: none of the three
-# scales with how many attachments the account already holds.
-UPLOAD_QUERIES = 3
+# One insert, and nothing else. The row lock and the SUM aggregate over the
+# account's own rows left with the lifetime quota (ADR-0025); the day's allowance
+# is charged in Redis, which is two round trips on the first upload of a day and
+# one on every upload after it, and no statement at all.
+UPLOAD_QUERIES = 1
 
 UPLOAD_URL = "/api/v1/attachments"
 SMALLEST = min(ATTACHMENT_BUCKETS)
@@ -40,14 +42,12 @@ def counted(http, method, url, expected, **kwargs):
 
 
 @pytest.mark.parametrize("existing", [0, 25])
-def test_the_quota_check_is_one_aggregate_however_many_files_exist(
+def test_the_upload_is_one_insert_however_many_files_exist(
     http, active_user, device, bearer, existing
 ):
-    """The quota must stay a single SUM pushed to the database, never a fetch-and-add
-    over the user's rows."""
-    Attachment.objects.bulk_create(
-        [Attachment(uploader=active_user, size=SMALLEST) for _ in range(existing)]
-    )
+    """The cost that AR-8 recorded is gone rather than reduced: the upload reads no
+    row of this table at all, so it does not grow with what is already stored."""
+    Attachment.objects.bulk_create([Attachment(size=SMALLEST) for _ in range(existing)])
 
     resp = counted(
         http,
@@ -112,18 +112,18 @@ def test_a_body_the_route_cannot_read_costs_nothing_but_the_credential(
     assert resp.status_code == 400
 
 
-def test_a_quota_refusal_costs_the_lock_and_the_aggregate_and_no_insert(
+def test_an_allowance_refusal_costs_no_statement_at_all(
     http, active_user, device, bearer, settings, attachments_root
 ):
-    """The refusal happens inside the same transaction as the check, so it costs
-    the row lock and the one SUM, and the insert never runs."""
-    settings.ATTACH_USER_QUOTA_BYTES = SMALLEST - 1
+    """The refusal is settled in Redis before the bytes are copied, so the only
+    statement the request makes is the credential the dependency already read."""
+    settings.ATTACH_DAILY_BYTES = SMALLEST - 1
 
     resp = counted(
         http,
         "POST",
         UPLOAD_URL,
-        AUTH_QUERY + UPLOAD_QUERIES - 1,
+        AUTH_QUERY,
         files={"blob": ("blob", b"\x01" * SMALLEST)},
         headers=bearer(active_user, device),
     )

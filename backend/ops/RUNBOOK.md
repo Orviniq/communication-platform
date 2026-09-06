@@ -10,10 +10,11 @@ detail, and the note is authoritative wherever the two could differ. The notes:
 
 | Subject | Owner |
 |---|---|
-| PostgreSQL role, database, `pg_hba.conf`, and the recreation rule | [`postgres/README.md`](postgres/README.md) |
+| PostgreSQL role, database, `pg_hba.conf`, the recreation rule, and the logging posture | [`postgres/README.md`](postgres/README.md) |
 | The private CA, the server pair, and the client SPKI pins | [`tls/README.md`](tls/README.md) |
 | Redis posture | [`redis/redis-chatapp.conf`](redis/redis-chatapp.conf) |
 | The units, their hardening, and every uvicorn flag | [`systemd/`](systemd/) |
+| What the identity backup dumps, what it never dumps, and how it is encrypted | [`backup/identity_backup.sh`](backup/identity_backup.sh) |
 | The nginx site, its per-location caps and its header ownership | [`nginx/`](nginx/) |
 | The coturn relay: its listener, its quotas, its denied peers and its silence | [`coturn/turnserver.conf`](coturn/turnserver.conf) |
 | Every environment variable and what it does | [`../README.md`](../README.md) §Configuration, [`../.env.example`](../.env.example) |
@@ -28,7 +29,10 @@ real VPS: this repository has no serving host yet, and every claim about the
 host is what the committed configuration sets rather than what a machine
 reported. The rollback of step 9 has never been executed, which
 [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) records as AR-13 with the
-trigger that ends it. Read this file as the plan it is, and record what actually
+trigger that ends it. The backup of step 11 has never run on a host either, and
+AR-20 records what that leaves open — but its restore *has* been drilled, against a
+scratch database on a developer machine, and step 11 gives the procedure that was
+run. Read this file as the plan it is, and record what actually
 happens in [`../../docs/architecture/GROUND-TRUTH.md`](../../docs/architecture/GROUND-TRUTH.md)
 the first time it runs.
 
@@ -56,8 +60,10 @@ of the same operator. Everything below listens on loopback except nginx and
 coturn.
 
 1. **Packages.** `python3.12` with `python3.12-venv`, `postgresql-16`, `redis`
-   (7.x), `nginx` and `coturn`. coturn is the only media service on this host
-   ([ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
+   (7.x), `nginx`, `coturn` and `age`. coturn is the only media service on this host
+   ([ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md));
+   `age` is what encrypts the identity backup of step 11, and Ubuntu 24.04 packages
+   it in universe.
 2. **The service account.** A `deploy` user with a group of its own, additionally
    a member of `www-data`, with no login shell. Every unit runs as that user with
    `Group=www-data`, so files the process creates are group-readable by nginx.
@@ -68,12 +74,16 @@ coturn.
    sudo -u deploy git clone https://github.com/n-shadloo/communication-platform /srv/chat
    install -d -o deploy -g www-data -m 0750 /srv/chat/backend/media_root
    install -d -o deploy -g www-data -m 0750 /srv/chat/backend/static_root
+   install -d -o deploy -g deploy    -m 0700 /srv/chat/backups
    ```
 
    `media_root` is the only path the serving unit may write, and `static_root`
    is deliberately not among them: `collectstatic` is the operator's command and
    nginx serves the result, so a compromised process cannot replace the panel's
-   own JavaScript ([`systemd/chat.service`](systemd/chat.service)).
+   own JavaScript ([`systemd/chat.service`](systemd/chat.service)). `backups` is
+   `deploy`-only and not group-readable, because nginx has no business reading it
+   and the group is what nginx is in; it is the only path the backup unit of step 11
+   may write, and no other unit may write it at all.
 4. **The firewall.** Inbound: 80 and 443/tcp (nginx), 3478/udp and 3478/tcp
    (coturn), and 50000–51000/udp (the coturn relay range). Nothing else — there
    is no TLS listener on coturn and no SFU, so 5349 and the LiveKit ports of the
@@ -85,7 +95,29 @@ coturn.
    `manage.py check --deploy` refuses a `REDIS_URL` with no password
    (`core.E004`), so a deployment cannot forget it.
 6. **PostgreSQL.** Follow [`postgres/README.md`](postgres/README.md) — the role,
-   the database, `listen_addresses`, and `pg_hba.conf`. Come back here for step 3.
+   the database, `listen_addresses`, `pg_hba.conf`, and **the logging posture**. That
+   last one is the setting no other layer of this deployment can compensate for: at
+   the stock `log_min_error_statement` a failing statement is written to the server
+   log with its bind parameters, which on this schema are device ids and ciphertext.
+   Come back here for step 3.
+7. **Swap.** Either none at all, or a swap device with a random key that does not
+   survive a boot — `/dev/urandom` as the key source in `/etc/crypttab`, with the
+   `swap` option, so the device is re-keyed on every start. Swap is a copy of process
+   memory on disk, and the memory of these processes holds the JWT signing key, the
+   TURN shared secret and whatever plaintext routing metadata is in flight. A 1 GB
+   host with `WEB_CONCURRENCY=1` is sized to run without swap
+   ([A3](../../docs/architecture/DESIGN-RECORD.md)); the encrypted-device form exists
+   for the operator who wants the safety margin anyway.
+8. **Core dumps.** `fs.suid_dumpable = 0` in `/etc/sysctl.d/`, which is the kernel
+   default and is written down for the same reason the PostgreSQL defaults are: a
+   default is not a decision. The units set `LimitCORE=0` of their own
+   ([`systemd/`](systemd/)), so none of the three processes that hold secrets can
+   produce a dump whatever the host's `DefaultLimitCORE=` resolves to.
+
+Items 7 and 8 above are **operator-set and unverifiable from this repository**. Nothing in
+the tree reads a host's swap table or its `sysctl` values, and no test here can fail
+when one of them changes. They are written down so the decision exists, not because
+anything enforces it.
 
 ---
 
@@ -188,7 +220,7 @@ server. `TURN_STATIC_AUTH_SECRET` is read by the backend as well from this
 release: the backend signs a relay credential under it, and coturn verifies that
 credential under `static-auth-secret` in step 7. The two copies are one value and
 must be the same string — a mismatch is a relay that refuses every allocation,
-and check 9 of step 8 is what catches it.
+and check 10 of step 8 is what catches it.
 
 `TURN_URLS` beside it is what serves voice at all. Left empty,
 `POST /api/v1/me/relay` answers `503 voice_unconfigured` and no client can place
@@ -241,12 +273,18 @@ locks every device out permanently — read that file before generating anything
 install -m 0644 ops/systemd/chat.service /etc/systemd/system/
 install -m 0644 ops/systemd/chat-maintenance.service /etc/systemd/system/
 install -m 0644 ops/systemd/chat-maintenance.timer /etc/systemd/system/
+install -m 0644 ops/systemd/chat-backup.service /etc/systemd/system/
+install -m 0644 ops/systemd/chat-backup.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now chat.service chat-maintenance.timer
+systemctl enable --now chat.service chat-maintenance.timer chat-backup.timer
 ```
 
-`chat-maintenance.service` is never enabled at all: the timer starts it. See
-step 10.
+`chat-maintenance.service` and `chat-backup.service` are never enabled at all: their
+timers start them. See steps 10 and 11.
+
+**Enable `chat-backup.timer` only after step 11**, which installs the public key it
+encrypts to. Without `/etc/chat/backup.pub` the script exits 1 and the unit enters a
+failed state on every fire.
 
 **nginx.** The site and the snippet it includes both ship here, and the snippet
 is not optional — it carries `X-Forwarded-Proto`, which is the header
@@ -371,6 +409,17 @@ systemctl show chat.service -p NRestarts
 as_deploy .venv/bin/python manage.py check --deploy
 # exit 0 and no core.E / core.W. A finding here is a release defect.
 
+# 2b. The PostgreSQL logging posture, read back off the running server.
+#     Nothing in this repository sets it and no test can fail when it moves, so
+#     this is the only thing that reports an operator's earlier edit, a restored
+#     postgresql.conf or a package upgrade having changed it.
+as_deploy bash ops/audit/postgres_posture.sh
+# "PASS: 10 settings, all as ops/postgres/README.md sets them." and exit 0.
+# Each difference is named on its own line and the exit status is 1. A DIFFERS on
+# log_min_error_statement or log_error_verbosity means failing statements are
+# reaching /var/log/postgresql with their bind parameters: fix it before anything
+# else on this list.
+
 # 3. The schema matches the code that is serving. It opens the database, so a
 #    pass is also the proof that PostgreSQL answers with these credentials.
 as_deploy .venv/bin/python manage.py migrate --check
@@ -399,7 +448,20 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/un
 # 8. Redis answers, with the password the check above insisted on.
 as_deploy sh -c 'redis-cli -u "$REDIS_URL" ping'     # PONG
 
-# 9. coturn accepts a credential this backend minted. Skip only if TURN_URLS is
+# 9. A stored attachment serves a byte range, so a client can resume a download.
+#    Needs one capability id of an attachment that is still inside its TTL; take
+#    it from the client that uploaded it, never from the database, because the id
+#    IS the capability and reading it out is a download anyone can then perform.
+#    The token is a full-scope session token of any account.
+curl -sS -D- -o /dev/null \
+    -H "Authorization: Bearer $token" -H 'Range: bytes=0-9' \
+    "https://chat.nimashadloo.dev/api/v1/attachments/$capability"
+# HTTP/1.1 206 Partial Content, with Content-Range: bytes 0-9/<bucket size> and
+# Content-Length: 10. A 200 with the whole bucket means the internal location is
+# not serving the file — X-Accel-Redirect fell through, and the application's own
+# empty body is what came back. A 404 means the id is spent or mistyped.
+
+# 10. coturn accepts a credential this backend minted. Skip only if TURN_URLS is
 #    empty. `turnutils_uclient` ships with coturn. The secret itself is never
 #    passed to it — the tool's own -W flag would put it in world-readable
 #    /proc/*/cmdline, which is the reason step 7 keeps it out of coturn's own
@@ -424,7 +486,7 @@ turnutils_uclient -y -c -X -n 10 -l 100 -p 3478 -u "$turn_user" -w "$turn_pass" 
 # the unit, the drop-in of step 7, and the firewall rule of step 1.
 ```
 
-Check 9 is the one check with no second source. The relay writes no log at all
+Check 10 is the one check with no second source. The relay writes no log at all
 (AR-15), so `journalctl -u coturn.service` will not confirm or contradict it: the
 client's own output is the whole of the evidence, which is why the pass and the
 fail above are distinguished by the line and never by the exit status — both of
@@ -436,7 +498,7 @@ one host with an in-place deploy has no rotation to gate, and a request-scoped
 log on this host would be the social graph the schema exists to exclude. AR-9 in
 [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) carries what that costs and
 the trigger that ends it. The checks above are what stands in its place, so
-running all nine is not optional.
+running all ten is not optional.
 
 `journalctl -u chat.service` carries the process's own output. It holds no
 request line, no path and no identifier — that is the invariant, not an
@@ -538,3 +600,123 @@ To run a sweep by hand:
 systemctl start chat-maintenance.service   # or:
 as_deploy .venv/bin/python manage.py prune
 ```
+
+---
+
+## 11. The identity backup, and the restore drill
+
+**What this protects, and it is one thing.** `user_id` is inside every signed device
+bundle, so a lost database is not a lost account list — it is a new identity for every
+account and a fresh SAS or QR verification with every contact, performed during
+whatever incident took the database. Nothing else on this host is irreplaceable: the
+code is in git, the wheels are already vendored here, the TLS pair is reissued from
+the offline CA, and the queue is seven days of ciphertext that expires on its own.
+
+So [`backup/identity_backup.sh`](backup/identity_backup.sh) dumps identity and nothing
+else — eight tables, listed in the script with the reason for every exclusion beside
+them, and pinned by `ops/tests/test_scripts.py` so the list cannot drift quietly. The
+queue, the attachment rows, the attachment bytes and the admin audit log are
+deliberately absent: a backup of any of them is a second copy of exactly the rows
+[`../SECURITY.md`](../SECURITY.md) bounds by retention, kept for seven days in a
+directory the retention sweep does not reach.
+
+### The key
+
+Generate it **on the operator's own machine**, never on the VPS. The private half
+never touches this host, so root here can read every backup it has written and open
+none of them.
+
+```sh
+# on the operator's machine, once
+age-keygen -o chat-backup.key          # mode 0600; this is the half that decrypts
+grep 'public key' chat-backup.key      # age1… — this is the half the host gets
+```
+
+Keep `chat-backup.key` where the operator keeps the offline CA key
+([`tls/README.md`](tls/README.md)) — the same custody, for the same reason. **A backup
+whose private key is lost is not a backup**, and nothing on the VPS can regenerate it.
+
+Then, on the host:
+
+```sh
+install -o root -g root -m 0644 backup.pub /etc/chat/backup.pub
+```
+
+Root-owned and world-readable on purpose: it is a public key, and the `deploy` account
+has to read it on every run.
+
+### The timer
+
+```sh
+systemctl enable --now chat-backup.timer
+systemctl start chat-backup.service      # the first one, by hand, now
+systemctl list-timers chat-backup.timer
+ls -l /srv/chat/backups/
+```
+
+Daily, with a randomised delay of up to thirty minutes, and `Persistent=true` so one
+missed day fires after a reboot and only one. The file is
+`identity-<YYYY-MM-DD>.sql.age`, mode 0600, owned by `deploy`; the script keeps the
+newest seven by the date in the name and removes the rest.
+
+What the journal says, and what it means:
+
+- `wrote identity-2026-09-06.sql.age (N bytes, 8 tables)` — a completed run. A byte
+  count and a table count; nothing that names an account.
+- `removed identity-…` — the rotation, one line per file past the seventh.
+- `FAIL: /etc/chat/backup.pub is missing or unreadable` — the key step above was
+  skipped. The unit fails and writes nothing, which is the correct outcome: there is
+  no fallback to an unencrypted dump.
+- A `pg_dump` error and exit 1 — the run wrote `identity-….sql.age.partial` and
+  removed it. Nothing partial is ever renamed into place, so the rotation never counts
+  a truncated file as one of the seven.
+
+### The restore drill
+
+**Rehearse this once before the first serving deploy**, not when it is needed. It runs
+entirely on a developer machine against a scratch database; nothing on the VPS is
+touched, and no production data exists to put at risk.
+
+```sh
+# on the operator's machine, with the private key
+age --decrypt --identity chat-backup.key identity-2026-09-06.sql.age > drill.sql
+
+createdb restoredrill
+POSTGRES_DB=restoredrill .venv/bin/python manage.py migrate
+psql -d restoredrill --set ON_ERROR_STOP=on -f drill.sql
+```
+
+`migrate` first and then the data, because the dump is `--data-only`: the schema comes
+from the migration history of the release being restored, which is the only schema
+that release can serve against. A dumped schema would be whichever one was current
+when the dump ran, and restoring that over a newer release is how a restore becomes an
+outage.
+
+Then assert at the application level rather than on the exit status:
+
+```sh
+POSTGRES_DB=restoredrill .venv/bin/python manage.py shell -c "
+from accounts.models import User
+from devices.models import Device
+u = User.objects.first()
+print(u.username, u.id, u.check_password('<the password of a test account>'))
+print(Device.objects.filter(user=u).count())
+"
+```
+
+What a pass looks like: the same `user_id`, the same device ids, and a password that
+still verifies. Those three are the whole point — an account whose `user_id` changed
+is a new account to every peer that ever verified it.
+
+Two things the drill will show and neither is a fault:
+
+- **The queue and the attachments are empty.** They are not in the backup. A restore
+  brings identity back; undelivered messages and stored files are gone, and the
+  clients re-send.
+- **Group membership on an operator account is gone.** `is_staff` and `is_superuser`
+  are columns on `accounts_user` and do survive; the two Django join tables behind
+  them are not in the list, so a panel role is re-granted by hand.
+
+Record the outcome and the measured duration in
+[`../../docs/architecture/GROUND-TRUTH.md`](../../docs/architecture/GROUND-TRUTH.md)
+§4 the first time this runs against a real backup file, and close AR-20 with it.

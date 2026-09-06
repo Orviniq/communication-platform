@@ -32,6 +32,10 @@ EXPECTED = {
     ("POST", "/api/v1/auth/login"): (ANONYMOUS, "login"),
     ("POST", "/api/v1/auth/renew"): (FULL_DEVICE, "accounts"),
     ("POST", "/api/v1/auth/logout"): (FULL_DEVICE, "accounts"),
+    # The one authenticated route that takes a password, and the only
+    # irreversible one. It counts against `accounts` like every other route of
+    # that app; the per-name cool-off is a second bound the scope does not give.
+    ("DELETE", "/api/v1/me"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/profile"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/me/profile"): (FULL_DEVICE, "accounts"),

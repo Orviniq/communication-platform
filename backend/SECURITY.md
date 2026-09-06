@@ -101,23 +101,41 @@ A full seizure of this server (disk + database) reveals, in total:
   seizure cannot separate a device in daily use from one that has not connected since
   the day it was added;
 - per-user **device-list log records** — opaque client-signed blobs and nothing else;
-- that **delivery happened, to which device, at hour granularity** — pending queue rows
-  (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
-  blob to a recipient device, never to a sender or a conversation; acked rows are
-  deleted outright;
-- per-user **attachment upload counts, bucketed sizes, and days** — no recipient data
-  of any kind;
+- that **delivery is pending, to which device, at day granularity** — pending queue
+  rows (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an
+  opaque blob to a recipient device, never to a sender or a conversation; acked rows
+  are deleted outright. The row carries the UTC day it was enqueued on and nothing
+  finer (ADR-0025), so a seizure cannot say which part of a day a device was addressed
+  in — the waking pattern an hour column carried is not recorded;
+- **attachment rows** — a capability id, a bucketed size and the day of upload, and
+  nothing that names an account. The column that used to carry the uploader is written
+  by nothing (ADR-0025), so a seizure cannot say whose file a stored blob is, how many
+  files an account uploaded, or that two blobs came from the same person. What bounds
+  an upload instead is a per-account counter for the UTC day, which lives in Redis with
+  persistence off and is therefore not in a seizure of the disk at all;
 - the **admin audit log** — one row per administrative act the operator performed
-  through the panel, holding the operator's account, a timestamp, the affected object
-  and a plain-language sentence. It names what the operator did, so it shows which
-  accounts were activated or deactivated, which devices were revoked and which
-  attachments were deleted, at second granularity. It carries no blob, no key, no
-  token and no password. `manage.py prune` deletes a row older than
-  `ADMIN_AUDIT_RETENTION_DAYS`, **90 days** by default, so a seizure takes at most one
-  quarter of operator history rather than the life of the deployment. One residue is
-  worth naming: the row for a deleted attachment holds that attachment's id in
-  `object_id`, which is the capability that used to download it — the row and its
+  through the panel, holding the operator's account, the **UTC day** of the act, the
+  affected object and a plain-language sentence. It names what the operator did, so it
+  shows which accounts were activated or deactivated, which devices were revoked and
+  which attachments were deleted — on which day, never at which minute. `action_time`
+  is Django's own second-granularity column and the panel writes midnight UTC into it
+  (ADR-0025), so the ordering of two acts on one day is not recoverable from the log.
+  It carries no blob, no key, no token and no password. `manage.py prune` deletes a row
+  older than `ADMIN_AUDIT_RETENTION_DAYS`, **30 days** by default, so a seizure takes
+  at most one month of operator history rather than the life of the deployment. One
+  residue is worth naming: the row for a deleted attachment holds that attachment's id
+  in `object_id`, which is the capability that used to download it — the row and its
   bytes are gone by the time the audit row exists, so it opens nothing.
+
+- the **encrypted identity backups** under `/srv/chat/backups/` — at most seven files,
+  each the eight identity tables `backend/ops/backup/identity_backup.sh` names and
+  nothing else. They are opaque: encrypted to a public key, whose private half is
+  generated on the operator's own machine and never exists on this host, so root here
+  can read every one of them and open none. What a seizure does learn is their
+  **count, their sizes and the dates in their names** — roughly how many accounts and
+  devices exist, and that the host was running on each of the last seven days. No
+  envelope, no attachment and no audit row is in any of them, by decision and not by
+  chance.
 
 No plaintext, no content key, no sender↔recipient pair, no group roster — anywhere at
 rest.
@@ -156,6 +174,29 @@ Also visible, below the live-root bar: **socket and signalling metadata** — wh
 devices hold a socket and when, and which device signals which device. The server holds
 no presence of any kind: a client learns that a peer is reachable from its own
 signalling and its own timeout, never from anything this server keeps.
+
+Also at rest, below the live-root bar: **a deleted row is not erased.** PostgreSQL
+marks the tuple dead and leaves its bytes in the page; the space becomes reusable only
+after a vacuum, and the bytes are gone only when a later insert takes that space. The
+same row is in the write-ahead log twice, as its insert and as its delete, and a WAL
+segment holds what it holds until it is recycled and written over. Nothing in this
+deployment zeroes a page, and the proposal to do so on a schedule is rejected rather
+than deferred ([`REJECTED_PROPOSALS.md`](../REJECTED_PROPOSALS.md) 17).
+
+This is a routine path and not an edge case: the queue table deletes a row on every
+acknowledgement. What persists there is exactly what the row held — bucketed
+ciphertext this server cannot open, a recipient device id, a sequence number, and the
+UTC day it was enqueued on. No sender, no conversation and no content key, because
+none of those is in the row to begin with.
+
+What is bounded is the window, not the residue.
+`messaging.0006_reclaim_the_queue_promptly` sets autovacuum storage parameters on the
+queue table so its space is reclaimed at 100 dead tuples plus one percent of the live
+ones, where the stock trigger is 50 plus a fifth — 2100 against 40 050 at the 200 000
+row shape, measured in
+[`docs/architecture/GROUND-TRUTH.md`](../docs/architecture/GROUND-TRUTH.md) §4. The
+WAL has no equivalent bound here: how long a segment holds an old row follows write
+volume and checkpoint activity, and this deployment sets nothing to shorten it.
 
 ## Voice
 

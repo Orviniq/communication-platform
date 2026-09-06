@@ -15,7 +15,7 @@ schema layer enforces, and the field itself checks nothing, so the declaration i
 what this file pins. `messaging/tests/test_schemas.py` holds the enforcement.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime
 from datetime import timezone as dt_timezone
 
 import pytest
@@ -23,7 +23,7 @@ from django.db import connection
 from django.utils import timezone
 
 from core.buckets import ENVELOPE_BUCKETS
-from messaging.models import QueuedEnvelope, _truncate_hour
+from messaging.models import QueuedEnvelope, _truncate_hour, _utc_day
 
 from .conftest import SMALLEST_BUCKET, make_device
 
@@ -43,29 +43,34 @@ def indexes_on(model):
     ]
 
 
-def test_the_hour_truncation_keeps_the_hour_and_drops_everything_below_it():
+def test_the_day_truncation_keeps_the_day_and_drops_everything_below_it():
     stamp = datetime(2026, 3, 9, 17, 43, 21, 987654, tzinfo=dt_timezone.utc)
 
-    assert _truncate_hour(stamp) == datetime(2026, 3, 9, 17, tzinfo=dt_timezone.utc)
+    assert _utc_day(stamp) == date(2026, 3, 9)
 
 
 def test_the_truncation_falls_back_to_the_clock_when_it_is_given_nothing():
     """The field's default is called with no argument, so this is the only path
     that ever runs in production."""
-    before = timezone.now()
-
-    truncated = _truncate_hour()
-
-    assert (truncated.minute, truncated.second, truncated.microsecond) == (0, 0, 0)
-    assert truncated <= before
-    assert before - truncated < timedelta(hours=1)
+    assert _utc_day() == timezone.now().date()
 
 
-def test_a_row_is_born_with_its_own_identifier_and_an_hour_coarse_timestamp(
+def test_the_hour_truncation_is_kept_for_the_initial_migration_alone():
+    """`messaging/0001_initial.py` names `_truncate_hour` by import path, and the
+    migration history is append-only — so the function has to keep working even
+    though ADR-0025 retired the column it defaulted. Nothing else calls it."""
+    stamp = datetime(2026, 3, 9, 17, 43, 21, 987654, tzinfo=dt_timezone.utc)
+
+    assert _truncate_hour(stamp) == datetime(2026, 3, 9, 17, tzinfo=dt_timezone.utc)
+    assert _truncate_hour().minute == 0
+
+
+def test_a_row_is_born_with_its_own_identifier_and_a_day_coarse_stamp(
     active_user,
 ):
-    """Nothing finer than the hour reaches the column: a per-second timestamp
-    would let a dump order two mailboxes against each other."""
+    """Nothing finer than the day reaches the column (ADR-0025): an hour told a
+    dump which part of the day a device was addressed in, which is a waking
+    pattern, and a second let it order two mailboxes against each other."""
     device = make_device(active_user, registration_id=31)
 
     row = QueuedEnvelope.objects.create(
@@ -74,11 +79,12 @@ def test_a_row_is_born_with_its_own_identifier_and_an_hour_coarse_timestamp(
     row.refresh_from_db()
 
     assert row.id is not None
-    assert (row.queued_hour.minute, row.queued_hour.second) == (0, 0)
-    assert row.queued_hour.microsecond == 0
+    assert row.queued_day == timezone.now().date()
+    # The column it replaces is written by nothing until run 08 drops it.
+    assert row.queued_hour is None
 
 
-def test_a_bulk_created_row_gets_the_same_coarse_timestamp_as_a_saved_one(active_user):
+def test_a_bulk_created_row_gets_the_same_coarse_day_as_a_saved_one(active_user):
     """The send path inserts through `bulk_create`, which never calls `save()`:
     a default applied only in `save()` would leave the hot path writing NULL."""
     device = make_device(active_user, registration_id=32)
@@ -88,8 +94,8 @@ def test_a_bulk_created_row_gets_the_same_coarse_timestamp_as_a_saved_one(active
     )
 
     stored = QueuedEnvelope.objects.get(recipient_device=device)
-    assert (stored.queued_hour.minute, stored.queued_hour.second) == (0, 0)
-    assert stored.queued_hour.microsecond == 0
+    assert stored.queued_day == timezone.now().date()
+    assert stored.queued_hour is None
 
 
 def test_two_rows_of_the_same_device_never_share_an_identifier(active_user):
@@ -154,7 +160,7 @@ def test_the_blob_column_declares_the_envelope_bucket_set_and_nothing_editable()
 
     assert blob.bucket_set == set(ENVELOPE_BUCKETS)
     assert blob.editable is False
-    assert QueuedEnvelope._meta.get_field("queued_hour").editable is False
+    assert QueuedEnvelope._meta.get_field("queued_day").editable is False
     assert QueuedEnvelope._meta.pk.editable is False
 
 
@@ -166,13 +172,20 @@ def test_the_bucket_set_travels_into_the_migration_rather_than_the_code_alone():
     assert kwargs["bucket_set"] == sorted(ENVELOPE_BUCKETS)
 
 
-def test_the_table_carries_the_mailbox_index_the_retention_index_and_no_third():
+def test_the_table_carries_the_mailbox_index_the_retention_indexes_and_no_more():
     """The unique constraint doubles as the ordered mailbox read, and the hourly
-    sweep filters on `queued_hour` alone. A standalone index on the foreign key —
+    sweep filters on `queued_day` alone. A standalone index on the foreign key —
     which is what Django adds unless told not to — would be a redundant B-tree
-    maintained on every insert into the largest table of the schema."""
+    maintained on every insert into the largest table of the schema.
+
+    Two retention indexes for now: `ix_queue_queued_hour` indexes a column nothing
+    reads any more and goes with that column in run 08, because a column leaves in
+    two steps. Until then the table pays for it on every insert, and this assertion
+    is what makes that a decision rather than an oversight.
+    """
     held = indexes_on(QueuedEnvelope)
 
     assert ("recipient_device_id", "seq") in held
+    assert ("queued_day",) in held
     assert ("queued_hour",) in held
     assert ("recipient_device_id",) not in held

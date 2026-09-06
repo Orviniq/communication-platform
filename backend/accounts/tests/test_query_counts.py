@@ -31,6 +31,7 @@ REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
 RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
+ERASE_URL = "/api/v1/me"
 DIRECTORY_URL = "/api/v1/users"
 MY_PROFILE_URL = "/api/v1/me/profile"
 
@@ -249,3 +250,65 @@ def test_a_first_profile_write_is_the_locked_read_and_one_insert(
 
     assert response.status_code == 200
     assert ProfileBlob.objects.count() == 1
+
+
+# What `DELETE /api/v1/me` costs, statement by statement, at any device count:
+# the credential read of the authentication dependency; the account's own name and
+# hash in one `values_list`, because both are deferred on the instance the
+# dependency hands over; the live device ids for the socket close; and then the
+# fifteen statements Django's collector issues for the cascade — one probe for the
+# devices it must walk, one probe for the account row, twelve deletes, and the one
+# `UPDATE` that nulls `Attachment.uploader` on rows this account happens to have
+# uploaded. Every one of the deletes is a fast delete: no row of any of those
+# tables is read into this process, so no ciphertext crosses the boundary.
+ERASE_QUERIES = 15
+
+
+@pytest.mark.parametrize("extra_devices", [0, 2])
+def test_the_erasure_cascade_does_not_grow_with_the_device_count(
+    http, active_user, device, bearer, extra_devices
+):
+    """The collector issues one delete for each table, not one for each device. A
+    per-device cascade would be an unbounded statement count on the one route that
+    is allowed to be slow and must still finish inside its deadline."""
+    from devices.models import Device
+    from messaging.models import QueuedEnvelope
+
+    for index in range(extra_devices):
+        extra = Device.objects.create(
+            user=active_user,
+            ik_pub=b"ik",
+            spk_id=index + 2,
+            spk_pub=b"spk",
+            spk_sig=b"sig",
+            registration_id=5000 + index,
+        )
+        QueuedEnvelope.objects.create(recipient_device=extra, seq=1, blob=b"\x00" * 1024)
+
+    response = counted(
+        http,
+        "DELETE",
+        ERASE_URL,
+        AUTH_QUERY + 2 + ERASE_QUERIES,
+        json={"password": PASSWORD},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 204
+
+
+def test_a_wrong_password_costs_the_credential_read_and_nothing_else(
+    http, active_user, device, bearer
+):
+    """The refusal happens before the collector is ever asked for anything: the
+    authentication query, and the one read of the name and the hash."""
+    response = counted(
+        http,
+        "DELETE",
+        ERASE_URL,
+        AUTH_QUERY + 1,
+        json={"password": "not-the-password"},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 401

@@ -306,7 +306,7 @@ def test_acking_an_envelope_the_ttl_already_took_deletes_nothing(
     settings.ENVELOPE_TTL_DAYS = 7
     row = enqueue(device, 1)[0]
     QueuedEnvelope.objects.filter(id=row.id).update(
-        queued_hour=timezone.now() - timedelta(days=8)
+        queued_day=timezone.now().date() - timedelta(days=8)
     )
     call_command("prune", stdout=StringIO())
 

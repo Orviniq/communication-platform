@@ -3,47 +3,49 @@
 import os
 
 from django.conf import settings
-from django.db import transaction
-from django.db.models import Sum
 
-from accounts.models import User
 from api.errors import ApiError
 from attachments.models import Attachment
 
 NOT_FOUND = "No such attachment."
 
 
-def record(attachment):
-    """Charge the upload against the quota and insert its row, in one transaction.
+def disk_space():
+    """The bytes still writable under `ATTACHMENTS_ROOT`, and the filesystem's size.
 
-    The check and the insert are one unit under the uploader's row lock, because
-    apart they are a race: two in-flight uploads both read the same SUM, both
-    pass, and the account ends above its quota. Only the same account blocks here.
+    `f_bavail` rather than `f_bfree`: the blocks a filesystem holds back for root
+    are not space this service account can use, and a guard that counted them
+    would admit the upload that fills the disk.
 
-    The bytes are already on disk when this runs, so a refusal leaves a file that
-    no row names and the caller drops it. The other order — insert, then write —
-    would leave a row a download could reach with nothing behind it.
+    The directory is created here because it is the first thing the upload path
+    touches and the copy needs it anyway; without that a deployment whose root
+    does not exist yet would read as a filesystem that is not there.
     """
-    with transaction.atomic():
-        User.objects.select_for_update().filter(pk=attachment.uploader_id).only(
-            "id"
-        ).first()
-        used = (
-            Attachment.objects.filter(uploader_id=attachment.uploader_id).aggregate(
-                s=Sum("size")
-            )["s"]
-            or 0
-        )
-        if used + attachment.size > settings.ATTACH_USER_QUOTA_BYTES:
-            raise ApiError(413, "quota_exceeded", "Storage quota exhausted.")
-        attachment.save()
+    os.makedirs(settings.ATTACHMENTS_ROOT, exist_ok=True)
+    stats = os.statvfs(settings.ATTACHMENTS_ROOT)
+    return stats.f_bavail * stats.f_frsize, stats.f_blocks * stats.f_frsize
+
+
+def record(attachment):
+    """Insert the row for bytes that are already on disk.
+
+    One statement and no lock. The charge is taken before the bytes are written,
+    in Redis (`attachments/allowance.py`), so the aggregate over the account's own
+    rows that used to run here left with `Attachment.uploader` — and with it the
+    only column that said whose bytes these are (ADR-0025).
+
+    The bytes reach the disk first, which is the order that keeps a failed write
+    off the download path: no row exists for a file that was never finished. The
+    other order would publish a capability id for bytes that are not there.
+    """
+    attachment.save()
 
 
 def locate(attachment_id):
     """The capability id, read back from the row that holds it.
 
-    Only the id: the row carries the uploader, and the response must name nobody.
-    A missing row and a pruned one are the same answer.
+    Only the id: the response must name nobody and there is nothing else on the
+    row a caller may have. A missing row and a pruned one are the same answer.
 
     A NUL byte is the third: PostgreSQL text carries none, so psycopg refuses the
     statement rather than returning no row, and the route raised instead of

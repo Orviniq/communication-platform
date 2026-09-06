@@ -9,6 +9,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from django.conf import settings
 from fastapi import APIRouter, Depends, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -20,7 +21,7 @@ from api.errors import ApiError
 from api.orm import run_unit
 from api.ratelimit import rate_limit
 from api.schema import FULL_DEVICE, errors
-from attachments import services
+from attachments import allowance, services
 from attachments.models import Attachment
 from attachments.schemas import AttachmentOut
 from core.buckets import ATTACHMENT_BUCKETS
@@ -100,6 +101,30 @@ def _discard(path):
     Path(path).unlink(missing_ok=True)
 
 
+async def _undo(reservation, nbytes, path):
+    """Everything an upload that got past the reservation has to give back.
+
+    The day's allowance first, then the bytes: a file no row names is unreachable
+    and the sweep would never see it, so a refused upload must not be allowed to
+    consume the disk the free-space guard exists to protect.
+    """
+    await allowance.refund(reservation, nbytes)
+    await run_in_threadpool(_discard, path)
+
+
+async def _require_free_space():
+    """Refuse an upload when `ATTACHMENTS_ROOT` is below its floor.
+
+    The daily allowance bounds one account and nothing bounds their sum, so this
+    is the guard that answers for the disk itself. It is one `statvfs` and runs on
+    the event loop: the call is a syscall against a local filesystem, and moving
+    it to a thread would cost more than it measures.
+    """
+    free, _capacity = services.disk_space()
+    if free < settings.ATTACH_MIN_FREE_BYTES:
+        raise ApiError(503, "storage_full", "Attachment storage is full.")
+
+
 # Declared rather than introspected: the route parses the multipart body itself,
 # under limits FastAPI exposes no parameter for, so it declares no `UploadFile`
 # and the generator sees no body at all. This is the one non-JSON body of the
@@ -141,6 +166,7 @@ MULTIPART_BODY = {
         "payload_too_large",
         "quota_exceeded",
         "throttled",
+        "storage_full",
     ),
     dependencies=[Depends(rate_limit("attachments"))],
 )
@@ -148,6 +174,12 @@ async def upload_attachment(
     request: Request, principal: Principal = Depends(require_full_device)
 ):
     """Store one already-encrypted, already-padded blob under a fresh capability id.
+
+    The row names no account (ADR-0025). What bounds the upload instead is the
+    free-space floor and the account's allowance for the UTC day, and both are
+    settled before a byte is copied: the disk because it is the shared resource,
+    then the allowance, because a reservation taken for an upload the disk would
+    have refused anyway is one an account has to be given back.
 
     The bytes reach the disk before any row names them, which is the order that
     keeps a failed write off the download path: no row exists for a file that was
@@ -157,18 +189,21 @@ async def upload_attachment(
     async with _blob_part(request) as part:
         if part.size not in BUCKET_SIZES:
             raise BadBucket()
-        attachment = Attachment(uploader_id=principal.user.id, size=part.size)
+        await _require_free_space()
+        attachment = Attachment(size=part.size)
         path = attachment.disk_path()
-        # Off the event loop: the copy is blocking file I/O, and 64 MiB of it on
-        # the loop stalls every other request in the process.
-        await run_in_threadpool(_spool_to_disk, part.file, path)
+        reservation = await allowance.reserve(principal.user.id, attachment.size)
+        try:
+            # Off the event loop: the copy is blocking file I/O, and 64 MiB of it
+            # on the loop stalls every other request in the process.
+            await run_in_threadpool(_spool_to_disk, part.file, path)
+        except BaseException:
+            await _undo(reservation, attachment.size, path)
+            raise
     try:
         await run_unit(services.record, attachment)
     except BaseException:
-        # A quota refusal, or anything else, leaves bytes that no row names and
-        # nothing can reach. Drop them rather than let a refused upload consume
-        # the disk the quota exists to protect.
-        await run_in_threadpool(_discard, path)
+        await _undo(reservation, attachment.size, path)
         raise
     return {"attachment_id": attachment.id, "size": attachment.size}
 
@@ -197,6 +232,13 @@ async def download_attachment(attachment_id: str):
     Any live token may fetch by id; the unguessable id is the gate. The path is
     built from the id the row holds, which is server-generated, so no request
     value ever steers it.
+
+    A `Range` header is not read here and is not passed on by hand: nginx carries
+    the client's request headers into the internal redirect, and the static
+    handler there answers the range with a `206`. This route declares no such
+    status, because the document of this surface describes what these routes
+    answer and this one always answers `200` — `attachments/API.md` is where the
+    edge's half of the download is written down.
     """
     stored = await run_unit(services.locate, attachment_id)
     return Response(

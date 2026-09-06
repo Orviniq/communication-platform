@@ -1,5 +1,6 @@
 """The two properties of the upload path that the request shape alone cannot show:
-the bytes never cross the process whole, and the quota holds under concurrency.
+the bytes never cross the process whole, and the day's allowance holds under
+concurrency.
 """
 
 import os
@@ -54,13 +55,13 @@ def test_the_spool_threshold_is_the_copy_chunk():
 
 
 @pytest.mark.django_db(transaction=True)
-def test_concurrent_uploads_never_overshoot_the_quota(
+def test_concurrent_uploads_never_overshoot_the_days_allowance(
     new_http, active_user, device, bearer, settings, attachments_root
 ):
-    """The check and the insert are one unit under the uploader's row lock. Apart
-    they are this race: every thread reads the same SUM, every thread passes, and
-    the account ends above its quota."""
-    settings.ATTACH_USER_QUOTA_BYTES = SMALLEST * 2
+    """The reservation is one `INCRBY`, which is atomic and returns the value it
+    produced. A read-then-write instead would be this race: every thread reads the
+    same count, every thread passes, and the account spends past its allowance."""
+    settings.ATTACH_DAILY_BYTES = SMALLEST * 2
     headers = bearer(active_user, device)
     start = threading.Barrier(CONCURRENT_UPLOADS)
     statuses, failures = [], []
@@ -92,9 +93,9 @@ def test_concurrent_uploads_never_overshoot_the_quota(
 
     assert failures == []
     assert sorted(statuses) == [201, 201] + [413] * (CONCURRENT_UPLOADS - 2)
-    stored = Attachment.objects.filter(uploader_id=active_user.id)
+    stored = Attachment.objects.all()
     assert stored.count() == 2
-    assert sum(row.size for row in stored) <= settings.ATTACH_USER_QUOTA_BYTES
+    assert sum(row.size for row in stored) <= settings.ATTACH_DAILY_BYTES
     # The refused uploads left no bytes behind either.
     assert len([p for p in attachments_root.rglob("*") if p.is_file()]) == 2
 
@@ -148,8 +149,8 @@ def test_an_empty_part_leaves_an_empty_file_rather_than_no_file(tmp_path):
 
 
 def test_the_discard_removes_the_bytes_a_refused_upload_wrote(tmp_path):
-    """What a quota refusal calls: the file is written before the row is charged,
-    so the bytes have to be dropped by hand when the row is refused."""
+    """What a failed row write calls: the file is written before the row exists, so
+    the bytes have to be dropped by hand when the insert does not happen."""
     path = str(tmp_path / "ab" / "abcdef")
     routes._spool_to_disk(RecordingSource(b"ciphertext"), path)
 

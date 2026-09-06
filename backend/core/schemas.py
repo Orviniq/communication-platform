@@ -17,6 +17,7 @@ class ConfigOut(BaseModel):
 
     envelope_ttl_days: int
     attachment_ttl_days: int
+    attachment_daily_bytes: int
     mailbox_max_bytes: int
     max_devices_per_user: int
     max_devicelog_records: int

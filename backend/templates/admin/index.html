@@ -2,7 +2,7 @@
 {#                                                                                #}
 {# Overrides the `admin/index.html` django-unfold 0.105.0 ships, which draws the  #}
 {# application list. The application list is the database's shape; this page is   #}
-{# the operator's: the accounts still waiting, then the four numbers that say      #}
+{# the operator's: the accounts still waiting, then the numbers that say          #}
 {# whether anything needs attention, each one a link to the list behind it.        #}
 {#                                                                                #}
 {# It extends `admin/base.html` and repeats unfold's own `title` and `branding`    #}
@@ -42,7 +42,7 @@
                 {% component "unfold/components/text.html" %}{% translate "Attachment storage" %}{% endcomponent %}
                 {% component "unfold/components/title.html" %}{{ storage_used }}{% endcomponent %}
                 {% component "unfold/components/progress.html" with value=storage_percent %}{% endcomponent %}
-                {% component "unfold/components/text.html" %}{% blocktranslate %}of {{ storage_ceiling }} available{% endblocktranslate %}{% endcomponent %}
+                {% component "unfold/components/text.html" %}{% blocktranslate %}{{ storage_free }} free on the disk{% endblocktranslate %}{% endcomponent %}
             {% endcomponent %}
         </div>
 

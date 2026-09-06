@@ -96,6 +96,15 @@ ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=4096
+# A core dump of this process is its whole address space on disk: the JWT signing
+# key, the Django secret key, the TURN shared secret, the database and Redis
+# passwords, and whatever routing metadata and ciphertext is in flight. Zero is
+# stated rather than inherited because the inherited value is the host's and this
+# repository cannot read it — systemd's PID 1 raises RLIMIT_CORE to infinity for
+# its children, and `DefaultLimitCORE=` in `system.conf` differs between
+# distributions and between releases of one. A single value sets the soft and the
+# hard limit together, so the process cannot raise it back.
+LimitCORE=0
 # The outermost of the three windows. systemd's own DefaultTimeoutStopSec is
 # 90 s, which is below the 130 s drain above it: leaving it unset would have
 # systemd SIGKILL the process in the middle of the drain it was asked to take,
