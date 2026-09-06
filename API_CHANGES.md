@@ -576,6 +576,55 @@ one ciphertext the server relays without storing, and nothing above that.
 `TURN_REALM` is unchanged and still read by the coturn file alone; no Python module
 reads it.
 
+## The token pair becomes one session token
+
+The access and refresh pair is gone, and one device-bound session token replaces it.
+The decision and its cost are
+[ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md), which
+supersedes [ADR-0006](docs/architecture/decisions/0006-device-bound-tokens-on-pyjwt.md);
+the reference for the routes is [`backend/accounts/API.md`](backend/accounts/API.md)
+and [`backend/devices/API.md`](backend/devices/API.md).
+
+Why, in one line: rotation with reuse detection made a lost race between two client
+isolates a sign-out, and it defended only a theft the transport pinning and the
+encrypted client store already prevent. What it costs is stated rather than argued
+around, in `ACCEPTED_RISKS.md` AR-18.
+
+### The routes
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/auth/refresh` | Anonymous. Took `{"refresh": "…"}`, rotated the pair, advanced `Device.refresh_generation`, and answered `200` with `{"access", "refresh"}` | No such path: `404 not_found`, like any other path no route serves | Delete the call and the route from your client. `POST /api/v1/auth/renew` replaces it, and the request shape is different: a bearer header instead of a body |
+| `POST /api/v1/auth/renew` | Did not exist | `200` with `{"token", "expires_in"}`. Takes a full-scope bearer token and **no body**; a body, if sent, is ignored. It re-checks the device and the account through the same verifier every authenticated route uses, so a revoked device, a stale token generation and a deactivated account each answer `401 token_revoked` | Call it with the token you hold, well before `expires_in` runs out. Keep whichever token you got; the one you presented also stays valid until its own expiry |
+| A retried or timed-out renewal | A refresh was **never** safe to repeat: the second call presented a token the first had retired, which was a replay, which ended every token of the device | Safe to repeat. Nothing is written and no generation moves, so a retry issues another token and retires none | Delete the "never retry a refresh" rule and any arbitration built for it. Two of your isolates may renew concurrently and both keep working tokens |
+| `POST /api/v1/auth/login` with a `device_id` | `200` with `{"access", "refresh", "user_id", "device_id", "scope": "full"}`, and the login advanced `Device.refresh_generation`, retiring any refresh token the device still held | `200` with `{"token", "expires_in", "user_id", "device_id", "scope": "full"}`. The device row is read and never written, so a token the device already held keeps working | Rename the field in your DTO and read `expires_in`. Stop discarding the token you were holding when a login returns |
+| `POST /api/v1/auth/login` without one | `200` with `{"access", "user_id", "scope": "register"}` | `200` with `{"token", "expires_in", "user_id", "scope": "register"}` | Rename the field. `scope` is still the discriminator between the two success shapes |
+| `POST /api/v1/me/devices` | `201` with `{"device_id", "access", "refresh", "scope": "full"}` | `201` with `{"device_id", "token", "expires_in", "scope": "full"}` | Rename the field. The token is the new device's session token, and it is what you cross-sign with |
+| `POST /api/v1/auth/logout` | Advanced `token_generation`; the presented access token and every refresh token of the device died | Unchanged in behaviour and in wording: `token_generation` advances and every token of the device dies at once | None |
+
+### The claims and the replay rule
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The `scope` claim | Every token carried `scope`, `full` or `register`, and the power of a token was the pair (`scope`, `typ`) | Gone from the claims. `typ` alone carries the power: `session` for the device-bound token, `register` for the enrollment one | None, if you never read the claims. If you did, read `typ` — but the claim set is this server's and no client should depend on it: `expires_in` is published for exactly this reason |
+| The `rgen` claim | Carried by every refresh token and checked against `Device.refresh_generation` | Gone, with the refresh token | None |
+| The replay rule | A refresh presenting an `rgen` behind the row advanced `token_generation` and ended every token of the device, including ones the replayer had never seen | Gone. Nothing but a logout, a device revocation or an account deactivation ends a token before its own `exp` | Remove the arbitration this rule forced. A client may now hold several live tokens for one device — from a login, a registration and each renewal — and all of them work |
+| `403 scope_forbidden` | A register-scope token on a full-scope route | Unchanged: a register token on a route that needs a session token. `POST /api/v1/auth/renew` is one of them, so a register token cannot renew its way to a session | None |
+| A token that expires on an open socket | The socket stayed open; a revocation closed it with `4003` | Unchanged | None |
+
+### The settings
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `ACCESS_MIN` | Access-token lifetime in minutes, default 15 | Gone, as a setting and as a variable | Remove the line from the environment file |
+| `REFRESH_DAYS` | Refresh-token lifetime in days, default 14 | Gone, as a setting and as a variable | Remove the line |
+| `SESSION_TOKEN_DAYS` | Did not exist | The session token's lifetime in days, default 30. It is the whole exposure of a stolen token, so shortening it is the lever AR-18 names | None, unless 30 days is wrong for the deployment; shortening it costs only more frequent renewals |
+| `THROTTLE_REFRESH` | The rate scope of the refresh route, default `120/hour` | Gone with the route it bounded. Renewal counts against `accounts`, `THROTTLE_ACCOUNTS`, default `120/min` per account | Remove the line |
+| `REGISTER_SCOPE_ACCESS_MIN` | Register-scope token lifetime in minutes, default 10 | Unchanged in name, value and meaning | None |
+
+`Device.refresh_generation` keeps its column with no reader and no writer until the
+next run drops it; nothing a client can observe depends on it.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

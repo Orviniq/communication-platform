@@ -177,3 +177,71 @@ full statement of what moved.
 | `frontend/lib/features/messaging/presentation/chat_conversation_view.dart` | The comment describing why presence is absent, which now has a different reason behind it |
 | `frontend/docs/design-handoff/voice-room-states.md` | The "Too large" row reads `Blob over SIGNAL_MAX, 16384 chars`. `SIGNAL_MAX` is gone as a setting and as an environment variable, and a blob is dropped for being off-bucket rather than for being over a maximum — a 1500-character blob is dropped too |
 | `frontend/docs/sync-engine.md`, `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |
+
+## One session token replaces the pair
+
+The access and refresh pair is gone
+([ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md), which
+supersedes [ADR-0006](docs/architecture/decisions/0006-device-bound-tokens-on-pyjwt.md)).
+`POST /api/v1/auth/refresh` is gone with it, and `POST /api/v1/auth/renew` — a bearer
+token, no body — is in its place. `API_CHANGES.md` § "The token pair becomes one
+session token" is the full statement of what moved, and
+[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §M states both enrollment
+flows against one token. Paths below were read on 2026-09-05.
+
+This section has two halves, and they are not the same obligation. **The DTO changes
+are required**: a client that does not make them cannot parse a login. **The removal
+of the rotation arbitration is optional**, and a client that keeps it stays correct —
+an ownership gate around a token that no longer retires costs a little contention and
+protects nothing, but it breaks nothing either.
+
+### Required — the response bodies moved
+
+| Path | What must change |
+|---|---|
+| `frontend/lib/features/authentication/infrastructure/authentication_api_dtos.dart` | The login parser reads `json['access']` and, on the full branch, requires `json['refresh']` to be a non-empty string. Both fields are gone: read `token` and `expires_in` instead. The register branch's rejection of a body carrying `refresh` also has nothing left to reject. `scope` is unchanged and is still the discriminator between the two success shapes |
+| `frontend/lib/features/devices/infrastructure/device_enrollment_dtos.dart` | The `201` parser requires `access`, `refresh` and `scope == 'full'`. It is now `device_id`, `token`, `expires_in` and `scope` |
+| `frontend/lib/features/networking/domain/session_tokens.dart` | `SessionTokens.refreshToken`, `refreshExpiresAt` and the `canRefresh` getter describe a token that no longer exists, and the class comment calls the session rotating. `SessionTerminationReason.refreshRejected` names a refusal the server can no longer produce |
+| `frontend/lib/features/networking/infrastructure/auth/dio_token_endpoints.dart` | `DioRefreshTokenExchange` posts `RefreshRequestDto` to `/api/v1/auth/refresh`, which is now `404`. Renewal is `POST /api/v1/auth/renew` with the session token in the `Authorization` header and no body, answering `{"token", "expires_in"}` |
+| `frontend/lib/features/networking/application/ports/token_ports.dart` | `RefreshTokenExchange.rotate(String refreshToken)` takes the token that is gone. What replaces it takes no argument beyond the current session token and returns the next one |
+
+**Stop reading the expiry out of the token.** The login parser derives
+`accessExpiresAt` with `readJwtExpiry(access)`, which decodes this server's claim set
+on the client. `expires_in` is published on every issuing route for exactly that
+reason; read it, and let the claim set stay the server's business.
+
+**A login no longer retires anything.** The old rule was that a login advanced the
+refresh generation, so a token held elsewhere in the process died. It does not: the
+device row is read and never written. Code that discards a held token when a login
+returns is now discarding a working one.
+
+### Optional — the arbitration the rotation forced
+
+`frontend/docs/decisions.md` ADR-049 and ADR-050 and `frontend/docs/sync-engine.md`
+record why this exists: two owners in one process held one rotating refresh token, the
+loser of the race presented a retired token, and the server ended the session. That
+race is gone. Nothing retires a token, so two owners may renew concurrently and both
+keep working tokens.
+
+| Path | What it is, and what it protects now |
+|---|---|
+| `frontend/lib/features/networking/infrastructure/auth/token_coordinator.dart` | The single-flight coordinator, the bounded re-read budget, and `_awaitRotationByAnotherOwner`, which waits for another owner to publish a token this one can adopt. With nothing retiring a token, an owner that renews and loses the write race simply holds a second valid token |
+| `frontend/lib/app/dependencies/networking_foundation.dart` | The comment describing why a second `TokenCoordinator` against one rotating refresh token is unsafe, and the wiring that follows from it |
+| `frontend/lib/features/networking/application/ports/token_ports.dart` | `SessionTokenStore.readDurable` and its contract that a cached answer is one owner's last observation rather than the truth, so a session-ending decision is made against it rather than against `read`. That was true because the rotation moved the row under each owner; it no longer moves |
+| `frontend/lib/app/dependencies/message_delivery.dart` | The comments describing a wait on the rotating refresh rather than a race with it |
+
+If the arbitration is kept, keep it as a contention control and not as a correctness
+one, and say so where it is written down: the failure it was built to prevent cannot
+occur against this server. If it is removed, `frontend/docs/decisions.md` ADR-049 and
+ADR-050 and `frontend/docs/sync-engine.md` are the documents that then describe a
+server that does not exist.
+
+### What did not change
+
+Revocation is unchanged, and is still the only thing that ends a token early:
+`token_generation` advances on a logout, a device revocation or an account
+deactivation, and every token of that device dies at once — including a live socket,
+which closes with `4003`. A token that merely expires does not close its socket. The
+register token keeps its name, its ten-minute lifetime and its one route, and a
+register token presented anywhere else — `POST /api/v1/auth/renew` included — is still
+`403 scope_forbidden`.
