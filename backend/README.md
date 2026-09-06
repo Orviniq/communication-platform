@@ -148,7 +148,6 @@ online to transfer it. There is no server history API.
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
 | `attachments` | Bucketed encrypted blob store with capability-id access |
-| `voicerooms` | A migrations package and nothing else: `0002_delete_room` drops the table ADR-0021 removed. It leaves the tree once every environment has applied it |
 | `realtime` | The `/ws` gateway, the Redis publish-and-subscribe bus behind it, and its socket-side auth |
 | `core` | Size buckets, opaque blob field, env helpers, log scrubbing, health endpoint, deploy checks |
 | `config` | Settings (`base`/`dev`/`prod`), the ASGI entry point, root URLconf |

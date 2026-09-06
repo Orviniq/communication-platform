@@ -64,7 +64,7 @@ def test_a_duplicate_key_id_within_one_payload_is_a_400(
     assert response.status_code == 400
 
 
-def test_the_signed_prekey_is_replaced_and_dated(http, active_user, device, bearer):
+def test_the_signed_prekey_is_replaced_whole(http, active_user, device, bearer):
     """The server stores spk_pub/spk_sig and never verifies the signature; that is
     the client's job against ik_pub."""
     body = {"spk": {"spk_id": 77, "pub": pubkey(b"n"), "sig": pubkey(b"z")}}
@@ -78,7 +78,6 @@ def test_the_signed_prekey_is_replaced_and_dated(http, active_user, device, bear
     assert device.spk_id == 77
     assert bytes(device.spk_pub) == base64.b64decode(pubkey(b"n"))
     assert bytes(device.spk_sig) == base64.b64decode(pubkey(b"z"))
-    assert device.spk_updated_date is None  # retired by ADR-0024
 
 
 def test_a_signed_prekey_missing_its_signature_is_rejected(

@@ -36,10 +36,11 @@ ALIAS = "migration_replay"
 # into the tree unreviewed.
 RETIRE_DATES = "0002_retire_the_activity_dates"
 BACKFILL_THE_DAY = "0004_backfill_the_queued_day"
+DROP_THE_DATE = "0003_drop_the_retired_date"
 HISTORY = {
-    "accounts": [INITIAL, RETIRE_DATES],
-    "attachments": [INITIAL],
-    "devices": [INITIAL, RETIRE_DATES],
+    "accounts": [INITIAL, RETIRE_DATES, DROP_THE_DATE],
+    "attachments": [INITIAL, "0002_drop_the_uploader_link"],
+    "devices": [INITIAL, RETIRE_DATES, "0003_drop_the_retired_columns"],
     "messaging": [
         INITIAL,
         "0002_index_the_retention_filter",
@@ -47,9 +48,10 @@ HISTORY = {
         BACKFILL_THE_DAY,
         "0005_index_the_day_filter",
         "0006_reclaim_the_queue_promptly",
+        "0007_drop_the_hour_index",
+        "0008_drop_the_retired_hour",
     ],
-    "vault": [INITIAL, RETIRE_DATES],
-    "voicerooms": [INITIAL, "0002_delete_room"],
+    "vault": [INITIAL, RETIRE_DATES, DROP_THE_DATE],
 }
 
 # The migrations that carry data operations and no schema operation. They produce
@@ -59,8 +61,7 @@ HISTORY = {
 DATA_MIGRATIONS = {("messaging", BACKFILL_THE_DAY)}
 
 # The apps of this project that own a table. `core` and `realtime` declare no
-# model, and `voicerooms` stopped declaring one when ADR-0021 removed the room
-# object.
+# model.
 PROJECT_APPS = sorted(
     config.label
     for config in apps.get_app_configs()
@@ -69,8 +70,8 @@ PROJECT_APPS = sorted(
 )
 
 # The apps of this project that own a migrations package. That is the apps above
-# plus `voicerooms`, which owns no table any more and keeps its package only to
-# carry `0002_delete_room` to a database that still has the table.
+# and nothing else: `voicerooms` left the tree with its package once every
+# environment had applied the delete.
 MIGRATION_APPS = sorted(
     config.label
     for config in apps.get_app_configs()
@@ -78,21 +79,20 @@ MIGRATION_APPS = sorted(
     and (settings.BASE_DIR / config.label / "migrations").exists()
 )
 
-# The apps that own a migrations package and no table. One, and it is temporary:
-# `voicerooms` leaves the tree once every environment has applied the delete.
-MIGRATIONS_WITHOUT_A_TABLE = {"voicerooms"}
+# The apps that own a migrations package and no table. None: an app with a
+# migrations package and no model is a table somebody added without deciding to,
+# and the one exemption this set carried left with `voicerooms`.
+MIGRATIONS_WITHOUT_A_TABLE = frozenset()
 
 # What each `0001_initial` depends on inside this project. `accounts` holds
 # `AUTH_USER_MODEL`, so every app with a foreign key to a user waits for it;
-# `messaging` queues to a device, so it waits for `devices`. `voicerooms` held no
-# foreign key at all, so its history depends on nothing outside itself.
+# `messaging` queues to a device, so it waits for `devices`.
 DEPENDENCIES = {
     "accounts": set(),
     "attachments": {"accounts"},
     "devices": {"accounts"},
     "messaging": {"devices"},
     "vault": {"accounts"},
-    "voicerooms": set(),
 }
 
 
@@ -210,8 +210,16 @@ def test_no_migration_names_a_model_or_an_app_that_left():
     """Invariant: no migration file references a removed model or a removed app.
     `KeyPackage` and the MLS group state went in phase 1, and no token table has
     ever existed — `simplejwt`'s blacklist is a per-device login record at rest,
-    which is what ADR-0006 refuses to hold."""
-    gone = ("KeyPackage", "keypackage", "token_blacklist", "HistoryRecord")
+    which is what ADR-0006 refuses to hold. `Room` and the `voicerooms` app went
+    with ADR-0021, and their migrations left the tree in this run."""
+    gone = (
+        "KeyPackage",
+        "keypackage",
+        "token_blacklist",
+        "HistoryRecord",
+        "voicerooms",
+        "Room",
+    )
     written = {
         (app, name): (settings.BASE_DIR / app / "migrations" / f"{name}.py").read_text()
         for app, names in HISTORY.items()
@@ -244,10 +252,9 @@ def test_every_app_unapplies_to_zero(empty_database, app):
     recovered — but an app that cannot reach zero is one whose history carries an
     operation that lies about its own reverse.
 
-    The ledger is asserted beside the catalogue, because an app that owns no table
-    would otherwise be checked against an empty set: `voicerooms` reaches zero by
-    re-creating the room table and dropping it again, and only the ledger shows it
-    happened.
+    The ledger is asserted beside the catalogue, because an app whose head owns
+    fewer tables than its history created would otherwise be checked against a set
+    that is already empty, and only the ledger shows the unapply happened.
     """
     call_command("migrate", database=empty_database, verbosity=0)
 
@@ -281,7 +288,11 @@ def test_the_whole_history_unapplies_in_reverse_dependency_order(empty_database)
 # one operation here that can block another session; it is a catalogue change and
 # not a scan, so the hold is milliseconds rather than a function of the row count.
 # `AddIndexConcurrently` takes SHARE UPDATE EXCLUSIVE and blocks neither, at the
-# price of two table scans and a migration that cannot be atomic.
+# price of two table scans and a migration that cannot be atomic;
+# `RemoveIndexConcurrently` is its mirror and takes the same lock.
+# `RemoveField` is the operation that ends the two-step column removal: `DROP
+# COLUMN` is a catalogue write and never a scan, so its ACCESS EXCLUSIVE is held
+# for microseconds whatever the table holds.
 # `AlterField` is the one entry here whose lock depends on what the field became:
 # a type change rewrites the table under ACCESS EXCLUSIVE for as long as the scan
 # takes, and `SET NOT NULL` scans it under the same lock. Naming the operation is
@@ -303,6 +314,24 @@ LOCK_CLASSES = {
         "once at DDL time and store it in `pg_attribute.attmissingval` rather than "
         "rewriting the table. Measured at 1.7 ms against a 200 000-row, 111.6 MB "
         "copy with `relfilenode` unchanged either side"
+    ),
+    "RemoveField": (
+        "ACCESS EXCLUSIVE on a relation that already exists, for the length of a "
+        "catalogue write — `DROP COLUMN` marks the attribute dropped in "
+        "`pg_attribute` and rewrites nothing. Measured at 0.065 ms against a "
+        "200 000-row, 245 MB copy with `relfilenode` unchanged either side. On a "
+        "foreign key Django drops the constraint first, which takes the same lock "
+        "on the referenced table as well, and that table is in the map below. What "
+        "the statement does not do is remove the values: they stay in the heap "
+        "pages until a rewrite, which is why a drop is a schema change and never "
+        "an erasure"
+    ),
+    "RemoveIndexConcurrently": (
+        "SHARE UPDATE EXCLUSIVE on the table and on the index, held while the drop "
+        "waits for the transactions that can still be reading through it. It "
+        "blocks no reader and no writer; the plain `DROP INDEX` takes ACCESS "
+        "EXCLUSIVE on the table instead. Both measured from `pg_locks` on "
+        "PostgreSQL 16.14 against a 200 000-row copy"
     ),
     "RunPython": (
         "ROW EXCLUSIVE on the relation it updates, one batch at a time — the lock "
@@ -339,8 +368,13 @@ ALLOWED_STATEMENTS = (
     "CREATE INDEX CONCURRENTLY",
     "CREATE INDEX",
     "CREATE UNIQUE INDEX",
+    "DROP INDEX CONCURRENTLY",
     "DROP TABLE",
-    "ALTER TABLE",  # narrowed below to four forms
+    # A transaction setting and not DDL: it makes a deferred constraint droppable
+    # inside the transaction that drops it, and Django emits it in front of every
+    # foreign-key removal. It takes no lock of its own that the probe below reads.
+    "SET CONSTRAINTS",
+    "ALTER TABLE",  # narrowed below to the forms ALLOWED_ALTERATIONS admits
 )
 
 # The four `ALTER TABLE` forms the classification covers. `ADD CONSTRAINT` is judged
@@ -361,13 +395,28 @@ ALLOWED_STATEMENTS = (
 #   writes `pg_class.reloptions` and reads no row: measured at SHARE UPDATE
 #   EXCLUSIVE with `relfilenode` unchanged either side of a 200 000-row table.
 #
-# Every other form — `TYPE`, `SET NOT NULL`, `SET DEFAULT`, `DROP COLUMN` — rewrites
-# or scans, and each one fails here. `ADD COLUMN` with a *volatile* default would
-# rewrite too, and is caught by the `DEFAULT` check beside it.
+# * `DROP COLUMN` marks the attribute dropped in `pg_attribute`, drops the indexes
+#   and constraints that depended on it, and rewrites nothing: measured at 0.065 ms
+#   against a 200 000-row, 245 MB copy with `relfilenode` unchanged either side. It
+#   is the second step of every column removal in this project, and it was in the
+#   forbidden list below until this measurement moved it — for the same reason
+#   `ADD COLUMN` is here, and on the same evidence.
+#
+# * `DROP CONSTRAINT` is the statement in front of it when the column is a foreign
+#   key. Adding a constraint validates and therefore scans; dropping one deletes a
+#   catalogue row and reads none. It locks the referenced table as hard as the
+#   referencing one, which is a lock the map below has to record rather than a cost
+#   that grows with either table.
+#
+# Every other form — `TYPE`, `SET NOT NULL`, `SET DEFAULT` — rewrites or scans, and
+# each one fails here. `ADD COLUMN` with a *volatile* default would rewrite too, and
+# is caught by the `DEFAULT` check beside it.
 ALLOWED_ALTERATIONS = (
     "ADD CONSTRAINT",
     "DROP NOT NULL",
     "ADD COLUMN",
+    "DROP COLUMN",
+    "DROP CONSTRAINT",
     "DROP DEFAULT",
     "SET (",
 )
@@ -375,11 +424,10 @@ ALLOWED_ALTERATIONS = (
 # The forms the classification does not cover, named rather than left to the absence
 # of an allowed one. Every operation Django writes emits one action per `ALTER TABLE`,
 # so an allowed form present was an allowed form alone — until `RunSQL` entered the
-# tree, which can write `ALTER TABLE t DROP COLUMN c, SET (…)` and carry a rewrite and
-# an admitted form in the same statement. Each of these is a rewrite or a scan under
+# tree, which can write `ALTER TABLE t SET NOT NULL, SET (…)` and carry a scan and an
+# admitted form in the same statement. Each of these is a rewrite or a scan under
 # ACCESS EXCLUSIVE whose cost grows with the table.
 FORBIDDEN_ALTERATIONS = (
-    "DROP COLUMN",
     "SET NOT NULL",
     "SET DEFAULT",
     "SET TABLESPACE",
@@ -396,7 +444,14 @@ VOLATILE_DEFAULTS = ("RANDOM(", "NEXTVAL(", "CLOCK_TIMESTAMP(", "GEN_RANDOM_UUID
 
 # The `ALTER TABLE` forms whose cost is a catalogue write and never a scan, so they
 # may name a table the migration did not create.
-CATALOGUE_ONLY = ("DROP NOT NULL", "ADD COLUMN", "DROP DEFAULT", "SET (")
+CATALOGUE_ONLY = (
+    "DROP NOT NULL",
+    "ADD COLUMN",
+    "DROP COLUMN",
+    "DROP CONSTRAINT",
+    "DROP DEFAULT",
+    "SET (",
+)
 
 
 def migration_nodes():
@@ -531,10 +586,11 @@ def test_the_apps_that_own_no_table_own_no_migrations_either():
     and its Redis bus. Neither declares a model, so a migrations directory under
     either is a table somebody added without deciding to.
 
-    `voicerooms` is the one exemption and it is temporary. ADR-0021 removed the
-    room object, and the package stays only to carry `0002_delete_room` to a
-    database that still holds the table; it leaves once every environment has
-    applied it, and then this exemption goes with it.
+    There is no exemption any more. `voicerooms` held the only one, and it left
+    the tree with its package once every environment had applied
+    `0002_delete_room`; the record of those two migrations stays in
+    `django_migrations` on an applied database and is inert
+    (`backend/ops/RUNBOOK.md` §5).
     """
     tableless = sorted(
         config.label
@@ -544,9 +600,11 @@ def test_the_apps_that_own_no_table_own_no_migrations_either():
         and not any(config.get_models())
     )
 
-    assert tableless == ["core", "realtime", "voicerooms"]
+    assert tableless == ["core", "realtime"]
+    assert MIGRATIONS_WITHOUT_A_TABLE == frozenset()
     for label in set(tableless) - MIGRATIONS_WITHOUT_A_TABLE:
         assert not (settings.BASE_DIR / label / "migrations").exists(), label
+    assert not (settings.BASE_DIR / "voicerooms").exists()
 
 
 def test_the_recorded_history_covers_every_app_that_owns_migrations():
@@ -617,6 +675,19 @@ def backfill_module():
     """The backfill's own module. Imported by path rather than by name, because a
     migration file starts with a digit and is not an identifier."""
     return import_module(f"messaging.migrations.{BACKFILL_THE_DAY}")
+
+
+def historical_apps(node):
+    """The model registry as it stood before `node` ran, which is the one `migrate`
+    hands to a `RunPython`.
+
+    The live registry is not it, and handing that over is how a backfill test comes
+    to depend on the schema of today: `0004` reads `queued_hour`, and
+    `0008_drop_the_retired_hour` removed that field from the model this project
+    ships. A `RunPython` is written against the state of its own dependency and has
+    to be tested against it.
+    """
+    return MigrationLoader(None, ignore_no_migrations=True).project_state(node).apps
 
 
 def seed_the_queue_before_the_day(alias, hours):
@@ -720,19 +791,18 @@ def test_the_backfill_is_idempotent(empty_database):
     """A crash part-way through leaves a mix of filled and unfilled rows, and the
     repair is to run it again. Re-running must be a no-op on the rows it already
     settled — which is what the `exclude` on the mismatch buys."""
-    from django.apps import apps as global_apps
-
     migrate_to(BACKFILL_THE_DAY, empty_database)
     seed_the_queue_before_the_day(empty_database, BACKFILL_HOURS)
     backfill = backfill_module()
+    state = historical_apps(("messaging", BACKFILL_THE_DAY))
     editor = connections[empty_database].schema_editor()
-    backfill.fill_the_day_from_the_hour(global_apps, editor)
+    backfill.fill_the_day_from_the_hour(state, editor)
     once = rows_of(
         empty_database,
         "SELECT seq, queued_day FROM messaging_queuedenvelope ORDER BY seq",
     )
 
-    backfill.fill_the_day_from_the_hour(global_apps, editor)
+    backfill.fill_the_day_from_the_hour(state, editor)
 
     assert once
     assert (
@@ -751,16 +821,15 @@ def test_the_backfill_updates_in_batches_that_bound_its_lock_time(
     """One unbounded `UPDATE` holds a row lock on every row it touches until it
     commits, against the largest table in the schema and the one every send writes
     to. Five rows at a batch of two is three statements, not one."""
-    from django.apps import apps as global_apps
-
     migrate_to(BACKFILL_THE_DAY, empty_database)
     seed_the_queue_before_the_day(empty_database, BACKFILL_HOURS)
     backfill = backfill_module()
     monkeypatch.setattr(backfill, "BATCH", 2)
+    state = historical_apps(("messaging", BACKFILL_THE_DAY))
     editor = connections[empty_database].schema_editor()
 
     with CaptureQueriesContext(connections[empty_database]) as context:
-        backfill.fill_the_day_from_the_hour(global_apps, editor)
+        backfill.fill_the_day_from_the_hour(state, editor)
 
     updates = [
         query["sql"]
@@ -801,14 +870,7 @@ LOCK_STRENGTH = [
 # populated and nothing is being written. On a database with rows in it, each of
 # these would be a write outage on the named table for as long as the migration runs.
 #
-# `voicerooms.0001_initial` held no foreign key at all — a room was a capability id
-# and an encrypted name — so it locks nothing that exists. Its `0002_delete_room` is
-# the one entry in this map that blocks reads as well as writes: `DROP TABLE` takes
-# ACCESS EXCLUSIVE on a table that is already there. It costs nothing on this
-# deployment because the same release removed every reader of it and because the
-# service is stopped before `migrate` runs.
-#
-# The `0002_retire_the_activity_dates` rows are the other kind: they create and drop
+# The `0002_retire_the_activity_dates` rows are the second kind: they create and drop
 # nothing, so every lock in them is on a relation that already exists. Each is an
 # ACCESS EXCLUSIVE for one `DROP NOT NULL`, which blocks reads as well as writes —
 # for the length of a catalogue write, because the statement clears a flag and reads
@@ -823,15 +885,34 @@ LOCK_STRENGTH = [
 # kind and the weakest entry here: SHARE UPDATE EXCLUSIVE on the queue table for one
 # write to `pg_class.reloptions`, which blocks no reader and no writer — only a
 # concurrent DDL or vacuum on the same table.
+#
+# The five column drops are the fifth kind and the ones this run added. Each is one or
+# more `DROP COLUMN` on a table that already exists, under ACCESS EXCLUSIVE for a
+# catalogue write that reads no row: 0.065 ms measured against a 200 000-row, 245 MB
+# copy. `attachments.0002_drop_the_uploader_link` is the one that names two tables,
+# because the foreign key it drops is a property of `accounts_user` as much as of
+# `attachments_attachment` and `DROP CONSTRAINT` locks both sides. The concurrent
+# index drop in front of the queue's column is `atomic = False`, so like `0005` it is
+# absent from this map and held by the test below it instead.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
         "auth_permission": "ShareRowExclusiveLock",
     },
     ("accounts", RETIRE_DATES): {"accounts_profileblob": "AccessExclusiveLock"},
+    ("accounts", DROP_THE_DATE): {"accounts_profileblob": "AccessExclusiveLock"},
     ("attachments", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
+    ("attachments", "0002_drop_the_uploader_link"): {
+        "accounts_user": "AccessExclusiveLock",
+        "attachments_attachment": "AccessExclusiveLock",
+    },
     ("devices", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("devices", RETIRE_DATES): {
+        "devices_device": "AccessExclusiveLock",
+        "devices_devicelogrecord": "AccessExclusiveLock",
+        "devices_useridentity": "AccessExclusiveLock",
+    },
+    ("devices", "0003_drop_the_retired_columns"): {
         "devices_device": "AccessExclusiveLock",
         "devices_devicelogrecord": "AccessExclusiveLock",
         "devices_useridentity": "AccessExclusiveLock",
@@ -843,10 +924,12 @@ BLOCKING_LOCKS = {
     ("messaging", "0006_reclaim_the_queue_promptly"): {
         "messaging_queuedenvelope": "ShareUpdateExclusiveLock"
     },
+    ("messaging", "0008_drop_the_retired_hour"): {
+        "messaging_queuedenvelope": "AccessExclusiveLock"
+    },
     ("vault", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("vault", RETIRE_DATES): {"vault_keybackup": "AccessExclusiveLock"},
-    ("voicerooms", INITIAL): {},
-    ("voicerooms", "0002_delete_room"): {"voicerooms_room": "AccessExclusiveLock"},
+    ("vault", DROP_THE_DATE): {"vault_keybackup": "AccessExclusiveLock"},
 }
 
 RELATIONS_IN_SCHEMA = """
@@ -954,12 +1037,13 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
     What it does not catch: how long any of them is held. A lock class is not a
     duration, and an ACCESS EXCLUSIVE on a table this migration created is free
     only because no other session can name that relation yet — the same statement
-    against a populated table would be an outage. A drop is the case where the lock
-    class alone decides nothing: `voicerooms.0002_delete_room` takes the strongest
-    lock in the list on a relation every other session can name, and what makes it
-    free is the release that removed every reader, not this measurement. It also
-    measures nothing about migrations that cannot run inside a transaction; the one
-    this project has is held by the test below.
+    against a populated table would be an outage. A column drop is the case where
+    the lock class alone decides nothing: each one here takes the strongest lock in
+    the list on a relation every other session can name, and what makes them free is
+    that `DROP COLUMN` reads no row and that the release before them removed every
+    reader — not this measurement. It also measures nothing about migrations that
+    cannot run inside a transaction; the two this project has are held by the test
+    below.
     """
     apply_the_state_before((app, name), empty_database)
     out = StringIO()
@@ -990,20 +1074,24 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize(("app", "name"), non_atomic_nodes())
-def test_the_index_built_outside_a_transaction_is_built_concurrently(
+def test_the_index_changed_outside_a_transaction_is_changed_concurrently(
     empty_database, app, name
 ):
-    """The one migration the lock probe above cannot measure.
+    """The migrations the lock probe above cannot measure.
 
-    `CREATE INDEX CONCURRENTLY` is refused inside a transaction block, so the
-    statements cannot be run and rolled back with the lock still held. What is
-    asserted instead is the statement itself: the concurrent form takes SHARE
-    UPDATE EXCLUSIVE and blocks no write, where the plain form takes SHARE and
-    stops every send for the length of the build. This is the largest table in the
+    Neither `CREATE INDEX CONCURRENTLY` nor `DROP INDEX CONCURRENTLY` may run
+    inside a transaction block, so their statements cannot be run and rolled back
+    with the lock still held. What is asserted instead is the statement itself:
+    each concurrent form takes SHARE UPDATE EXCLUSIVE and blocks no write, where
+    the plain build takes SHARE and the plain drop takes ACCESS EXCLUSIVE — either
+    of which stops every send for its duration. This is the largest table in the
     schema and the one every send writes to.
 
-    The claim about which lock each form takes is PostgreSQL's documentation, not
-    a measurement — an unmeasured claim, recorded as one.
+    The build's lock is PostgreSQL's documentation and not a measurement — an
+    unmeasured claim, recorded as one. The drop's is measured: SHARE UPDATE
+    EXCLUSIVE on the table and on the index, read from `pg_locks` in a second
+    session while a concurrent drop waited on an open transaction, against ACCESS
+    EXCLUSIVE for the plain form on the same table.
     """
     apply_the_state_before((app, name), empty_database)
     out = StringIO()
@@ -1020,7 +1108,9 @@ def test_the_index_built_outside_a_transaction_is_built_concurrently(
     assert statements
     assert "BEGIN;" not in out.getvalue()
     for statement in statements:
-        assert statement.startswith("CREATE INDEX CONCURRENTLY"), statement
+        assert statement.startswith(
+            ("CREATE INDEX CONCURRENTLY", "DROP INDEX CONCURRENTLY")
+        ), statement
 
 
 # The relation a statement acts on: the table of an `ALTER TABLE`, and the table an
@@ -1044,12 +1134,13 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
     check would pass it. The same goes for a plain `CREATE INDEX`: on a new table
     it is free, on a populated one it takes SHARE for the whole build.
 
-    Five statements are allowed to name a table they did not create. The concurrent
+    Seven statements are allowed to name a table they did not create. The concurrent
     index build blocks nothing at all. `ALTER COLUMN … DROP NOT NULL`, `ADD COLUMN`
-    with a non-volatile default and the `DROP DEFAULT` that follows it each block
+    with a non-volatile default, the `DROP DEFAULT` that follows it, `DROP COLUMN`
+    and the `DROP CONSTRAINT` in front of a foreign key's removal each block
     everything for a catalogue write and read no row, so unlike the two above their
     cost does not grow with the table — which is the whole reason they are the shapes
-    a column is retired and introduced in. `SET (` is the fifth and the cheapest: a
+    a column is introduced and retired in. `SET (` is the last and the cheapest: a
     storage parameter is one write to `pg_class.reloptions` under a lock that blocks
     no reader and no writer.
     """

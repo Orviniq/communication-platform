@@ -256,12 +256,15 @@ def test_a_first_profile_write_is_the_locked_read_and_one_insert(
 # the credential read of the authentication dependency; the account's own name and
 # hash in one `values_list`, because both are deferred on the instance the
 # dependency hands over; the live device ids for the socket close; and then the
-# fifteen statements Django's collector issues for the cascade — one probe for the
-# devices it must walk, one probe for the account row, twelve deletes, and the one
-# `UPDATE` that nulls `Attachment.uploader` on rows this account happens to have
-# uploaded. Every one of the deletes is a fast delete: no row of any of those
-# tables is read into this process, so no ciphertext crosses the boundary.
-ERASE_QUERIES = 15
+# fourteen statements Django's collector issues for the cascade — one probe for the
+# devices it must walk, one probe for the account row, and twelve deletes. Every one
+# of the deletes is a fast delete: no row of any of those tables is read into this
+# process, so no ciphertext crosses the boundary.
+#
+# It was fifteen until `attachments.0002_drop_the_uploader_link`. The fifteenth was
+# an `UPDATE` nulling `Attachment.uploader` on the rows this account had uploaded,
+# and there is no column left for the collector to null.
+ERASE_QUERIES = 14
 
 
 @pytest.mark.parametrize("extra_devices", [0, 2])

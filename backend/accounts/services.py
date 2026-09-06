@@ -157,10 +157,10 @@ def erase(user, password):
     so no ciphertext crosses the boundary on the way out. The username is free
     again the moment it commits.
 
-    Attachments stay. `Attachment.uploader` is written by nothing and read by
-    nothing (ADR-0025), so no row of that table says these bytes were this
-    account's; the retention sweep removes them on its own schedule, and there is
-    nothing here that could find them sooner.
+    Attachments stay. `attachments.0002_drop_the_uploader_link` took the column
+    that said whose bytes a stored file was (ADR-0025), so no row of that table
+    names this account and nothing here can find them; the retention sweep removes
+    them on its own schedule.
 
     The sockets close after the commit, on state that is already gone: a device
     told `4003` while the transaction could still roll back would be a device that

@@ -175,7 +175,6 @@ class BasePostureTests(SimpleTestCase):
                 "vault",
                 "messaging",
                 "attachments",
-                "voicerooms",
                 "realtime",
             ],
         )

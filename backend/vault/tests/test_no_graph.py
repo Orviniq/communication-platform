@@ -1,10 +1,11 @@
 """No-graph proof for vault_keybackup, the vault's only remaining table.
 
-A dump of the table shows only {user_id, blob, version, updated_date}: the blob is
-an exact bucket length, updated_date is always null since ADR-0024 stopped writing
-it, and the single user reference is the backup's owner. No column links a second
-user, and no history table exists in this app at all (vault/tests/test_no_history.py
-proves that removal).
+A dump of the table shows only {user_id, blob, version}: the blob is an exact bucket
+length, and the single user reference is the backup's owner. ADR-0024 stopped writing
+the date this table used to carry and `vault.0003_drop_the_retired_date` dropped the
+column, so there is no when to read. No column links a second user, and no history
+table exists in this app at all (vault/tests/test_no_history.py proves that
+removal).
 """
 
 import base64
@@ -22,7 +23,7 @@ from .conftest import KEYBACKUP_URL, backup_blob, make_device
 # would sever the connection the test itself holds.
 pytestmark = pytest.mark.django_db(transaction=True)
 
-EXPECTED_COLUMNS = {"user_id", "blob", "version", "updated_date"}
+EXPECTED_COLUMNS = {"user_id", "blob", "version"}
 
 
 def test_keybackup_columns_are_exactly_the_minimum():
@@ -44,7 +45,7 @@ def test_keybackup_columns_are_exactly_the_minimum():
     assert user_fks == ["user"]
 
 
-def test_stored_blob_is_bucket_sized_and_date_is_day_coarse(
+def test_stored_blob_is_bucket_sized_and_no_date_is_stored(
     http, active_user, device, bearer
 ):
     http.put(
@@ -55,9 +56,9 @@ def test_stored_blob_is_bucket_sized_and_date_is_day_coarse(
     backup = KeyBackup.objects.get(user_id=active_user.id)
 
     assert len(bytes(backup.blob)) in set(BACKUP_BUCKETS)
-    # No date at all since ADR-0024: the column has no writer left, so the dump
-    # carries a NULL where it used to carry the day of the last write.
-    assert backup.updated_date is None
+    # No date at all: ADR-0024 stopped writing one and run 08 dropped the column, so
+    # a dump of this table carries no field the row could put a day in.
+    assert not hasattr(backup, "updated_date")
 
 
 def dump(user_id):

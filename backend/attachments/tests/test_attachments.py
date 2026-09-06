@@ -140,7 +140,6 @@ def test_the_daily_allowance_is_spent_per_account(
     assert second.json()["code"] == "quota_exceeded"
     assert other.status_code == 201
     assert Attachment.objects.count() == 2
-    assert list(Attachment.objects.values_list("uploader_id", flat=True)) == [None, None]
     # The refused upload left no bytes: one file for each of the two rows.
     assert len([p for p in attachments_root.rglob("*") if p.is_file()]) == 2
 
@@ -203,7 +202,7 @@ def test_a_register_scope_token_cannot_upload_or_download(
 def test_the_model_stores_no_recipient_or_acl_data():
     names = {f.name for f in Attachment._meta.get_fields()}
 
-    assert names == {"id", "uploader", "size", "created_date"}
+    assert names == {"id", "size", "created_date"}
 
 
 def test_a_nul_byte_in_a_capability_id_is_a_404(http, active_user, device, bearer):

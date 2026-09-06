@@ -57,16 +57,13 @@ def test_a_new_device_is_born_never_cross_signed_and_never_used(active_user):
     assert device.cross_sig is None
     assert device.bundle_version == 0
     assert device.token_generation == 1
-    assert device.refresh_generation == 1
     assert device.queue_seq == 0
     assert device.queue_pruned_through == 0
     assert device.label_blob is None
-    assert device.last_active_date is None
     assert device.revoked_date is None
     assert device.pq_spk_id is None
     assert device.pq_spk_pub is None
     assert device.pq_spk_sig is None
-    assert device.pq_spk_updated_date is None
 
 
 def test_the_only_date_a_device_is_stamped_with_is_day_coarse(active_user):
@@ -75,15 +72,18 @@ def test_the_only_date_a_device_is_stamped_with_is_day_coarse(active_user):
     an arbitrary order.
 
     It is also the only stamp left. ADR-0024 stopped writing every other date on
-    this row, so a new device carries a creation day and nothing else — the columns
-    survive with no writer until run 08 drops them.
+    this row and `devices.0003_drop_the_retired_columns` dropped their columns, so a
+    device row carries a creation day and no other date at all.
     """
     device = make_device(active_user, registration_id=12)
 
     assert device.created_date == timezone.now().date()
-    assert device.spk_updated_date is None
-    assert device.last_active_date is None
-    assert device.pq_spk_updated_date is None
+    dates = {
+        field.name
+        for field in device._meta.concrete_fields
+        if field.get_internal_type() in ("DateField", "DateTimeField")
+    }
+    assert dates == {"created_date", "revoked_date"}
 
 
 def test_two_devices_of_one_account_hold_independent_key_material(active_user):

@@ -5,6 +5,8 @@ one query the authentication dependency makes. Transaction statements are
 excluded, so the number is the database work itself.
 """
 
+import re
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -121,20 +123,25 @@ def test_replacing_an_existing_backup_costs_what_creating_one_did(
     assert response.status_code == 200
 
 
-def test_the_read_never_drags_the_timestamp_column_back_with_it(
+def test_the_read_asks_for_the_two_response_fields_and_the_key(
     http, active_user, device, bearer
 ):
     """`.only("blob", "version")` is the whole point: the response carries two
-    fields, so the query must ask for two columns and the key that finds them."""
+    fields, so the query must ask for two columns and the key that finds them.
+
+    The column list is read out of the statement rather than probed for one name.
+    `updated_date` was the name this asserted against until run 08 dropped it, and a
+    test that names a column nobody has passes whatever the query selects.
+    """
     headers = bearer(active_user, device)
     http.put(KEYBACKUP_URL, json={"blob": backup_blob(), "version": 1}, headers=headers)
 
     response, sqls = statements(http, "GET", KEYBACKUP_URL, headers=headers)
 
     read = next(sql for sql in sqls if "vault_keybackup" in sql)
+    selected = re.findall(r'"vault_keybackup"\."(\w+)"', read.split(" FROM ")[0])
     assert response.status_code == 200
-    assert "updated_date" not in read
-    assert '"blob"' in read and '"version"' in read
+    assert selected == ["user_id", "blob", "version"]
 
 
 def test_the_version_probe_never_reads_the_blob(http, active_user, device, bearer):

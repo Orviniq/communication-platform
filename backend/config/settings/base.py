@@ -29,7 +29,6 @@ INSTALLED_APPS = [
     "vault",
     "messaging",
     "attachments",
-    "voicerooms",
     "realtime",
 ]
 

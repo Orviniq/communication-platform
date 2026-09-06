@@ -193,6 +193,12 @@ as_deploy .venv/bin/python manage.py collectstatic --noinput
 hook: one process applies the schema, and the code that reads it starts
 afterwards.
 
+A database that applied `voicerooms.0001_initial` and `0002_delete_room` keeps
+both rows in `django_migrations` after the app left the tree; they are records of
+migrations that already ran, `migrate` never looks for the files again, and
+deleting them would only make the ledger disagree with what the database was
+built from.
+
 `collectstatic` is the step that fails quietly. Nothing raises without it — the
 panel simply renders with no styling at all, because nginx serves `static_root`
 in production and Django serves nothing. Run it on **every** deploy that changes

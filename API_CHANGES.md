@@ -746,6 +746,18 @@ field or status changed.
 | Copies peers hold | — | Untouched, and unreachable from here. Every message this account sent was decrypted on the recipient's device | **Required in the wording.** A dialog that says "delete my data" without this is a false claim |
 | The audit log | — | No row is written. The operator performed nothing | None |
 
+## The retired columns leave the schema
+
+**Nothing here reaches a client.** Ten columns that no route served, no response
+carried and no code read or wrote were dropped from the database, with the two
+indexes that were maintained for them, and the migrations-only `voicerooms` package
+left the tree with them. Every field the
+retirements themselves removed from a response was published when it happened —
+`last_active_date` under "The token pair becomes one session token" and the
+attachment fields under "The attachment store stops naming accounts" — and this step
+changes no request shape, no response shape, no status and no header.
+`backend/openapi.json` is byte-for-byte unchanged across it.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

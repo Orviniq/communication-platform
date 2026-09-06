@@ -277,11 +277,13 @@ def test_re_uploading_a_pq_key_id_is_an_idempotent_retry(
     assert PqOneTimePrekey.objects.filter(device=device).count() == 3
 
 
-def test_rotating_the_pq_signed_prekey_replaces_it_and_dates_it(
+def test_rotating_the_pq_signed_prekey_replaces_it_whole(
     http, active_user, device, bearer, peer, peer_device
 ):
     """The rotation a client performs periodically: the stored bytes are replaced
-    whole, the date moves, and peers claim the new key with no step in between."""
+    whole and peers claim the new key with no step in between. Nothing records that
+    it happened — ADR-0024 retired the date this used to move, and
+    `devices.0003_drop_the_retired_columns` dropped the column."""
     headers = bearer(active_user, device)
     http.put(
         prekeys_url(device.id), json={"pq_spk": pq_spk(b"F", spk_id=1)}, headers=headers
@@ -295,7 +297,6 @@ def test_rotating_the_pq_signed_prekey_replaces_it_and_dates_it(
     device.refresh_from_db()
     assert device.pq_spk_id == 2
     assert bytes(device.pq_spk_pub) == (b"G" * PQ_PUBKEY_LEN)
-    assert device.pq_spk_updated_date is None  # retired by ADR-0024
     claimed = http.post(
         claim_url(active_user.id),
         json={"device_ids": [str(device.id)]},
