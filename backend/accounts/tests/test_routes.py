@@ -1,7 +1,7 @@
 """What every accounts route does with a body it cannot use.
 
 One rule holds across the whole surface: a malformed request is a `400` carrying
-the error envelope, and never a `500`. Three of the four bodies are anonymous
+the error envelope, and never a `500`. Two of the three bodies are anonymous
 input, so a type confusion here would be an unauthenticated server error; that is
 why the matrix below is a matrix rather than a spot check.
 
@@ -16,7 +16,6 @@ import pytest
 
 from accounts.models import ProfileBlob, User
 from accounts.schemas import MAX_VERSION_INT
-from api.auth import issue_full
 from core.buckets import PROFILE_BUCKETS
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -24,7 +23,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 GOOD_PASSWORD = "a-sufficiently-long-passphrase"
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
-REFRESH_URL = "/api/v1/auth/refresh"
+RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
 DIRECTORY_URL = "/api/v1/users"
 MY_PROFILE_URL = "/api/v1/me/profile"
@@ -33,7 +32,6 @@ MY_PROFILE_URL = "/api/v1/me/profile"
 BODY_ROUTES = [
     ("POST", REGISTER_URL, False),
     ("POST", LOGIN_URL, False),
-    ("POST", REFRESH_URL, False),
     ("PUT", MY_PROFILE_URL, True),
 ]
 
@@ -113,9 +111,6 @@ class TestWrongTypesAndUnknownFields:
             (REGISTER_URL, {"username": None, "password": None}),
             (LOGIN_URL, {"username": {"$ne": None}, "password": GOOD_PASSWORD}),
             (LOGIN_URL, {"username": "alice", "password": GOOD_PASSWORD, "device_id": 7}),
-            (REFRESH_URL, {"refresh": ["a-token"]}),
-            (REFRESH_URL, {"refresh": 42}),
-            (REFRESH_URL, {}),
         ],
     )
     def test_an_anonymous_route_refuses_a_wrong_type_without_a_server_error(
@@ -149,7 +144,6 @@ class TestWrongTypesAndUnknownFields:
         [
             ("POST", REGISTER_URL, False, {"username": "bob", "password": GOOD_PASSWORD}),
             ("POST", LOGIN_URL, False, {"username": "alice", "password": GOOD_PASSWORD}),
-            ("POST", REFRESH_URL, False, {"refresh": "a-token"}),
             (
                 "PUT",
                 MY_PROFILE_URL,
@@ -215,7 +209,6 @@ class TestOversizedInput:
                 {"username": "a" * 33, "password": GOOD_PASSWORD},
                 "username",
             ),
-            ("POST", REFRESH_URL, False, {"refresh": "t" * 4097}, "refresh"),
             ("PUT", MY_PROFILE_URL, True, {"blob": "A" * 8193, "version": 1}, "blob"),
         ],
     )
@@ -431,7 +424,7 @@ class TestRoutingRefusals:
         [
             ("GET", REGISTER_URL, "POST"),
             ("GET", LOGIN_URL, "POST"),
-            ("GET", REFRESH_URL, "POST"),
+            ("GET", RENEW_URL, "POST"),
             ("DELETE", DIRECTORY_URL, "GET"),
             ("POST", MY_PROFILE_URL, "GET"),
         ],
@@ -462,6 +455,18 @@ class TestRoutingRefusals:
         assert response.status_code == 200
         assert [row["username"] for row in response.json()["users"]] == ["alice"]
 
+    def test_renew_ignores_a_malformed_body(self, http, active_user, device, bearer):
+        """The route takes no body, so a client that sends one anyway is served
+        rather than refused on a payload nothing reads."""
+        response = http.post(
+            RENEW_URL,
+            headers={**bearer(active_user, device), "content-type": "application/json"},
+            content=b"{not json",
+        )
+
+        assert response.status_code == 200
+        assert set(response.json()) == {"token", "expires_in"}
+
     def test_logout_ignores_a_malformed_body(self, http, active_user, device, bearer):
         response = http.post(
             LOGOUT_URL,
@@ -474,10 +479,9 @@ class TestRoutingRefusals:
         assert device.token_generation == 2
 
     def test_a_second_logout_with_the_dead_token_is_refused_not_repeated(
-        self, http, active_user, device
+        self, http, active_user, device, bearer
     ):
-        access, _refresh = issue_full(active_user, device)
-        auth = {"Authorization": f"Bearer {access}"}
+        auth = bearer(active_user, device)
         assert http.post(LOGOUT_URL, headers=auth).status_code == 204
 
         response = http.post(LOGOUT_URL, headers=auth)

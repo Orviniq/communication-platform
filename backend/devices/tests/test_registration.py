@@ -19,8 +19,8 @@ from .conftest import (
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(
-    http, active_user, register_bearer
+def test_a_register_scope_token_registers_a_device_and_gets_a_session_token(
+    http, active_user, register_bearer, settings
 ):
     """The register-scope token from login exists only to reach this endpoint."""
     response = http.post(
@@ -29,8 +29,9 @@ def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(
 
     assert response.status_code == 201
     body = response.json()
+    assert set(body) == {"device_id", "token", "expires_in", "scope"}
     assert body["scope"] == "full"
-    assert body["access"] and body["refresh"]
+    assert body["expires_in"] == settings.SESSION_TOKEN_DAYS * 86400
     device = Device.objects.get(id=body["device_id"])
     assert device.user_id == active_user.id
     assert OneTimePrekey.objects.filter(device=device).count() == 3
@@ -38,7 +39,7 @@ def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(
     # token could not.
     assert (
         http.get(
-            DEVICES_URL, headers={"Authorization": f"Bearer {body['access']}"}
+            DEVICES_URL, headers={"Authorization": f"Bearer {body['token']}"}
         ).status_code
         == 200
     )
@@ -348,13 +349,13 @@ def test_a_label_at_either_bucket_size_round_trips_byte_identically(
 def test_the_issued_token_is_bound_to_the_new_device_and_no_other(
     http, active_user, device, bearer
 ):
-    """The pair the 201 carries is what the client cross-signs with, so it must
+    """The token the 201 carries is what the client cross-signs with, so it must
     reach the new device's own prekeys route and be refused on a sibling's."""
     publish_identity(active_user)
     registered = http.post(
         DEVICES_URL, json=register_payload(), headers=bearer(active_user, device)
     ).json()
-    issued = {"Authorization": f"Bearer {registered['access']}"}
+    issued = {"Authorization": f"Bearer {registered['token']}"}
 
     own = http.get(
         f"{DEVICES_URL}/{registered['device_id']}/prekeys/count", headers=issued
@@ -383,5 +384,5 @@ def test_a_registration_that_carries_pq_material_but_no_prekeys_is_accepted(
     assert response.status_code == 201
     stored = Device.objects.get(id=response.json()["device_id"])
     assert stored.pq_spk_id == 5
-    assert stored.pq_spk_updated_date is not None
+    assert stored.pq_spk_updated_date is None  # retired by ADR-0024
     assert OneTimePrekey.objects.filter(device=stored).count() == 0

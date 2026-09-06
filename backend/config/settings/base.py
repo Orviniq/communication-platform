@@ -128,13 +128,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # No email is ever sent by this system.
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-# --- Authentication (ADR-0006): PyJWT, and no token table -----------------------
+# --- Authentication (ADR-0023): PyJWT, and no token table -----------------------
 # A token table would be a per-device login record at rest, which the threat model
-# refuses to keep. Revocation is two counters on the device row instead.
+# refuses to keep. Revocation is one counter on the device row instead.
 JWT_SIGNING_KEY = env("JWT_SIGNING_KEY")
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_MINUTES = env_int("ACCESS_MIN", default=15)
-REFRESH_TOKEN_DAYS = env_int("REFRESH_DAYS", default=14)
+SESSION_TOKEN_DAYS = env_int("SESSION_TOKEN_DAYS", default=30)
 REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 
 # --- Rate limits (ADR-0010) -----------------------------------------------------
@@ -143,8 +142,10 @@ REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 THROTTLE_RATES = {
     "register": env("THROTTLE_REGISTER", default="10/hour"),
     "login": env("THROTTLE_LOGIN", default="20/hour"),
-    "refresh": env("THROTTLE_REFRESH", default="120/hour"),
-    "accounts": env("THROTTLE_ACCOUNTS", default="120/min"),
+    # 300/min: a 50-member fan-out with per-user reads reached the old 120 in one
+    # cycle, and the peer-state route removes most of those reads (ADR-0024) while
+    # the raise covers the rest.
+    "accounts": env("THROTTLE_ACCOUNTS", default="300/min"),
     "claim": env("THROTTLE_CLAIM", default="120/min"),
     "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
     "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),

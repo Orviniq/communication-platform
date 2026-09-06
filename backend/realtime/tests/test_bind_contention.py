@@ -6,29 +6,33 @@ process-wide thread-sensitive executor thread. That makes any wait inside a
 gateway unit a wait for every socket in the worker, not for one of them.
 
 `send` locks each live target device with `SELECT ... FOR UPDATE` and holds it to
-commit (ADR-0017), and `_touch_active` writes the same row. So the two contend on
-exactly the device a send is delivering to — the device most likely to be
-reconnecting.
+commit (ADR-0017), and the device a send is delivering to is the device most
+likely to be reconnecting. ADR-0024 removed the activity stamp the bind used to
+write, so the bind is now a plain read of that row and takes no lock at all. This
+file measures that rather than assuming it: a bind that grew a write back would
+queue behind the send exactly as the stamp did.
 """
 
 import threading
 import time
-import uuid
 
 import pytest
 from django.db import connections, transaction
-from django.utils import timezone
+from django.test.utils import CaptureQueriesContext
 
+from api.auth import issue_session
 from devices.models import Device
-from realtime.auth import _touch_active
+from realtime.auth import _authenticate_session
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
 # Long enough to measure against a wait of microseconds, short enough that a
 # regression costs one second rather than a hung suite.
 HOLD_SECONDS = 1.0
-# The wait that says the update queued behind the lock rather than passing it.
+# The wait that says the bind queued behind the lock rather than passing it.
 BLOCKED_SECONDS = HOLD_SECONDS / 2
+
+WRITE_STATEMENTS = ("INSERT", "UPDATE", "DELETE")
 
 
 class Sender:
@@ -44,19 +48,18 @@ class Sender:
         try:
             with transaction.atomic():
                 list(
-                    Device.objects.select_for_update(of=("self",))
+                    Device.objects.select_for_update()
                     .filter(id=self.device_id)
-                    .only("id", "queue_seq")
                     .order_by("id")
                 )
                 self.holding.set()
-                self.release.wait(HOLD_SECONDS)
+                self.release.wait(HOLD_SECONDS * 2)
         finally:
             connections.close_all()
 
     def __enter__(self):
         self._thread.start()
-        assert self.holding.wait(HOLD_SECONDS), "the lock was never taken"
+        assert self.holding.wait(HOLD_SECONDS * 2), "the sender never took the lock"
         return self
 
     def __exit__(self, *_exc):
@@ -70,66 +73,33 @@ def elapsed(call):
     return time.perf_counter() - began
 
 
-def test_a_bind_on_a_device_a_send_is_locking_does_not_queue_behind_it(device):
-    """The bind of a device that has already been seen today writes nothing, so
-    it never reaches the lock. Before this, every bind issued an unconditional
-    `UPDATE` and waited out the send — on the one thread every socket shares."""
-    Device.objects.filter(id=device.id).update(last_active_date=timezone.now().date())
+def test_a_bind_on_a_device_a_send_is_locking_does_not_queue_behind_it(
+    active_user, device
+):
+    """A `SELECT` without `FOR UPDATE` reads the row a `FOR UPDATE` holds, because
+    PostgreSQL's readers do not block on writers. Before ADR-0024 the bind followed
+    that read with an `UPDATE` of the same row and waited out the send — on the one
+    thread every socket of the worker shares."""
+    token, _expires_in = issue_session(active_user, device)
 
     with Sender(device.id):
-        waited = elapsed(lambda: _touch_active(device.id))
+        waited = elapsed(lambda: _authenticate_session(token))
 
     assert waited < BLOCKED_SECONDS, f"the bind queued behind the send for {waited:.3f}s"
 
 
-def test_the_first_bind_of_the_day_still_records_it(device):
-    """The write is skipped only because the row already says today. A device
-    whose date is stale, or that has never connected, still gets one."""
-    assert device.last_active_date is None
+def test_a_bind_writes_no_row(active_user, device):
+    """The structural half of the test above. The bind is one read and nothing
+    else: a write of any kind would be a row lock, and a row lock on the device is
+    the wait the file exists to keep out."""
+    token, _expires_in = issue_session(active_user, device)
 
-    _touch_active(device.id)
-    device.refresh_from_db()
-    assert device.last_active_date == timezone.now().date()
+    with CaptureQueriesContext(connections["default"]) as context:
+        assert _authenticate_session(token) is not None
 
-    Device.objects.filter(id=device.id).update(
-        last_active_date=timezone.now().date() - timezone.timedelta(days=1)
-    )
-    _touch_active(device.id)
-    device.refresh_from_db()
-    assert device.last_active_date == timezone.now().date()
-
-
-def test_two_binds_of_one_device_race_without_deadlocking(device):
-    """Two sockets of one device reconnecting at once — a phone waking while a
-    laptop resumes — run this unit on two connections against one row. Both are
-    conditional updates of that row, so the second waits out the first's row lock
-    and neither is chosen as a deadlock victim."""
-    failures = []
-
-    def bind():
-        try:
-            _touch_active(device.id)
-        except Exception as failure:  # the race is the point: record, never raise
-            failures.append(failure)
-        finally:
-            connections.close_all()
-
-    threads = [threading.Thread(target=bind) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(HOLD_SECONDS * 2)
-
-    assert failures == []
-    device.refresh_from_db()
-    assert device.last_active_date == timezone.now().date()
-
-
-def test_a_bind_for_a_device_that_is_gone_writes_nothing(device):
-    """The row can be deleted between the token check and the stamp — a revoke
-    that lands mid-bind. The filter then matches nothing, which is a write of zero
-    rows rather than an error the socket has to survive."""
-    _touch_active(uuid.uuid4())
-
-    device.refresh_from_db()
-    assert device.last_active_date is None
+    written = [
+        query["sql"]
+        for query in context.captured_queries
+        if query["sql"].upper().lstrip().startswith(WRITE_STATEMENTS)
+    ]
+    assert written == []

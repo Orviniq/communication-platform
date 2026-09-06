@@ -27,9 +27,10 @@ OWN_DEVICE = require_own_device.__name__
 # the routes the phase records as declaring otherwise.
 EXPECTED = {
     ("GET", "/api/v1/health"): (ANONYMOUS, None),
+    ("GET", "/api/v1/config"): (FULL_DEVICE, "accounts"),
     ("POST", "/api/v1/auth/register"): (ANONYMOUS, "register"),
     ("POST", "/api/v1/auth/login"): (ANONYMOUS, "login"),
-    ("POST", "/api/v1/auth/refresh"): (ANONYMOUS, "refresh"),
+    ("POST", "/api/v1/auth/renew"): (FULL_DEVICE, "accounts"),
     ("POST", "/api/v1/auth/logout"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/profile"): (FULL_DEVICE, "accounts"),
@@ -50,6 +51,7 @@ EXPECTED = {
     ("POST", "/api/v1/me/devicelog"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/devicelog"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/devices"): (FULL_DEVICE, "accounts"),
+    ("POST", "/api/v1/peers"): (FULL_DEVICE, "accounts"),
     ("POST", "/api/v1/users/{user_id}/keys/claim"): (FULL_DEVICE, "claim"),
     ("POST", "/api/v1/envelopes"): (FULL_DEVICE, "envelopes"),
     ("GET", "/api/v1/me/envelopes"): (FULL_DEVICE, "envelopes"),

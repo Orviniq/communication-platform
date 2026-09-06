@@ -56,6 +56,15 @@ Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # 503. The budget is the connection limit, the sixteen the database pool holds,
 # the Redis client and its subscription, the listening socket and stdio.
 #
+# --ws-ping-interval and --ws-ping-timeout are the keepalive uvicorn runs on every
+# live WebSocket. Its defaults are 20 s and 20 s, and a ping every twenty seconds
+# wakes a mobile radio every twenty seconds on a client that holds the socket in the
+# background — the connection is the product's only push path, so the cost is paid
+# for the life of the session. 240 s and 60 s put the worst case at 300 s: a peer
+# whose network vanished holds a socket for at most five minutes before the pong
+# times out and the connection is closed. The nginx /ws read timeout is 3600 s, well
+# above the interval, so nothing between the two closes first.
+#
 # The graceful-shutdown timeout is the drain window: on SIGTERM uvicorn stops
 # accepting, closes every live WebSocket with 1012, and waits this long for the
 # in-flight requests before it stops regardless.
@@ -81,6 +90,7 @@ ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
     --loop uvloop --http httptools --ws websockets-sansio \
     --workers ${WEB_CONCURRENCY} \
     --limit-concurrency 1024 \
+    --ws-ping-interval 240 --ws-ping-timeout 60 \
     --timeout-graceful-shutdown 130 \
     config.asgi:application
 Restart=on-failure

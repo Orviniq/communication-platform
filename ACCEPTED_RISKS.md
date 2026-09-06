@@ -138,7 +138,25 @@ the rate limiter, none of which fills the disk:
   account; the dashboard lists them for the operator;
 - upload at its attachment quota. The bytes reach the disk before the quota refuses
   them and the refusal unlinks the file, so the transient disk cost is the in-flight
-  uploads times 64 MiB.
+  uploads times 64 MiB;
+- pull bytes through `POST /api/v1/peers`, which the `accounts` scope counts as one
+  request whatever it answers. Measured on the developer machine at the route's own
+  ceiling — 64 peers, ten live devices each, an identity and a log head for every one
+  — a 3.4 kB request answers 222 kB, and the scope admits 300 of those a minute, so
+  one account can pull roughly 66 MB a minute of public key material. The same bytes
+  were reachable before through the per-user reads, at roughly 130 kB a minute,
+  because each of those cost a request of its own: what changed is the volume per
+  unit of rate limit, not what a caller may read. It is bounded by a hard product —
+  `MAX_PEERS` times `MAX_DEVICES_PER_USER` times fixed field lengths — so it grows
+  with neither the population nor anything stored, and it touches no disk;
+- hold connections against `--limit-concurrency`, which is 1024 and counts a live
+  WebSocket as one. A socket the client closes is released at once; one whose peer
+  vanishes without closing the connection is held until the keepalive gives up on it,
+  which [ADR-0024](docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)
+  moved from at most 40 seconds to at most 300 — the 240-second ping interval plus the
+  60-second pong timeout. Exhausting the budget therefore needs roughly a seventh of
+  the rate it needed before, though it still needs a caller that can blackhole its own
+  connections rather than close them.
 
 **Why this is carried.** At band 0 every account is activated by hand by the operator,
 who knows the person behind it. The two durable surfaces a member could have used to
@@ -149,16 +167,24 @@ offers: deactivate the account, and the rest stops.
 
 **What reduces it today.** The per-account and per-address rate limits; the `4008`
 close, which costs the target a reconnect and nothing else; the dashboard's pending
-list; the quota, which holds the durable total.
+list; the quota, which holds the durable total; and, for the connection budget, the
+headroom itself — 1024 against a band of 500 devices, so the budget is twice the
+population it serves.
 
-**If it were exploited.** A targeted member's socket drops and reconnects while the
-flood lasts; a member who mints credentials and allocates against them takes the relay
+**If it were exploited.** An account pulling peer state at its ceiling takes about
+1.1 MB a second of uplink, so a handful of them contend for it; the bytes are public
+key material every authenticated caller may read, so nothing is disclosed that a
+slower caller could not have read anyway. A targeted member's socket drops and
+reconnects while the flood lasts; a member who mints credentials and allocates against them takes the relay
 towards `total-quota`, at which point calls that are not theirs fail to allocate; the
 operator skims a longer pending list; the disk carries a transient spike bounded by
 concurrency.
 
-**Trigger that ends the acceptance.** Open registration, a second operator, band 1, or
-a relay that reaches `total-quota` outside a real call load.
+**Trigger that ends the acceptance.** Open registration, a second operator, band 1, a
+relay that reaches `total-quota` outside a real call load, a worker that reaches
+`--limit-concurrency` while the live device count is well below it, or sustained
+egress from the `accounts` scope that is not a real fan-out — the answer to which is a
+byte budget beside the request counter, not a smaller batch.
 
 ---
 
@@ -732,6 +758,63 @@ rather than a participant; and it authenticates nothing on the API.
 stolen credential costs money rather than headroom, or the first observed misuse of one.
 The answer then is a shorter lifetime, paid for in more frequent ICE restarts, and not
 revocation — which needs the record of issued credentials this design refuses to keep.
+
+---
+
+## AR-18 — A stolen session token is valid until it expires, and nothing detects the theft
+
+**What is exposed.** A session token lives `SESSION_TOKEN_DAYS`, 30 days by default, and
+nothing rotates it. Whoever holds a copy of one holds the calling device's whole
+authenticated surface for the rest of its lifetime: the directory, the profile and key
+backup blobs, the device list and the device-list log, the mailbox, the attachments, the
+relay credential and the WebSocket. Until
+[ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md) the refresh
+token rotated on every use and a second presentation of a rotated one was reported as a
+replay, which ended every token of the device. That detection is gone with the refresh
+token, so a stolen token now looks exactly like the honest one that was copied.
+
+**Why this is carried.** The detection cost the honest device more than it cost a thief.
+The client is one Flutter application whose two Dart isolates share one token from one
+encrypted store; at expiry both rotate, one loses, and the loser's presentation is
+indistinguishable from a replay — so the honest device was signed out. The client answered
+with an in-process ownership gate, a bounded re-read repair path and a three-owner
+arbitration (`frontend/docs/decisions.md` ADR-049 and ADR-050,
+`frontend/docs/sync-engine.md`), which is a consensus problem inside one process caused
+entirely by the server making one token unshareable.
+
+What the detection defended was also narrower than it looks. The adversary of this threat
+model holds live root on the VPS, and therefore `JWT_SIGNING_KEY`; that adversary mints
+whatever token it likes and never touches a refresh route. What is left is a token taken
+off a client, and the client stores it in a SQLCipher database under a Keystore-wrapped
+key and sends it only over TLS pinned to the provisioned private CA. Reuse detection
+defended the case those two already cover, and it ended honest sessions to do it.
+
+**What reduces it today.**
+
+- The token is device-bound. `tgen` is checked against `Device.token_generation` on every
+  request and at every socket bind, so a logout, a device revocation or an account
+  deactivation ends it at once, from any device of the account or from the admin panel.
+- Its power is bounded by what the server holds, which is opaque bucket-padded ciphertext,
+  public keys and no message history. It decrypts nothing: no content key reaches this
+  server.
+- It cannot escalate. `typ` is `session`, so it reaches no admin surface, and the panel is
+  a separate credential behind `ADMIN_PATH`.
+- 30 days is the whole exposure. It is a setting, `SESSION_TOKEN_DAYS`, and shortening it
+  costs only more frequent calls to `POST /api/v1/auth/renew`, which writes nothing and is
+  safe to repeat.
+
+**If it were exploited.** The holder reads and writes as that device until the lifetime
+runs out or the account revokes the device. They read the ciphertext addressed to it and
+can send ciphertext as it — which peers will reject, because the pairwise session keys are
+on the device and not in the token — and they can enumerate the account's devices and
+claim key material. No plaintext and no content key is reached from the token alone. The
+owner's remedy is immediate and total: revoke the device, and every token of it dies with
+the same counter that always ended them.
+
+**Trigger that ends the acceptance.** A client platform with a weaker token store than a
+Keystore-wrapped SQLCipher database, or evidence of a stolen token. The answer then is
+sender-constraining — a key the client holds and proves per request — rather than rotation,
+because rotation reintroduces the sign-out this row was written to remove.
 
 ---
 

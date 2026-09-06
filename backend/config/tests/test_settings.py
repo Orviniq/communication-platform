@@ -47,11 +47,10 @@ MINIMUM = {key: f"chosen-{key.lower()}" for key in REQUIRED}
 
 # Every numeric setting, and the variable it reads. The name on the left is the
 # operator's and the path on the right is the reader's, and the two differ often
-# enough — `ACCESS_MIN` for `ACCESS_TOKEN_MINUTES`, `DB_POOL_MAX_SIZE` for a key
+# enough — `ENVELOPE_TTL_DAYS` for a plain name, `DB_POOL_MAX_SIZE` for a key
 # three levels inside `DATABASES` — that a copy-paste between two of them would
 # otherwise be invisible.
 NUMERIC = {
-    "ACCESS_MIN": "ACCESS_TOKEN_MINUTES",
     "ADMIN_AUDIT_RETENTION_DAYS": "ADMIN_AUDIT_RETENTION_DAYS",
     "ATTACH_TTL_DAYS": "ATTACH_TTL_DAYS",
     "ATTACH_USER_QUOTA_BYTES": "ATTACH_USER_QUOTA_BYTES",
@@ -68,10 +67,10 @@ NUMERIC = {
     "MAX_DEVICES_PER_USER": "MAX_DEVICES_PER_USER",
     "MULTIPART_OVERHEAD_BYTES": "MULTIPART_OVERHEAD_BYTES",
     "REDIS_COMMAND_TIMEOUT_SECONDS": "REDIS_COMMAND_TIMEOUT_SECONDS",
-    "REFRESH_DAYS": "REFRESH_TOKEN_DAYS",
     "REGISTER_SCOPE_ACCESS_MIN": "REGISTER_SCOPE_ACCESS_MIN",
     "RELAY_CREDENTIAL_TTL_SECONDS": "RELAY_CREDENTIAL_TTL_SECONDS",
     "REQUEST_DEADLINE_SECONDS": "REQUEST_DEADLINE_SECONDS",
+    "SESSION_TOKEN_DAYS": "SESSION_TOKEN_DAYS",
     "UPLOAD_DEADLINE_SECONDS": "UPLOAD_DEADLINE_SECONDS",
     "WS_MAX_FRAME": "WS_MAX_FRAME",
 }
@@ -81,7 +80,6 @@ NUMERIC = {
 # changed here is a number changed in production, and the retention windows and
 # the caps are the ones the threat model is written against.
 NUMERIC_DEFAULTS = {
-    "ACCESS_TOKEN_MINUTES": 15,
     "ADMIN_AUDIT_RETENTION_DAYS": 90,
     "ATTACH_TTL_DAYS": 30,
     "ATTACH_USER_QUOTA_BYTES": 2 * 1024**3,
@@ -98,10 +96,10 @@ NUMERIC_DEFAULTS = {
     "MAX_DEVICES_PER_USER": 10,
     "MULTIPART_OVERHEAD_BYTES": 8 * 1024,
     "REDIS_COMMAND_TIMEOUT_SECONDS": 2,
-    "REFRESH_TOKEN_DAYS": 14,
     "REGISTER_SCOPE_ACCESS_MIN": 10,
     "RELAY_CREDENTIAL_TTL_SECONDS": 21600,
     "REQUEST_DEADLINE_SECONDS": 15,
+    "SESSION_TOKEN_DAYS": 30,
     "UPLOAD_DEADLINE_SECONDS": 120,
     "WS_MAX_FRAME": 512 * 1024,
 }
@@ -113,7 +111,6 @@ THROTTLE_VARIABLES = {
     "claim": "THROTTLE_CLAIM",
     "envelopes": "THROTTLE_ENVELOPES",
     "login": "THROTTLE_LOGIN",
-    "refresh": "THROTTLE_REFRESH",
     "register": "THROTTLE_REGISTER",
     "relay": "THROTTLE_RELAY",
 }

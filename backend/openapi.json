@@ -217,6 +217,94 @@
         "title": "ClaimedOtpkOut",
         "type": "object"
       },
+      "ConfigOut": {
+        "description": "The limits a client has to know and cannot derive.\n\nEvery value is a setting or a constant a route already enforces, so nothing\nhere is a second statement of a limit: a client that ignores this document\nlearns the same numbers from a `413`, a `409` or a `400 bad_bucket`.",
+        "properties": {
+          "ack_max": {
+            "title": "Ack Max",
+            "type": "integer"
+          },
+          "attachment_buckets": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Attachment Buckets",
+            "type": "array"
+          },
+          "attachment_ttl_days": {
+            "title": "Attachment Ttl Days",
+            "type": "integer"
+          },
+          "claim_max": {
+            "title": "Claim Max",
+            "type": "integer"
+          },
+          "drain_page_max": {
+            "title": "Drain Page Max",
+            "type": "integer"
+          },
+          "envelope_buckets": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Envelope Buckets",
+            "type": "array"
+          },
+          "envelope_ttl_days": {
+            "title": "Envelope Ttl Days",
+            "type": "integer"
+          },
+          "mailbox_max_bytes": {
+            "title": "Mailbox Max Bytes",
+            "type": "integer"
+          },
+          "max_devicelog_records": {
+            "title": "Max Devicelog Records",
+            "type": "integer"
+          },
+          "max_devices_per_user": {
+            "title": "Max Devices Per User",
+            "type": "integer"
+          },
+          "send_batch_max": {
+            "title": "Send Batch Max",
+            "type": "integer"
+          },
+          "session_token_days": {
+            "title": "Session Token Days",
+            "type": "integer"
+          },
+          "signal_buckets": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Signal Buckets",
+            "type": "array"
+          },
+          "voice_configured": {
+            "title": "Voice Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "envelope_ttl_days",
+          "attachment_ttl_days",
+          "mailbox_max_bytes",
+          "max_devices_per_user",
+          "max_devicelog_records",
+          "session_token_days",
+          "send_batch_max",
+          "ack_max",
+          "drain_page_max",
+          "claim_max",
+          "envelope_buckets",
+          "attachment_buckets",
+          "signal_buckets",
+          "voice_configured"
+        ],
+        "title": "ConfigOut",
+        "type": "object"
+      },
       "DeviceLogAppendIn": {
         "additionalProperties": false,
         "properties": {
@@ -324,28 +412,28 @@
       },
       "DeviceRegisteredOut": {
         "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
-          },
           "device_id": {
             "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
-          "refresh": {
-            "title": "Refresh",
-            "type": "string"
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
           },
           "scope": {
             "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
             "type": "string"
           }
         },
         "required": [
           "device_id",
-          "access",
-          "refresh",
+          "token",
+          "expires_in",
           "scope"
         ],
         "title": "DeviceRegisteredOut",
@@ -471,22 +559,22 @@
       "FullScopeOut": {
         "description": "The login answer when the request named a live device of the account.",
         "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
-          },
           "device_id": {
             "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
-          "refresh": {
-            "title": "Refresh",
-            "type": "string"
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
           },
           "scope": {
             "const": "full",
             "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
             "type": "string"
           },
           "user_id": {
@@ -497,8 +585,8 @@
         },
         "required": [
           "scope",
-          "access",
-          "refresh",
+          "token",
+          "expires_in",
           "user_id",
           "device_id"
         ],
@@ -562,6 +650,10 @@
       },
       "IdentityOut": {
         "properties": {
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
           "master_pub": {
             "title": "Master Pub",
             "type": "string"
@@ -588,7 +680,8 @@
           "self_signing_pub",
           "user_signing_pub",
           "master_sig",
-          "version"
+          "version",
+          "etag"
         ],
         "title": "IdentityOut",
         "type": "object"
@@ -791,18 +884,6 @@
             ],
             "title": "Label Blob"
           },
-          "last_active_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Active Date"
-          },
           "this_device": {
             "title": "This Device",
             "type": "boolean"
@@ -812,7 +893,6 @@
           "device_id",
           "label_blob",
           "created_date",
-          "last_active_date",
           "this_device"
         ],
         "title": "OwnDeviceOut",
@@ -890,6 +970,152 @@
           "bundle_version"
         ],
         "title": "PeerDeviceOut",
+        "type": "object"
+      },
+      "PeerStateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "peers": {
+            "items": {
+              "$ref": "#/components/schemas/PeerStateItemIn"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Peers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "peers"
+        ],
+        "title": "PeerStateIn",
+        "type": "object"
+      },
+      "PeerStateItemIn": {
+        "additionalProperties": false,
+        "properties": {
+          "etag": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "PeerStateItemIn",
+        "type": "object"
+      },
+      "PeerStateItemOut": {
+        "description": "The full answer for one peer: the same bytes the two per-user reads serve.",
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/PeerDeviceOut"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "log_head_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Head Seq"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "etag",
+          "identity",
+          "devices",
+          "log_head_seq"
+        ],
+        "title": "PeerStateItemOut",
+        "type": "object"
+      },
+      "PeerStateOut": {
+        "properties": {
+          "peers": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PeerUnchangedOut"
+                },
+                {
+                  "$ref": "#/components/schemas/PeerStateItemOut"
+                }
+              ]
+            },
+            "title": "Peers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "peers"
+        ],
+        "title": "PeerStateOut",
+        "type": "object"
+      },
+      "PeerUnchangedOut": {
+        "description": "The answer for a peer whose request `etag` still holds: three fields and no\nbody. `unchanged` is what a client branches on, and it is never false \u2014 the\nother shape omits it.",
+        "properties": {
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "unchanged": {
+            "const": true,
+            "title": "Unchanged",
+            "type": "boolean"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "etag",
+          "unchanged"
+        ],
+        "title": "PeerUnchangedOut",
         "type": "object"
       },
       "PqOtpkIn": {
@@ -1071,21 +1297,6 @@
         "title": "ProfileOut",
         "type": "object"
       },
-      "RefreshIn": {
-        "additionalProperties": false,
-        "properties": {
-          "refresh": {
-            "maxLength": 4096,
-            "title": "Refresh",
-            "type": "string"
-          }
-        },
-        "required": [
-          "refresh"
-        ],
-        "title": "RefreshIn",
-        "type": "object"
-      },
       "RegisterDeviceIn": {
         "additionalProperties": false,
         "properties": {
@@ -1210,15 +1421,19 @@
         "type": "object"
       },
       "RegisterScopeOut": {
-        "description": "The login answer when the request named no live device of the account: a\nshort token whose only power is `POST /me/devices`. It carries no refresh\ntoken, because the pair a refresh rotates is bound to a device.",
+        "description": "The login answer when the request named no live device of the account: a\nshort token whose only power is `POST /me/devices`. It names no device,\nbecause a session token is bound to one.",
         "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
           },
           "scope": {
             "const": "register",
             "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
             "type": "string"
           },
           "user_id": {
@@ -1229,7 +1444,8 @@
         },
         "required": [
           "scope",
-          "access",
+          "token",
+          "expires_in",
           "user_id"
         ],
         "title": "RegisterScopeOut",
@@ -1317,6 +1533,25 @@
         "title": "SendOut",
         "type": "object"
       },
+      "SessionOut": {
+        "description": "What `POST /auth/renew` answers: the same session, on a later token.",
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expires_in"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
       "SignedPrekeyIn": {
         "additionalProperties": false,
         "description": "The signature is stored and relayed, never verified: checking it would mean\nthe server parsing key material and committing to a curve, and the client is the\nparty that must verify spk_sig against ik_pub as part of X3DH. Validating it\nhere would imply a guarantee the server does not keep.",
@@ -1344,24 +1579,6 @@
           "sig"
         ],
         "title": "SignedPrekeyIn",
-        "type": "object"
-      },
-      "TokenPairOut": {
-        "properties": {
-          "access": {
-            "title": "Access",
-            "type": "string"
-          },
-          "refresh": {
-            "title": "Refresh",
-            "type": "string"
-          }
-        },
-        "required": [
-          "access",
-          "refresh"
-        ],
-        "title": "TokenPairOut",
         "type": "object"
       }
     }
@@ -1580,7 +1797,7 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "description": "Two success shapes: a full-scope pair when `device_id` names a live device\nof this account, and a register-scope token otherwise.",
+        "description": "Two success shapes: a session token when `device_id` names a live device\nof this account, and a register-scope token otherwise.",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -1697,7 +1914,7 @@
     },
     "/api/v1/auth/logout": {
       "post": {
-        "description": "Takes no body: the caller is identified by the access token it presents,\nand the device row is what carries the revocation. The presented token dies\nwith the rest of the family, so a second call with it answers 401.",
+        "description": "Takes no body: the caller is identified by the token it presents, and the\ndevice row is what carries the revocation. The presented token dies with\nevery other token of the device, so a second call with it answers 401.",
         "operationId": "logout",
         "responses": {
           "204": {
@@ -1755,97 +1972,6 @@
           }
         },
         "summary": "Logout",
-        "tags": [
-          "accounts"
-        ]
-      }
-    },
-    "/api/v1/auth/refresh": {
-      "post": {
-        "operationId": "refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TokenPairOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`invalid_request`"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`invalid_token`, `token_revoked`"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`payload_too_large`"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`throttled`"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`server_error`"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "`unavailable`"
-          }
-        },
-        "summary": "Refresh",
         "tags": [
           "accounts"
         ]
@@ -1939,6 +2065,150 @@
         "summary": "Register",
         "tags": [
           "accounts"
+        ]
+      }
+    },
+    "/api/v1/auth/renew": {
+      "post": {
+        "description": "Takes no body: the caller is identified by the token it presents, and the\nrequirement above has already re-read the device row and its owner. Nothing\nis written, so a client that repeats the call after a dropped connection gets\nanother token and loses nothing \u2014 the one it presented stays good until its\nown `exp`.",
+        "operationId": "renew",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Renew",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "description": "The limits the client contract names, read from the settings and the\nconstants the routes enforce rather than restated here.\n\nIt exists because the client cannot otherwise state them. `ENVELOPE_TTL_DAYS`\nis an operator setting, and a client that tells a user how long an undelivered\nmessage survives has to be told what it is. Authenticated, because none of it\nis a secret and none of it is anyone's business before they hold a session.\n\nIt touches no row, so it needs no unit of work.",
+        "operationId": "config",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Config",
+        "tags": [
+          "core"
         ]
       }
     },
@@ -3547,6 +3817,108 @@
         ]
       }
     },
+    "/api/v1/peers": {
+      "post": {
+        "description": "Everything a sender needs to verify a set of recipients, in one call.\n\nA POST because the request carries a body \u2014 a list of ids each with the tag the\nclient already holds \u2014 and a query string would not hold 64 of those. It reads\nstate and writes none, which is what the retry paragraph of\n`devices/API.md` states and what keeps it on the `accounts` scope.",
+        "operationId": "peer_state",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeerStateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Peer State",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "operationId": "user_directory",
@@ -3868,6 +4240,22 @@
               "title": "User Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
           }
         ],
         "responses": {
@@ -3880,6 +4268,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "304": {
+            "description": "`If-None-Match` carried the current ETag."
           },
           "400": {
             "content": {

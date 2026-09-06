@@ -26,7 +26,7 @@ import uvicorn
 import websockets
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from .conftest import mint_access
+from .conftest import mint_session
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -90,7 +90,7 @@ async def server():
 async def test_a_refused_token_is_a_failed_handshake(server, db):
     """The gateway binds before the accept, so a token that fails ends the
     handshake: there is no accepted socket to carry a close code, and a client
-    must read a failed upgrade as "refresh the access token and reconnect"
+    must read a failed upgrade as "renew the session token and reconnect"
     rather than wait for one."""
     with pytest.raises(InvalidStatus) as refusal:
         await websockets.connect(
@@ -114,7 +114,7 @@ async def test_a_shutdown_closes_a_live_socket_with_1012(server, active_user, de
     """The drain window of `ops/systemd/chat.service`, exercised end to end: a
     deploy has to reach the client as a reconnect signal, not as a dropped
     connection it will retry blindly."""
-    access = await mint_access(active_user, device)
+    access = await mint_session(active_user, device)
 
     async with websockets.connect(
         server.url, additional_headers={"authorization": f"Bearer {access}"}
@@ -134,7 +134,7 @@ async def test_a_protocol_violation_after_the_accept_arrives_as_a_close_frame(
     """The other half of what this file exists to draw. A refusal decided before
     the accept is an HTTP failure with no code on it; once a socket is accepted
     the documented code is a real close frame, and a client can read it."""
-    access = await mint_access(active_user, device)
+    access = await mint_session(active_user, device)
 
     async with websockets.connect(
         server.url, additional_headers={"authorization": f"Bearer {access}"}

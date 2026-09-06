@@ -6,10 +6,9 @@ owner. `transaction=True` makes the transaction statements real BEGIN/COMMIT
 rather than savepoints, and they are excluded here so the number is the database
 work itself.
 
-Every count is at or below what the REST Framework view cost, except the login
-that names a device: rotating the refresh generation is a write that did not
-exist before ADR-0006, and it costs the UPDATE and the read of the row at its new
-value.
+Every count is at or below what the REST Framework view cost. The login that
+names a device reads that row and writes nothing, and the renewal that replaces
+the refresh route costs the authentication query alone (ADR-0023).
 """
 
 import base64
@@ -19,7 +18,6 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from accounts.models import ProfileBlob, User
-from api.auth import issue_full
 from conftest import PASSWORD
 from core.buckets import PROFILE_BUCKETS
 
@@ -31,7 +29,7 @@ AUTH_QUERY = 1  # the device row, joined to its owner
 
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
-REFRESH_URL = "/api/v1/auth/refresh"
+RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
 DIRECTORY_URL = "/api/v1/users"
 MY_PROFILE_URL = "/api/v1/me/profile"
@@ -79,15 +77,14 @@ def test_login_without_a_device_reads_the_account_once(http, active_user):
     assert response.json()["scope"] == "register"
 
 
-def test_login_with_a_device_costs_the_generation_rotation(http, active_user, device):
-    """The account row, the UPDATE that advances the refresh generation, and the
-    read of the row at its new value. The UPDATE is what retires the refresh
-    tokens the device already held."""
+def test_login_with_a_device_reads_the_account_and_the_device(http, active_user, device):
+    """The account row and the device row, and no write: a login mints a token at
+    the generation the device already carries."""
     response = counted(
         http,
         "POST",
         LOGIN_URL,
-        3,
+        2,
         json={
             "username": "alice",
             "password": PASSWORD,
@@ -98,13 +95,15 @@ def test_login_with_a_device_costs_the_generation_rotation(http, active_user, de
     assert response.json()["scope"] == "full"
 
 
-def test_a_rotation_is_one_locked_read_and_one_update(http, active_user, device):
-    """Refresh runs every access lifetime per device, so its shape is load-bearing.
-    The device row is fetched with `.only(...)` over a select_related join, so
-    touching a column outside that set would silently add a deferred load."""
-    _access, refresh = issue_full(active_user, device)
-
-    response = counted(http, "POST", REFRESH_URL, 2, json={"refresh": refresh})
+def test_a_renewal_is_the_authentication_query_and_nothing_else(
+    http, active_user, device, bearer
+):
+    """Renewal runs once a session lifetime per device, and the requirement has
+    already read the device row it needs. A second query here would mean the
+    handler re-read a row the dependency handed it."""
+    response = counted(
+        http, "POST", RENEW_URL, AUTH_QUERY, headers=bearer(active_user, device)
+    )
 
     assert response.status_code == 200
 

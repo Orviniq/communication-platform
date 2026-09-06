@@ -1,6 +1,6 @@
 """Every answer `backend/openapi.json` declares, produced by the running surface.
 
-`core/tests/artefact.py` reads the committed document and lists the 217
+`core/tests/artefact.py` reads the committed document and lists the 216
 `(method, template, status)` triples it declares. A document may declare a status
 no code path can reach, and nothing in the drift gate would notice: the gate
 proves the document matches the *routes*, not that the surface can actually
@@ -39,7 +39,6 @@ from hypothesis import strategies as st
 from accounts.models import ProfileBlob, User
 from api import app as api_app
 from api.app import create_app, wrap
-from api.auth import issue_full
 from attachments.models import Attachment
 from config.asgi import api_application, application, django_asgi_app
 from conftest import PASSWORD, AsgiClient
@@ -181,10 +180,6 @@ class Stage:
         return self._register(self.user)
 
     @functools.cached_property
-    def refresh_token(self):
-        return issue_full(self.user, self.device)[1]
-
-    @functools.cached_property
     def peer(self):
         """A second activated account. It never authenticates, so it is created
         with no usable password rather than paying for an Argon2 hash."""
@@ -292,6 +287,11 @@ def _health(stage):
     return Call("GET", f"{PREFIX}/health")
 
 
+@sample("GET", f"{PREFIX}/config", "200")
+def _config(stage):
+    return Call("GET", f"{PREFIX}/config", stage.auth)
+
+
 @sample("POST", f"{PREFIX}/auth/register", "201")
 def _register(stage):
     return Call(
@@ -310,13 +310,9 @@ def _login(stage):
     )
 
 
-@sample("POST", f"{PREFIX}/auth/refresh", "200")
-def _refresh(stage):
-    return Call(
-        "POST",
-        f"{PREFIX}/auth/refresh",
-        body={"json": {"refresh": stage.refresh_token}},
-    )
+@sample("POST", f"{PREFIX}/auth/renew", "200")
+def _renew(stage):
+    return Call("POST", f"{PREFIX}/auth/renew", stage.auth)
 
 
 @sample("POST", f"{PREFIX}/auth/logout", "204")
@@ -441,6 +437,17 @@ def _peer_log(stage):
 def _peer_devices(stage):
     stage.peer_device
     return Call("GET", f"{PREFIX}/users/{stage.peer.id}/devices", stage.auth)
+
+
+@sample("POST", f"{PREFIX}/peers", "200")
+def _peer_state(stage):
+    stage.peer_device
+    return Call(
+        "POST",
+        f"{PREFIX}/peers",
+        stage.auth,
+        {"json": {"peers": [{"user_id": str(stage.peer.id)}]}},
+    )
 
 
 @sample("POST", PREFIX + "/users/{user_id}/keys/claim", "200")
@@ -658,6 +665,12 @@ def _peer_devices_unchanged(stage):
     return _repeat_with_the_tag(stage, f"{PREFIX}/users/{stage.peer.id}/devices")
 
 
+@drives("GET", PREFIX + "/users/{user_id}/identity", "304")
+def _peer_identity_unchanged(stage):
+    stage.peer_identity
+    return _repeat_with_the_tag(stage, f"{PREFIX}/users/{stage.peer.id}/identity")
+
+
 # --- The three refusals the anonymous routes carry themselves --------------------
 
 
@@ -679,11 +692,6 @@ def _account_awaiting_activation(stage):
     return stage.http.post(
         f"{PREFIX}/auth/login", json={"username": dormant.username, "password": PASSWORD}
     )
-
-
-@drives("POST", f"{PREFIX}/auth/refresh", "401")
-def _refresh_token_is_not_a_token(stage):
-    return stage.http.post(f"{PREFIX}/auth/refresh", json={"refresh": "not.a.token"})
 
 
 # --- The seams: one request, one thing changed -----------------------------------

@@ -128,6 +128,7 @@ A Persian, right-to-left panel is a deferral, not a gap — see section 9.
 | Date | Decision reversed | Reason |
 |---|---|---|
 | 2026-09-05 | The registered set of [ADR-0011](../architecture/decisions/0011-django-unfold-admin-panel.md) was five models. It is now four: **Voice rooms is unregistered and its model is deleted** | [ADR-0021](../architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md) removed the room object from the server, so there is no row for the page to show. The page was read-only plus a delete, and its one live column was a Redis set cardinality that no longer exists. Nothing replaces it: the operator has no voice surface, because the server holds no voice state. The dashboard loses its room card and one of its five queries, the sidebar group "Storage and voice" becomes "Storage", and the `voicerooms` `AppConfig` drops the `verbose_name` it needed for a breadcrumb that no page renders any more |
+| 2026-09-06 | The device page showed the day a device was last seen, and offered a filter on it | [ADR-0024](../architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md) stopped the server writing `Device.last_active_date`, so the column has no value to render. `last_active_date` leaves `list_display`, `list_filter` and `fields`; the page keeps the account, the state badge, `created_date` and `revoked_date`, and the revoke action is untouched. What the operator loses is the ability to answer "when was this device last seen" — from the panel or from anywhere else, because the column is written by nothing. What answering "I lost my phone" needs is still there: which devices the account has, which are live, and the button. The `RevokedFilter` is unaffected — it reads `revoked_date`, which stays |
 
 ## Architecture decisions
 
@@ -137,3 +138,4 @@ The panel depends on:
 - [ADR-0003](../architecture/decisions/0003-one-asgi-process.md) — the Django application is mounted behind FastAPI at `ADMIN_PATH`, which is why the panel and the API share one process and one nginx upstream.
 - [ADR-0010](../architecture/decisions/0010-redis-rate-limiting-that-fails-closed.md) — the fail-closed posture the login lockout follows.
 - [ADR-0014](../architecture/decisions/0014-process-hardening-at-the-edge.md) — the request deadline and body caps the panel's requests also pass through.
+- [ADR-0024](../architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md) — the server records no activity date, which is why the device page shows none.

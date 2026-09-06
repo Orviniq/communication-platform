@@ -78,7 +78,7 @@ def test_the_signed_prekey_is_replaced_and_dated(http, active_user, device, bear
     assert device.spk_id == 77
     assert bytes(device.spk_pub) == base64.b64decode(pubkey(b"n"))
     assert bytes(device.spk_sig) == base64.b64decode(pubkey(b"z"))
-    assert device.spk_updated_date is not None
+    assert device.spk_updated_date is None  # retired by ADR-0024
 
 
 def test_a_signed_prekey_missing_its_signature_is_rejected(

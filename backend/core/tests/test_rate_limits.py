@@ -38,7 +38,6 @@ def test_every_declared_scope_has_a_rate():
     assert set(settings.THROTTLE_RATES) == {
         "register",
         "login",
-        "refresh",
         "accounts",
         "claim",
         "envelopes",

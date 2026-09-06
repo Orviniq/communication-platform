@@ -17,7 +17,7 @@ from .conftest import (
     expect_close,
     expect_refused,
     http_request,
-    mint_access,
+    mint_session,
     probe,
 )
 
@@ -25,7 +25,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 
 async def test_connection_close_event_closes_the_socket_4003(active_user, device):
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     await bus.publish(bus.device_topic(device.id), {"type": bus.CLOSE})
 
@@ -48,10 +48,10 @@ async def test_rest_revocation_closes_the_live_socket_and_bars_reconnect(
         spk_sig=b"sig",
         registration_id=3003,
     )
-    doomed_access = await mint_access(active_user, doomed)
+    doomed_access = await mint_session(active_user, doomed)
     comm = await connect_ok(bearer(doomed_access))
 
-    revoker = await mint_access(active_user, device)
+    revoker = await mint_session(active_user, device)
     resp = await http_request("DELETE", f"/api/v1/me/devices/{doomed.id}", revoker)
     assert resp.status_code == 204
 
@@ -70,7 +70,7 @@ async def test_admin_deactivation_closes_the_users_live_sockets(active_user, dev
     from accounts.admin import AccountAdmin
     from accounts.models import User
 
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     def deactivate_via_admin_action():
         # A real request with a real operator on it: the action writes an audit row
@@ -100,7 +100,7 @@ async def test_the_logout_route_closes_every_socket_of_the_device(active_user, d
     """Signing out on the phone has to take the phone's socket with it. The route
     bumps `token_generation` and publishes the close, and both sockets the device
     holds are on one topic, so both hear it."""
-    access = await mint_access(active_user, device)
+    access = await mint_session(active_user, device)
     first = await connect_ok(bearer(access))
     second = await connect_ok(bearer(access))
 
@@ -119,7 +119,7 @@ async def test_a_close_event_for_another_device_leaves_this_socket_alone(
     """The close rides the revoked device's own topic, so it reaches that device's
     sockets and nothing else. A close that fanned out wider would sign out every
     client of the account each time one of them lost a device."""
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     await bus.publish(bus.device_topic(peer_device.id), {"type": bus.CLOSE})
 

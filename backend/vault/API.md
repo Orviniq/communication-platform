@@ -37,7 +37,7 @@ can never clobber a newer backup — including two racing first uploads.
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 | `Content-Type` | PUT only | `application/json` |
 
 **Path parameters**
@@ -121,5 +121,5 @@ Counted as the bytes arrive, so an understated `Content-Length` does not defeat 
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min per account. `Retry-After` carries the seconds to
+Scope `accounts`, default 300/min per account. `Retry-After` carries the seconds to
 wait.

@@ -26,19 +26,18 @@ voice surface — everything else about a call is `signal` frames and client sta
 
 ## Connection and authentication
 
-One handshake path. Send `Authorization: Bearer <access token>` on the upgrade
-request. A valid full-scope, device-bound token accepts the connection; anything
-else — a bad token, or no header at all — **refuses the handshake**: the server
-answers the upgrade request with `403 Forbidden` and no WebSocket is ever
-established. There is no close code to read, because the refusal is decided before
-the accept and there is no socket to send one on. Treat a failed handshake as
-"refresh the access token and reconnect".
+One handshake path. Send `Authorization: Bearer <session token>` on the upgrade
+request. A valid session token accepts the connection; anything else — a bad token,
+or no header at all — **refuses the handshake**: the server answers the upgrade
+request with `403 Forbidden` and no WebSocket is ever established. There is no close
+code to read, because the refusal is decided before the accept and there is no socket
+to send one on. Treat a failed handshake as "renew the session token and reconnect".
 
-The token is validated with the same strength as REST: signature and expiry, `full`
-scope (a register-scope token opens no socket), a live device whose
-`token_generation` matches, and an active account. On success the socket subscribes
-to the device's delivery topic and the device's `last_active_date` is touched (day
-precision).
+The token is validated with the same strength as REST: signature and expiry, `typ`
+`session` (a register token opens no socket), a live device whose `token_generation`
+matches, and an active account. On success the socket subscribes to the device's
+delivery topic, and that is the whole of the bind: it writes no row, so connecting
+records nothing about the device (ADR-0024).
 
 Every accepted socket is therefore already bound to a device: there is no
 unauthenticated state, no in-band authentication frame and no deadline to meet.
@@ -144,8 +143,8 @@ session it belongs to.
 
 **A refused handshake carries no code.** Authentication is decided before the accept,
 so a server has no socket to send a close frame on and answers the upgrade request
-with `403 Forbidden` instead. A failed handshake therefore means "refused": refresh
-the access token and retry. Once a socket has been accepted, every code above arrives
+with `403 Forbidden` instead. A failed handshake therefore means "refused": renew
+the session token and retry. Once a socket has been accepted, every code above arrives
 as a close frame.
 
 ## Mint a relay credential
@@ -162,7 +161,7 @@ than stored, so this route reads no row and writes none: there is no table behin
 nothing to revoke, and a credential dies of its own expiry.
 
 **The request takes no body.** A body, if sent, is ignored. The caller is identified by
-the access token it presents, and the answer names nothing the caller asked for.
+the session token it presents, and the answer names nothing the caller asked for.
 
 What the client does with the credential — the relay-only ICE policy, the mesh, the
 signalling over `signal` frames, and when to refresh — is
@@ -172,7 +171,7 @@ signalling over `signal` frames, and when to refresh — is
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Authorization` | yes | `Bearer <session token>` |
 
 **Path parameters**
 

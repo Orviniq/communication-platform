@@ -16,7 +16,7 @@ import logging
 
 import pytest
 
-from api.auth import issue_full, issue_register_scope
+from api.auth import issue_register_scope, issue_session
 from api.middleware import RESPONSE_HEADERS
 from config.asgi import api_application, application
 from conftest import PASSWORD, AsgiClient
@@ -49,8 +49,8 @@ def test_every_refusal_this_layer_writes_leaks_nothing(
     token refusals, the scope refusal, the routing refusals, the unknown host,
     the oversized body and the throttle."""
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "1/min"}
-    access, refresh = issue_full(active_user, device)
-    register = issue_register_scope(active_user)
+    access, _expires_in = issue_session(active_user, device)
+    register, _register_expires_in = issue_register_scope(active_user)
     oversized = "z" * (17 * 1024)
 
     with capture_all_logging() as lines:
@@ -82,8 +82,7 @@ def test_every_refusal_this_layer_writes_leaks_nothing(
         scan(
             lines,
             {
-                "access token": access,
-                "refresh token": refresh,
+                "session token": access,
                 "register-scope token": register,
                 "forged token": FORGED,
                 "caller account id": str(active_user.id),

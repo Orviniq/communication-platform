@@ -10,9 +10,10 @@
   thread-sensitive executor thread rather than taking a thread each. A context per
   socket would mean a thread per socket, and the assumption ledger's A1 puts up to 500
   concurrent sockets on a host with 1 GB of RAM. The gateway issues a handful of
-  queries per socket for its whole life — a bind, a `last_active_date` touch, an
-  existence check per room join, a delete per ack — so serialising them costs nothing
-  at this band. The flip trigger is a socket-path query that is not O(1) per
+  queries per socket for its whole life — one read to bind, and a delete per ack — so
+  serialising them costs nothing at this band. It was three kinds of query when this
+  was written; the room join left with [0021](0021-relayed-webrtc-mesh-and-no-server-room.md)
+  and the activity touch with [0024](0024-peer-state-published-limits-and-no-activity-dates.md). The flip trigger is a socket-path query that is not O(1) per
   lifecycle event, at which point one slow query would stall every socket's database
   work and the middleware needs a websocket branch.
 

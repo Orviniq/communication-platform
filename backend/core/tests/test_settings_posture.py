@@ -255,9 +255,35 @@ class BasePostureTests(SimpleTestCase):
             "--ws websockets-sansio",
             "--workers ${WEB_CONCURRENCY}",
             "--limit-concurrency",
+            "--ws-ping-interval",
+            "--ws-ping-timeout",
             "--timeout-graceful-shutdown",
         ):
             self.assertIn(flag, unit)
+
+    def test_the_socket_keepalive_is_the_one_adr_0024_set(self):
+        """uvicorn pings every live WebSocket, and its own defaults are 20 s and
+        20 s. The client holds the socket in the background under a foreground
+        service, so a ping every twenty seconds wakes a mobile radio every twenty
+        seconds for the life of the session — the socket is this product's only
+        push path, so nothing else pays that cost down.
+
+        The two numbers together are what a dead peer costs: the interval before
+        the ping goes out, plus the timeout before the pong is given up on, so at
+        most 300 s of a socket held for a peer that is gone. The interval is
+        pinned below the edge's own read timeout as well, because an idle socket
+        must be closed by the keepalive rather than cut by nginx.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        conf = (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+
+        interval = int(re.search(r"--ws-ping-interval (\d+)", unit).group(1))
+        timeout = int(re.search(r"--ws-ping-timeout (\d+)", unit).group(1))
+        ws_block = conf.split("location /ws")[1]
+        read_timeout = int(re.search(r"proxy_read_timeout (\d+)s", ws_block).group(1))
+
+        self.assertEqual((interval, timeout), (240, 60))
+        self.assertGreater(read_timeout, interval)
 
     def test_the_edge_writes_no_access_log_and_no_request_line(self):
         """The other half of `--no-access-log`, one layer out.

@@ -3,7 +3,8 @@
 A device row is mostly key material — an identity key, a signed prekey, two
 signatures, a post-quantum pair — and a label that is ciphertext. None of it
 reaches this page. What the operator needs to answer "I lost my phone" is the
-account, the dates, and a button.
+account, the day the device was added, whether it is still live, and a button. The
+server records no activity day (ADR-0024), so the panel shows none.
 """
 
 from django.contrib import admin, messages
@@ -48,27 +49,13 @@ class DeviceAdmin(PanelModelAdmin):
     owns, and every other column is key material the server never interprets.
     """
 
-    list_display = (
-        "id",
-        "account",
-        "state",
-        "created_date",
-        "last_active_date",
-        "revoked_date",
-    )
+    list_display = ("id", "account", "state", "created_date", "revoked_date")
     list_display_links = ("id",)
-    list_filter = (RevokedFilter, "created_date", "last_active_date", "user")
+    list_filter = (RevokedFilter, "created_date", "user")
     search_fields = ("user__username",)
     ordering = ("user__username", "-created_date")
     date_hierarchy = "created_date"
-    fields = (
-        "id",
-        "account",
-        "state",
-        "created_date",
-        "last_active_date",
-        "revoked_date",
-    )
+    fields = ("id", "account", "state", "created_date", "revoked_date")
     readonly_fields = fields
     # The account column would otherwise be one query for each row.
     list_select_related = ("user",)

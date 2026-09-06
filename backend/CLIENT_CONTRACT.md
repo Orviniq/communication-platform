@@ -190,6 +190,9 @@ group key; a group exists only in its members' clients.
 - `GET /me/envelopes` returns `pruned_through`. If the client's last acked seq is
   **below** `pruned_through`, envelopes were lost to the `ENVELOPE_TTL_DAYS` cap, and
   the server cannot re-create them.
+- `GET /api/v1/config` is the source of that window: `envelope_ttl_days` is this
+  deployment's value, and it is the only way the client can state it. Read it once at
+  startup and use it when telling a user how long an undelivered message survives.
 - A lost envelope may have carried a ratchet message or a group control event. Repair
   each affected pairwise session through its authenticated repair path, then ask a
   member for the current group control state. Client-to-client history transfer (§G)
@@ -219,6 +222,14 @@ group key; a group exists only in its members' clients.
 ## L. Polling
 
 - No foreign push (FCM/APNs) is available. Background polling only.
+- `GET /api/v1/config` publishes the batch and page ceilings a poll works against —
+  `drain_page_max`, `ack_max`, `send_batch_max`, `claim_max` — and the retention
+  windows behind them. It is the source for every one of those numbers; nothing else
+  states them, and a client that hard-codes one will disagree with a deployment whose
+  operator changed it.
+- Before a send, `POST /api/v1/peers` verifies up to 64 recipients in one call and
+  answers `unchanged` for each peer whose tag the client already holds. It is the
+  route to poll on, rather than the three per-user reads for each recipient.
 
 ## M. Enrollment ordering (load-bearing — read before implementing registration)
 
@@ -234,11 +245,20 @@ a **cross-signature change** to any peer that polled in between, and §D require
 block the conversation and demand re-verification over it. Null is the state that means
 "not yet"; there is no signature-shaped value that means the same.
 
+Both flows begin with a login that names no device, and end holding one session
+token. There is one token in this system: `POST /auth/login` and `POST /me/devices`
+each answer `token` and `expires_in`, `POST /auth/renew` issues another without
+retiring the one you presented, and nothing rotates. A device may therefore hold
+several live tokens at once, and two of your isolates may renew concurrently without
+coordinating — the loser of that race keeps a working token rather than losing the
+session.
+
 **First device on a new account:**
 
-1. `POST /auth/login` → register-scope token (10 min; its only power is step 2).
+1. `POST /auth/login` with no `device_id` → `scope: "register"` and a register token
+   (10 min; its only power is step 2).
 2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201` with the assigned
-   `device_id` and a full-scope token pair.
+   `device_id` and a session token bound to it.
 3. `PUT /me/identity` — publish the cross-signing identity. Required before any *later*
    device can register, so do not defer it.
 4. `PUT /me/devices/{device_id}/prekeys` with `cross_sig` (over the bundle for the
@@ -250,11 +270,13 @@ block the conversation and demand re-verification over it. Null is the state tha
 
 **Every later device:**
 
-1. `POST /auth/login` → register-scope token.
-2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201`, `device_id`,
-   full-scope tokens. The account's identity must already be published or this is
-   `400 {"code":"identity_required"}`.
-3. `GET /me/keybackup` (needs the full scope from step 2) → unwrap with the user's
+1. `POST /auth/login` with no `device_id` → register token. A login that names an
+   existing device of the account answers that device's session token instead, which
+   is the sign-in path rather than the enrollment path.
+2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201`, `device_id`, and
+   the new device's session token. The account's identity must already be published or
+   this is `400 {"code":"identity_required"}`.
+3. `GET /me/keybackup` (needs the session token from step 2) → unwrap with the user's
    recovery secret → the account's **self-signing private key**. This is the only path to
    it; a device that cannot unwrap the backup can never be cross-signed, and the user
    must verify it out-of-band from an existing device instead.
@@ -335,12 +357,14 @@ is [`../CLIENT_WORK.md`](../CLIENT_WORK.md); what follows is the protocol.
 
 ## O. The `/ws` handshake
 
-- The token goes on the upgrade request, as `Authorization: Bearer <access token>`.
+- The token goes on the upgrade request, as `Authorization: Bearer <session token>`.
   There is one handshake path and this is it: the server refuses a handshake that
   carries no header, and there is no in-band authentication frame to fall back on.
 - A refusal is decided **before** the accept, so it reaches you as a failed upgrade
-  (`403 Forbidden`) and never as a close code. Read one as "refresh the access token
+  (`403 Forbidden`) and never as a close code. Read one as "renew the session token
   and reconnect"; a handler that waits for a close code there will never fire.
+- A token that expires while its socket is open does not close the socket. Only a
+  revocation does, as close code `4003`.
 - Treat a socket as a wake-up hint and never as the delivery contract. The durable
   queue is authoritative (§H), so reconnect with backoff and drain over REST rather
   than trusting a frame to arrive.

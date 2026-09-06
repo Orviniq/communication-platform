@@ -13,7 +13,7 @@ from .conftest import (
     connect_ok,
     envelope_blob,
     http_request,
-    mint_access,
+    mint_session,
     probe,
 )
 
@@ -42,10 +42,10 @@ async def test_enqueued_envelope_is_pushed_acked_and_deleted(
 ):
     """The headline durable exit test: enqueue via the messaging service, receive the
     `envelope` frame, ack it, and the queue row is gone."""
-    comm = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    comm = await connect_ok(bearer(await mint_session(peer, peer_device)))
     blob = envelope_blob(b"d")
 
-    resp = await send(await mint_access(active_user, device), peer_device.id, blob)
+    resp = await send(await mint_session(active_user, device), peer_device.id, blob)
     assert resp.status_code == 202 and resp.json()["accepted"] == 1
 
     frame = await comm.receive_json_from(timeout=2)
@@ -69,7 +69,7 @@ async def test_ack_only_touches_the_calling_devices_rows(
         seq=1,
         blob=b"e" * min(ENVELOPE_BUCKETS),
     )
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     await comm.send_json_to({"type": "ack", "ids": [str(row.id)]})
     await probe(comm, device.id)
@@ -83,7 +83,7 @@ async def test_malformed_ack_ids_are_dropped_without_killing_the_socket(
 ):
     """Non-UUID ids never reach the pk column (the WS twin of the ack route's
     guard); the socket survives and later frames still work."""
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     await comm.send_json_to({"type": "ack", "ids": ["not-a-uuid", {"nested": 1}]})
     await comm.send_json_to({"type": "ack", "ids": "not-a-list"})
@@ -115,7 +115,7 @@ async def test_an_ack_of_exactly_the_id_cap_clears_every_row_it_names(
     able to clear. A cap that admitted 199 would leave a row the client believes it
     acked, and the client would be pushed it again on its next reconnect."""
     rows = await queued(device.id, gateway.ACK_IDS_MAX)
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     await comm.send_json_to({"type": "ack", "ids": [str(row.id) for row in rows]})
     await probe(comm, device.id)  # barrier: the ack has been fully processed
@@ -130,7 +130,7 @@ async def test_an_ack_of_one_id_past_the_cap_deletes_nothing_at_all(active_user,
     behind, and truncation is how an unbounded `id__in` gets in through the back
     door."""
     rows = await queued(device.id, gateway.ACK_IDS_MAX + 1)
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
 
     await comm.send_json_to({"type": "ack", "ids": [str(row.id) for row in rows]})
     await probe(comm, device.id)
@@ -145,11 +145,11 @@ async def test_every_socket_of_one_device_receives_the_same_envelope_push(
     """A phone and a laptop signed in as one device are two sockets on one topic.
     Both are live, so both are pushed; the row behind them is one row, and either
     socket's ack clears it."""
-    first = await connect_ok(bearer(await mint_access(peer, peer_device)))
-    second = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    first = await connect_ok(bearer(await mint_session(peer, peer_device)))
+    second = await connect_ok(bearer(await mint_session(peer, peer_device)))
     blob = envelope_blob(b"t")
 
-    resp = await send(await mint_access(active_user, device), peer_device.id, blob)
+    resp = await send(await mint_session(active_user, device), peer_device.id, blob)
     assert resp.status_code == 202
 
     row = await run_unit(QueuedEnvelope.objects.get, recipient_device_id=peer_device.id)
@@ -170,12 +170,12 @@ async def test_closing_one_socket_of_a_device_leaves_the_other_delivering(
     """The topic is released when its last sink goes, not when its first does.
     Unsubscribing on the first disconnect would silence the device's other socket
     until it happened to reconnect."""
-    first = await connect_ok(bearer(await mint_access(peer, peer_device)))
-    second = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    first = await connect_ok(bearer(await mint_session(peer, peer_device)))
+    second = await connect_ok(bearer(await mint_session(peer, peer_device)))
     blob = envelope_blob(b"s")
 
     await first.disconnect()
-    resp = await send(await mint_access(active_user, device), peer_device.id, blob)
+    resp = await send(await mint_session(active_user, device), peer_device.id, blob)
     assert resp.status_code == 202
 
     frame = await second.receive_json_from(timeout=2)

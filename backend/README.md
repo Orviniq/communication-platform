@@ -33,21 +33,28 @@ base64-encoded. Errors share one envelope: `{"code": "...", "detail": ...}`, whe
 `detail` is a string except for `invalid_request`, which maps a field path to its
 messages. No error body echoes request input. A request that fails validation is
 `400 invalid_request`, a body above the route's cap is `413 payload_too_large`, and a
-request past its deadline is `503 unavailable`.
+request past its deadline is `503 unavailable`. `GET /api/v1/config` publishes the
+limits a client cannot derive — the retention windows, the storage and device
+ceilings, the batch sizes and the padding buckets — read from the settings and
+constants the routes enforce, and `POST /api/v1/peers` answers identity, live devices
+and log head for up to 64 peers in one call so that verifying a fan-out costs one
+round trip rather than three per recipient
+([ADR-0024](../docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)).
 
 **Authentication.** Bearer JWTs (PyJWT, HS256, a dedicated `JWT_SIGNING_KEY`). No
 token is ever stored: a token table would be a per-device login record at rest, so
-revocation lives in two counters on the device row instead. Login with a known device
-id yields a short-lived access token and a rotating refresh token. Tokens are
-device-scoped: a `full`-scope token is bound to one device and carries a `tgen`
-(token-generation) claim checked against the device row on every request, so revoking a
-device — which bumps the generation — kills all its outstanding tokens immediately. A
-refresh token also carries `rgen`; a rotation advances `refresh_generation`, and a
-refresh that presents an older value is a replay, which advances `token_generation` and
-ends the whole family. Logout does the same for the calling device. Login without a
-device yields a narrow `register`-scope token whose only power is registering a device
-at `POST /api/v1/me/devices`. Both runtimes verify through the same module, so a token
-one revokes is dead on the other.
+revocation lives in one counter on the device row instead. There is one token, and its
+`typ` claim carries its power (ADR-0023). Login with a known device id yields a session
+token of `SESSION_TOKEN_DAYS`, bound to that device and carrying a `tgen`
+(token-generation) claim checked against the device row on every request and at every
+socket bind, so revoking a device — which bumps the generation — kills all its
+outstanding tokens immediately. Logout does the same for the calling device.
+`POST /api/v1/auth/renew` issues another token and retires none, so nothing rotates and
+the token presented stays valid until its own expiry; the cost of that is
+[`../ACCEPTED_RISKS.md`](../ACCEPTED_RISKS.md) AR-18. Login without a device yields a
+narrow `register` token whose only power is registering a device at
+`POST /api/v1/me/devices`. Both runtimes verify through the same module, so a token one
+revokes is dead on the other.
 
 **WebSocket.** One gateway at `/ws`, a Starlette WebSocket route of the same FastAPI
 application, with one handshake path: an `Authorization: Bearer` header on the upgrade
@@ -57,6 +64,11 @@ is already bound to a device. The gateway handles `ack` and `signal` frames from
 client and emits `envelope` and `signal` frames to it; it holds no presence, which is
 client protocol over `signal` frames
 ([ADR-0022](../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
+The bind writes no row: bringing a socket up is one read, and the server records
+nothing about when a device connected. uvicorn pings a live socket every 240 seconds
+and gives up on the pong after 60, so a dead peer holds a socket for at most five
+minutes
+([ADR-0024](../docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)).
 A `signal` blob is base64 of exactly one signal bucket, like every stored
 ciphertext. Frames are JSON text only, size- and rate-limited;
 protocol violations and a slow consumer close the socket with code 4008, revocation
@@ -131,7 +143,7 @@ online to transfer it. There is no server history API.
 | Path | Owns |
 |---|---|
 | `api` | The FastAPI runtime and the seam: the composed application, token issue and verification, the error envelope, the shared Redis client and the rate limiter over it, the ORM unit-of-work helper, the pure-ASGI request limits |
-| `accounts` | User model, register/login/refresh/logout, user directory, encrypted profile blobs |
+| `accounts` | User model, register/login/renew/logout, user directory, encrypted profile blobs |
 | `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, device-list log, peer bundles and claims, revocation cascade |
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
@@ -197,9 +209,8 @@ Every environment variable the code reads, with its default:
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout and the gateway bus. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
 | `REDIS_COMMAND_TIMEOUT_SECONDS` | `2` | Connect and per-command timeout, seconds, for every Redis client of the process; a store that accepts the connection and then stops answering fails the command instead of holding its caller. The blocking pub/sub read of the gateway bus opts out of it |
 | `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs; at least 32 characters and never equal to `DJANGO_SECRET_KEY`, or `check --deploy` refuses it (`core.E005`) |
-| `ACCESS_MIN` | `15` | Access-token lifetime, minutes |
-| `REFRESH_DAYS` | `14` | Refresh-token lifetime, days |
-| `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-scope token lifetime, minutes |
+| `SESSION_TOKEN_DAYS` | `30` | Session-token lifetime, days |
+| `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-token lifetime, minutes |
 | `REQUEST_DEADLINE_SECONDS` | `15` | Deadline for a request FastAPI serves; past it the answer is `503 unavailable` |
 | `UPLOAD_DEADLINE_SECONDS` | `120` | Deadline for the attachment upload and the device/envelope batch routes |
 | `BODY_CAP_JSON_BYTES` | `16384` | Body cap for a small-JSON route, and for any path no route claims |
@@ -208,8 +219,7 @@ Every environment variable the code reads, with its default:
 | `MULTIPART_OVERHEAD_BYTES` | `8192` | Added to the largest attachment bucket to give `POST /api/v1/attachments` its cap |
 | `THROTTLE_REGISTER` | `10/hour` | Rate limit: account registration |
 | `THROTTLE_LOGIN` | `20/hour` | Rate limit: login |
-| `THROTTLE_REFRESH` | `120/hour` | Rate limit: token refresh |
-| `THROTTLE_ACCOUNTS` | `120/min` | Rate limit: general account and device endpoints |
+| `THROTTLE_ACCOUNTS` | `300/min` | Rate limit: general account and device endpoints, the peer-state batch and the limits route |
 | `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey-bundle claims |
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |

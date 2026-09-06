@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 
 from accounts.models import ProfileBlob, User
-from api.auth import issue_full, issue_register_scope
+from api.auth import issue_register_scope, issue_session
 from api.errors import ApiError
 from core import lockout
 from devices.models import Device
@@ -48,22 +48,16 @@ def register(username, password):
     return {"user_id": str(user.id)}
 
 
-def _rotate_refresh_generation(user_id, device_id):
-    """Advance the device's refresh generation, and read the row at its new value.
+def _live_device(user_id, device_id):
+    """The account's live device of that id, or None.
 
-    A login retires every refresh token the device held before it. The UPDATE is
-    atomic on its own row, so two concurrent logins each read a generation that
-    is current at the moment they read it, and no row lock has to span the two
-    statements.
+    A login writes nothing: it mints a token at the generation the row already
+    carries, so a second login neither retires the first one's token nor needs a
+    lock to decide the order of the two.
     """
-    updated = Device.objects.filter(
-        id=device_id, user_id=user_id, revoked_date__isnull=True
-    ).update(refresh_generation=F("refresh_generation") + 1)
-    if not updated:
-        return None
     return (
-        Device.objects.filter(id=device_id)
-        .only("id", "token_generation", "refresh_generation")
+        Device.objects.filter(id=device_id, user_id=user_id, revoked_date__isnull=True)
+        .only("id", "token_generation")
         .first()
     )
 
@@ -107,74 +101,25 @@ def login(username, password, device_id):
     if not user.is_active:
         raise ApiError(403, "account_inactive", "This account is awaiting activation.")
 
-    device = _rotate_refresh_generation(user.id, device_id) if device_id else None
+    device = _live_device(user.id, device_id) if device_id else None
     if device is None:
         # No device, or one this account does not own: a short register-scope
         # token whose only power is POST /me/devices.
+        token, expires_in = issue_register_scope(user)
         return {
-            "access": issue_register_scope(user),
+            "token": token,
+            "expires_in": expires_in,
             "user_id": str(user.id),
             "scope": "register",
         }
-    access, refresh_token = issue_full(user, device)
+    token, expires_in = issue_session(user, device)
     return {
-        "access": access,
-        "refresh": refresh_token,
+        "token": token,
+        "expires_in": expires_in,
         "user_id": str(user.id),
         "device_id": str(device.id),
         "scope": "full",
     }
-
-
-def refresh(claims):
-    """Rotate the pair, or detect reuse and end the whole family.
-
-    A refresh whose `rgen` is behind the row is a replay of a token that was
-    already rotated. The device row is the family: `token_generation` advances,
-    every outstanding token of the device dies, and that escalation commits
-    before the refusal reaches the client.
-
-    Returns None for every refusal. A revoked device, a stale generation, a
-    deactivated account and a replay are reported identically, so the client
-    learns only that this token is finished.
-    """
-    replayed = False
-    with transaction.atomic():
-        device = (
-            Device.objects.select_for_update()
-            .select_related("user")
-            .only(
-                "id",
-                "user_id",
-                "token_generation",
-                "refresh_generation",
-                "user__is_active",
-            )
-            .filter(
-                id=claims["device_id"],
-                user_id=claims["user_id"],
-                revoked_date__isnull=True,
-            )
-            .first()
-        )
-        if device is None or device.token_generation != claims["tgen"]:
-            return None
-        if not device.user.is_active:
-            return None
-        if device.refresh_generation != claims["rgen"]:
-            device.token_generation += 1
-            device.save(update_fields=["token_generation"])
-            replayed = True
-        else:
-            device.refresh_generation += 1
-            device.save(update_fields=["refresh_generation"])
-            access, refresh_token = issue_full(device.user, device)
-    if replayed:
-        # The access tokens of the family are dead; a socket that one of them
-        # opened must not outlive them.
-        close_device_sockets(claims["device_id"])
-        return None
-    return {"access": access, "refresh": refresh_token}
 
 
 def logout(user_id, device_id):
@@ -235,7 +180,7 @@ def write_profile(user_id, raw, version):
             else:
                 profile.blob = raw
                 profile.version = version
-                profile.save(update_fields=["blob", "version", "updated_date"])
+                profile.save(update_fields=["blob", "version"])
     except IntegrityError:
         # select_for_update locks nothing when the row does not exist yet, so two
         # concurrent first writes can both clear the version check above.

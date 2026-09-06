@@ -576,6 +576,106 @@ one ciphertext the server relays without storing, and nothing above that.
 `TURN_REALM` is unchanged and still read by the coturn file alone; no Python module
 reads it.
 
+## The token pair becomes one session token
+
+The access and refresh pair is gone, and one device-bound session token replaces it.
+The decision and its cost are
+[ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md), which
+supersedes [ADR-0006](docs/architecture/decisions/0006-device-bound-tokens-on-pyjwt.md);
+the reference for the routes is [`backend/accounts/API.md`](backend/accounts/API.md)
+and [`backend/devices/API.md`](backend/devices/API.md).
+
+Why, in one line: rotation with reuse detection made a lost race between two client
+isolates a sign-out, and it defended only a theft the transport pinning and the
+encrypted client store already prevent. What it costs is stated rather than argued
+around, in `ACCEPTED_RISKS.md` AR-18.
+
+### The routes
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/auth/refresh` | Anonymous. Took `{"refresh": "…"}`, rotated the pair, advanced `Device.refresh_generation`, and answered `200` with `{"access", "refresh"}` | No such path: `404 not_found`, like any other path no route serves | Delete the call and the route from your client. `POST /api/v1/auth/renew` replaces it, and the request shape is different: a bearer header instead of a body |
+| `POST /api/v1/auth/renew` | Did not exist | `200` with `{"token", "expires_in"}`. Takes a full-scope bearer token and **no body**; a body, if sent, is ignored. It re-checks the device and the account through the same verifier every authenticated route uses, so a revoked device, a stale token generation and a deactivated account each answer `401 token_revoked` | Call it with the token you hold, well before `expires_in` runs out. Keep whichever token you got; the one you presented also stays valid until its own expiry |
+| A retried or timed-out renewal | A refresh was **never** safe to repeat: the second call presented a token the first had retired, which was a replay, which ended every token of the device | Safe to repeat. Nothing is written and no generation moves, so a retry issues another token and retires none | Delete the "never retry a refresh" rule and any arbitration built for it. Two of your isolates may renew concurrently and both keep working tokens |
+| `POST /api/v1/auth/login` with a `device_id` | `200` with `{"access", "refresh", "user_id", "device_id", "scope": "full"}`, and the login advanced `Device.refresh_generation`, retiring any refresh token the device still held | `200` with `{"token", "expires_in", "user_id", "device_id", "scope": "full"}`. The device row is read and never written, so a token the device already held keeps working | Rename the field in your DTO and read `expires_in`. Stop discarding the token you were holding when a login returns |
+| `POST /api/v1/auth/login` without one | `200` with `{"access", "user_id", "scope": "register"}` | `200` with `{"token", "expires_in", "user_id", "scope": "register"}` | Rename the field. `scope` is still the discriminator between the two success shapes |
+| `POST /api/v1/me/devices` | `201` with `{"device_id", "access", "refresh", "scope": "full"}` | `201` with `{"device_id", "token", "expires_in", "scope": "full"}` | Rename the field. The token is the new device's session token, and it is what you cross-sign with |
+| `POST /api/v1/auth/logout` | Advanced `token_generation`; the presented access token and every refresh token of the device died | Unchanged in behaviour and in wording: `token_generation` advances and every token of the device dies at once | None |
+
+### The claims and the replay rule
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The `scope` claim | Every token carried `scope`, `full` or `register`, and the power of a token was the pair (`scope`, `typ`) | Gone from the claims. `typ` alone carries the power: `session` for the device-bound token, `register` for the enrollment one | None, if you never read the claims. If you did, read `typ` — but the claim set is this server's and no client should depend on it: `expires_in` is published for exactly this reason |
+| The `rgen` claim | Carried by every refresh token and checked against `Device.refresh_generation` | Gone, with the refresh token | None |
+| The replay rule | A refresh presenting an `rgen` behind the row advanced `token_generation` and ended every token of the device, including ones the replayer had never seen | Gone. Nothing but a logout, a device revocation or an account deactivation ends a token before its own `exp` | Remove the arbitration this rule forced. A client may now hold several live tokens for one device — from a login, a registration and each renewal — and all of them work |
+| `403 scope_forbidden` | A register-scope token on a full-scope route | Unchanged: a register token on a route that needs a session token. `POST /api/v1/auth/renew` is one of them, so a register token cannot renew its way to a session | None |
+| A token that expires on an open socket | The socket stayed open; a revocation closed it with `4003` | Unchanged | None |
+
+### The settings
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `ACCESS_MIN` | Access-token lifetime in minutes, default 15 | Gone, as a setting and as a variable | Remove the line from the environment file |
+| `REFRESH_DAYS` | Refresh-token lifetime in days, default 14 | Gone, as a setting and as a variable | Remove the line |
+| `SESSION_TOKEN_DAYS` | Did not exist | The session token's lifetime in days, default 30. It is the whole exposure of a stolen token, so shortening it is the lever AR-18 names | None, unless 30 days is wrong for the deployment; shortening it costs only more frequent renewals |
+| `THROTTLE_REFRESH` | The rate scope of the refresh route, default `120/hour` | Gone with the route it bounded. Renewal counts against `accounts`, `THROTTLE_ACCOUNTS`, default `120/min` per account | Remove the line |
+| `REGISTER_SCOPE_ACCESS_MIN` | Register-scope token lifetime in minutes, default 10 | Unchanged in name, value and meaning | None |
+
+`Device.refresh_generation` keeps its column with no reader and no writer until the
+next run drops it; nothing a client can observe depends on it.
+
+## The client stops paying for the contract
+
+Four costs the client was carrying, and one column it can no longer read
+([ADR-0024](docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)).
+
+### `POST /api/v1/peers` — one call for a whole fan-out
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Verifying the recipients of a send | Three reads for each recipient: `GET /api/v1/users/{user_id}/identity`, `GET /api/v1/users/{user_id}/devices` and the device log. A 50-member group was 150 round trips before one message | `POST /api/v1/peers` with 1 to 64 `{user_id, etag?}` items answers each peer's `identity`, `devices` and `log_head_seq` in one call, in request order | Optional. Replace the per-recipient loop with one call. The per-user routes are unchanged and stay, so nothing is forced |
+| The bytes of each answer | — | The same bytes the per-user routes serve: `identity` is the whole body of the identity read or `null`, and `devices` holds the items of the device list | None. Whatever already verifies the per-user answers verifies these unchanged |
+| Repeating the call | — | Send the `etag` the previous answer carried for that peer. A peer whose state has not moved answers `{user_id, etag, unchanged: true}` and no body | Optional. Branch on the presence of `unchanged`, never on its value — it is never `false` |
+| What the tag covers | — | The identity, the live device set, every device's `bundle_version`, and the log head. It is **this route's own tag** and is not the `ETag` of either per-user route | Keep it separate from the other two. Sending one where another belongs costs a full answer, never a wrong `304` |
+| A user that does not exist, is not activated, or was deactivated | Each per-user route answered separately: `404` from the identity read, an empty list from the device list | **Omitted** from `peers` entirely. The three cases are not told apart | Match the answer to the request by `user_id`; do not assume the list is the same length as the request |
+| The rate cost | 150 requests against `accounts` for a 50-member fan-out | One | Optional. The 30-second peer cache built to survive the old cost is no longer needed |
+
+### `GET /api/v1/users/{user_id}/identity` — a conditional read
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The response | `{master_pub, self_signing_pub, user_signing_pub, master_sig, version}`, always a full `200` | The same five fields plus `etag`, and an `ETag` header carrying the same value | Optional. The added field is additive; a client that ignores it is unaffected |
+| `If-None-Match` | Not read | A matching value answers `304` with an empty body | Optional. Send the tag you last received and skip the body while the identity is unchanged |
+| What the tag covers | — | The four public byte fields and the version, and nothing else | Note that the identity's tag and the peer-state tag are different values for different routes; the peer-state answer carries both |
+| An identity that was never published | `404 not_found` | Unchanged, whatever `If-None-Match` carries — there is no tag for a row that does not exist | None |
+
+### `GET /api/v1/config` — the limits, published
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The retention window | Not published anywhere. `ENVELOPE_TTL_DAYS` is an operator setting, so a client telling a user how long an undelivered message survives was guessing | `envelope_ttl_days` in the response | Recommended. Read it once at startup and use it in the queue-gap disclosure (`backend/CLIENT_CONTRACT.md` §H) |
+| Every other limit | Learned from a `413`, a `409` or a `400 bad_bucket` | `attachment_ttl_days`, `mailbox_max_bytes`, `max_devices_per_user`, `max_devicelog_records`, `session_token_days`, `send_batch_max`, `ack_max`, `drain_page_max`, `claim_max`, `envelope_buckets`, `attachment_buckets`, `signal_buckets` | Recommended. Prefer these over hard-coded numbers: an operator may change any of them |
+| Whether the deployment serves voice | Discovered by calling `POST /api/v1/me/relay` and reading `503 voice_unconfigured` | `voice_configured`, a boolean | Recommended. Hide the call control rather than offering one that fails |
+
+Every value is read from the setting or the constant the enforcing route reads, so
+none of them can describe a server that behaves differently. Authenticated: the
+route takes a full-scope token.
+
+### `last_active_date` is gone — this is the breaking one
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `GET /api/v1/me/devices` | Each item carried `device_id`, `label_blob`, `created_date`, `last_active_date` and `this_device` | `last_active_date` is gone from the item. The other four are unchanged | **Required.** Remove the field from the DTO and from the linked-devices screen. A DTO that requires it will fail to parse |
+| What the server records about activity | The socket bind wrote `Device.last_active_date` on the day it changed, and six other columns carried a day-coarse write timestamp | Nothing. No route serves any of the seven, and the socket bind writes no row at all | None. There is no replacement, by decision: `backend/SECURITY.md` states the new seizure yield |
+
+### The rate limit and the socket keepalive
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `THROTTLE_ACCOUNTS` | `120/min` per account | `300/min` per account. Every route on the `accounts` scope shares it, including the two new ones | None. More headroom, not less |
+| The server's WebSocket ping | uvicorn's default: a ping every 20 s, given up on after 20 s | A ping every 240 s, given up on after 60 s | None. The client's own four-minute keepalive is unaffected and stays its decision. A socket the server has stopped hearing from is closed within 300 s rather than 40 s |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

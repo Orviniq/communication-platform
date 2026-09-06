@@ -2,9 +2,9 @@
 
 `accounts/tests/test_device_auth.py` covers what the HTTP surface answers for a
 token it refuses. This file covers the parser and the two loaders themselves: what
-`decode_access` does with input nobody minted, what survives a replay, and that
-the scope split holds on every route the application actually serves rather than
-on a list somebody remembered to update.
+`decode` does with input nobody minted, what a revocation reaches, and that the
+scope split holds on every route the application actually serves rather than on a
+list somebody remembered to update.
 """
 
 import base64
@@ -26,10 +26,10 @@ from starlette.requests import Request
 from accounts.models import User
 from api.auth import (
     bearer,
-    decode_access,
-    decode_refresh,
-    issue_full,
+    decode,
+    decode_session,
     issue_register_scope,
+    issue_session,
     load_device,
     load_register_user,
     require_full_device,
@@ -42,25 +42,25 @@ from devices.models import Device, UserIdentity
 
 DIRECTORY_URL = "/api/v1/users"
 DEVICES_URL = "/api/v1/me/devices"
-REFRESH_URL = "/api/v1/auth/refresh"
+RENEW_URL = "/api/v1/auth/renew"
 LOGIN_URL = "/api/v1/auth/login"
 LOGOUT_URL = "/api/v1/auth/logout"
 
-# One account and one device, never saved: minting reads four attributes and
+# One account and one device, never saved: minting reads three attributes and
 # touches no row, so the parser properties below need no database at all.
 UNSAVED_USER = User(username="parser")
 UNSAVED_DEVICE = Device(user=UNSAVED_USER, spk_id=1, registration_id=1)
-ACCESS, REFRESH = issue_full(UNSAVED_USER, UNSAVED_DEVICE)
-REGISTER = issue_register_scope(UNSAVED_USER)
-REAL = (ACCESS, REFRESH, REGISTER)
+SESSION, SESSION_TTL = issue_session(UNSAVED_USER, UNSAVED_DEVICE)
+REGISTER, REGISTER_TTL = issue_register_scope(UNSAVED_USER)
+REAL = (SESSION, REGISTER)
 
 
 def unverified(raw):
     return jwt.decode(raw, options={"verify_signature": False})
 
 
-ACCESS_JTI = frozenset({unverified(ACCESS)["jti"], unverified(REGISTER)["jti"]})
-REFRESH_JTI = frozenset({unverified(REFRESH)["jti"]})
+MINTED_JTI = frozenset({unverified(SESSION)["jti"], unverified(REGISTER)["jti"]})
+SESSION_JTI = frozenset({unverified(SESSION)["jti"]})
 
 
 def segment(payload):
@@ -99,16 +99,14 @@ TRUNCATIONS = [token[:cut] for token in REAL for cut in range(0, len(token), 7)]
 FORGERIES = [
     *(unsigned(token) for token in REAL),
     *(resigned(token, "another-signing-key-of-at-least-32-bytes") for token in REAL),
-    *(swapped(ACCESS, REFRESH), swapped(REFRESH, ACCESS), swapped(ACCESS, REGISTER)),
-    tampered(ACCESS, scope="root"),
-    tampered(ACCESS, scope="register"),
-    tampered(ACCESS, typ="refresh"),
-    tampered(ACCESS, tgen=99),
-    tampered(ACCESS, user_id=str(uuid.uuid4())),
-    tampered(ACCESS, device_id=str(uuid.uuid4())),
-    tampered(REFRESH, rgen=99),
-    tampered(REFRESH, typ="access"),
-    tampered(REGISTER, typ="refresh"),
+    *(swapped(SESSION, REGISTER), swapped(REGISTER, SESSION)),
+    tampered(SESSION, typ="root"),
+    tampered(SESSION, typ="register"),
+    tampered(SESSION, typ="access"),
+    tampered(SESSION, tgen=99),
+    tampered(SESSION, user_id=str(uuid.uuid4())),
+    tampered(SESSION, device_id=str(uuid.uuid4())),
+    tampered(REGISTER, typ="session"),
 ]
 
 
@@ -127,16 +125,26 @@ def presented():
 
 
 @pytest.mark.parametrize(
-    "parse, minted",
-    [(decode_access, ACCESS_JTI), (decode_refresh, REFRESH_JTI)],
-    ids=["access", "refresh"],
+    "parse, minted, refusals",
+    [
+        (decode, MINTED_JTI, {(401, "invalid_token")}),
+        (
+            decode_session,
+            SESSION_JTI,
+            {(401, "invalid_token"), (403, "scope_forbidden")},
+        ),
+    ],
+    ids=["decode", "decode_session"],
 )
 @given(raw=presented())
 def test_the_parser_answers_claims_it_minted_or_the_projects_own_refusal(
-    parse, minted, raw
+    parse, minted, refusals, raw
 ):
     """The whole contract of the parser, over anything at all: it returns the
-    claims of a token this process signed, or it raises `401 invalid_token`.
+    claims of a token this process signed, or it raises one of the refusals that
+    parser is allowed to raise — `401 invalid_token` for a token nobody minted,
+    and for `decode_session` the `403 scope_forbidden` an authentic register
+    token earns.
 
     Nothing else. An unhandled exception here is a `500` on an unauthenticated
     route, and a returned principal for input nobody minted is the authentication
@@ -145,8 +153,7 @@ def test_the_parser_answers_claims_it_minted_or_the_projects_own_refusal(
     try:
         claims = parse(raw)
     except ApiError as refusal:
-        assert refusal.status_code == 401
-        assert refusal.code == "invalid_token"
+        assert (refusal.status_code, refusal.code) in refusals
     else:
         assert claims["jti"] in minted
 
@@ -205,18 +212,18 @@ def test_a_token_with_an_internal_space_is_handed_to_the_parser_whole():
     )
 
 
-def test_a_full_scope_token_that_names_no_device_is_refused():
-    """The boundary between the two scopes: `full` means device-bound, and a
-    token that claims the scope without the binding is not a lesser token, it is
-    a forged one."""
-    claims = unverified(ACCESS)
+def test_a_session_token_that_names_no_device_is_refused():
+    """The boundary between the two powers: a session token is device-bound, and
+    one that claims the type without the binding is not a lesser token, it is a
+    forged one."""
+    claims = unverified(SESSION)
     del claims["device_id"]
     forged = jwt.encode(
         claims, settings.JWT_SIGNING_KEY, algorithm=settings.JWT_ALGORITHM
     )
 
     with pytest.raises(ApiError) as raised:
-        decode_access(forged)
+        decode_session(forged)
 
     assert raised.value.code == "invalid_token"
 
@@ -226,59 +233,64 @@ def test_a_generation_that_is_not_an_integer_is_refused(tgen):
     """`tgen` is compared to a column, so a string that looks like a number would
     never equal it and a float would compare equal to the wrong thing."""
     forged = jwt.encode(
-        {**unverified(ACCESS), "tgen": tgen},
+        {**unverified(SESSION), "tgen": tgen},
         settings.JWT_SIGNING_KEY,
         algorithm=settings.JWT_ALGORITHM,
     )
 
     with pytest.raises(ApiError) as raised:
-        decode_access(forged)
+        decode_session(forged)
 
     assert raised.value.code == "invalid_token"
 
 
-def test_a_register_scope_token_can_never_rotate_its_way_up_to_a_pair():
-    """A refresh token is always full scope. One that carried the register scope
-    would mint the device-bound pair its holder was deliberately not given."""
-    forged = jwt.encode(
-        {**unverified(REGISTER), "typ": "refresh"},
-        settings.JWT_SIGNING_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
+def test_an_authentic_register_token_is_a_scope_refusal_and_not_a_forgery():
+    """`typ` alone separates the two powers, and the two refusals it produces are
+    not interchangeable: an authentic token used past its power is a `403`, and a
+    `401` there would tell its holder the token itself is broken."""
+    with pytest.raises(ApiError) as raised:
+        decode_session(REGISTER)
+
+    assert (raised.value.status_code, raised.value.code) == (403, "scope_forbidden")
+    assert decode(REGISTER)["jti"] == unverified(REGISTER)["jti"]
+
+
+def test_a_register_token_can_never_claim_its_way_up_to_a_session():
+    """A session token is the only device-bound one. A register token that
+    carried the type would reach every route its holder was deliberately not
+    given, and the signature is what refuses it."""
+    forged = f"{REGISTER.rsplit('.', 1)[0]}.{SESSION.rsplit('.', 1)[1]}"
 
     with pytest.raises(ApiError) as raised:
-        decode_refresh(forged)
-
-    assert raised.value.code == "invalid_token"
-
-
-def test_a_refresh_token_without_a_refresh_generation_is_refused():
-    """A refresh token is the only one that carries `rgen`, and `rgen` is the
-    whole of reuse detection: without it a replay is undetectable."""
-    claims = unverified(REFRESH)
-    del claims["rgen"]
-    forged = jwt.encode(
-        claims, settings.JWT_SIGNING_KEY, algorithm=settings.JWT_ALGORITHM
-    )
-
-    with pytest.raises(ApiError) as raised:
-        decode_refresh(forged)
+        decode_session(forged)
 
     assert raised.value.code == "invalid_token"
 
 
 def test_an_expired_token_is_refused_at_the_parser():
-    issued = datetime.now(timezone.utc) - timedelta(hours=1)
+    issued = datetime.now(timezone.utc) - timedelta(days=40)
     expired = jwt.encode(
-        {**unverified(ACCESS), "iat": issued, "exp": issued + timedelta(minutes=15)},
+        {**unverified(SESSION), "iat": issued, "exp": issued + timedelta(days=30)},
         settings.JWT_SIGNING_KEY,
         algorithm=settings.JWT_ALGORITHM,
     )
 
     with pytest.raises(ApiError) as raised:
-        decode_access(expired)
+        decode_session(expired)
 
     assert raised.value.code == "invalid_token"
+
+
+def test_each_issuer_publishes_the_lifetime_it_signed():
+    """The client is told when to renew rather than left to read a claim set
+    whose shape is this server's alone, so the published number and the signed
+    `exp` cannot drift apart."""
+    for raw, published in ((SESSION, SESSION_TTL), (REGISTER, REGISTER_TTL)):
+        claims = unverified(raw)
+        assert claims["exp"] - claims["iat"] == published
+
+    assert SESSION_TTL == settings.SESSION_TOKEN_DAYS * 86400
+    assert REGISTER_TTL == settings.REGISTER_SCOPE_ACCESS_MIN * 60
 
 
 class TestTheLoaders:
@@ -293,7 +305,7 @@ class TestTheLoaders:
         """Everything the dependency and the envelope drain need, read together.
         A second query here is a second round trip on every authenticated
         request in the system."""
-        claims = decode_access(issue_full(active_user, device)[0])
+        claims = decode_session(issue_session(active_user, device)[0])
 
         with CaptureQueriesContext(connection) as queries:
             loaded = load_device(claims)
@@ -311,7 +323,7 @@ class TestTheLoaders:
     ):
         """One answer for five states, so a client learns only that this token is
         finished and never why."""
-        claims = decode_access(issue_full(active_user, device)[0])
+        claims = decode_session(issue_session(active_user, device)[0])
         if spoil == "revoked":
             Device.objects.filter(id=device.id).update(revoked_date="2026-01-01")
         elif spoil == "deleted":
@@ -326,7 +338,7 @@ class TestTheLoaders:
         assert load_device(claims) is None
 
     def test_a_register_scope_token_loads_only_an_activated_owner(self, active_user, bob):
-        claims = decode_access(issue_register_scope(active_user))
+        claims = decode(issue_register_scope(active_user)[0])
 
         assert load_register_user(claims).id == active_user.id
 
@@ -336,47 +348,41 @@ class TestTheLoaders:
     def test_a_register_scope_token_for_an_account_that_is_gone_loads_nothing(
         self, active_user
     ):
-        claims = decode_access(issue_register_scope(active_user))
+        claims = decode(issue_register_scope(active_user)[0])
         active_user.delete()
 
         assert load_register_user(claims) is None
 
 
 @pytest.mark.django_db(transaction=True)
-class TestReplay:
-    """A token presented a second time, and what the device row does about it.
+class TestRevocation:
+    """One counter on the device row, and what it reaches.
 
     The behaviour lives partly in `accounts/services.py`, but what it protects is
     the token layer, so the assertions here are on `api/auth.py`'s own loaders as
     well as on the routes.
     """
 
-    def test_a_refresh_token_presented_twice_ends_every_token_of_the_device(
+    def test_a_renewal_ends_nothing_the_device_already_holds(
+        self, http, active_user, device, bearer
+    ):
+        """No rotation and no reuse detection: the token that bought the new one
+        is still a token, which is what lets two clients of one device renew
+        without arbitrating between themselves."""
+        headers = bearer(active_user, device)
+        renewed = http.post(RENEW_URL, headers=headers).json()["token"]
+
+        device.refresh_from_db()
+        assert device.token_generation == 1
+        assert load_device(decode_session(renewed)) is not None
+        assert load_device(decode_session(headers["Authorization"].split()[1]))
+
+    def test_a_login_leaves_the_token_the_device_already_holds_alive(
         self, http, active_user, device
     ):
-        _access, original = issue_full(active_user, device)
-        newest = http.post(REFRESH_URL, json={"refresh": original}).json()
-
-        replay = http.post(REFRESH_URL, json={"refresh": original})
-
-        assert replay.status_code == 401
-        assert replay.json()["code"] == "token_revoked"
-        # The escalation is on the row, so the newest pair — which the holder of
-        # the replayed token never saw — is dead at the loader, not at the parser.
-        newest_claims = decode_access(newest["access"])
-        assert load_device(newest_claims) is None
-        still_authentic = http.get(
-            DIRECTORY_URL, headers={"Authorization": f"Bearer {newest['access']}"}
-        )
-        assert still_authentic.status_code == 401
-        assert still_authentic.json()["code"] == "token_revoked"
-
-    def test_a_login_rotates_the_refresh_token_and_the_previous_one_dies(
-        self, http, active_user, device
-    ):
-        """Rotation, not revocation: the older refresh token is finished and the
-        one the login just issued still works."""
-        _access, older = issue_full(active_user, device)
+        """The login writes no generation, so a token minted before it is still
+        good after it."""
+        older, _expires_in = issue_session(active_user, device)
 
         issued = http.post(
             LOGIN_URL,
@@ -387,40 +393,35 @@ class TestReplay:
             },
         ).json()
 
-        rotated = http.post(REFRESH_URL, json={"refresh": issued["refresh"]})
-        assert rotated.status_code == 200
+        assert load_device(decode_session(older)) is not None
+        assert load_device(decode_session(issued["token"])) is not None
 
-        replayed = http.post(REFRESH_URL, json={"refresh": older})
-        assert replayed.status_code == 401
-        assert replayed.json()["code"] == "token_revoked"
-
-    def test_after_logout_both_halves_of_the_pair_are_dead(
+    def test_after_logout_every_token_of_the_device_is_dead(
         self, http, active_user, device
     ):
         """The token stays authentic — nothing about it changed — and the device
         row is what ends it. That is the whole of revocation without a token
         table."""
-        access, refresh = issue_full(active_user, device)
-        headers = {"Authorization": f"Bearer {access}"}
+        token, _expires_in = issue_session(active_user, device)
+        sibling, _sibling_expires_in = issue_session(active_user, device)
+        headers = {"Authorization": f"Bearer {token}"}
 
         assert http.post(LOGOUT_URL, headers=headers).status_code == 204
 
-        assert decode_access(access)["jti"]  # still parses: the signature is intact
-        assert load_device(decode_access(access)) is None
+        assert decode_session(token)["jti"]  # still parses: the signature is intact
+        assert load_device(decode_session(token)) is None
+        assert load_device(decode_session(sibling)) is None
         dead = http.get(DIRECTORY_URL, headers=headers)
         assert dead.status_code == 401
         assert dead.json()["code"] == "token_revoked"
-        replayed_refresh = http.post(REFRESH_URL, json={"refresh": refresh})
-        assert replayed_refresh.status_code == 401
-        assert replayed_refresh.json()["code"] == "token_revoked"
 
     def test_a_second_logout_with_the_same_token_is_refused(
         self, http, active_user, device
     ):
-        """The access token that authorised the logout dies with the family it
-        belongs to, so the retry a client makes on a dropped connection answers
+        """The token that authorised the logout dies with every other token of
+        the device, so the retry a client makes on a dropped connection answers
         `401` rather than revoking a generation nobody holds."""
-        headers = {"Authorization": f"Bearer {issue_full(active_user, device)[0]}"}
+        headers = {"Authorization": f"Bearer {issue_session(active_user, device)[0]}"}
         http.post(LOGOUT_URL, headers=headers)
 
         second = http.post(LOGOUT_URL, headers=headers)

@@ -22,7 +22,7 @@ from hypothesis import strategies as st
 from api.redis import close_client
 from realtime import bus, gateway
 
-from .conftest import PROBE_BLOB, bearer, connect_ok, mint_access, probe
+from .conftest import PROBE_BLOB, bearer, connect_ok, mint_session, probe
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -175,7 +175,7 @@ async def test_a_client_that_went_away_first_is_answered_with_no_close_frame(
     """The disconnect is the client saying the socket is over. There is nothing to
     close, and a close frame written into a transport the server already tore down
     is what `_close`'s guard exists to avoid."""
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm = await connect_ok(bearer(await mint_session(active_user, device)))
     await probe(comm, device.id)
 
     await comm.disconnect()
@@ -249,7 +249,7 @@ async def send_and_settle(user, device, batch):
     The driver re-raises whatever the application raised, so an exception escaping
     the gateway fails the example here rather than showing up as a timeout.
     """
-    comm = await connect_ok(bearer(await mint_access(user, device)))
+    comm = await connect_ok(bearer(await mint_session(user, device)))
     try:
         for frame in batch:
             await comm.send_json_to(frame)

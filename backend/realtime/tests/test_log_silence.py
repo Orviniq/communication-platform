@@ -21,7 +21,7 @@ from .conftest import (
     envelope_blob,
     expect_close,
     expect_refused,
-    mint_access,
+    mint_session,
     probe,
     signal_blob,
 )
@@ -59,8 +59,8 @@ def raw_root_capture():
 async def test_every_socket_scenario_emits_no_identifier_or_payload(
     active_user, device, peer, peer_device
 ):
-    access_a = await mint_access(active_user, device)
-    access_b = await mint_access(peer, peer_device)
+    access_a = await mint_session(active_user, device)
+    access_b = await mint_session(peer, peer_device)
     volatile_blob = signal_blob(b"v")
     push_blob = envelope_blob(b"l")
     offline_target = str(uuid.uuid4())
@@ -136,7 +136,7 @@ async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
     carrying control characters and a NUL are here as much for the close paths as
     for the parse.
     """
-    access = await mint_access(active_user, device)
+    access = await mint_session(active_user, device)
 
     with raw_root_capture() as lines:
         logging.getLogger("test.canary").debug("canary")
@@ -193,7 +193,7 @@ async def test_a_slow_consumer_close_names_neither_the_device_nor_its_backlog(
         # The wire holds one frame, so a peer that never reads blocks the send loop
         # after the first and everything behind it piles up in the send queue.
         comm = await connect_ok(
-            bearer(await mint_access(active_user, device)), outbound_max=1
+            bearer(await mint_session(active_user, device)), outbound_max=1
         )
         for index in range(10):
             await bus.push_envelopes([(device.id, str(uuid.uuid4()), index + 1, blob)])

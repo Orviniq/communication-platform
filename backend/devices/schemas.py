@@ -21,7 +21,7 @@ import base64
 import binascii
 import datetime
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, Field, PrivateAttr, model_validator
 from pydantic_core import PydanticCustomError
@@ -69,6 +69,14 @@ MAX_STORED_PQ_OTPKS = 100
 # be noise; the bound keeps an oversized `IN (...)` out of the planner.
 MAX_CLAIM_DEVICE_IDS = 100
 MAX_LOG_RECORDS = 50
+# The peer-state batch. A group is at most 50 members and a client verifies every
+# recipient before a send, so 64 covers the largest fan-out in one call with room
+# above it; past that the cost of one answer stops fitting the JSON body cap.
+MAX_PEERS = 64
+# A tag this surface mints is a quoted 32-character digest, so 34 characters. The
+# bound is what keeps an arbitrarily long string out of the comparison; a value
+# this side of it that is not a tag simply fails to match one.
+MAX_ETAG_CHARS = 64
 DEVICELOG_PAGE_CAP = 200
 
 # Registration accepts neither `cross_sig` nor `bundle_version`, because no valid
@@ -338,12 +346,15 @@ class IdentityOut(BaseModel):
     user_signing_pub: str
     master_sig: str
     version: int
+    # Mirrored from the `ETag` header, so a client that reads the body alone still
+    # holds the value it sends back as `If-None-Match`.
+    etag: str
 
 
 class DeviceRegisteredOut(BaseModel):
     device_id: uuid.UUID
-    access: str
-    refresh: str
+    token: str
+    expires_in: int
     scope: str
 
 
@@ -351,7 +362,6 @@ class OwnDeviceOut(BaseModel):
     device_id: uuid.UUID
     label_blob: str | None
     created_date: datetime.date
-    last_active_date: datetime.date | None
     this_device: bool
 
 
@@ -372,6 +382,44 @@ class PeerDeviceListOut(BaseModel):
     devices: list[PeerDeviceOut]
     etag: str
     log_head_seq: int | None
+
+
+class PeerStateItemIn(RequestModel):
+    user_id: LaxUuid
+    # The tag this route gave for the same peer on an earlier call. Absent on the
+    # first ask, and a value that matches nothing is simply a full answer.
+    etag: Annotated[str, Field(max_length=MAX_ETAG_CHARS)] | None = None
+
+
+class PeerStateIn(RequestModel):
+    peers: Annotated[list[PeerStateItemIn], Field(min_length=1, max_length=MAX_PEERS)]
+
+
+class PeerUnchangedOut(BaseModel):
+    """The answer for a peer whose request `etag` still holds: three fields and no
+    body. `unchanged` is what a client branches on, and it is never false — the
+    other shape omits it."""
+
+    user_id: uuid.UUID
+    etag: str
+    unchanged: Literal[True]
+
+
+class PeerStateItemOut(BaseModel):
+    """The full answer for one peer: the same bytes the two per-user reads serve."""
+
+    user_id: uuid.UUID
+    etag: str
+    identity: IdentityOut | None
+    devices: list[PeerDeviceOut]
+    log_head_seq: int | None
+
+
+class PeerStateOut(BaseModel):
+    # Not a discriminated union: the unchanged shape carries three fields and the
+    # full one carries five, so `identity` and `unchanged` are each required by
+    # exactly one branch and neither validates as the other.
+    peers: list[PeerUnchangedOut | PeerStateItemOut]
 
 
 class OtpkCountOut(BaseModel):
