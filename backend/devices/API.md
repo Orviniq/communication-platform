@@ -1105,7 +1105,7 @@ yields `{"bundles": []}` with `200`.
 ### Body too large — `413 Payload Too Large`
 
 ```json
-{{ "code": "payload_too_large", "detail": "Request body is too large." }}
+{ "code": "payload_too_large", "detail": "Request body is too large." }
 ```
 
 The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
@@ -1189,7 +1189,7 @@ at 0.
 ### Body too large — `413 Payload Too Large`
 
 ```json
-{{ "code": "payload_too_large", "detail": "Request body is too large." }}
+{ "code": "payload_too_large", "detail": "Request body is too large." }
 ```
 
 The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
