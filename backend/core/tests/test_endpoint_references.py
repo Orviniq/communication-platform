@@ -23,6 +23,7 @@ route-specific — but may never name a status the code cannot answer.
 
 import json
 import re
+from collections import Counter
 
 import pytest
 from django.conf import settings
@@ -260,3 +261,84 @@ def test_every_code_the_document_describes_is_in_the_published_table():
 
     assert described - set(published_vocabulary()) == set()
     assert len(described) > 5
+
+
+# --- The one prose count of the surface, held to the surface -----------------------
+# `API_CHANGES.md` closes with "What the client can build against now", which is the
+# section a client author reads first. It states the shape of the surface in numbers,
+# and a number in prose is the thing in this repository most likely to rot: nothing
+# regenerates it, and a route added or removed leaves it describing a server that no
+# longer exists. Every figure it carries is derived below from the artefact and the
+# route table, so the section fails with the change rather than after it.
+
+CHANGES = "API_CHANGES.md"
+SECTION_HEADING = "## What the client can build against now"
+
+
+def build_against_section():
+    """The text of that section, from its heading to the next `##`."""
+    text = (settings.BASE_DIR.parent / CHANGES).read_text(encoding="utf-8")
+    start = text.index(SECTION_HEADING)
+    tail = text[start + len(SECTION_HEADING) :]
+    end = tail.find("\n## ")
+    return tail if end == -1 else tail[:end]
+
+
+def test_the_section_the_client_reads_first_counts_the_surface_it_describes():
+    """Operations, paths, and the per-app split, against the generated document."""
+    doc = document()
+    operations = [
+        (method, path, body)
+        for path, item in doc["paths"].items()
+        for method, body in item.items()
+    ]
+    by_tag = Counter(tag for _m, _p, body in operations for tag in body.get("tags", []))
+    section = build_against_section()
+
+    assert f"**{len(operations)} operations over {len(doc['paths'])}" in section
+    for tag, count in by_tag.items():
+        row = f"backend/{tag}/API.md) | {count} |"
+        assert row in section, f"{tag} serves {count} operations; the table disagrees"
+    assert len(by_tag) == len(
+        [line for line in section.splitlines() if line.startswith("| [`")]
+    )
+
+
+def test_the_section_counts_the_methods_and_the_statuses_the_document_declares():
+    """The two sentences under the table. A status published by a different number of
+    operations than the sentence claims is a client planning for the wrong branches."""
+    doc = document()
+    operations = [
+        body for item in doc["paths"].values() for _method, body in item.items()
+    ]
+    methods = Counter(method.upper() for item in doc["paths"].values() for method in item)
+    statuses = Counter(
+        status for body in operations for status in body.get("responses", {})
+    )
+    section = build_against_section()
+
+    ordered = ", ".join(
+        f"{count} `{method}`" for method, count in sorted(methods.items())
+    )
+    # "13 `GET`, 12 `POST`, 5 `PUT` and 2 `DELETE`" — the same pairs, last one joined
+    # by "and", so the assertion is on the pairs rather than on the punctuation.
+    for pair in ordered.split(", "):
+        assert pair in section, pair
+    for status in ("400", "413", "404", "409"):
+        assert f"{statuses[status]} declare `{status}`" in section or (
+            f"{statuses[status]} `{status}`" in section
+        ), f"`{status}` is declared by {statuses[status]} operations"
+
+
+def test_the_section_counts_the_three_authentication_requirements():
+    """Anonymous, register-scope, and session-bound. A client reads this to know how
+    many doors exist before it has a token at all."""
+    from core.tests.test_route_table import ANONYMOUS, EXPECTED, REGISTER_OR_FULL
+
+    requirements = Counter(requirement for requirement, _scope in EXPECTED.values())
+    section = build_against_section()
+
+    assert f"**{requirements[ANONYMOUS]} of the {len(EXPECTED)} take no" in section
+    assert requirements[REGISTER_OR_FULL] == 1
+    full = len(EXPECTED) - requirements[ANONYMOUS] - requirements[REGISTER_OR_FULL]
+    assert f"**The other {full} take a session token" in section

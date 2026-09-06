@@ -162,3 +162,65 @@ def test_a_purge_whose_file_is_already_gone_still_clears_the_row(
 
     assert messages_of(response) == ["1 attachment deleted (0 files removed)."]
     assert Attachment.objects.count() == 0
+
+
+# --- The same rule, read off the rendered page ------------------------------------
+# Every assertion above is about the `ModelAdmin`: which columns it declares, which
+# permissions it refuses, what its audit label says. Configuration is what the panel
+# is built from, and it is not what the operator's browser receives. A column added
+# to `list_display`, a `list_display_links` restored, or a template that echoes the
+# primary key would each leave every test above green and put the bearer capability
+# in front of the operator.
+#
+# The two pages that carry a per-row identifier at all are the changelist and the
+# confirmation of the one bulk action, and on both the identifier is the value of the
+# `_selected_action` input the action cannot run without. That is the whole of the
+# posture, so the count is the assertion: exactly one occurrence, inside that input.
+
+SELECTED = 'name="_selected_action" value="'
+
+
+def occurrences(body, capability):
+    return body.count(capability)
+
+
+def test_the_rendered_changelist_carries_the_capability_only_as_the_action_token(
+    client, owner, attachment
+):
+    """Not in a link, not in a column, not in the address bar — and once, because the
+    row has to be selectable for the one action this page offers."""
+    body = client.get(reverse(CHANGELIST)).content.decode()
+
+    assert occurrences(body, attachment.id) == 1
+    assert f"{SELECTED}{attachment.id}" in body
+    # The capability is a URL-safe string, so a link carrying it would be a plain
+    # substring of an `href`. Neither form appears.
+    assert f'href="{attachment.id}' not in body
+    assert f"/{attachment.id}" not in body
+
+
+def test_the_rendered_purge_confirmation_carries_it_only_as_the_action_token(
+    client, owner, attachment
+):
+    """The confirmation page is where the first draft of this panel leaked the
+    capability, so it is asserted against the rendered body rather than against the
+    template name."""
+    body = purge_post(client, [attachment.pk]).content.decode()
+
+    assert occurrences(body, attachment.id) == 1
+    assert f"{SELECTED}{attachment.id}" in body
+    assert f"/{attachment.id}" not in body
+
+
+def test_the_operator_is_told_what_the_purge_removes_without_being_told_which(
+    client, owner, attachment
+):
+    """The confirmation has to be specific enough to act on and vague enough to leak
+    nothing: a count, a freed size and the consequence, never the capability."""
+    body = purge_post(client, [attachment.pk]).content.decode()
+
+    assert "This deletes 1 attachment and the bytes behind it" in body
+    assert "64.0 KiB of storage is freed" in body
+    assert "never be able to" in body  # the consequence, stated before the button
+    # Everything but the action token: the prose names no capability at all.
+    assert attachment.id not in body.replace(f"{SELECTED}{attachment.id}", "", 1)
