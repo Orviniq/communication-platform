@@ -100,6 +100,24 @@ coturn.
    the stock `log_min_error_statement` a failing statement is written to the server
    log with its bind parameters, which on this schema are device ids and ciphertext.
    Come back here for step 3.
+7. **Swap.** Either none at all, or a swap device with a random key that does not
+   survive a boot — `/dev/urandom` as the key source in `/etc/crypttab`, with the
+   `swap` option, so the device is re-keyed on every start. Swap is a copy of process
+   memory on disk, and the memory of these processes holds the JWT signing key, the
+   TURN shared secret and whatever plaintext routing metadata is in flight. A 1 GB
+   host with `WEB_CONCURRENCY=1` is sized to run without swap
+   ([A3](../../docs/architecture/DESIGN-RECORD.md)); the encrypted-device form exists
+   for the operator who wants the safety margin anyway.
+8. **Core dumps.** `fs.suid_dumpable = 0` in `/etc/sysctl.d/`, which is the kernel
+   default and is written down for the same reason the PostgreSQL defaults are: a
+   default is not a decision. The units set `LimitCORE=0` of their own
+   ([`systemd/`](systemd/)), so none of the three processes that hold secrets can
+   produce a dump whatever the host's `DefaultLimitCORE=` resolves to.
+
+Items 7 and 8 above are **operator-set and unverifiable from this repository**. Nothing in
+the tree reads a host's swap table or its `sysctl` values, and no test here can fail
+when one of them changes. They are written down so the decision exists, not because
+anything enforces it.
 
 ---
 

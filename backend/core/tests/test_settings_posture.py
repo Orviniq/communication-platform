@@ -517,6 +517,49 @@ class BasePostureTests(SimpleTestCase):
             ):
                 self.assertIn(directive, unit)
 
+    def test_neither_unit_can_write_a_core_dump(self):
+        """A core dump of either process is its whole address space on disk: the
+        JWT signing key, the Django secret key, the TURN shared secret and the
+        database and Redis passwords, plus whatever routing metadata and ciphertext
+        is in flight. `ProtectSystem=strict` does not stop one — the kernel writes
+        it wherever `kernel.core_pattern` points, and on this distribution that is
+        `systemd-coredump`, outside every path the units may write.
+
+        Stated rather than inherited because the inherited value is the host's:
+        systemd's PID 1 raises `RLIMIT_CORE` to infinity for its children, and
+        `DefaultLimitCORE=` differs between distributions and between releases of
+        one. A single value sets the soft and the hard limit together, so the
+        process cannot raise it back.
+        """
+        units = settings.BASE_DIR / "ops" / "systemd"
+
+        for name in ("chat.service", "chat-maintenance.service", "chat-backup.service"):
+            unit = (units / name).read_text()
+
+            self.assertIsNotNone(
+                re.search(r"^LimitCORE=0$", unit, re.M), f"{name} sets no LimitCORE"
+            )
+
+    def test_the_edge_resumes_no_tls_session(self):
+        """Both halves of resumption, off.
+
+        A session ticket is encrypted under a key nginx generates at startup and
+        rotates only on reload, so it is a long-lived symmetric secret in worker
+        memory that opens the resumption state of every session it covers — on a
+        box whose threat model grants the adversary live root.
+        `ssl_session_tickets` is on by default, and `ssl_session_cache` is the
+        stateful half whose compiled default, `none`, still advertises resumption
+        to the client; `off` refuses it outright.
+
+        The cost is one full handshake per connection, which is what makes this
+        deployment the one that can afford it: one Android client holding one
+        long-lived socket, not a browser opening a connection per asset.
+        """
+        conf = (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+
+        self.assertIn("ssl_session_tickets off;", conf)
+        self.assertIn("ssl_session_cache off;", conf)
+
     def test_the_backup_unit_writes_the_backup_directory_and_nothing_else(self):
         """`ReadWritePaths` is the whole of what a compromised backup run can change
         on a `ProtectSystem=strict` host, and this one holds the only encrypted copy
