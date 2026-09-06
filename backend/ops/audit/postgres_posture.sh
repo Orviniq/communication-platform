@@ -25,13 +25,13 @@ for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_HOST POSTGRES_P
     fi
 done
 
-# The password reaches psql through the environment and never through an argument:
-# /proc/*/cmdline is world-readable on this host, and the VPS serves two other
-# projects.
-export PGPASSWORD="$POSTGRES_PASSWORD"
-
 show() {
-    psql --no-psqlrc --quiet --tuples-only --no-align \
+    # The password reaches psql through the environment and never through an
+    # argument: /proc/*/cmdline is world-readable on this host, and the VPS serves
+    # two other projects. The assignment is a prefix rather than an `export`, so it
+    # is in the environment of this one command and of nothing else the script runs.
+    PGPASSWORD="$POSTGRES_PASSWORD" \
+        psql --no-psqlrc --quiet --tuples-only --no-align \
         --host "$POSTGRES_HOST" --port "$POSTGRES_PORT" \
         --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
         --command "SHOW $1"

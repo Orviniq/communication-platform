@@ -83,10 +83,6 @@ fi
 # key, and a mode is cheaper than trusting that.
 umask 077
 
-# The password reaches pg_dump through the environment and never through an argument:
-# /proc/*/cmdline is world-readable and the VPS serves two other projects.
-export PGPASSWORD="$POSTGRES_PASSWORD"
-
 target="${DESTINATION}/identity-$(date -u +%Y-%m-%d).sql.age"
 temp="${target}.partial"
 trap 'rm -f -- "$temp"' EXIT
@@ -107,7 +103,12 @@ done
 # the plaintext dump never touches the disk of the host it is being protected from.
 # The write goes to `.partial` and is renamed only on success, so a failed run leaves
 # nothing the rotation below would then count as one of the seven.
-pg_dump \
+#
+# The password reaches pg_dump through the environment and never through an
+# argument: /proc/*/cmdline is world-readable and the VPS serves two other projects.
+# The assignment is a prefix rather than an `export`, so it is in the environment of
+# pg_dump alone — `age` on the other side of the pipe never sees it.
+PGPASSWORD="$POSTGRES_PASSWORD" pg_dump \
     --host "$POSTGRES_HOST" --port "$POSTGRES_PORT" \
     --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
     --data-only "${selection[@]}" \
