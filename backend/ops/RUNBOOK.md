@@ -10,7 +10,7 @@ detail, and the note is authoritative wherever the two could differ. The notes:
 
 | Subject | Owner |
 |---|---|
-| PostgreSQL role, database, `pg_hba.conf`, and the recreation rule | [`postgres/README.md`](postgres/README.md) |
+| PostgreSQL role, database, `pg_hba.conf`, the recreation rule, and the logging posture | [`postgres/README.md`](postgres/README.md) |
 | The private CA, the server pair, and the client SPKI pins | [`tls/README.md`](tls/README.md) |
 | Redis posture | [`redis/redis-chatapp.conf`](redis/redis-chatapp.conf) |
 | The units, their hardening, and every uvicorn flag | [`systemd/`](systemd/) |
@@ -85,7 +85,11 @@ coturn.
    `manage.py check --deploy` refuses a `REDIS_URL` with no password
    (`core.E004`), so a deployment cannot forget it.
 6. **PostgreSQL.** Follow [`postgres/README.md`](postgres/README.md) — the role,
-   the database, `listen_addresses`, and `pg_hba.conf`. Come back here for step 3.
+   the database, `listen_addresses`, `pg_hba.conf`, and **the logging posture**. That
+   last one is the setting no other layer of this deployment can compensate for: at
+   the stock `log_min_error_statement` a failing statement is written to the server
+   log with its bind parameters, which on this schema are device ids and ciphertext.
+   Come back here for step 3.
 
 ---
 
@@ -370,6 +374,17 @@ systemctl show chat.service -p NRestarts
 # 2. Posture, under the settings the process actually runs.
 as_deploy .venv/bin/python manage.py check --deploy
 # exit 0 and no core.E / core.W. A finding here is a release defect.
+
+# 2b. The PostgreSQL logging posture, read back off the running server.
+#     Nothing in this repository sets it and no test can fail when it moves, so
+#     this is the only thing that reports an operator's earlier edit, a restored
+#     postgresql.conf or a package upgrade having changed it.
+as_deploy bash ops/audit/postgres_posture.sh
+# "PASS: 10 settings, all as ops/postgres/README.md sets them." and exit 0.
+# Each difference is named on its own line and the exit status is 1. A DIFFERS on
+# log_min_error_statement or log_error_verbosity means failing statements are
+# reaching /var/log/postgresql with their bind parameters: fix it before anything
+# else on this list.
 
 # 3. The schema matches the code that is serving. It opens the database, so a
 #    pass is also the proof that PostgreSQL answers with these credentials.
