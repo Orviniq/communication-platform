@@ -95,7 +95,7 @@ One device-bound session token. It is renewed on demand, and it never rotates.
   its `exp`, a logout or a revocation, and 30 days is a long window to hold one.
   Revocation granularity is one counter on the device row: there is no way to end
   one token and keep its siblings, and there never was.
-  [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) AR-18 carries the row.
+  [`ACCEPTED_RISKS.md`](../../../ACCEPTED_RISKS.md) AR-18 carries the row.
 - **Evidence.** The client cost is recorded rather than predicted:
   `frontend/docs/decisions.md` ADR-049 and ADR-050 and
   `frontend/docs/sync-engine.md` describe the ownership gate, the repair path and
