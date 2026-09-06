@@ -358,3 +358,39 @@ so it declines a `206` as it stands. What a resume needs there:
 
 Worth doing only for the two largest buckets. A 64 KiB or 256 KiB attachment costs
 less to fetch again than the bookkeeping costs to maintain.
+
+## Required before release — the erase-account action
+
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+adds `DELETE /api/v1/me`. Until the client offers it, a user who wants to leave has
+to ask the operator, and the operator can only deactivate the account — the rows stay.
+
+The observable behaviour is in [`API_CHANGES.md`](API_CHANGES.md) § "An account can
+erase itself", and `backend/accounts/API.md` carries the section.
+
+| Path | What is needed |
+|---|---|
+| Settings | An "Erase this account" action, apart from log-out and marked destructive |
+| Its confirmation | A dialog that asks for the account password and states the consequence in the wording below. The password goes in the request body and is never stored |
+| The call | `DELETE /api/v1/me` with a full-scope token and `{"password": "…"}`. `204` is success |
+| `401 invalid_credentials` | The wrong password. Say so and let the user retry — but count: five wrong attempts lock the username for fifteen minutes on the login route as well, so the user would be locked out of the app entirely |
+| `429 throttled` | The name is in its cool-off, or the `accounts` scope is spent. Show the `Retry-After` wait |
+| After `204` | Clear the local store the way a log-out does, and go to the sign-in screen. The token is dead and the socket is already closed with `4003` |
+| A retry after a lost response | `401 token_revoked`. Treat it as success: the first call landed |
+
+### The wording is part of the requirement
+
+The dialog must say that this erases what the server holds and **not** copies peers
+already have. Every message this account sent was decrypted on the recipient's device
+and is stored there; nothing in this call reaches another device. A dialog that says
+"delete my data" or "erase my messages" without that sentence is a claim the system
+does not keep, and `backend/SECURITY.md` § "Best-effort features, worded honestly"
+is the rule it breaks.
+
+Two smaller facts belong in the same text if the screen mentions them at all:
+
+- Attachments this account uploaded stay on the server until the retention window
+  expires them — `attachment_ttl_days` from `GET /api/v1/config`, 30 days by default.
+  Nothing on a stored attachment names an account, so there is no set of them the
+  call could delete.
+- The username becomes available again immediately. Someone else may register it.

@@ -320,6 +320,13 @@ def _logout(stage):
     return Call("POST", f"{PREFIX}/auth/logout", stage.auth)
 
 
+@sample("DELETE", f"{PREFIX}/me", "204")
+def _erase(stage):
+    return Call(
+        "DELETE", f"{PREFIX}/me", stage.auth, body={"json": {"password": PASSWORD}}
+    )
+
+
 @sample("GET", f"{PREFIX}/users", "200")
 def _directory(stage):
     return Call("GET", f"{PREFIX}/users", stage.auth)
@@ -752,6 +759,9 @@ def _burn_the_accounts_scope(stage):
 BURNERS = {
     ("POST", f"{PREFIX}/auth/logout"): _burn_the_accounts_scope,
     ("DELETE", PREFIX + "/me/devices/{device_id}"): _burn_the_accounts_scope,
+    # Its sample deletes the account, so the token the next call would present
+    # names a device that no longer exists.
+    ("DELETE", f"{PREFIX}/me"): _burn_the_accounts_scope,
 }
 
 

@@ -728,6 +728,24 @@ redirects to has always been able to serve a byte range. Both are measured in
 | Where a slow upload is paid for | nginx buffered the request body by default and nothing said so, so the application's 120 s deadline read as a bound on the client's link | `proxy_request_buffering on` is stated: nginx absorbs the body first and the application's deadline covers the loopback hop alone. Measured — with buffering off the upstream spent 3.5 s of its own deadline reading a 200 KiB body trickled over 5 s | None. The behaviour is unchanged; what changed is that it is now pinned by a test rather than inherited |
 | A client that stalls mid-body | nginx's default 60 s between two reads of the body | 30 s, at the edge. A live link trickles and never approaches it | None |
 
+## An account can erase itself
+
+[ADR-0025](docs/architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md)
+adds the one irreversible route this API has. It is additive: no existing route,
+field or status changed.
+
+### `DELETE /api/v1/me` — a new route
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Leaving the service | No route. A user who wanted their account gone asked the operator, who could deactivate it from the panel but never delete it | `DELETE /api/v1/me` with a full-scope token and `{"password": "…"}` answers `204` and deletes the account row, the devices, the one-time prekeys of both kinds, the identity, the key backup, the device-list log, the profile blob and every queued envelope of every device. The username is free again | **Required before release.** The settings screen needs the action, and its wording must say what it does not erase — see [`CLIENT_WORK.md`](CLIENT_WORK.md) |
+| The password | — | Required and checked. A wrong one is `401 {"code": "invalid_credentials"}`, the same body login answers | Ask for it in the confirmation dialog. Do not cache it for this call |
+| Guessing at it | — | Counted against the same per-name cool-off `POST /api/v1/auth/login` feeds: five failures on a username inside fifteen minutes lock it for fifteen on **both** routes, answering `429 throttled` with `Retry-After` | Show the wait. A user locked here cannot log in either, on any device |
+| The token afterwards | — | Dead. Every socket of the account's devices closes with `4003`, and any later call answers `401 {"code": "token_revoked"}` | Treat a `401` on a retry as success: the first call landed and the response was lost |
+| Attachments this account uploaded | — | Left in place until `ATTACH_TTL_DAYS` expires them. Nothing on an attachment row names an account, so there is no set of them this call could identify | None. Say "up to N days" if the screen mentions it; `attachment_ttl_days` is in `GET /api/v1/config` |
+| Copies peers hold | — | Untouched, and unreachable from here. Every message this account sent was decrypted on the recipient's device | **Required in the wording.** A dialog that says "delete my data" without this is a false claim |
+| The audit log | — | No row is written. The operator performed nothing | None |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

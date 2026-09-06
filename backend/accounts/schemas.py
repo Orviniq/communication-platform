@@ -104,6 +104,14 @@ class LoginIn(RequestModel):
     device_id: Annotated[uuid.UUID | None, Field(strict=False)] = None
 
 
+class EraseIn(RequestModel):
+    """The body of `DELETE /api/v1/me`: the account's own password, and nothing
+    else. `extra="forbid"` is what makes a mistyped field a refusal rather than an
+    erasure performed with a field the caller thought was a confirmation."""
+
+    password: Annotated[str, Field(max_length=256)]
+
+
 class ProfileIn(BlobIn):
     blob: Annotated[str, Field(max_length=MAX_PROFILE_CHARS)]
 

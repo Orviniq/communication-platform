@@ -334,6 +334,33 @@ async def _scripted_logout(client, s):
     assert r.status_code == 204, f"logout: {r.status_code}"
 
 
+async def _scripted_erasure(client, s):
+    """Very last: it deletes the account every step above built up.
+
+    A fresh login first, because the logout above ended every token of the device
+    and the erasure needs a full-scope one. What this step contributes is a
+    password inside the body of an authenticated route, and a cascade that removes
+    the mailbox, the key material and every blob the steps above wrote — a delete
+    that named one of those rows in a log line would name all of them.
+    """
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": s["username"],
+            "password": s["password"],
+            "device_id": s["device id"],
+        },
+    )
+    assert r.status_code == 200, f"login before erasure: {r.status_code}"
+    r = await client.request(
+        "DELETE",
+        "/api/v1/me",
+        json={"password": s["password"]},
+        headers={"Authorization": f"Bearer {r.json()['token']}"},
+    )
+    assert r.status_code == 204, f"erase: {r.status_code}"
+
+
 async def _scripted_relay_traffic(client, s):
     """The voice half's HTTP surface: mint one coturn credential.
 
@@ -432,6 +459,7 @@ async def run_audit(probe=None):
                 await _scripted_relay_traffic(client, secrets)
                 await _scripted_socket_traffic(secrets)
                 await _scripted_logout(client, secrets)
+                await _scripted_erasure(client, secrets)
         if probe is not None:
             probe(secrets)
         logging.getLogger("ops.audit.canary").debug(CANARY_CLOSE)

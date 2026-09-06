@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Response, status
 from accounts import services
 from accounts.schemas import (
     DirectoryOut,
+    EraseIn,
     LoginIn,
     LoginOut,
     ProfileIn,
@@ -94,6 +95,35 @@ async def logout(principal: Principal = Depends(require_full_device)):
     device row is what carries the revocation. The presented token dies with
     every other token of the device, so a second call with it answers 401."""
     await run_unit(services.logout, principal.user.id, principal.device.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@authenticated.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "invalid_credentials",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
+async def erase_account(
+    payload: EraseIn, principal: Principal = Depends(require_full_device)
+):
+    """Delete this account and every row that depends on it.
+
+    The one irreversible act the API offers, and the only authenticated route that
+    asks for a password: the token that reached it lives thirty days and nothing
+    detects its theft (AR-18). A wrong password counts against the same per-name
+    cool-off `POST /auth/login` counts against.
+
+    No audit row is written. The operator did nothing, and a row saying that this
+    username erased itself on this day is exactly the record the erasure removes.
+    """
+    await run_unit(services.erase, principal.user, payload.password)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

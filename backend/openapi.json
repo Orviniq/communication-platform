@@ -529,6 +529,22 @@
         "title": "EnvelopeOut",
         "type": "object"
       },
+      "EraseIn": {
+        "additionalProperties": false,
+        "description": "The body of `DELETE /api/v1/me`: the account's own password, and nothing\nelse. `extra=\"forbid\"` is what makes a mistyped field a refusal rather than an\nerasure performed with a field the caller thought was a confirmation.",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "EraseIn",
+        "type": "object"
+      },
       "ErrorOut": {
         "description": "The error envelope. `detail` is a string on every code but\n`invalid_request`, where it maps a field path to the messages that failed.",
         "properties": {
@@ -2358,6 +2374,101 @@
         "summary": "Health",
         "tags": [
           "core"
+        ]
+      }
+    },
+    "/api/v1/me": {
+      "delete": {
+        "description": "Delete this account and every row that depends on it.\n\nThe one irreversible act the API offers, and the only authenticated route that\nasks for a password: the token that reached it lives thirty days and nothing\ndetects its theft (AR-18). A wrong password counts against the same per-name\ncool-off `POST /auth/login` counts against.\n\nNo audit row is written. The operator did nothing, and a row saying that this\nusername erased itself on this day is exactly the record the erasure removes.",
+        "operationId": "erase_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`, `invalid_credentials`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Erase Account",
+        "tags": [
+          "accounts"
         ]
       }
     },
