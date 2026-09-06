@@ -181,10 +181,11 @@ class Command(BaseCommand):
     def _prune_audit():
         """Retention on the admin audit log (ADR-0011).
 
-        The rows name an operator, a time and an object, and for a deleted
-        attachment the object id is that attachment's spent capability. Ninety days
-        is long enough to answer "what did I change last quarter" and short enough
-        that a seizure takes one quarter rather than the life of the deployment.
+        The rows name an operator, a UTC day and an object, and for a deleted
+        attachment the object id is that attachment's spent capability. Thirty days
+        is long enough to answer "what did I change last month" and short enough
+        that a seizure takes one month rather than the life of the deployment
+        (ADR-0025 shortened it from ninety when the rows stopped carrying a time).
         """
         cutoff = timezone.now() - timedelta(days=settings.ADMIN_AUDIT_RETENTION_DAYS)
         pruned = 0

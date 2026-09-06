@@ -112,15 +112,17 @@ A full seizure of this server (disk + database) reveals, in total:
   an upload instead is a per-account counter for the UTC day, which lives in Redis with
   persistence off and is therefore not in a seizure of the disk at all;
 - the **admin audit log** — one row per administrative act the operator performed
-  through the panel, holding the operator's account, a timestamp, the affected object
-  and a plain-language sentence. It names what the operator did, so it shows which
-  accounts were activated or deactivated, which devices were revoked and which
-  attachments were deleted, at second granularity. It carries no blob, no key, no
-  token and no password. `manage.py prune` deletes a row older than
-  `ADMIN_AUDIT_RETENTION_DAYS`, **90 days** by default, so a seizure takes at most one
-  quarter of operator history rather than the life of the deployment. One residue is
-  worth naming: the row for a deleted attachment holds that attachment's id in
-  `object_id`, which is the capability that used to download it — the row and its
+  through the panel, holding the operator's account, the **UTC day** of the act, the
+  affected object and a plain-language sentence. It names what the operator did, so it
+  shows which accounts were activated or deactivated, which devices were revoked and
+  which attachments were deleted — on which day, never at which minute. `action_time`
+  is Django's own second-granularity column and the panel writes midnight UTC into it
+  (ADR-0025), so the ordering of two acts on one day is not recoverable from the log.
+  It carries no blob, no key, no token and no password. `manage.py prune` deletes a row
+  older than `ADMIN_AUDIT_RETENTION_DAYS`, **30 days** by default, so a seizure takes
+  at most one month of operator history rather than the life of the deployment. One
+  residue is worth naming: the row for a deleted attachment holds that attachment's id
+  in `object_id`, which is the capability that used to download it — the row and its
   bytes are gone by the time the audit row exists, so it opens nothing.
 
 No plaintext, no content key, no sender↔recipient pair, no group roster — anywhere at

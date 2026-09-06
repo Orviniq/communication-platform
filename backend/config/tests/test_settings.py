@@ -81,7 +81,7 @@ NUMERIC = {
 # changed here is a number changed in production, and the retention windows and
 # the caps are the ones the threat model is written against.
 NUMERIC_DEFAULTS = {
-    "ADMIN_AUDIT_RETENTION_DAYS": 90,
+    "ADMIN_AUDIT_RETENTION_DAYS": 30,
     "ATTACH_DAILY_BYTES": 256 * 1024**2,
     "ATTACH_MIN_FREE_BYTES": 2 * 1024**3,
     "ATTACH_TTL_DAYS": 30,

@@ -242,8 +242,10 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 # ["redirect_after"]` does not fix it: the key is declared in unfold's settings and
 # read nowhere else in the release.
 LOGIN_REDIRECT_URL = reverse_lazy("admin:index")
-# How long an audit row survives. `manage.py prune` deletes the rest.
-ADMIN_AUDIT_RETENTION_DAYS = env_int("ADMIN_AUDIT_RETENTION_DAYS", default=90)
+# How long an audit row survives. `manage.py prune` deletes the rest. Thirty days
+# with the day-granularity rows of ADR-0025: a seizure takes at most one month of
+# operator history, and the day a row holds says nothing about the hour.
+ADMIN_AUDIT_RETENTION_DAYS = env_int("ADMIN_AUDIT_RETENTION_DAYS", default=30)
 
 # The panel is designed in `core/panel.py`; this is only its configuration. Every
 # key below is read by django-unfold 0.105.0 — an unknown key changes nothing and

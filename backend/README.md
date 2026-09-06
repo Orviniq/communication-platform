@@ -196,7 +196,7 @@ Every environment variable the code reads, with its default:
 | `DJANGO_SECRET_KEY` | — (required) | Django secret key |
 | `DJANGO_ALLOWED_HOSTS` | empty | Comma-separated `ALLOWED_HOSTS` |
 | `ADMIN_PATH` | `admin/` | URL path of the admin panel; the nginx site needs a matching location |
-| `ADMIN_AUDIT_RETENTION_DAYS` | `90` | How long an admin audit row survives before `manage.py prune` deletes it |
+| `ADMIN_AUDIT_RETENTION_DAYS` | `30` | How long an admin audit row survives before `manage.py prune` deletes it. Each row carries the UTC day of the act and never the second |
 | `POSTGRES_DB` | — (required) | Database name |
 | `POSTGRES_USER` | — (required) | Database role |
 | `POSTGRES_PASSWORD` | — (required) | Database password |

@@ -305,10 +305,7 @@ def test_the_envelope_sweep_deletes_in_batches_that_bound_its_lock_time(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_the_audit_sweep_deletes_in_batches_too(
-    expired_audit_rows, settings, monkeypatch
-):
-    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+def test_the_audit_sweep_deletes_in_batches_too(expired_audit_rows, monkeypatch):
     monkeypatch.setattr(prune, "BATCH", 2)
 
     with CaptureQueriesContext(connection) as context:
@@ -526,11 +523,13 @@ def test_the_attachment_cutoff_keeps_the_row_that_lands_exactly_on_it(
 def test_the_audit_cutoff_keeps_the_row_that_lands_exactly_on_it(
     active_user, settings, stopped_clock
 ):
-    """Ninety days of administrative history: long enough to answer what changed
-    last quarter, short enough that a seizure takes one quarter rather than the
-    life of the deployment."""
-    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
-    cutoff = stopped_clock - timedelta(days=90)
+    """Thirty days of administrative history: long enough to answer what changed
+    last month, short enough that a seizure takes one month rather than the life of
+    the deployment. The window is pinned here rather than read from the settings,
+    because a boundary test that moved with the operator's own number would assert
+    nothing about where the boundary is."""
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 30
+    cutoff = stopped_clock - timedelta(days=30)
     marks = {}
     for label, action_time in (
         ("outside", cutoff - timedelta(microseconds=1)),
@@ -679,7 +678,7 @@ def test_a_failed_step_names_the_step_and_the_exception_class_and_nothing_else(
     reaches an operator's terminal either."""
     settings.ENVELOPE_TTL_DAYS = 7
     settings.ATTACH_TTL_DAYS = 30
-    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 30
     leaky = DatabaseError("SELECT blob FROM messaging_queuedenvelope WHERE id = 'x'")
 
     with mock.patch.object(manager.objects, "filter", side_effect=leaky):
@@ -703,7 +702,7 @@ def test_the_output_carries_no_identifier_no_payload_and_no_path(
     system exists to keep."""
     settings.ENVELOPE_TTL_DAYS = 7
     settings.ATTACH_TTL_DAYS = 30
-    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 30
     device = make_device(active_user, 112)
     row = queue_row(device, 1, age_days=8)
     blob = bytes(QueuedEnvelope.objects.get(id=row.id).blob)

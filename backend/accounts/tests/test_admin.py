@@ -949,7 +949,7 @@ def test_the_maintenance_command_deletes_only_audit_rows_past_their_window(owner
 def test_the_retention_window_is_configured_and_documented():
     from django.conf import settings
 
-    assert settings.ADMIN_AUDIT_RETENTION_DAYS == 90
+    assert settings.ADMIN_AUDIT_RETENTION_DAYS == 30
     assert (
         "ADMIN_AUDIT_RETENTION_DAYS" in (settings.BASE_DIR / ".env.example").read_text()
     )

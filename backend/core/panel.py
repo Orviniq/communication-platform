@@ -12,8 +12,9 @@ every page below:
   including the bulk actions Django itself would log nothing for.
 """
 
-from django.contrib.admin.models import DELETION, LogEntry
+from django.contrib.admin.models import CHANGE, DELETION, LogEntry
 from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin
 
@@ -50,6 +51,19 @@ def storage_label(nbytes):
         nbytes /= 1024
 
 
+def audit_day():
+    """Midnight UTC of the day an administrative act happened on.
+
+    `LogEntry.action_time` is Django's own second-granularity column, and the
+    schema of a contributed application is not this project's to change — so the
+    coarsening happens at the write instead. Every row this panel produces carries
+    the day and nothing finer (ADR-0025), which is what the seizure yield in
+    `backend/SECURITY.md` states: the log says what the operator did and on which
+    day, and never at which minute.
+    """
+    return timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def audit(request, objects, action_flag, summary, repr_of=str):
     """One `LogEntry` row for each object an administrative act touched.
 
@@ -65,6 +79,7 @@ def audit(request, objects, action_flag, summary, repr_of=str):
     if not rows:
         return 0
     content_type = ContentType.objects.get_for_model(rows[0], for_concrete_model=False)
+    day = audit_day()
     LogEntry.objects.bulk_create(
         [
             LogEntry(
@@ -74,6 +89,7 @@ def audit(request, objects, action_flag, summary, repr_of=str):
                 object_repr=repr_of(obj)[:200],
                 action_flag=action_flag,
                 change_message=summary,
+                action_time=day,
             )
             for obj in rows
         ]
@@ -115,6 +131,19 @@ class PanelModelAdmin(ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    def log_change(self, request, obj, message):
+        """The change-form save, routed through `audit`.
+
+        Django's own implementation calls `LogEntry.objects.log_actions`, which
+        stamps `action_time` from the model default — the second the save
+        happened. Every row this panel writes carries the day instead, and this
+        was the one write path the framework still owned. Confirmed against
+        django-unfold 0.105.0: `log_change`, `log_deletions` and `log_addition`
+        all come from Django's own `ModelAdmin`, so nothing in the theme shadows
+        this override.
+        """
+        return audit(request, [obj], CHANGE, message, repr_of=self.panel_repr)
 
     def log_deletions(self, request, queryset):
         """Django's own delete paths, routed through `panel_repr`.
