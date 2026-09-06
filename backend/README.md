@@ -64,6 +64,11 @@ is already bound to a device. The gateway handles `ack` and `signal` frames from
 client and emits `envelope` and `signal` frames to it; it holds no presence, which is
 client protocol over `signal` frames
 ([ADR-0022](../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
+The bind writes no row: bringing a socket up is one read, and the server records
+nothing about when a device connected. uvicorn pings a live socket every 240 seconds
+and gives up on the pong after 60, so a dead peer holds a socket for at most five
+minutes
+([ADR-0024](../docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)).
 A `signal` blob is base64 of exactly one signal bucket, like every stored
 ciphertext. Frames are JSON text only, size- and rate-limited;
 protocol violations and a slow consumer close the socket with code 4008, revocation
