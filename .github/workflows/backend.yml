@@ -122,7 +122,7 @@ jobs:
         # suite stopped covering a failed build rather than a number in a report
         # nobody reads. It repeats `pytest.ini`'s floor on purpose, so the job
         # states the contract it enforces instead of inheriting it silently.
-        run: pytest --cov --cov-branch --cov-fail-under=95
+        run: pytest --cov --cov-branch --cov-fail-under=98
       - name: No model change is missing its migration
         run: python manage.py makemigrations --check --dry-run
 
