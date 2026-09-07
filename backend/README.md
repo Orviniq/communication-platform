@@ -183,7 +183,18 @@ floor to. `pyproject.toml` carries what is measured and what is excluded.
 
 Each app holds exactly one `0001_initial` migration. A developer database that
 recorded the history before it was regenerated cannot be migrated onto this one — drop
-and recreate it, as `ops/postgres/README.md` describes. A route change that alters the
+and recreate it, as `ops/postgres/README.md` describes.
+
+**Read `sqlmigrate` against a database at the state that precedes the migration**, and
+never against whatever your `POSTGRES_DB` happens to hold. The schema editor asks the
+connected database for the names of the constraints it drops, so a database that does
+not carry them emits fewer statements than the migration really runs: read against a
+stale developer database, `attachments.0002_drop_the_uploader_link` prints one
+`DROP COLUMN` and hides both the `DROP CONSTRAINT` in front of it and the ACCESS
+EXCLUSIVE that constraint drop takes on `accounts_user`. A reviewer would price a
+two-table migration as a one-table one. `core/tests/test_migrations.py` stages each
+migration's own predecessor state before it reads the SQL, which is the shape to copy
+by hand. A route change that alters the
 contract needs `python manage.py openapi` and the regenerated file committed with it.
 
 ## Configuration

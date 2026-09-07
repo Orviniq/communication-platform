@@ -1214,6 +1214,9 @@ databases were created and dropped per audit; `chatapp`, `chatperf` and
 | `CASCADE` slipped through the statement gate this run widened: `DROP COLUMN` and `DROP CONSTRAINT` were admitted as catalogue writes and exempted from the same-table check, and `CASCADE` matched the same substring | Low | `1d940bf` — added to `FORBIDDEN_ALTERATIONS`; Django emits it only on `DROP TABLE`, which that list never sees |
 | The panel's rule — the attachment capability never becomes visible text and never enters a URL — was proven against `list_display`, `list_display_links` and the permission hooks, and never against a rendered page | Medium | `b08ff32` — asserted against the rendered bodies of the two pages that carry a per-row identifier; adding `id` to `list_display` and restoring `list_display_links` each fail it |
 | "What the client can build against now" described how the contract is published and never what the surface is | Low | `b08ff32` — it states the surface, and every figure in it is derived from the generated document and the route table by three tests |
+| Deploy check 8 pinged Redis and never read its posture back. Demonstrated live: the running Redis on the developer machine reports `maxmemory 0` — unbounded — while the committed `redis-chatapp.conf` now says `128mb`. Nothing in the repository can fail when the running server differs from the file, which is the same gap check 2b exists to close for PostgreSQL | Medium | The runbook's step 8 gains check 8b, which reads `maxmemory`, `maxmemory-policy`, `appendonly` and `save` off the running server and says what each difference means |
+| The rollback trigger read "any of the nine checks in step 8" while step 8 held twelve | Low | Restated as **any** check, with the reason: a count in prose that nothing gates does not survive the next check somebody adds |
+| `sqlmigrate` read against a stale developer database emits fewer statements than the migration runs, because the schema editor asks the connected database for the constraint names it drops. Measured: `attachments.0002_drop_the_uploader_link` prints one `DROP COLUMN` against the fossil `chatapp` and all three statements against a correctly-staged database — hiding the `DROP CONSTRAINT` and the ACCESS EXCLUSIVE it takes on `accounts_user`, so a reviewer prices a two-table migration as a one-table one | Medium | `backend/README.md` states which database to read it against; `core/tests/test_migrations.py` already stages each migration's predecessor state before it reads the SQL |
 
 Every fix landed with a test that failed on the code before it, and each new gate was
 mutation-proved against the change it exists to catch.
@@ -1273,6 +1276,16 @@ mutation-proved against the change it exists to catch.
   `UNFOLD` keys**, and its one flagged attribute is a project attribute the panel
   defines and reads itself. The pinned release, the registered set of four and the
   hidden-model list all match the panel record.
+- **The go-live gate.** `manage.py check --deploy --fail-level WARNING` against
+  `config.settings.prod`, run exactly as the `deploy-check` CI job runs it with its
+  generated stub environment: "System check identified no issues (0 silenced)",
+  exit 0. The declared topology is one VPS, one `chat.service`, in-place with the
+  service stopped — so there is no rolling window, which is what makes the one
+  order-bound migration of this run free.
+- **The rest of step 8.** LiveKit appears nowhere in `ops/` except one sentence
+  naming it as absent; coturn is in checks 1 and 10; the range check, the two
+  posture read-backs and the HSTS count all assert on what came back rather than on
+  an absence of errors.
 - **Performance against the recorded shape.** Peer state is 5 queries flat at 1, 8 and
   64 peers. The sweep on `queued_day` is 5.58 s for 100 000 expired of 200 000 against
   5.95 s recorded, and both retention queries still index-scan. The §4.1 load curve

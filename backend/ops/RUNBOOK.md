@@ -454,6 +454,23 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/un
 # 8. Redis answers, with the password the check above insisted on.
 as_deploy sh -c 'redis-cli -u "$REDIS_URL" ping'     # PONG
 
+# 8b. The Redis posture, read back off the running server, for the same reason as
+#     2b: `ops/redis/redis-chatapp.conf` is what this repository can test, and a
+#     server started before that file, edited by hand, or restarted by a package
+#     upgrade is what actually holds the counters. No test can fail when the two
+#     disagree.
+as_deploy sh -c 'redis-cli -u "$REDIS_URL" config get maxmemory maxmemory-policy appendonly save'
+# maxmemory 134217728, maxmemory-policy noeviction, appendonly no, save empty.
+#
+# `maxmemory 0` is the failure this check exists for: it is Redis's default, it is
+# what an unconfigured server reports, and it means the store is unbounded on a
+# host it shares with PostgreSQL. `maxmemory-policy` anything but `noeviction` is
+# worse than unbounded — every key in this instance is a control, so an eviction is
+# a rate limit or a login lockout silently resetting, where a refused write is a
+# `503` the API already answers (ADR-0010). A non-empty `save` or `appendonly yes`
+# puts the throttle counters, the login lockout and the fan-out bus on disk, which
+# is invariant 6.
+
 # 9. A stored attachment serves a byte range, so a client can resume a download.
 #    Needs one capability id of an attachment that is still inside its TTL; take
 #    it from the client that uploaded it, never from the database, because the id
@@ -517,9 +534,14 @@ accident — so a fault shows as a traceback that names code and never data.
 **The rollback is a git checkout and a restart, and it has never been
 executed** (AR-13). Read that entry before you need this section.
 
-The trigger, decided here rather than during the incident: any of the nine
-checks in step 8 fails and is not fixed by the next command you would have run
-anyway. Do not diagnose first. Restore the previous release, then diagnose.
+The trigger, decided here rather than during the incident: **any** check in
+step 8 fails and is not fixed by the next command you would have run anyway. Do
+not diagnose first. Restore the previous release, then diagnose.
+
+Stated as "any" and not as a count. This sentence read "any of the nine checks"
+while step 8 held twelve, because a number in prose is what rots first and
+nothing here gates it — the trigger has to hold for the check that was added
+after it was written.
 
 ```sh
 # 0. Know where you are going back to, before you stop anything.
