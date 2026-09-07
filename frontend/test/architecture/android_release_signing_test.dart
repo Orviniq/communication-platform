@@ -10,8 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// this application cannot survive the resulting uninstall: it erases the
 /// SQLCipher database and the envelope holding its key, the manifest disables
 /// backup, and the database key has no exportable copy.
-const _frozenBetaApplicationId = 'dev.nimashadloo.chat.beta';
-const _productionApplicationId = 'dev.nimashadloo.chat';
+///
+/// Re-frozen on 2026-09-07 for the move to chat.orviniq.com, which predates any
+/// external Beta install: with nothing installed anywhere there was no update
+/// path to break, so the value could move once. That exemption is spent.
+const _frozenBetaApplicationId = 'com.orviniq.chat.beta';
+const _productionApplicationId = 'com.orviniq.chat';
 
 String _readIdentityProperty(String source, String key) {
   final match = RegExp(

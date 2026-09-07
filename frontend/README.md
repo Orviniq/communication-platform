@@ -34,9 +34,9 @@ mirror; the application has no foreign runtime dependency.
 
 | Environment | Dart entry point | Android application ID |
 |---|---|---|
-| Development | `lib/main_development.dart` | `dev.nimashadloo.chat.development` |
-| Private Experimental | `lib/main_beta.dart` | `dev.nimashadloo.chat.beta` |
-| Production | `lib/main_production.dart` | `dev.nimashadloo.chat` |
+| Development | `lib/main_development.dart` | `com.orviniq.chat.development` |
+| Private Experimental | `lib/main_beta.dart` | `com.orviniq.chat.beta` |
+| Production | `lib/main_production.dart` | `com.orviniq.chat` |
 
 The beta flavor ships the **Private Experimental** deployment defined by
 [ADR-044](docs/decisions.md): one privately distributed artifact for roughly 20-30

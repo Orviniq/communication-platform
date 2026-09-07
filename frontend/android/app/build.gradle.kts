@@ -193,7 +193,7 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
-    val productionApplicationId = "dev.nimashadloo.chat"
+    val productionApplicationId = "com.orviniq.chat"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
