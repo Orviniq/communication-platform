@@ -14,10 +14,10 @@ import uuid
 import pytest
 import redis.asyncio
 
+from ops.audit.log_silence import capture_all_logging
 from realtime import auth, bus, gateway
 
 from .conftest import bearer, connect_ok, mint_session, probe, ws
-from .test_log_silence import raw_root_capture
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -182,7 +182,7 @@ async def test_the_reconnect_puts_nothing_in_a_log_line(monkeypatch, settings):
     monkeypatch.setattr(bus, "RECONNECT_DELAY_SECONDS", 0.05)
     await bus.get_subscriber().subscribe(topic, received.append)
 
-    with raw_root_capture() as lines:
+    with capture_all_logging() as lines:
         logging.getLogger("test.canary").debug("canary")
         await kill_the_subscription(settings)
         async with asyncio.timeout(DELIVERY_TIMEOUT):

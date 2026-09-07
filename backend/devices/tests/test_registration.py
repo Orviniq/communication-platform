@@ -384,5 +384,4 @@ def test_a_registration_that_carries_pq_material_but_no_prekeys_is_accepted(
     assert response.status_code == 201
     stored = Device.objects.get(id=response.json()["device_id"])
     assert stored.pq_spk_id == 5
-    assert stored.pq_spk_updated_date is None  # retired by ADR-0024
     assert OneTimePrekey.objects.filter(device=stored).count() == 0

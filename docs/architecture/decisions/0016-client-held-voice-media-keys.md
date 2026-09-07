@@ -58,5 +58,10 @@ is unchanged.
 - The `signal` frames that carry the keys are volatile and never touch disk, per
   invariant 7. That also means a key distribution missed during a reconnect is
   gone, and the client must ask again.
-- `voicerooms/tests/test_media_key_isolation.py` is the executable form of the
-  server-side half: no media key reaches a model, a serializer or a migration.
+- `voicerooms/tests/test_media_key_isolation.py` was the executable form of the
+  server-side half: no media key reaches a model, a serializer or a migration. It
+  left with the `voicerooms` package — the tests when [0021](0021-relayed-webrtc-mesh-and-no-server-room.md)
+  removed the room object, and the package itself in phase 10 run 08. The property
+  it held is now held more broadly and by construction: `core/tests/test_manifest.py`
+  and `core/tests/test_seizure_guard.py` walk **every** registered model and fail on
+  any key-material column, so there is no voice-shaped exemption left to test for.

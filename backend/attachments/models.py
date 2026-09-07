@@ -18,13 +18,6 @@ class Attachment(models.Model):
     id = models.CharField(
         primary_key=True, max_length=43, default=_new_capability_id, editable=False
     )
-    # Retired by ADR-0025 with the lifetime quota it charged. Nothing reads it and
-    # nothing writes it; the column stays until run 08 drops it, because a column
-    # leaves in two steps and this is the first. `SET_NULL` is what keeps an
-    # erased account's attachments in place until the sweep expires them.
-    uploader = models.ForeignKey(
-        "accounts.User", on_delete=models.SET_NULL, null=True, related_name="attachments"
-    )
     size = models.BigIntegerField()
     created_date = models.DateField(auto_now_add=True)
 

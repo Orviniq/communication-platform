@@ -80,8 +80,9 @@ def test_a_row_is_born_with_its_own_identifier_and_a_day_coarse_stamp(
 
     assert row.id is not None
     assert row.queued_day == timezone.now().date()
-    # The column it replaces is written by nothing until run 08 drops it.
-    assert row.queued_hour is None
+    # And nothing finer exists to write: the column it replaced is gone with
+    # `messaging.0008_drop_the_retired_hour`.
+    assert [f.name for f in row._meta.concrete_fields if f.name.endswith("_hour")] == []
 
 
 def test_a_bulk_created_row_gets_the_same_coarse_day_as_a_saved_one(active_user):
@@ -95,7 +96,6 @@ def test_a_bulk_created_row_gets_the_same_coarse_day_as_a_saved_one(active_user)
 
     stored = QueuedEnvelope.objects.get(recipient_device=device)
     assert stored.queued_day == timezone.now().date()
-    assert stored.queued_hour is None
 
 
 def test_two_rows_of_the_same_device_never_share_an_identifier(active_user):
@@ -172,20 +172,20 @@ def test_the_bucket_set_travels_into_the_migration_rather_than_the_code_alone():
     assert kwargs["bucket_set"] == sorted(ENVELOPE_BUCKETS)
 
 
-def test_the_table_carries_the_mailbox_index_the_retention_indexes_and_no_more():
+def test_the_table_carries_the_mailbox_index_the_retention_index_and_no_more():
     """The unique constraint doubles as the ordered mailbox read, and the hourly
     sweep filters on `queued_day` alone. A standalone index on the foreign key —
     which is what Django adds unless told not to — would be a redundant B-tree
     maintained on every insert into the largest table of the schema.
 
-    Two retention indexes for now: `ix_queue_queued_hour` indexes a column nothing
-    reads any more and goes with that column in run 08, because a column leaves in
-    two steps. Until then the table pays for it on every insert, and this assertion
-    is what makes that a decision rather than an oversight.
+    One retention index, not two: `ix_queue_queued_hour` indexed a column nothing
+    read any more and left concurrently in `0007_drop_the_hour_index`, so the table
+    stopped paying for it on every insert. The exact set is asserted rather than the
+    presence of each one, because an index nobody decided on costs the same whatever
+    it is called. The primary key's own index is in the set for that reason: it is
+    an index this table maintains, and leaving it out would make the assertion a
+    list of the ones somebody remembered.
     """
     held = indexes_on(QueuedEnvelope)
 
-    assert ("recipient_device_id", "seq") in held
-    assert ("queued_day",) in held
-    assert ("queued_hour",) in held
-    assert ("recipient_device_id",) not in held
+    assert set(held) == {("id",), ("recipient_device_id", "seq"), ("queued_day",)}

@@ -64,10 +64,10 @@ def test_deleting_the_backup_leaves_the_account(active_user):
     assert type(active_user).objects.filter(id=active_user.id).exists()
 
 
-def test_the_table_carries_exactly_four_concrete_columns():
+def test_the_table_carries_exactly_three_concrete_columns():
     names = [field.name for field in KeyBackup._meta.concrete_fields]
 
-    assert names == ["user", "blob", "version", "updated_date"]
+    assert names == ["user", "blob", "version"]
     assert KeyBackup._meta.db_table == "vault_keybackup"
 
 
@@ -91,14 +91,15 @@ def test_the_version_column_starts_at_zero_and_refuses_a_negative(active_user):
 
 def test_no_save_stamps_a_time_of_any_kind(active_user):
     """A day the account last wrote its backup is a presence signal, and ADR-0024
-    stopped recording one: the column has no automatic value and no writer, so a
-    seizure of this table learns nothing about when. It survives with the row until
-    run 08 drops it, because a column leaves in two steps."""
-    field = KeyBackup._meta.get_field("updated_date")
+    stopped recording one. `vault.0003_drop_the_retired_date` took the column with
+    it, so a seizure of this table has no column to read a when from at all."""
+    stored = store(active_user)
 
-    assert field.auto_now is False
-    assert field.null is True
-    assert store(active_user).updated_date is None
+    assert [
+        field.name
+        for field in type(stored)._meta.concrete_fields
+        if field.get_internal_type() in ("DateField", "DateTimeField")
+    ] == []
 
 
 @pytest.mark.parametrize(

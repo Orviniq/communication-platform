@@ -240,3 +240,118 @@ def test_a_rate_the_deployment_cannot_parse_fails_loudly(rate):
     answers `server_error` rather than serving unlimited traffic."""
     with pytest.raises((KeyError, IndexError, ValueError)):
         parse_rate(rate)
+
+
+# --- The two commands, and what happens when something gets between them ----------
+# The counter and its expiry are one pipeline for a reason that is not latency. As
+# two awaits with the `EXPIRE` guarded by `count == 1`, anything that stopped the
+# coroutine after the `INCR` left a key that never expired, and no later request of
+# that window re-armed it. The two tests below are that failure, from both of its
+# ends: the split itself, and the unarmed key a split would leave behind.
+
+
+class OneRoundTripThenGone:
+    """A client that is cancelled at the first opportunity after one Redis round
+    trip, which is what a disconnected caller does to the handler serving it.
+
+    The cancellation is injected rather than raced, so the test is deterministic.
+    What it models is real: `uvicorn` cancels the task when the peer goes away, and
+    the limiter has no shield around its store calls.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.calls = []
+
+    def pipeline(self, *args, **kwargs):
+        return _CancelAfterExecute(self.inner.pipeline(*args, **kwargs), self.calls)
+
+    async def incr(self, key):
+        self.calls.append("incr")
+        await self.inner.incr(key)
+        raise asyncio.CancelledError
+
+    async def expire(self, key, period, **kwargs):
+        self.calls.append("expire")
+        return await self.inner.expire(key, period, **kwargs)
+
+
+class _CancelAfterExecute:
+    def __init__(self, inner, calls):
+        self.inner = inner
+        self.calls = calls
+
+    async def __aenter__(self):
+        await self.inner.__aenter__()
+        return self
+
+    async def __aexit__(self, *exc):
+        return await self.inner.__aexit__(*exc)
+
+    def incr(self, key):
+        self.calls.append("incr")
+        return self.inner.incr(key)
+
+    def expire(self, key, period, **kwargs):
+        self.calls.append("expire")
+        return self.inner.expire(key, period, **kwargs)
+
+    async def execute(self):
+        self.calls.append("execute")
+        await self.inner.execute()
+        raise asyncio.CancelledError
+
+
+def test_a_caller_that_disappears_mid_pair_leaves_no_key_without_an_expiry(
+    settings, clock, run, monkeypatch
+):
+    """The failure this pipeline exists to prevent.
+
+    A handler stopped between the `INCR` and the `EXPIRE` left the key at `TTL -1`
+    for good: the expiry only ever ran on the first hit of a window, so no later
+    request re-armed it, and the key outlived the process in a store the
+    deployment gives no `maxmemory`. An unauthenticated caller reaches this on
+    `login` and `register` by hanging up.
+    """
+    rate_of(settings, 5)
+    clock.now = 1_700_000_000
+    key = f"ratelimit:{SCOPE}:addr:{CALLER}:{clock.now // MINUTE}"
+
+    async def example():
+        store = get_client()
+        await store.flushdb()
+        wrapped = OneRoundTripThenGone(store)
+        monkeypatch.setattr("api.ratelimit.get_client", lambda: wrapped)
+        with pytest.raises(asyncio.CancelledError):
+            await rate_limit(SCOPE)(request_from())
+        monkeypatch.undo()
+        return await store.exists(key), await store.ttl(key), wrapped.calls
+
+    exists, ttl, calls = run(example())
+
+    assert calls, "the limiter never reached the store"
+    # Either the round trip never landed, or it landed whole. What may not happen
+    # is a key with no expiry on it.
+    assert not exists or ttl > 0, f"key left unarmed at TTL {ttl} after {calls}"
+
+
+def test_a_key_that_lost_its_expiry_is_rearmed_by_the_next_request(settings, clock, run):
+    """The repair, which is what `NX` buys over an expiry guarded by the count.
+
+    A key with no TTL is not only the split above: a `FLUSHDB`-less operator, a
+    restored dump, or any future path that writes the counter can produce one. The
+    limiter must not need the key to be fresh in order to arm it.
+    """
+    rate_of(settings, 5)
+    clock.now = 1_700_000_000
+    key = f"ratelimit:{SCOPE}:addr:{CALLER}:{clock.now // MINUTE}"
+
+    async def example():
+        store = get_client()
+        await store.flushdb()
+        await store.set(key, 1)  # a counter with no expiry, as a split would leave
+        assert await store.ttl(key) == -1
+        await rate_limit(SCOPE)(request_from())
+        return await store.ttl(key)
+
+    assert 0 < run(example()) <= MINUTE

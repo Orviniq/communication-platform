@@ -108,9 +108,15 @@ A full seizure of this server (disk + database) reveals, in total:
   finer (ADR-0025), so a seizure cannot say which part of a day a device was addressed
   in — the waking pattern an hour column carried is not recorded;
 - **attachment rows** — a capability id, a bucketed size and the day of upload, and
-  nothing that names an account. The column that used to carry the uploader is written
-  by nothing (ADR-0025), so a seizure cannot say whose file a stored blob is, how many
-  files an account uploaded, or that two blobs came from the same person. What bounds
+  nothing that names an account. The column that used to carry the uploader stopped
+  being written by ADR-0025 and was **dropped from the table** in phase 10 run 08, so
+  the row has no field an account could be read out of: a seizure cannot say whose
+  file a stored blob is, how many files an account uploaded, or that two blobs came
+  from the same person. The distinction matters for a seizure of an environment that
+  ran the earlier release — a column that merely stopped being written still carries
+  the values it was written with, and dropping a column does not erase what is already
+  in the heap pages, only what the catalogue names. This deployment carries no such
+  rows: ADR-0009 makes creating the database and migrating once the supported path. What bounds
   an upload instead is a per-account counter for the UTC day, which lives in Redis with
   persistence off and is therefore not in a seizure of the disk at all;
 - the **admin audit log** — one row per administrative act the operator performed

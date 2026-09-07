@@ -148,7 +148,6 @@ online to transfer it. There is no server history API.
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
 | `attachments` | Bucketed encrypted blob store with capability-id access |
-| `voicerooms` | A migrations package and nothing else: `0002_delete_room` drops the table ADR-0021 removed. It leaves the tree once every environment has applied it |
 | `realtime` | The `/ws` gateway, the Redis publish-and-subscribe bus behind it, and its socket-side auth |
 | `core` | Size buckets, opaque blob field, env helpers, log scrubbing, health endpoint, deploy checks |
 | `config` | Settings (`base`/`dev`/`prod`), the ASGI entry point, root URLconf |
@@ -177,14 +176,25 @@ Tests use `config.settings.dev` (see `pytest.ini`) and require both services run
 The dev settings fall back to insecure dev keys for `DJANGO_SECRET_KEY` and
 `JWT_SIGNING_KEY` when unset; everything else reads from the environment.
 
-Branch coverage is gated at 95 percent over `backend/`. `pytest` on its own does not
+Branch coverage is gated at 98 percent over `backend/`. `pytest` on its own does not
 measure it, so the inner loop stays fast and a single file can be run alone; the gate
 is `pytest --cov --cov-branch`, which is what CI runs and what `pytest.ini` binds the
 floor to. `pyproject.toml` carries what is measured and what is excluded.
 
 Each app holds exactly one `0001_initial` migration. A developer database that
 recorded the history before it was regenerated cannot be migrated onto this one — drop
-and recreate it, as `ops/postgres/README.md` describes. A route change that alters the
+and recreate it, as `ops/postgres/README.md` describes.
+
+**Read `sqlmigrate` against a database at the state that precedes the migration**, and
+never against whatever your `POSTGRES_DB` happens to hold. The schema editor asks the
+connected database for the names of the constraints it drops, so a database that does
+not carry them emits fewer statements than the migration really runs: read against a
+stale developer database, `attachments.0002_drop_the_uploader_link` prints one
+`DROP COLUMN` and hides both the `DROP CONSTRAINT` in front of it and the ACCESS
+EXCLUSIVE that constraint drop takes on `accounts_user`. A reviewer would price a
+two-table migration as a one-table one. `core/tests/test_migrations.py` stages each
+migration's own predecessor state before it reads the SQL, which is the shape to copy
+by hand. A route change that alters the
 contract needs `python manage.py openapi` and the regenerated file committed with it.
 
 ## Configuration

@@ -215,13 +215,20 @@ class TestRefund:
         here would replace that answer with one about a store the client cannot
         act on, and the key expires either way."""
 
+        reached = []
+
         class Unreachable:
             async def decrby(self, key, amount):
+                reached.append((key, amount))
                 raise RedisConnectionError("refused")
 
         monkeypatch.setattr(allowance, "get_client", Unreachable)
 
-        await allowance.refund("attach:day:whoever:2026-09-06", SMALLEST)
+        assert await allowance.refund("attach:day:whoever:2026-09-06", SMALLEST) is None
+        # The store was reached with the caller's own key and amount. Without this a
+        # `refund` that returned before it ever issued the `DECRBY` would pass: the
+        # test would be asserting that nothing raised from code that did nothing.
+        assert reached == [("attach:day:whoever:2026-09-06", SMALLEST)]
 
 
 def test_the_key_names_the_account_and_the_day_and_nothing_else():

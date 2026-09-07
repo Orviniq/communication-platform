@@ -138,20 +138,24 @@ def test_reading_a_profile_is_one_lookup(http, active_user, device, bearer):
         user=active_user, blob=b"\x01" * PROFILE_BUCKETS[0], version=1
     )
 
-    counted(
+    peer = counted(
         http,
         "GET",
         f"/api/v1/users/{active_user.id}/profile",
         AUTH_QUERY + 1,
         headers=bearer(active_user, device),
     )
-    counted(
+    own = counted(
         http,
         "GET",
         MY_PROFILE_URL,
         AUTH_QUERY + 1,
         headers=bearer(active_user, device),
     )
+
+    # `counted` weighs the statements and returns the answer; without this a route
+    # that regressed to a `404` at the same cost would pass here.
+    assert (peer.status_code, own.status_code) == (200, 200)
 
 
 def test_a_profile_write_reads_the_row_once(http, active_user, device, bearer):
@@ -256,12 +260,15 @@ def test_a_first_profile_write_is_the_locked_read_and_one_insert(
 # the credential read of the authentication dependency; the account's own name and
 # hash in one `values_list`, because both are deferred on the instance the
 # dependency hands over; the live device ids for the socket close; and then the
-# fifteen statements Django's collector issues for the cascade — one probe for the
-# devices it must walk, one probe for the account row, twelve deletes, and the one
-# `UPDATE` that nulls `Attachment.uploader` on rows this account happens to have
-# uploaded. Every one of the deletes is a fast delete: no row of any of those
-# tables is read into this process, so no ciphertext crosses the boundary.
-ERASE_QUERIES = 15
+# fourteen statements Django's collector issues for the cascade — one probe for the
+# devices it must walk, one probe for the account row, and twelve deletes. Every one
+# of the deletes is a fast delete: no row of any of those tables is read into this
+# process, so no ciphertext crosses the boundary.
+#
+# It was fifteen until `attachments.0002_drop_the_uploader_link`. The fifteenth was
+# an `UPDATE` nulling `Attachment.uploader` on the rows this account had uploaded,
+# and there is no column left for the collector to null.
+ERASE_QUERIES = 14
 
 
 @pytest.mark.parametrize("extra_devices", [0, 2])

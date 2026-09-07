@@ -52,7 +52,3 @@ class ProfileBlob(models.Model):
     )
     blob = OpaqueBlobField(bucket_set=PROFILE_BUCKETS)
     version = models.PositiveIntegerField(default=0)
-    # Retired by ADR-0024 with the activity dates. Nothing reads it and nothing
-    # writes it; the column stays until run 08 drops it, because a column leaves
-    # in two steps and this is the first.
-    updated_date = models.DateField(null=True)

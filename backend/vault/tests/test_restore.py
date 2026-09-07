@@ -122,11 +122,7 @@ def test_restoring_twice_returns_the_same_bytes_and_writes_nothing(
 
     assert first.json() == second.json()
     after = KeyBackup.objects.get(user_id=active_user.id)
-    assert (after.version, bytes(after.blob), after.updated_date) == (
-        before.version,
-        bytes(before.blob),
-        before.updated_date,
-    )
+    assert (after.version, bytes(after.blob)) == (before.version, bytes(before.blob))
     assert KeyBackup.objects.count() == 1
 
 

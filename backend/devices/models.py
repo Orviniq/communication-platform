@@ -28,10 +28,6 @@ class UserIdentity(models.Model):
     # Ed25519 signature by master over the canonical encoding of the two subkeys.
     master_sig = models.BinaryField()
     version = models.PositiveIntegerField(default=0)
-    # Retired by ADR-0024 with the activity dates. Nothing reads it and nothing
-    # writes it; the column stays until run 08 drops it, because a column leaves
-    # in two steps and this is the first.
-    updated_date = models.DateField(null=True)
 
 
 class Device(models.Model):
@@ -46,10 +42,6 @@ class Device(models.Model):
     spk_id = models.PositiveIntegerField()
     spk_pub = models.BinaryField()
     spk_sig = models.BinaryField()
-    # Retired by ADR-0024 with the activity dates. Nothing reads it and nothing
-    # writes it; the column stays until run 08 drops it, because a column leaves
-    # in two steps and this is the first.
-    spk_updated_date = models.DateField(null=True)
     registration_id = models.PositiveIntegerField()
     # Ed25519 signature by the user's self-signing key over the canonical device
     # bundle. Opaque: stored and relayed, never verified — peers verify it against
@@ -62,15 +54,7 @@ class Device(models.Model):
     label_blob = OpaqueBlobField(bucket_set=LABEL_BUCKETS, null=True)
     # Bumping this invalidates every outstanding JWT for this device.
     token_generation = models.PositiveIntegerField(default=1)
-    # Retired by ADR-0023 with the refresh token it counted. Nothing reads it and
-    # nothing writes it; the column stays until the next run drops it, because a
-    # column leaves in two steps and this is the first.
-    refresh_generation = models.PositiveIntegerField(default=1)
     created_date = models.DateField(auto_now_add=True)
-    # Retired by ADR-0024 with the activity dates. Nothing reads it and nothing
-    # writes it; the column stays until run 08 drops it, because a column leaves
-    # in two steps and this is the first.
-    last_active_date = models.DateField(null=True)
     revoked_date = models.DateField(null=True)
     # Per-device envelope counter. Ordering the mailbox needs a monotonic number, and
     # a server-wide sequence would let row adjacency correlate activity across devices
@@ -90,10 +74,6 @@ class Device(models.Model):
     pq_spk_id = models.PositiveIntegerField(null=True)
     pq_spk_pub = models.BinaryField(null=True)  # encapsulation key, 1184 bytes
     pq_spk_sig = models.BinaryField(null=True)  # Ed25519 by the device identity key
-    # Retired by ADR-0024 with the activity dates. Nothing reads it and nothing
-    # writes it; the column stays until run 08 drops it, because a column leaves
-    # in two steps and this is the first.
-    pq_spk_updated_date = models.DateField(null=True)
 
 
 class OneTimePrekey(models.Model):
@@ -166,10 +146,6 @@ class DeviceLogRecord(models.Model):
     )
     seq = models.BigIntegerField()
     blob = OpaqueBlobField(bucket_set=DEVICELOG_BUCKETS)
-    # Retired by ADR-0024 with the activity dates. Nothing reads it and nothing
-    # writes it; the column stays until run 08 drops it, because a column leaves
-    # in two steps and this is the first.
-    stored_date = models.DateField(null=True)
 
     class Meta:
         # The unique (user, seq) index also serves keyset paging and the Max(seq)

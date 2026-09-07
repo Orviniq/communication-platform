@@ -44,10 +44,12 @@ known-first-party = [
 "*/migrations/*.py" = ["E501"]
 
 # Coverage is measured with branch coverage, and the floor that turns the figure
-# into a gate is `--cov-fail-under=95` in `pytest.ini` and in the CI test job.
-# Ninety-five rather than the figure the suite happens to reach: a floor set at the
-# measurement fails on the next honest refactor, and one set below it says what the
-# project will not go under.
+# into a gate is `--cov-fail-under=98` in `pytest.ini` and in the CI test job.
+# Ninety-eight rather than the figure the suite happens to reach: measured at 99.97
+# percent — 3033 statements with none missed, 442 branches with one partial — a floor
+# set at the measurement fails on the next honest refactor, and one set a whole point
+# below it says what the project will not go under. It was ninety-five until this
+# release, which is three points of slack the suite has never used.
 #
 # `source` is the repository, not a list of apps, so a new app is measured the day
 # it is created rather than the day somebody remembers to add it here. The two

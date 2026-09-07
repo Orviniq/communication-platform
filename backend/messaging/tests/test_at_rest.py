@@ -28,7 +28,6 @@ EXPECTED_COLUMNS = {
     "recipient_device_id",
     "seq",
     "blob",
-    "queued_hour",  # retired by ADR-0025; run 08 drops it
     "queued_day",
 }
 
@@ -98,14 +97,11 @@ def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
         assert len(hexed[1:]) // 2 in set(ENVELOPE_BUCKETS)
 
     # (d) Nothing finer than the day is recorded (ADR-0025). A date column carries
-    # no time at all, and the column that used to carry an hour is written by
-    # nothing — so a dump can say which day a device was addressed on and never
-    # which part of it.
+    # no time at all, and the column that used to carry an hour has left the table
+    # entirely — so a dump can say which day a device was addressed on and never
+    # which part of it. The column set asserted above is what holds the second half.
     for row in rows:
         assert date.fromisoformat(row["queued_day"]) == timezone.now().date()
-        assert row["queued_hour"] == "\\N", (
-            f"the retired hour column was written: {row['queued_hour']}"
-        )
 
     # The sender is in none of it: alice sent all three and appears nowhere.
     dump = pg_dump_table(TABLE)
@@ -153,14 +149,7 @@ def test_the_model_declares_no_sender_or_recipient_list_field():
 
     names = {f.name for f in QueuedEnvelope._meta.get_fields()}
 
-    assert names == {
-        "id",
-        "recipient_device",
-        "seq",
-        "blob",
-        "queued_hour",
-        "queued_day",
-    }
+    assert names == {"id", "recipient_device", "seq", "blob", "queued_day"}
     assert not any("sender" in n for n in names)
 
 

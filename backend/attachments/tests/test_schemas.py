@@ -1,7 +1,7 @@
 """The one outbound model of the attachment surface.
 
 Two fields leave this process for a stored blob, and the model is what holds the
-line: the row also carries an uploader, and a response that named it would put an
+line: the row also carries a stored day, and a response that named it would put a
 account behind every capability. There is no inbound model — the upload body is
 multipart, parsed under limits Pydantic has no say over — and that absence is
 asserted here too, because a model added later would be a second parse of a body
@@ -28,13 +28,14 @@ def test_the_stored_blob_is_described_by_its_capability_and_its_length():
 
 
 def test_nothing_the_row_also_carries_survives_into_the_body():
-    """The uploader is on the row the route holds, and a model that let an unknown
-    key through would put an account behind every capability."""
+    """The stored day and the path on disk are on the row the route holds, and a
+    model that let an unknown key through would publish the first and hand out the
+    second."""
     body = AttachmentOut.model_validate(
         {
             "attachment_id": CAPABILITY,
             "size": SMALLEST,
-            "uploader_id": 7,
+            "created_date": "2026-09-06",
             "disk_path": "/srv/chat/media/Xk/Xk3v",
         }
     )

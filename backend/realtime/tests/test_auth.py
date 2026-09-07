@@ -58,15 +58,16 @@ async def test_header_auth_path_connects(active_user, device):
 
 async def test_a_connect_records_nothing_about_the_device(active_user, device):
     """ADR-0024: the bind stopped writing the day the device was last seen, and no
-    other column stands in for it. A socket that came up must leave the row exactly
-    as it found it, or the seizure yield gains an activity day again."""
+    other column stands in for it — `devices.0003_drop_the_retired_columns` then
+    took the column. A socket that came up must leave the row exactly as it found
+    it, or the seizure yield gains an activity signal again."""
     before = await run_unit(type(device).objects.get, id=device.id)
     comm = await connect_ok(bearer(await mint_session(active_user, device)))
     await probe(comm, device.id)
 
     after = await run_unit(type(device).objects.get, id=device.id)
-    assert after.last_active_date is None
     assert model_to_dict(after) == model_to_dict(before)
+    assert "last_active_date" not in model_to_dict(after)
     await comm.disconnect()
 
 

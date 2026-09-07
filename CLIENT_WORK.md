@@ -8,8 +8,45 @@ This file routes; it never repeats. The contract the client implements is
 are in [`API_CHANGES.md`](API_CHANGES.md), and the endpoint reference is the per-app
 `API.md` files with [`backend/openapi.json`](backend/openapi.json) beside them.
 
-Each run of the server appends its section. Nothing is removed from this file except
-by the developer who did the work.
+Each run of the server appends its section, so the body below is in the order the
+work arrived. Nothing is removed from this file except by the developer who did the
+work.
+
+## The order to do it in
+
+Release necessity, not arrival. **Required** means a release without it is broken or
+misleading to a user; **recommended** means the client works without it and costs the
+user something; **optional** is an improvement with no obligation behind it. Each row
+names the `backend/` document that binds the obligation — that document is
+authoritative and this one never restates it.
+
+### Required before release
+
+| Work | Section | Bound by |
+|---|---|---|
+| The `/ws` handshake takes the token in the `Authorization` header; the query-parameter form is gone | [The `/ws` handshake](#the-ws-handshake--this-is-the-breaking-one) | [`backend/realtime/API.md`](backend/realtime/API.md) |
+| One session token replaces the access/refresh pair: the response bodies of register, login and renew moved, and `POST /api/v1/auth/refresh` is gone | [Required — the response bodies moved](#required--the-response-bodies-moved) | [`backend/accounts/API.md`](backend/accounts/API.md), [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §B |
+| The linked-devices screen must stop reading `last_active_date`, which no route serves | [Required — the linked-devices screen loses the last-active value](#required--the-linked-devices-screen-loses-the-last-active-value) | [`backend/devices/API.md`](backend/devices/API.md) |
+| The gateway handles `ack` and `signal` and emits `envelope` and `signal` and nothing else; the frames that left must go from the client | [The gateway frames that left](#the-gateway-frames-that-left-and-the-one-that-changed-shape) | [`backend/realtime/API.md`](backend/realtime/API.md) |
+| The account-erasure action, so a user who wants to leave has a way to | [Required before release — the erase-account action](#required-before-release--the-erase-account-action) | [`backend/accounts/API.md`](backend/accounts/API.md) |
+| The web platform files, the conditional-import stubs and the web build step the removed web target left behind | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
+| Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
+
+### Recommended
+
+| Work | Section | Bound by |
+|---|---|---|
+| Read the published limits from `GET /api/v1/config` rather than hard-coding them | [Recommended — read the limits rather than hard-coding them](#recommended--read-the-limits-rather-than-hard-coding-them) | [`backend/core/API.md`](backend/core/API.md) |
+| Say what the day's upload allowance is before the refusal, rather than after it | [Recommended — say what the day's allowance is, before the refusal](#recommended--say-what-the-days-allowance-is-before-the-refusal) | [`backend/attachments/API.md`](backend/attachments/API.md) |
+| The user-facing wording the removed web target left in the client | [The wording](#the-wording) | [`backend/README.md`](backend/README.md) |
+
+### Optional
+
+| Work | Section | Bound by |
+|---|---|---|
+| One call for a fan-out, and a conditional identity read under `ETag` | [Optional — one call for a fan-out, and a conditional identity read](#optional--one-call-for-a-fan-out-and-a-conditional-identity-read) | [`backend/devices/API.md`](backend/devices/API.md) |
+| Resume an interrupted attachment download with a `Range` request | [Optional — resume an attachment download](#optional--resume-an-attachment-download) | [`backend/attachments/API.md`](backend/attachments/API.md) |
+| The arbitration the token rotation forced, where two devices race | [Optional — the arbitration the rotation forced](#optional--the-arbitration-the-rotation-forced) | [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §B |
 
 ## Remove the web target
 

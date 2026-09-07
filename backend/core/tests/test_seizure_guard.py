@@ -70,7 +70,6 @@ APP_LABELS = frozenset(
         "vault",
         "messaging",
         "attachments",
-        "voicerooms",
         "core",
         "realtime",
     }

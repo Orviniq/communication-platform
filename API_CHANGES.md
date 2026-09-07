@@ -746,10 +746,45 @@ field or status changed.
 | Copies peers hold | — | Untouched, and unreachable from here. Every message this account sent was decrypted on the recipient's device | **Required in the wording.** A dialog that says "delete my data" without this is a false claim |
 | The audit log | — | No row is written. The operator performed nothing | None |
 
+## The retired columns leave the schema
+
+**Nothing here reaches a client.** Ten columns that no route served, no response
+carried and no code read or wrote were dropped from the database, with the two
+indexes that were maintained for them, and the migrations-only `voicerooms` package
+left the tree with them. Every field the
+retirements themselves removed from a response was published when it happened —
+`last_active_date` under "The token pair becomes one session token" and the
+attachment fields under "The attachment store stops naming accounts" — and this step
+changes no request shape, no response shape, no status and no header.
+`backend/openapi.json` is byte-for-byte unchanged across it.
+
 ## What the client can build against now
 
-**The surface is frozen at `v1` from this merge.** It is published two ways and they
-are the same contract:
+**The surface is frozen at `v1` from this merge.** It is **32 operations over 28
+paths**, plus the `/ws` gateway, and nothing else answers:
+
+| App | Operations | What the client reaches there |
+|---|---|---|
+| [`devices`](backend/devices/API.md) | 13 | Device registration and revocation, the cross-signing identity, classical and ML-KEM prekeys, peer bundles and claims, the device-list log, and the peer-state batch |
+| [`accounts`](backend/accounts/API.md) | 9 | Register, login, renew, logout, the user directory, the encrypted profile, and account erasure |
+| [`messaging`](backend/messaging/API.md) | 3 | Fan-out send, per-device drain, ack |
+| [`attachments`](backend/attachments/API.md) | 2 | Bucketed upload and capability download |
+| [`vault`](backend/vault/API.md) | 2 | Read and write the recovery key backup |
+| [`core`](backend/core/API.md) | 2 | Health, and the published limits |
+| [`realtime`](backend/realtime/API.md) | 1 | The relay credential. The `/ws` gateway itself is a WebSocket and carries no OpenAPI operation, so `realtime/API.md` is the whole of its reference: its frames, its bucket rules and its close codes |
+
+By method that is 13 `GET`, 12 `POST`, 5 `PUT` and 2 `DELETE`. Every one of the 32
+declares `401`, `403`, `429`, `500` and `503`; 21 declare `400`, 15 `413`, 7 `404`
+and 7 `409`.
+
+**3 of the 32 take no credential** — health, register and login. **One takes the
+short-lived register-scope token** — `POST /api/v1/me/devices`, which is the route
+that mints the device a caller does not yet have. **The other 28 take a session token
+bound to a live device**, and there is exactly one kind of it: one token, thirty
+days, no refresh, revoked by a counter on the device row
+([ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md)).
+
+It is published two ways and they are the same contract:
 
 - [`backend/openapi.json`](backend/openapi.json) — the OpenAPI document, generated
   from the routes. Every path, method, request shape, response shape and status is in
@@ -757,8 +792,14 @@ are the same contract:
   fails a change that does not regenerate it, so it cannot describe a server that no
   longer exists.
 - The per-app `API.md` files — the same routes in prose, plus what a schema cannot
-  carry: the retry semantics of every mutating route, the padding buckets, and the
-  WebSocket close codes.
+  carry: the retry semantics of **every** route, the padding buckets, and the
+  WebSocket close codes. Every route, not only the mutating ones: "this route is a
+  read" is a fact only the route can state, because the method does not carry it.
+
+Both are gated in both directions. A route the document describes and the surface
+does not serve fails, and so does a route the surface serves and the document does
+not describe; the same holds for every status each route publishes against every
+status its code can answer.
 
 There is **no idempotency store**, because a stored response for a send would link a
 sender to its recipients at rest — which is the one thing the schema is built to

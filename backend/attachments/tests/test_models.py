@@ -11,7 +11,6 @@ import os
 
 import pytest
 
-from accounts.models import User
 from attachments.models import Attachment, _new_capability_id
 from core.buckets import ATTACHMENT_BUCKETS
 
@@ -22,8 +21,8 @@ SMALLEST = min(ATTACHMENT_BUCKETS)
 ALPHABET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
 
 
-def test_a_fresh_row_carries_43_characters_of_url_safe_capability(active_user):
-    attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+def test_a_fresh_row_carries_43_characters_of_url_safe_capability():
+    attachment = Attachment.objects.create(size=SMALLEST)
 
     assert len(attachment.id) == 43
     assert set(attachment.id) <= ALPHABET
@@ -51,11 +50,11 @@ def test_no_two_generated_capabilities_collide():
 
 
 def test_the_disk_path_shards_on_the_capability_and_stays_under_the_root(
-    active_user, attachments_root
+    attachments_root,
 ):
     """One directory of every stored file is a directory listing nobody can page.
     The shard comes off the server-generated id, so no request value steers it."""
-    attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+    attachment = Attachment.objects.create(size=SMALLEST)
 
     path = attachment.disk_path()
 
@@ -64,40 +63,30 @@ def test_the_disk_path_shards_on_the_capability_and_stays_under_the_root(
 
 
 def test_the_path_follows_the_configured_root_rather_than_a_value_baked_at_import(
-    active_user, settings, tmp_path
+    settings, tmp_path
 ):
     """The deployment points `ATTACHMENTS_ROOT` at its own volume, and a path read
     once at import would keep writing into the directory the tests use."""
-    attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
+    attachment = Attachment.objects.create(size=SMALLEST)
     settings.ATTACHMENTS_ROOT = tmp_path / "somewhere-else"
 
     assert attachment.disk_path().startswith(str(tmp_path / "somewhere-else"))
 
 
-def test_a_removed_account_leaves_its_attachments_fetchable(active_user):
-    """`SET_NULL`, not cascade: the capability travelled to recipients inside their
-    messages, and deleting the uploader must not silently break their download."""
-    attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
-
-    User.objects.filter(pk=active_user.pk).delete()
-
-    attachment.refresh_from_db()
-    assert attachment.uploader_id is None
-    assert Attachment.objects.filter(id=attachment.id).exists()
-
-
-def test_the_largest_bucket_round_trips_through_the_size_column(active_user):
+def test_the_largest_bucket_round_trips_through_the_size_column():
     """The boundary the column has to hold: the biggest bucket a client may
     upload, read back as the integer it was stored as."""
     largest = max(ATTACHMENT_BUCKETS)
 
-    attachment = Attachment.objects.create(uploader=active_user, size=largest)
+    attachment = Attachment.objects.create(size=largest)
 
     assert Attachment.objects.get(id=attachment.id).size == largest
 
 
-def test_an_account_reaches_its_own_attachments_through_the_related_name(active_user):
-    """`user.attachments` is what the quota aggregate and the panel column read."""
-    attachment = Attachment.objects.create(uploader=active_user, size=SMALLEST)
-
-    assert list(active_user.attachments.all()) == [attachment]
+def test_no_relation_reaches_an_attachment_from_an_account(active_user):
+    """`user.attachments` was the accessor the lifetime quota and the panel column
+    read. ADR-0025 removed both and run 08 dropped the column, so an account has no
+    path to a stored file: the only handle on one is the capability id a recipient
+    was given inside an end-to-end encrypted message."""
+    assert not hasattr(active_user, "attachments")
+    assert [f.name for f in Attachment._meta.get_fields() if f.is_relation] == []

@@ -53,7 +53,12 @@ class TestRecord:
         services.record(attachment)
 
         stored = Attachment.objects.get(id=attachment.id)
-        assert (stored.uploader_id, stored.size) == (None, SMALLEST)
+        assert stored.size == SMALLEST
+        assert [f.name for f in stored._meta.concrete_fields] == [
+            "id",
+            "size",
+            "created_date",
+        ]
 
 
 class TestDiskSpace:

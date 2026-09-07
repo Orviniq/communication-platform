@@ -131,6 +131,37 @@ A Persian, right-to-left panel is a deferral, not a gap — see section 9.
 | 2026-09-06 | The attachment page named the account that uploaded each row, filtered on it, and the account page showed that account's stored bytes | [ADR-0025](../architecture/decisions/0025-unlinked-attachments-erasure-and-day-granularity.md) stopped the server reading and writing `Attachment.uploader`, so there is no account for either to render. The attachment page keeps the size bucket and the day, and its audit label names those two rather than an account; the `uploader` column and filter, the `list_select_related` behind them and the account page's "Attachment storage" field all leave. The dashboard's storage card stops measuring a per-account quota that no longer exists and measures the filesystem instead, which is what `ATTACH_MIN_FREE_BYTES` actually refuses uploads against. What the operator loses is the ability to answer "who uploaded this" — from the panel or from anywhere else, because nothing records it. What the page is for is unaffected: the operator sees what is on the disk and deletes it |
 | 2026-09-06 | The device page showed the day a device was last seen, and offered a filter on it | [ADR-0024](../architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md) stopped the server writing `Device.last_active_date`, so the column has no value to render. `last_active_date` leaves `list_display`, `list_filter` and `fields`; the page keeps the account, the state badge, `created_date` and `revoked_date`, and the revoke action is untouched. What the operator loses is the ability to answer "when was this device last seen" — from the panel or from anywhere else, because the column is written by nothing. What answering "I lost my phone" needs is still there: which devices the account has, which are live, and the button. The `RevokedFilter` is unaffected — it reads `revoked_date`, which stays |
 
+## 11. What the panel audit of phase 10 run 08 rendered
+
+Every position above is a statement about configuration. This run drove the panel
+instead, signed in as a superuser against a scratch database, and read what the
+browser receives.
+
+| Page | Answered | What the body carried |
+|---|---|---|
+| Dashboard | `200` | — |
+| `accounts.user` changelist, both flag filters, search, change form | `200` | No password hash. The `created_date` filter answers `302`, which is the date-hierarchy redirect and not a refusal |
+| `admin.logentry` changelist, `action_flag` filter, search | `200` | — |
+| `attachments.attachment` changelist | `200` | The capability, **once**, as the `_selected_action` input value |
+| `attachments.attachment` change form and per-object delete | `403` | Refused, so neither URL exists to carry a capability |
+| The bulk purge confirmation | `200` | The capability, **once**, as the same input value; the prose names a count, a freed size and the consequence |
+| `devices.device` changelist, `state` filter, search, change form | `200` | No `ik_pub`, no `spk_sig` |
+| Every per-object delete | `403` | Refused panel-wide |
+
+**The one thing the rendered read found that configuration could not.** The rule
+this panel is built on — the capability never becomes visible text and never enters
+a URL — was proven only against `list_display`, `list_display_links` and the
+permission hooks. It now has a rendered assertion beside it: the capability occurs
+exactly once on each of the two pages that carry a per-row identifier at all, and
+that occurrence is the action token the one bulk action cannot run without. A column
+added to `list_display` and a restored `list_display_links` were each mutated in and
+each fails it.
+
+`unfold_surface_check.py` against the installed 0.105.0 reports **0 unknown `UNFOLD`
+keys** across 36 keys and 5 admin classes. Its one flagged attribute,
+`AttachmentAdmin.purge_confirmation_template`, is a project attribute this panel
+defines and reads itself, not an invented framework key.
+
 ## Architecture decisions
 
 The panel depends on:
