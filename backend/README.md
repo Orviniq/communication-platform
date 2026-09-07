@@ -176,6 +176,26 @@ Tests use `config.settings.dev` (see `pytest.ini`) and require both services run
 The dev settings fall back to insecure dev keys for `DJANGO_SECRET_KEY` and
 `JWT_SIGNING_KEY` when unset; everything else reads from the environment.
 
+**The temporary directory needs `ATTACH_MIN_FREE_BYTES` of free space.** The
+attachment fixtures point `ATTACHMENTS_ROOT` at pytest's `tmp_path`, and the
+upload path refuses to write when the filesystem under it holds less than that
+floor — 2 GiB by default — so a host whose `/tmp` is a small `tmpfs` fails every
+upload with `503 storage_full`. It is worth naming because of how the failure
+reads: 45 tests across `attachments/`, `core/tests/test_log_silence.py` and the
+contract suite fail on an assertion about a status code, and none of them says
+anything about the disk. Ubuntu 26.04 mounts `/tmp` as a 478 MB `tmpfs` out of
+the box, which is below the floor. Point `TMPDIR` at real disk before the run, or
+lower `ATTACH_MIN_FREE_BYTES` for it.
+
+**A test run empties the Redis database `REDIS_URL` names.** `conftest.py` calls
+`flushdb()` before every test, because the rate counters and the login lockout are
+shared state that leaks between tests otherwise. On a developer machine that is
+what you want. On a host that is also serving it is not: a run pointed at the
+serving instance's database resets every live rate limit and every login lockout,
+and nothing warns that it happened. Give a test run its own database index —
+`redis://:<password>@127.0.0.1:6379/1` — whenever a serving instance shares the
+host.
+
 Branch coverage is gated at 98 percent over `backend/`. `pytest` on its own does not
 measure it, so the inner loop stays fast and a single file can be run alone; the gate
 is `pytest --cov --cov-branch`, which is what CI runs and what `pytest.ini` binds the

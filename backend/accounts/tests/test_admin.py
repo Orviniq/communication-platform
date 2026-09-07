@@ -925,9 +925,19 @@ def test_collectstatic_can_run():
     this is here to catch."""
     out = StringIO()
     call_command("collectstatic", "--noinput", "--dry-run", verbosity=1, stdout=out)
+    summary = out.getvalue()
 
-    assert "0 static files" not in out.getvalue(), out.getvalue()
-    assert "unfold" in out.getvalue().lower() or "static files" in out.getvalue()
+    # Both counts, because either one alone is legitimately zero. On a host that
+    # has already run `collectstatic` — which step 4 of the runbook requires before
+    # the service is ever started — the summary reads `0 static files copied …, N
+    # unmodified`, so a check for the copy count alone reports a finder
+    # configuration that resolves to nothing on every host where the step actually
+    # ran, while passing in CI against an empty `static_root`. What this is here to
+    # catch is a total of zero.
+    copied = int(re.search(r"(\d+) static files? copied", summary).group(1))
+    unmodified = re.search(r"(\d+) unmodified", summary)
+    assert copied + int(unmodified.group(1) if unmodified else 0) > 0, summary
+    assert "unfold" in summary.lower() or "static files" in summary
 
 
 # --- Retention -------------------------------------------------------------------

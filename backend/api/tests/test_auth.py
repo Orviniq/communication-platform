@@ -248,11 +248,23 @@ def test_an_authentic_register_token_is_a_scope_refusal_and_not_a_forgery():
     """`typ` alone separates the two powers, and the two refusals it produces are
     not interchangeable: an authentic token used past its power is a `403`, and a
     `401` there would tell its holder the token itself is broken."""
+    # Minted here rather than taken from the module-level `REGISTER`, and this is
+    # the only test of the file that needs the token to still verify: the others
+    # assert on a broken signature, which is refused before the expiry is read, or
+    # on claims read unverified. A register token lives
+    # `REGISTER_SCOPE_ACCESS_MIN` minutes — ten by default — and the module
+    # constants are built once at import, so on a host where the suite takes
+    # longer than that to reach this test the token has expired and the parser
+    # answers `401 invalid_token` before the scope check is ever reached. That is
+    # the assertion this test exists to make, inverted by the clock. Measured on
+    # the VPS, where the suite runs 38 minutes against 4 on a developer machine.
+    register, _ = issue_register_scope(UNSAVED_USER)
+
     with pytest.raises(ApiError) as raised:
-        decode_session(REGISTER)
+        decode_session(register)
 
     assert (raised.value.status_code, raised.value.code) == (403, "scope_forbidden")
-    assert decode(REGISTER)["jti"] == unverified(REGISTER)["jti"]
+    assert decode(register)["jti"] == unverified(register)["jti"]
 
 
 def test_a_register_token_can_never_claim_its_way_up_to_a_session():
