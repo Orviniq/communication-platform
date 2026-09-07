@@ -60,16 +60,20 @@ class TestTheAdminPath:
         assert reverse("admin:index", urlconf=module) == "/ops-7f31/"
         assert reverse("admin:login", urlconf=module) == "/ops-7f31/login/"
 
-    def test_the_default_path_is_the_one_the_nginx_site_routes(self, monkeypatch):
-        """`ADMIN_PATH` and the nginx `location` are one setting in two places, and
-        nothing in the process can see the half that lives in nginx: a panel moved
-        in the environment file alone answers this API's `not_found` envelope,
-        because the request never reaches the process at all."""
-        module = urlconf(monkeypatch, debug=False)
-        routed = re.findall(r"^\s*location (/\S*/) \{", NGINX.read_text(), re.M)
+    def test_the_nginx_site_needs_no_copy_of_the_admin_path(self, monkeypatch):
+        """`ADMIN_PATH` was one setting in two places — here and an nginx
+        `location` — and the nginx half could not name an operator's chosen path
+        without writing that path into a public repository. Every value but the
+        default therefore left the panel unreachable behind nginx's own 404. The
+        site's most general location is a catch-all instead: it carries whatever
+        this variable holds, and `api.app.django_paths` is what separates the
+        admin prefix from the paths that get this API's `not_found` envelope."""
+        module = urlconf(monkeypatch, debug=False, ADMIN_PATH="ops-7f31/")
+        routed = re.findall(r"^\s*location (\S+) \{", NGINX.read_text(), re.M)
 
-        assert module.ADMIN_PATH == "admin/"
-        assert f"/{module.ADMIN_PATH}" in routed
+        assert reverse("admin:index", urlconf=module) == "/ops-7f31/"
+        assert "/" in routed
+        assert "/admin/" not in routed
 
     def test_the_example_environment_carries_the_trailing_slash(self):
         """The boundary an operator can cross by hand. `path()` concatenates, so

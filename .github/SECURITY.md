@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report privately through this repository's [GitHub private security
-advisories](https://github.com/n-shadloo/communication-platform/security/advisories/new).
+advisories](https://github.com/Orviniq/communication-platform/security/advisories/new).
 Do not file a vulnerability as a public issue or a public pull request.
 
 Include what an attacker gains, the steps to reproduce it, and the commit you observed it

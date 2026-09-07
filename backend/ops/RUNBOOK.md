@@ -59,11 +59,33 @@ The host is one VPS with 1 vCPU and 1 GB of RAM, shared with two other projects
 of the same operator. Everything below listens on loopback except nginx and
 coturn.
 
-1. **Packages.** `python3.12` with `python3.12-venv`, `postgresql-16`, `redis`
-   (7.x), `nginx`, `coturn` and `age`. coturn is the only media service on this host
+1. **Packages.** A CPython with its `venv` module, PostgreSQL, Redis, `nginx`,
+   `coturn` and `age` — **the distribution's own, whichever versions those are.**
+   The project has run on 3.12 with PostgreSQL 16 and Redis 7, and on 3.14 with
+   PostgreSQL 18 and Redis 8 ([`GROUND-TRUTH.md`](../../docs/architecture/GROUND-TRUTH.md) §1);
+   pinning a version the distribution does not carry would mean an APT source from
+   outside it, which is the foreign dependency this deployment exists to avoid.
+   What actually constrains the interpreter is the wheel cache of step 2, not this
+   list: `ops/vendor.sh` refuses a source distribution, so an interpreter with no
+   binary wheel for one of the pins fails there, loudly, before anything is
+   installed. coturn is the only media service on this host
    ([ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md));
    `age` is what encrypts the identity backup of step 11, and Ubuntu 24.04 packages
    it in universe.
+
+   **Installing `coturn` starts it, and the packaged configuration authenticates
+   nobody.** The Debian and Ubuntu packages enable and start the unit from their
+   post-install, and the `/etc/turnserver.conf` they ship sets no `lt-cred-mech`,
+   no `use-auth-secret` and no `realm` — so from this step until step 7 the host
+   runs an open relay on its public address, and anyone who scans for it can
+   allocate through it. Measured on Ubuntu 26.04 with coturn 4.6.1 on 2026-09-07:
+   `turnutils_uclient -y -n 1 -e 127.0.0.1 YOUR_VPS_IP` completed an allocation
+   with no credential and relayed 400 bytes at zero loss, exit 0. Close the window
+   at the moment the package lands, and let step 7 be what turns it back on:
+
+   ```sh
+   systemctl disable --now coturn
+   ```
 2. **The service account.** A `deploy` user with a group of its own, additionally
    a member of `www-data`, with no login shell. Every unit runs as that user with
    `Group=www-data`, so files the process creates are group-readable by nginx.
@@ -71,7 +93,7 @@ coturn.
 
    ```sh
    install -d -o deploy -g www-data -m 0750 /srv/chat
-   sudo -u deploy git clone https://github.com/n-shadloo/communication-platform /srv/chat
+   sudo -u deploy git clone https://github.com/Orviniq/communication-platform /srv/chat
    install -d -o deploy -g www-data -m 0750 /srv/chat/backend/media_root
    install -d -o deploy -g www-data -m 0750 /srv/chat/backend/static_root
    install -d -o deploy -g deploy    -m 0700 /srv/chat/backups
@@ -257,10 +279,14 @@ trigger.
 `.env.production` is never committed. `.gitignore` excludes `.env.*`, and the
 only file of that family in the repository is the example.
 
-Two settings are one setting in two places, and changing either alone breaks the
-panel: `ADMIN_PATH` here and the matching `location` in
-[`nginx/chat.nimashadloo.dev.conf`](nginx/chat.nimashadloo.dev.conf). Pick a
-non-obvious path and change both.
+`ADMIN_PATH` is set here and nowhere else. Pick a non-obvious path; the nginx
+site needs no matching edit, because its most general location is a catch-all that
+carries every path no other location claims to the application, and
+`api.app.django_paths` is what hands `ADMIN_PATH` to Django and answers everything
+else with this API's `not_found` envelope. Writing the path into
+[`nginx/chat.nimashadloo.dev.conf`](nginx/chat.nimashadloo.dev.conf) would put an
+operator's chosen path into a public repository, which is the one thing the path
+buys.
 
 ---
 
@@ -312,11 +338,11 @@ Two properties of that site are worth knowing before changing it, because both
 fail silently:
 
 - **Every location states its own `client_max_body_size`**, equal to the largest
-  body that location admits, and the server block's value is the deny-by-default
-  for a path that matches none. The `/api/` cap and `BODY_CAP_BATCH_BYTES` are
-  one number in two places; so are the `/admin/` cap and `BODY_CAP_JSON_BYTES`.
-  Raise one without the other and nginx either refuses a body the routes accept
-  or carries one they refuse.
+  body that location admits, and the server block's value is the floor a location
+  that forgot one would inherit. The `/api/` cap and `BODY_CAP_BATCH_BYTES` are
+  one number in two places; so are the catch-all `/` cap — which is what serves
+  the admin path — and `BODY_CAP_JSON_BYTES`. Raise one without the other and
+  nginx either refuses a body the routes accept or carries one they refuse.
 - **`add_header` inside a location replaces every inherited one.** nginx owns
   `Strict-Transport-Security` for the whole host, because it is the only layer
   that sees every response — the proxied ones, the files it serves from disk, and
@@ -359,6 +385,20 @@ first client rather than at start:
 ```sh
 systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf   # 1
 ```
+
+Then prove it authenticates, which is the half the check above cannot see: an
+allocation that offers no credential at all must be refused.
+
+```sh
+turnutils_uclient -y -n 1 -e 127.0.0.1 YOUR_VPS_IP      # must NOT complete
+```
+
+`recv: Connection refused`, or any run that transfers nothing, is the pass. A run
+that reports `tot_recv_msgs` above zero and exits 0 means coturn is still reading
+the packaged file and relaying for anonymous callers — the drop-in did not take.
+This is a different failure from check 10 of step 8, which asks whether a
+credential this backend minted is *accepted*; this one asks whether the absence
+of one is *refused*, and a relay can fail it while passing the other.
 
 - **coturn cannot read environment variables, and a command-line flag would put
   the secret in world-readable `/proc/*/cmdline`.** So `realm=` and
