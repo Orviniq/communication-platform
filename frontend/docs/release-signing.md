@@ -40,7 +40,7 @@ mechanisms, not build configuration.** Treat them accordingly.
 
 | Property | Value |
 |---|---|
-| Application ID | `dev.nimashadloo.chat.beta` |
+| Application ID | `com.orviniq.chat.beta` |
 | Artifact | Direct-install APK (no App Bundle, no store) |
 | Key alias | `communication-platform-beta` |
 | Key | RSA 4096, `SHA384withRSA`, 10 000 days (~27 years) |
@@ -70,7 +70,7 @@ have to be distributed alongside every APK.
 
 They are **separate applications** that coexist on a device:
 
-- Beta is `dev.nimashadloo.chat.beta`, Production is `dev.nimashadloo.chat`.
+- Beta is `com.orviniq.chat.beta`, Production is `com.orviniq.chat`.
 - Neither can ever upgrade into the other — different application IDs — so a
   shared key would buy exactly zero upgrade continuity.
 - The Beta key has to be reachable for frequent releases, and eventually by CI.
@@ -195,7 +195,7 @@ control.
 ```bash
 cd frontend
 export CP_BETA_SIGNING_PROPERTIES="$HOME/.communication-platform/beta-signing/beta-signing.properties"
-export BETA_SERVER_ORIGIN="https://chat.nimashadloo.dev"
+export BETA_SERVER_ORIGIN="https://chat.orviniq.com"
 export BETA_PRIVATE_CA_SHA256="<64 hex characters>"
 export BETA_PRIMARY_SPKI_SHA256="<base64 pin>"
 export BETA_BACKUP_SPKI_SHA256="<a different base64 pin>"
@@ -319,7 +319,7 @@ touches storage, schema, or crypto state.
    same message history; the attachment still opens; the group still shows its
    roster; a new message sends and is received by the second device.
 8. Confirm the identity did not change:
-   `adb shell dumpsys package dev.nimashadloo.chat.beta | grep -i versionCode`
+   `adb shell dumpsys package com.orviniq.chat.beta | grep -i versionCode`
    and `apksigner verify --print-certs` on both artifacts — same certificate.
 
 Record the result and the two build numbers in the release notes.
