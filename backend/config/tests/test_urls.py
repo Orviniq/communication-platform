@@ -23,7 +23,7 @@ from config.tests.test_settings import SETTINGS, load
 
 URLS = SETTINGS.parent / "urls.py"
 EXAMPLE = settings.BASE_DIR / ".env.example"
-NGINX = settings.BASE_DIR / "ops" / "nginx" / "chat.nimashadloo.dev.conf"
+NGINX = settings.BASE_DIR / "ops" / "nginx" / "chat.orviniq.com.conf"
 
 
 def urlconf(monkeypatch, debug, **environment):

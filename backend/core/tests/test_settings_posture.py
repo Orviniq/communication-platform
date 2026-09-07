@@ -16,7 +16,7 @@ SOCKET_CEILING = 500
 # The one site file `ops/nginx/` carries; the per-location assertions below read
 # it by name rather than by glob, so a rename fails here instead of passing over
 # an empty match.
-SITE = "chat.nimashadloo.dev.conf"
+SITE = "chat.orviniq.com.conf"
 
 # The two modules the relay's shared-secret posture is read out of, named here so a
 # failure quotes the path rather than the file.
