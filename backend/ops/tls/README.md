@@ -5,7 +5,7 @@ and the client devices do.
 
 ## Superseded posture: the wildcard certificate
 
-The public deployment at `chat.nimashadloo.dev` used to terminate TLS in the host's
+The public deployment at `chat.orviniq.com` used to terminate TLS in the host's
 nginx with the wildcard Let's Encrypt certificate the VPS already renews. Only the
 nginx site has moved off it; coturn still points at `/etc/letsencrypt/live/`.
 
@@ -14,7 +14,7 @@ nginx site has moved off it; coturn still points at `/etc/letsencrypt/live/`.
 A public CA has to be reachable to issue and renew. If the system must keep working
 through a network shutdown, it can depend on no live foreign CA: the root generated
 by `make_ca.sh` is created once, kept offline, and pre-installed on the devices that
-will use the server. `ops/nginx/chat.nimashadloo.dev.conf` now carries the private-CA
+will use the server. `ops/nginx/chat.orviniq.com.conf` now carries the private-CA
 `ssl_certificate` pair directly; the clients pin the CA as described below.
 
 ### Generating

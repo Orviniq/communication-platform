@@ -384,7 +384,7 @@ two layers around it.
 
 ### A request past 60 seconds now gets this API's answer, not nginx's
 
-`ops/nginx/chat.nimashadloo.dev.conf` set no `proxy_read_timeout` on `/api/`, so
+`ops/nginx/chat.orviniq.com.conf` set no `proxy_read_timeout` on `/api/`, so
 nginx used its own default of 60 seconds. The application's deadline on the
 attachment upload and the batch routes is `UPLOAD_DEADLINE_SECONDS`, 120 seconds. A
 request between the two therefore reached nginx's limit first and the client read

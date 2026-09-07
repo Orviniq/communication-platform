@@ -200,7 +200,7 @@ working credentials rather than none, and either one works.
 
 ```json
 {
-  "urls": ["turn:chat.nimashadloo.dev:3478?transport=udp"],
+  "urls": ["turn:chat.orviniq.com:3478?transport=udp"],
   "username": "1757352000:qkT2wR1mVbA4cJ7fKpN0Zg==",
   "credential": "b0Zk9Qd4rXm2sT1uV7wY8aB3cD0=",
   "expires_in": 21600

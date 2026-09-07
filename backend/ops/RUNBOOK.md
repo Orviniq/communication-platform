@@ -284,7 +284,7 @@ site needs no matching edit, because its most general location is a catch-all th
 carries every path no other location claims to the application, and
 `api.app.django_paths` is what hands `ADMIN_PATH` to Django and answers everything
 else with this API's `not_found` envelope. Writing the path into
-[`nginx/chat.nimashadloo.dev.conf`](nginx/chat.nimashadloo.dev.conf) would put an
+[`nginx/chat.orviniq.com.conf`](nginx/chat.orviniq.com.conf) would put an
 operator's chosen path into a public repository, which is the one thing the path
 buys.
 
@@ -326,9 +326,9 @@ header.
 
 ```sh
 install -d -m 0755 /etc/nginx/snippets
-install -m 0644 ops/nginx/chat.nimashadloo.dev.conf /etc/nginx/sites-available/
+install -m 0644 ops/nginx/chat.orviniq.com.conf /etc/nginx/sites-available/
 install -m 0644 ops/nginx/snippets/proxy-headers.conf /etc/nginx/snippets/
-ln -sf /etc/nginx/sites-available/chat.nimashadloo.dev.conf /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/chat.orviniq.com.conf /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 ```
 
@@ -471,24 +471,24 @@ as_deploy bash ops/audit/postgres_posture.sh
 as_deploy .venv/bin/python manage.py migrate --check
 
 # 4. Liveness, through the edge, end to end.
-curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/api/v1/health
+curl -sS -o /dev/null -w '%{http_code}\n' https://chat.orviniq.com/api/v1/health
 # 200
 
 # 5. The edge is answering, and the error envelope is this API's.
-curl -sS https://chat.nimashadloo.dev/api/v1/nope
+curl -sS https://chat.orviniq.com/api/v1/nope
 # {"code": "not_found", ...} — Django's HTML 404 here means the mount is wrong.
 
 # 6. Exactly one Strict-Transport-Security header, on a proxied path and on a
 #    path nginx serves itself.
-curl -sSI https://chat.nimashadloo.dev/api/v1/health | grep -ci strict-transport
-curl -sSI https://chat.nimashadloo.dev/static/admin/css/base.css | grep -ci strict-transport
+curl -sSI https://chat.orviniq.com/api/v1/health | grep -ci strict-transport
+curl -sSI https://chat.orviniq.com/static/admin/css/base.css | grep -ci strict-transport
 # 1 and 1. A 2 is a second owner; a 0 on the static path is the add_header
 # inheritance rule biting.
 
 # 7. The panel renders styled — collectstatic ran and nginx serves the result.
 #    ADMIN_PATH is in .env.production, so read it from there rather than typing it.
-as_deploy sh -c 'curl -sSI "https://chat.nimashadloo.dev/${ADMIN_PATH}" | head -1'
-curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/unfold/css/styles.css
+as_deploy sh -c 'curl -sSI "https://chat.orviniq.com/${ADMIN_PATH}" | head -1'
+curl -sS -o /dev/null -w '%{http_code}\n' https://chat.orviniq.com/static/unfold/css/styles.css
 # 200 for the stylesheet. A 404 is an empty static_root.
 
 # 8. Redis answers, with the password the check above insisted on.
@@ -518,7 +518,7 @@ as_deploy sh -c 'redis-cli -u "$REDIS_URL" config get maxmemory maxmemory-policy
 #    The token is a full-scope session token of any account.
 curl -sS -D- -o /dev/null \
     -H "Authorization: Bearer $token" -H 'Range: bytes=0-9' \
-    "https://chat.nimashadloo.dev/api/v1/attachments/$capability"
+    "https://chat.orviniq.com/api/v1/attachments/$capability"
 # HTTP/1.1 206 Partial Content, with Content-Range: bytes 0-9/<bucket size> and
 # Content-Length: 10. A 200 with the whole bucket means the internal location is
 # not serving the file — X-Accel-Redirect fell through, and the application's own
