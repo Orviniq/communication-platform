@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/n-shadloo/communication-platform/security/advisories/new
+    url: https://github.com/Orviniq/communication-platform/security/advisories/new
     about: >-
       Report privately through a GitHub security advisory. Vulnerabilities must not be
       filed as public issues.

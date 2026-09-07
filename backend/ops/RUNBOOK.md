@@ -71,7 +71,7 @@ coturn.
 
    ```sh
    install -d -o deploy -g www-data -m 0750 /srv/chat
-   sudo -u deploy git clone https://github.com/n-shadloo/communication-platform /srv/chat
+   sudo -u deploy git clone https://github.com/Orviniq/communication-platform /srv/chat
    install -d -o deploy -g www-data -m 0750 /srv/chat/backend/media_root
    install -d -o deploy -g www-data -m 0750 /srv/chat/backend/static_root
    install -d -o deploy -g deploy    -m 0700 /srv/chat/backups

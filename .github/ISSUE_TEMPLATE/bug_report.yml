@@ -7,7 +7,7 @@ body:
       value: >-
         Do not report a security vulnerability here. Use a private security advisory —
         see
-        [SECURITY.md](https://github.com/n-shadloo/communication-platform/blob/main/.github/SECURITY.md).
+        [SECURITY.md](https://github.com/Orviniq/communication-platform/blob/main/.github/SECURITY.md).
 
   - type: dropdown
     id: component
