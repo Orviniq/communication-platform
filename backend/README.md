@@ -289,7 +289,7 @@ session lasts at most eight hours and ends at browser close.
 
 Every asset is served by this deployment: run `python manage.py collectstatic` on
 deploy, and nginx serves `STATIC_ROOT` — without it the panel renders unstyled. The
-nginx site needs a `location` for `ADMIN_PATH`; `ops/nginx/chat.nimashadloo.dev.conf`
+nginx site needs a `location` for `ADMIN_PATH`; `ops/nginx/chat.orviniq.com.conf`
 carries the default one, and it and `ADMIN_PATH` are one setting in two places.
 
 [`docs/admin/PANEL-RECORD.md`](../docs/admin/PANEL-RECORD.md) is the system of record
