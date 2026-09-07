@@ -48,7 +48,7 @@ is not silently edited out of history.
 
 | ADR-041 | Accepted | Same-revision control forks converge on an ordering key the branch author cannot vary — operation precedence class, then the signer's authority in the shared parent, then the signer's authenticated user and device id, then the control state hash; supersedes ADR-038 (2026-08-17) | ADR-038 ordered siblings by the control state hash alone. That hash is SHA-256 over the signed descriptor, and the descriptor's 16-byte event id is free author-chosen entropy that nothing binds, `created_ms` is an unvalidated `u64`, and Ed25519 is deterministic, so one grinding trial is one signature plus one hash and produces an independent uniform ordering value. Measured on the shipped signing path: about 24,500 candidate branches per second per core, and 9 trials to land below one known rival. A member facing eviction sees the `Remove` first, so it could undercut it for well under a millisecond of work and quarantine the evicting owner instead. Ordering now reads the operation's precedence class first, so an eviction cannot lose to a metadata edit, an invite, or a leave; then the signer's role in the reconstructed shared parent, so an evicted admin's counter-`Remove` loses to the owner's; then the authenticated signer identity. The hash is reached only between two branches from one device, where ordering decides nothing that author could not decide by choosing which branch to send. Every input is either fixed by the shared parent or bound to an authenticated device credential, so no participant can bias the outcome, and the rule stays total, deterministic, server-independent and free of extra round trips. Sibling authentication, replay against the reconstructed parent, and authorization are unchanged, and a superseded branch is still recovered by fork-quarantine plus remove/re-add. This is closed-beta convergence behavior and opens no production gate. |
 
-| ADR-042 | Accepted | The Private Experimental Beta ships under a frozen application ID and one persistent signing key, separate from Production, which stays unsigned (2026-08-19) | Android accepts an update only when both the application ID and the signing certificate match the installed app; otherwise the only path forward is uninstall, and this client cannot survive one. Uninstalling erases all app data, here both the SQLCipher database and the `no_backup` envelope holding its key, the manifest sets `allowBackup="false"` so nothing restores either, and the database key is protected by a non-exportable AndroidKeyStore key so no exportable copy exists; local message history has no server-side copy by design. Identity was therefore frozen before any external install rather than after: `com.example.communication_platform.beta` was a documented placeholder awaiting branding, and shipping it would have guaranteed a later forced reinstall, so the flavors move to `dev.nimashadloo.chat{,.beta,.development}` under a domain the project already operates. Beta and Production take separate keys because their application IDs differ, so they coexist and no upgrade path between them can ever exist; a shared key would buy no continuity while dragging Production's identity into the Beta's warmer custody and widening compromise blast radius. Production release keeps no signing config at all, so it packages unsigned: it still builds and is verified in CI, but the OS cannot install it, which is fail-closed by construction. Beta signs v2+v3 without the legacy v1 scheme, which minSdk 24 makes unnecessary; v3 records the signer so a rotation lineage stays possible on API 28+, though rotation requires the original key, so key loss is not recoverable by rotation. Private material never enters source control: Gradle reads it from the environment or an untracked properties file, absence is a hard build failure, and the public certificate fingerprint is committed so every artifact is verified against the identity it must match. |
+| ADR-042 | Superseded by ADR-067 (2026-09-07) | The Private Experimental Beta ships under a frozen application ID and one persistent signing key, separate from Production, which stays unsigned (2026-08-19) | Android accepts an update only when both the application ID and the signing certificate match the installed app; otherwise the only path forward is uninstall, and this client cannot survive one. Uninstalling erases all app data, here both the SQLCipher database and the `no_backup` envelope holding its key, the manifest sets `allowBackup="false"` so nothing restores either, and the database key is protected by a non-exportable AndroidKeyStore key so no exportable copy exists; local message history has no server-side copy by design. Identity was therefore frozen before any external install rather than after: `com.example.communication_platform.beta` was a documented placeholder awaiting branding, and shipping it would have guaranteed a later forced reinstall, so the flavors move to `dev.nimashadloo.chat{,.beta,.development}` under a domain the project already operates. Beta and Production take separate keys because their application IDs differ, so they coexist and no upgrade path between them can ever exist; a shared key would buy no continuity while dragging Production's identity into the Beta's warmer custody and widening compromise blast radius. Production release keeps no signing config at all, so it packages unsigned: it still builds and is verified in CI, but the OS cannot install it, which is fail-closed by construction. Beta signs v2+v3 without the legacy v1 scheme, which minSdk 24 makes unnecessary; v3 records the signer so a rotation lineage stays possible on API 28+, though rotation requires the original key, so key loss is not recoverable by rotation. Private material never enters source control: Gradle reads it from the environment or an untracked properties file, absence is a hard build failure, and the public certificate fingerprint is committed so every artifact is verified against the identity it must match. |
 
 | ADR-043 | Accepted | The client's own transport trusts the provisioned private CA exclusively; Android's network security configuration is retained as defence in depth for non-Dart traffic only (2026-08-20) | Release validation of a real signed Beta APK found the app could not reach a healthy, correctly provisioned server. Every network precondition held - DNS, TCP, TLS from the host, a chain verifying against the provisioned CA, ~1.1s latency - and removing the pin-set from a diagnostic build changed nothing. The cause is that Android's `network_security_config` governs the platform's Java HTTP stacks and WebView, while this app's REST and WebSocket traffic both run on `dart:io`, which does not consult it. The configuration was therefore protecting no traffic at all: the app was simultaneously unable to reach its own server and, had it reached one, unpinned. Trust now comes from a `SecurityContext` built with `withTrustedRoots: false` plus the provisioned authority, so the built-in root store is **replaced** rather than extended and no public authority can issue a certificate this client accepts; chain construction, expiry, and hostname verification are still performed in full by BoringSSL. Both transports share one context, and the authority reaches the app as `<ENV>_PRIVATE_CA_PEM_BASE64` because `dart:io` verifies against a certificate, not the digest the configuration previously carried. Absent or malformed authority material fails configuration closed rather than falling back to public roots. Leaf SPKI pinning is deliberately **not** reimplemented in Dart: `X509Certificate` exposes no SPKI accessor and no SHA-256, so it would require hand-written ASN.1 parsing plus a hashing dependency inside the TLS path, which `AGENTS.md` forbids and which would be unreviewed cryptographic code. Anchoring exclusively to a single offline private root is a stronger constraint than the public-CA-plus-leaf-pin model it replaces, and the residual exposure - a stolen CA key minting a new leaf - is accepted for the closed beta and recorded here. The rendered Android configuration and its two pins are kept and still verified in the artifact, but only as defence in depth for any future WebView or Java-side traffic; no document may claim they protect the app's API traffic. Health checks now distinguish `trustRejected` from ordinary connectivity so a refused certificate is never reported, or retried, as an outage. |
 
@@ -77,6 +77,158 @@ is not silently edited out of history.
 | ADR-064 | Accepted | A rebuild re-derives the messages that changed and redraws the rows that changed, the reading anchor comes from the rows that are mounted, and a keystroke costs a timer instead of a database write and a page rebuild (2026-08-28) | The last three terms ADR-061, ADR-062 and ADR-063 left behind, all of them on the main isolate. Measured on the A56 in a 219-message conversation with the whole thing drawn: typing goes from **5.25 ms median / 8.13 p90 / 9.89 worst** of build time per frame to **2.33 / 3.76 / 6.57**, and produces 38 frames for thirty characters where it produced 55, because the page is no longer one of the things that rebuild; a message arriving goes from **1.77 / 5.02 / 7.49** to **0.82 / 3.23 / 5.97**. On the host, where a long conversation could be driven, the frame that draws an arrival went from 36.7 ms median at 1200 messages (19.7 at 48) to 10.9 (13.7 at 48), and a keystroke from 32.7 (16.8 at 48) to 4.0 (5.1 at 48) — before, both roughly doubled with conversation length; after, neither grows. `ChatMessageProjection` returns the identical view model for every message whose row cannot have changed, keyed on the whole `ConversationMessage` plus the positional inputs grouping and reply quotes actually depend on, so one arrival derives **2** elements and one reaction **1**, equal at a 48-message window and a 240-message one, against the whole window on every emission before; the timeline retains the built row behind it, so `Element.updateChild` skips it outright, and every row is keyed with a `findChildIndexCallback` so an arrival relocates elements instead of re-parenting a `GlobalKey` per row. `_messageKeys` becomes a registry of *mounted* rows — bounded by construction, and always the only set an anchor could come from — and the anchor is captured in `didUpdateWidget`, in `didChangeDependencies` and at scroll end, rather than additionally on every build and every scroll tick. The draft is debounced 500 ms and flushed on blur, route pop, leaving `resumed`, dispose and send, and the cascade that made a keystroke rebuild the page is cut in the provider layer — the draft becomes a one-shot read, typing narrows to a boolean through `select`, and the forward targets become a callback — because the draft must keep living in the `conversations` row. Also: `DateTime.now()` leaves `build` for a clock refreshed exactly when the earliest mute on screen expires, a jump no longer has its own scroll cancelled by the reading anchor it was leaving, and a jump to a target already inside the drawn range asks for the frame nothing else was going to schedule. Schema stays at 18; no repository, projector, outbox, sync-engine or backend file is touched. |
 | ADR-065 | Accepted | A delivery cycle asks the network once per person instead of two to four times, through a thirty-second process-local cache that sits below every authentication gate and never touches a prekey claim; and the device-log gossip a send owes becomes a debt the cycle records and pays after the outbox instead of a second fan-out awaited in front of the first one's ciphertext; closes the RCA ADR-060 opened (2026-08-28) | `ClientAuthenticationService` was entirely uncached, so one `prepareOwedSend` fetched a peer's identity — an unconditional full `200`, because `/identity` offers no ETag — twice, three times when a session had to be started, and again for the gossip owed to the same peer moments later, against a round trip ADR-060 measured at **107-137 ms**. Measured on the composed send path with a synthetic 122 ms round trip: a first contact and its gossip fall from **14 round trips / 1828 ms to 6 / 788**, a send and its gossip from **8 / 1051 to 4 / 528**, two sends to one peer from **8 / 1037 to 4 / 522**, and the time from `prepare` starting to a postable ciphertext from **8 / 1028 to 4 / 512** — the last of those is F7 alone, because half of it was a fan-out owed to somebody else. The cache decorates `PeerIdentityRemotePort` rather than memoizing `AuthenticatedPeer`, so a hit is the *same* verification over the same bytes: the master-key comparison, the unsigned-device rejection, the transition check, the hash chain, `requireCurrentLiveSet`, the trust states and the global fork gate all still run, and a suite proves each rejection is reproduced on a hit with zero further requests. `claimPrekeyBundles` reaches no map, no in-flight entry and no bypass check, because it consumes one-time prekeys and is `ReplaySafety.never`. The device log is coalesced but never stored: a stored page outlives the head that said what to expect, and a mismatched head is read as a fork, which would withhold every send to every peer. `refreshPeer` and `confirmOutOfBand` are forced live by the service itself, which is what makes user verification and the `stale_devices` path bypass it with no call site changed. Gossip's failure isolation stops being a swallowed `try`/`catch` and becomes a `void` return with no future to await; a bare `unawaited` was rejected because a headless catch-up (ADR-049/ADR-050) disposes its container and closes its database the moment `synchronize()` returns. Schema stays at 18; no migration, table, column or index, no endpoint, header or status-code change, no cryptographic construction touched, and no `backend/` file. |
 | ADR-066 | Accepted | Supersedes ADR-007: the conversation timeline is an app-owned reversed sliver because Flyer requires mutable controller-owned message state and ADR-002 puts that state in drift, not because a package was slow; custom ownership is bounded to the timeline surface and Material keeps every surface the user types into or selects within; and the first thing owning it costs is a first-strong direction resolver that is correct where neither the previous regex nor `intl`'s `Bidi` is (2026-08-30) | ADR-007 named a package `pubspec.yaml` has not carried since ADR-054, and it did so for the whole interval between piece 15 replacing the adapter's contents and this row. The reason on the checklist is the durable one and was never promoted into the register: Flyer 2.11.1 keeps messages in a mutable controller it owns, and ADR-002 makes drift the single source of truth, so the two want the same state in two places — an architectural conflict, decided before any frame was measured. **The performance record is corrected rather than inherited**: ADR-062, ADR-063 and ADR-064 fixed F8's whole-window mapper re-derivation, F9's unpruned `GlobalKey` walk and F10's per-keystroke draft write, and all three were application-layer costs that no package choice caused and no package choice would have fixed. Custom rendering did not buy that performance; measuring the mapper, the key registry and the provider cascade did. **The boundary is stated so "custom" cannot drift into "from scratch"**: app-owned covers the timeline surface — the reversed sliver, the keys and `findChildIndexCallback`, pagination, author grouping and bubble geometry — while Material remains the foundation for text fields, sheets, menus, dialogs, selection and focus traversal, because IME composition, RTL caret placement, selection handles and TalkBack semantics are not being re-implemented here. ADR-006's rule for Forui and the assertion in `design_system_boundary_test.dart` are unchanged and still the thing that keeps the package out of `lib/features`. **What owning the bubble actually costs is measured on its first bill.** `_contentDirection` was not first-strong: its class was the block range `֐-ࣿ`, which contains Arabic-Indic (U+0660-U+0669, class AN) and Persian (U+06F0-U+06F9, class EN) digits, so `۱۲۳ hello` resolved RTL where UAX #9 P2 skips both and answers LTR, and it contained neither Arabic Presentation Forms block, so a `ﻲ` pasted from a legacy Windows source resolved to nothing at all. `intl` 0.20.2 was read in the pub cache rather than recalled and **rejected as a replacement on evidence**: its `Bidi.startsWithRtl` is structurally first-strong but its `_RTL_CHARS` is `֑-߿`, which repeats the digit defect exactly, while its `_LTR_CHARS` claims `ࠀ-῿` wholesale and hands Samaritan, Mandaic, Syriac Supplement and Arabic Extended-A to LTR; `Bidi.detectRtlDirectionality` is not first-strong at all but a whitespace-token count against a 0.40 threshold, with a `^http://` special case a `https://` URL does not meet. The two implementations are wrong on **different** inputs and neither is a superset, so `resolveFirstStrongDirection` replaces both, on R/AL/L ranges from `DerivedBidiClass` with the weak, neutral, mark and format classes falling through, plus P2's isolate-run skipping; 29 tests hold it, including the executable comparison against both predecessors. **The isolation half of the finding was tested and half of it did not exist**: an embedded Latin URL with trailing punctuation inside Persian needs no FSI/PDI, because Flutter runs UAX #9 per paragraph and there is no second direction spliced into that string, and that non-defect is recorded so it is not re-fixed; the real one is the composer's character counter, where `20 / 500` is two EN runs around a neutral and N1 resolves the separator to an RTL base, reversing the pair to `500 / 20`. It is pinned to LTR, which is how the expression reads in either locale. A fourth golden, `chat_medium_rtl_mixed.png`, holds all three mixed-direction cases in one RTL frame; the existing three were not regenerated. Schema stays at 18; no migration, table, column or index, no repository, projector, outbox or delivery behaviour, no endpoint, header or status code, no cryptographic construction, no protocol, no wire format and no `backend/` file. **Opens no production gate.** |
+| ADR-067 | Accepted | Supersedes ADR-042: the serving origin becomes `chat.orviniq.com` and the flavors move to `com.orviniq.chat{,.beta,.development}`, the Beta signing identity is reissued under a matching subject, and the private CA is reused rather than replaced — but the leaf reissue moved the primary SPKI pin, which is the one thing in this migration that would have been unrecoverable a day later (2026-09-07) | ADR-042 froze the application ID on a premise that has since become false: the flavors took `dev.nimashadloo.chat{,.beta,.development}` "under a domain the project already operates", and the project no longer operates that domain. **Its reasoning is not what failed — only its premise.** Everything ADR-042 says about why the identity must be frozen is unchanged and now governs the new one: Android accepts an update only when the application ID and the signing certificate both match, the only path past a mismatch is uninstall, and uninstall destroys the SQLCipher database and the `no_backup` envelope holding its key with `allowBackup="false"` and a non-exportable AndroidKeyStore key behind them. **The freeze was breakable here because it had not yet bound.** No external install existed — no device, no emulator outside CI, no archived artifact in anyone's hands — so there was no update path to break and no local history to destroy. That is a fact about 2026-09-07 and not a property of the decision: the freeze re-binds from this point, and the next time this question is asked the answer is no. **The private CA is untouched and did not need touching**: it is hostname-agnostic by construction — subject `CN=chat private root CA`, `CA:TRUE, pathlen:0`, no `nameConstraints` and no SAN of its own — so it signs for the new host unchanged, and `BETA_PRIVATE_CA_SHA256` and `BETA_PRIVATE_CA_PEM_BASE64` keep their values. Verified rather than assumed: `ca.crt` and `ca.key` carry their original 2026-08-19 mtimes, and the reissue archive holds a leaf pair and no CA. **One pin moved, and the premise that neither would was wrong.** A pin covers a key, not a hostname, so a leaf reissued for a new name over the same key would have held both pins — but `ops/tls/make_ca.sh` does not reissue that way. It guards `ca.key` and `backup.key` behind `if [ ! -f ]` and mints `server.key` unconditionally on every run, so reissuing the leaf regenerated the server key and the **primary** SPKI pin with it; the backup pin, keyed to the untouched `backup.key`, did not move. Measured off the archived and current certificates, not argued. `BETA_PRIMARY_SPKI_SHA256` must therefore be re-read before the next Beta build, and a client carrying the old primary pin cannot complete a handshake against the new leaf at all. Today that costs nothing, for the same reason the identity move costs nothing; on any later day it locks out every provisioned device, which is the sharper half of ADR-043's two-pin rule and the reason the second pin exists. **The Beta signing identity was reissued as coherence, not correctness.** Nothing in Android, Gradle or `verify_release_apk.sh` enforces a match between a certificate subject and an application ID; a key reading `CN=dev.nimashadloo.chat.beta` would have kept signing `com.orviniq.chat.beta` artifacts indefinitely and no check would have objected. It was reissued because the freeze could still be broken safely and would not be again, so the incoherence would have been permanent. Created 2026-09-07, certificate SHA-256 `a1189203…fb9a7ba9`, subject `CN=com.orviniq.chat.beta`, valid to 2054-01-23, read back out of the keystore and matching `android/beta-release-identity.properties` exactly. The previous keystore is **archived, not destroyed**, under `archived-nimashadloo-` names beside the live one. Off-site encrypted backups do not exist for the reissued key: the reissue reset that obligation rather than inheriting it, and `docs/release-signing.md` still requires two of them before the first external install. **Every artifact built before this date is superseded and may not be distributed** — each carries the old origin, the old application ID, the old signing certificate and the old primary pin, and any one of the four is disqualifying on its own. |
+
+## ADR-067 in full — the origin moves, and the one thing that moved with it (2026-09-07)
+
+**Status:** Accepted. **Supersedes ADR-042.** Amends ADR-044. Deployment and client-identity
+decision. Touches no Dart source: no server origin is hardcoded in `lib/`, which takes the
+origin as a compile-time `--dart-define` and derives the health, socket and attachment URLs from
+it, so the migration is a provisioning change and a build-configuration change and nothing else.
+**The local schema stays at 18**: no migration, table, column or index, no repository, projector,
+outbox or delivery behaviour, no endpoint, header, status code, cryptographic construction,
+ciphersuite identifier, protocol or wire format. **Opens no production gate.**
+
+### The question
+
+> The server hostname moved from `chat.nimashadloo.dev` to `chat.orviniq.com`. ADR-042 froze the
+> application ID under the old domain and gave a reason that no longer holds. What may be
+> changed, what must not be, and what does the change cost that is not obvious from the rename?
+
+### D1. The origin moves, and nothing else about the deployment does
+
+The serving origin becomes `https://chat.orviniq.com`. Same VPS, same architecture, same
+private-CA TLS posture, same routes, same ports, same units. What moved is a name: the nginx
+site file and both its server blocks, the relay values that name the box coturn runs on, the
+provisioning examples, and the documentation that cites the site file as the source of a
+measurement. No measurement, date or claim moved with it — the rows in
+[`GROUND-TRUTH.md`](../../docs/architecture/GROUND-TRUTH.md) keep the dates they were measured
+on, because the rename changes the file a row cites and not what was read out of it.
+
+### D2. ADR-042's premise failed; its reasoning did not
+
+ADR-042 moved the flavors to `dev.nimashadloo.chat{,.beta,.development}` "under a domain the
+project already operates." The project does not operate that domain any more, so the sentence is
+false and the decision that rests on it cannot stand as written. It is **superseded rather than
+rewritten**, on this register's standing rule that an accepted decision records what was decided
+and why at the time.
+
+The flavors take `com.orviniq.chat.development`, `com.orviniq.chat.beta` and `com.orviniq.chat`.
+The invariant the suite enforces is unchanged and still holds: Beta is exactly
+`<production>.beta`. The Gradle namespace `com.example.communication_platform` and the Kotlin
+package under it are deliberately **not** part of the application ID and do not move;
+`android/app/build.gradle.kts` already documents why.
+
+**What ADR-042 got right is untouched and now governs the new identity.** Android accepts an
+update only when the application ID and the signing certificate both match the installed app.
+Past a mismatch the only path forward is uninstall, and uninstall is unrecoverable here: it
+erases the SQLCipher database and the `no_backup/storage_key_v1.bin` envelope holding its key,
+`allowBackup="false"` and `fullBackupContent="false"` mean nothing restores either, the database
+key is protected by a non-exportable AndroidKeyStore key so no exportable copy exists, and local
+message history has no server-side copy by design. None of that reasoning is weakened by this
+decision. All of it applies to `com.orviniq.chat.beta` from this point forward.
+
+### D3. Why breaking the freeze was safe, and why it is not safe again
+
+A frozen identity binds at the **first external install**, not at the moment it is written down.
+On 2026-09-07 there was none: no device, no emulator outside CI, no artifact in anyone's hands.
+There was no update path to break and no local state to destroy, so rebasing the application ID
+cost nothing that a later rebase would cost.
+
+That is a fact about a date, not a property of the decision. **The freeze re-binds here.** The
+warning in `android/beta-release-identity.properties` is not weakened by having been stepped
+over once; it applies again from this point, and the next time this question is asked under an
+install that exists, the answer is no.
+
+### D4. The private CA is unchanged, and one pin is not
+
+The private root CA is hostname-agnostic by construction: subject `CN=chat private root CA`,
+`basicConstraints=critical,CA:TRUE,pathlen:0`, `keyUsage=critical,keyCertSign,cRLSign`, no
+`nameConstraints` and no SAN of its own. It signs for the new host unchanged, and
+`BETA_PRIVATE_CA_SHA256` and `BETA_PRIVATE_CA_PEM_BASE64` keep the values they had.
+
+That was verified rather than assumed. `ca.crt` and `ca.key` carry their original 2026-08-19
+mtimes, the reissue archive holds a leaf pair and no CA, and the fingerprint read off the
+current `ca.crt` is the one already provisioned. Only the **leaf** was reissued:
+`CN=chat.orviniq.com`, `subjectAltName=DNS:chat.orviniq.com`, valid to 2028-12-10.
+
+**The premise that both SPKI pins would survive that reissue was wrong, and this is the finding
+of this decision.** A pin covers a public key, not a hostname, so a leaf reissued for a new name
+*over the same key* holds every pin. `ops/tls/make_ca.sh` does not reissue that way. It guards
+the two keys it means to preserve — `ca.key` and `backup.key` — behind `if [ ! -f ]`, and it
+mints `server.key` unconditionally on every run. Reissuing the leaf therefore regenerated the
+server key, and the **primary** pin moved with it. The **backup** pin, keyed to the untouched
+`backup.key`, did not.
+
+Measured off the archived and the current certificate rather than argued: the two primary pins
+differ, the two backup pins are the same file. Neither value is written here, because this
+repository carries no real pin and no real CA digest — `docs/release-signing.md` keeps them as
+placeholders and calls them public values that stay out of the tree.
+
+The consequence is operational and immediate: **`BETA_PRIMARY_SPKI_SHA256` must be re-read
+before the next Beta build.** A client compiled against the old primary pin cannot complete a
+handshake with the new leaf — not degrade, not warn, fail closed, which is what ADR-043's
+`SecurityContext(withTrustedRoots: false)` posture is for. Today that costs nothing, for exactly
+the reason D3 gives. On any later day it is a permanent lockout of every provisioned device,
+recoverable only through the backup pin, which is the whole reason ADR-042 required two.
+
+### D5. The Beta signing identity was reissued, as coherence rather than correctness
+
+The old certificate's subject read `CN=dev.nimashadloo.chat.beta`. Nothing enforces a match
+between a certificate subject and an application ID — not Android, not Gradle, not
+`tool/verify_release_apk.sh`, which checks the artifact's certificate against the recorded
+SHA-256 and never reads the subject. That key would have gone on signing `com.orviniq.chat.beta`
+artifacts indefinitely and no check anywhere would have objected.
+
+It was reissued anyway, and the reason is the same window D3 describes: the incoherence would
+have been permanent the moment the freeze re-bound, and this was the last day it could be fixed
+for free. **This is a decision, not a correctness fix**, and it is recorded as one so that a
+later reader does not mistake it for a defect that had to be repaired.
+
+| | |
+|---|---|
+| Created | 2026-09-07 |
+| Subject | `CN=com.orviniq.chat.beta`, `OU=Private Experimental Beta`, `O=Communication Platform` |
+| Certificate SHA-256 | `a1189203…fb9a7ba9` |
+| Valid to | 2054-01-23 |
+| Algorithm | RSA-4096, SHA-384, v2+v3, unchanged from ADR-042 |
+
+Read back out of the keystore on the day it was made, and matching
+`android/beta-release-identity.properties` exactly.
+
+The previous keystore is **archived, not destroyed** — `archived-nimashadloo-` names beside the
+live one — because destroying the only key that can verify a previously distributed artifact is
+not reversible either, and the archive costs nothing. It signs nothing from here on.
+
+**The off-site backup obligation was reset, not inherited.** `docs/release-signing.md` requires
+at least two encrypted copies on separate media, one of them off-site, before the first external
+install. Those copies, if they were ever made, protect the archived key and not the live one.
+None exists for the reissued key today; the requirement is unchanged and outstanding.
+
+### D6. Every artifact built before this date is superseded
+
+Any APK produced before 2026-09-07 carries the old origin, the old application ID, the old
+signing certificate and the old primary SPKI pin. **Any one of the four is disqualifying on its
+own**, and the last of them means such an artifact cannot reach the server even if someone
+chooses to ignore the first three. None may be distributed. That includes the production
+verification run ADR-044 records against a 2026-08-20 tree: what it checked is still the check,
+but the identity it checked against has moved, and the run is re-performed rather than cited.
+
+### Consequences
+
+- ADR-042 is `Superseded by ADR-067 (2026-09-07)` in the register. Its reasoning column is
+  untouched, which is the point of superseding rather than editing.
+- ADR-044 gains an amendment line. Its identifiers now read as migrated; every decision it
+  makes stands on the reasoning written there.
+- `BETA_PRIMARY_SPKI_SHA256` is stale in any provisioning environment that predates this
+  decision, and no test in this repository can fail on that — the pins are provisioning values
+  and deliberately absent from the tree. It is the one claim here that is enforced by nothing.
+- `ops/tls/make_ca.sh` regenerates `server.key` on every run. That is correct for first
+  generation and wrong for a leaf reissue, and it is why the primary pin moved. Whether the
+  script should grow a reissue path that preserves the server key is a separate decision and is
+  not taken here.
+- The frozen-identity constraint re-binds. This decision is the last one permitted to move an
+  application ID or a signing key without an uninstall, and it says so in those words.
 
 ## ADR-066 in full — the timeline is app-owned, and the first thing owning it costs is the bidi (2026-08-30)
 
@@ -8002,6 +8154,7 @@ ADR-044's eight conditions apply unchanged. This decision adds four:
 **Status:** Accepted. Deployment decision. **Opens no production gate.**
 **Amended by ADR-055 (2026-08-24):** tier 2 is withheld from the distributed artifact until the packaged closed-beta MLS core has been observed executing on real hardware. D2's tier table, alternative E, the production-boundary table's group rows and disclosure item 2 read as written only once that gate opens; everything else in this decision stands.
 **Amended by ADR-058 (2026-08-25):** the *Piece 20* section's re-scope stands and is completed. Its finding, its two exporter paths and its refusal to grant either are unchanged; what it left unset — the bar the granting decision must clear — is now seven checkable conditions in ADR-058, which also carry the per-ABI evidence rule ADR-056 introduced four days after this decision was written.
+**Amended by ADR-067 (2026-09-07):** the serving origin moved to `chat.orviniq.com` and the application IDs were rebased onto `com.orviniq.chat{,.beta,.development}`, so every identifier this decision names reads as written above rather than as it was first recorded; the Beta signing identity was reissued under a matching subject on the same day. What the decision *decides* is untouched — the deployment, its tiers, its disclosures and its boundary all stand on the reasoning written here. Every artifact built before that date is superseded and may not be distributed, which includes the 2026-08-20 production verification run recorded below: what it checked is still the check, but the identity it checked against has moved.
 
 ### The question
 
@@ -8023,12 +8176,12 @@ Verified against the working tree on 2026-08-20, not assumed:
 | Area | State |
 |---|---|
 | Flavors | `development`, `beta`, `production` on one `environment` dimension in `android/app/build.gradle.kts` |
-| Application IDs | `dev.nimashadloo.chat.development`, `dev.nimashadloo.chat.beta`, `dev.nimashadloo.chat` |
+| Application IDs | `com.orviniq.chat.development`, `com.orviniq.chat.beta`, `com.orviniq.chat` |
 | Entry points | `lib/main_development.dart`, `lib/main_beta.dart`, `lib/main_production.dart`; `lib/main.dart` delegates to development |
 | Provisioning | `String.fromEnvironment` under one `<ENV>_` prefix per flavor; no runtime origin selection anywhere |
 | Native core | Two Cargo profiles. `foundation` (development, production) exports 15 symbols; `beta` (`--features beta-pq-mls`) exports those plus `cp_crypto_v1_beta_mls_operation` |
 | Signing | Beta signs with a persistent RSA-4096 v2+v3 identity attached at flavor level; `buildTypes.release` sets `signingConfig = null`, so Production packages unsigned |
-| Signing identity | **Created**, on 2026-08-19; read back out of the keystore and re-verified on 2026-08-20. Certificate SHA-256 `d8d40c0c…71b5a2ff`, subject `CN=dev.nimashadloo.chat.beta`, valid to 2054-01-04, matching `android/beta-release-identity.properties` exactly. Off-site encrypted backups of it are still required before the first external install |
+| Signing identity | **Reissued**, on 2026-09-07, under ADR-067; read back out of the keystore the same day. Certificate SHA-256 `a1189203…fb9a7ba9`, subject `CN=com.orviniq.chat.beta`, valid to 2054-01-23, matching `android/beta-release-identity.properties` exactly. The identity this row recorded when the decision was written is archived, not destroyed, and signs nothing from here on. Off-site encrypted backups are still required before the first external install, and none exists for the reissued key: the reissue reset that obligation rather than inheriting it |
 | Transport trust | `SecurityContext(withTrustedRoots: false)` plus the provisioned authority, on both REST and WebSocket (ADR-043) |
 | Local state | SQLCipher database keyed by a non-exportable AndroidKeyStore key; `allowBackup="false"`; isolation between flavors is the Android application sandbox, which follows the application ID |
 | Background delivery | **Absent.** `AndroidPollingScheduler` is a port with no adapter in `lib/` |
@@ -8073,14 +8226,14 @@ notifications, no voice, and no search. **Experimental** is the accurate word.
 The application ID keeps its `.beta` suffix. ADR-042 froze it, and changing it would
 force every install through an uninstall that destroys local state irrecoverably. An
 application ID is an opaque identifier, not a claim; a launcher label and a persistent
-banner are claims. So the identifier stays `dev.nimashadloo.chat.beta`, the Dart enum
+banner are claims. So the identifier stays `com.orviniq.chat.beta`, the Dart enum
 stays `AppEnvironment.beta`, the Gradle flavor stays `beta` — and every string a user
 reads says Experimental.
 
 ### Decision
 
 **D1. The initial deployment is the Private Experimental build.** One Android artifact,
-application ID `dev.nimashadloo.chat.beta`, signed by the frozen Beta identity, compiled
+application ID `com.orviniq.chat.beta`, signed by the frozen Beta identity, compiled
 against one private origin, distributed as a direct APK with its SHA-256 and metadata
 file to a known, named set of roughly 20–30 trusted recipients over the self-hosted
 channel. It is not a beta, a release candidate, or a preview of a shipping product, and
@@ -8316,7 +8469,7 @@ suite.
 
 This was run, not assumed. A production release APK built from this working tree on
 2026-08-20 passed `tool/verify_release_apk.sh --production`: application ID
-`dev.nimashadloo.chat`, unsigned so the OS cannot install it, and a packaged native core
+`com.orviniq.chat`, unsigned so the OS cannot install it, and a packaged native core
 that does not export `cp_crypto_v1_beta_mls_operation`.
 
 ### Piece 19 under this deployment
@@ -8390,7 +8543,7 @@ backend, and starts fresh. Their experimental install keeps working independentl
 they remove it. Anyone expecting their experimental history to appear in the production
 app will be wrong, and must be told so before they invest in that history.
 
-**Application identity.** Production keeps `dev.nimashadloo.chat`, already reserved and
+**Application identity.** Production keeps `com.orviniq.chat`, already reserved and
 already the flavor's ID. It gains its own signing identity only through an explicit,
 separate release decision, created offline, with its own custody procedure. Nothing in
 this decision authorizes creating it.
