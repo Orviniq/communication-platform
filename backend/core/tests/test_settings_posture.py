@@ -331,8 +331,9 @@ class BasePostureTests(SimpleTestCase):
     def test_the_edge_admits_exactly_what_each_upstream_admits(self):
         """The two caps are one setting in two places. nginx above the application
         would 413 a body the routes accept; nginx below it would carry a body the
-        routes refuse. `/api/` takes the largest route class, and the admin claims
-        no route at all, so `api.app.route_limits` gives it the fallback class."""
+        routes refuse. `/api/` takes the largest route class, and the catch-all —
+        the admin path and every unserved path — claims no route at all, so
+        `api.app.route_limits` gives it the fallback class."""
         locations = nginx_locations(
             (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
         )
@@ -342,7 +343,25 @@ class BasePostureTests(SimpleTestCase):
         }
 
         self.assertEqual(caps["/api/"], settings.BODY_CAP_BATCH_BYTES)
-        self.assertEqual(caps["/admin/"], settings.BODY_CAP_JSON_BYTES)
+        self.assertEqual(caps["/"], settings.BODY_CAP_JSON_BYTES)
+
+    def test_no_unclaimed_path_is_answered_by_the_edge_itself(self):
+        """A catch-all that proxies, or two failures at once.
+
+        The panel's path is `ADMIN_PATH`, chosen by the operator and never written
+        into this public repository, so no literal location spec can match it — a
+        site whose most general prefix is something narrower leaves the panel
+        unreachable behind nginx's own 404. The same block is what carries a path
+        no route serves to the application, where `api.app.django_paths` raises the
+        router's 404 and it renders as this API's `not_found` envelope instead of
+        nginx's HTML.
+        """
+        locations = nginx_locations(
+            (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+        )
+
+        self.assertIn("/", locations)
+        self.assertIn("proxy_pass", locations["/"])
 
     def test_the_edge_waits_longer_than_the_deadline_below_it(self):
         """Timeouts nest innermost first. The application answers its own
@@ -360,7 +379,7 @@ class BasePostureTests(SimpleTestCase):
         }
 
         self.assertGreater(waits["/api/"], settings.UPLOAD_DEADLINE_SECONDS)
-        self.assertGreater(waits["/admin/"], settings.REQUEST_DEADLINE_SECONDS)
+        self.assertGreater(waits["/"], settings.REQUEST_DEADLINE_SECONDS)
 
     def test_the_body_of_a_slow_upload_is_absorbed_by_the_edge(self):
         """The two directives that decide where a slow client's upload is paid for.

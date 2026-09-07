@@ -257,10 +257,14 @@ trigger.
 `.env.production` is never committed. `.gitignore` excludes `.env.*`, and the
 only file of that family in the repository is the example.
 
-Two settings are one setting in two places, and changing either alone breaks the
-panel: `ADMIN_PATH` here and the matching `location` in
-[`nginx/chat.nimashadloo.dev.conf`](nginx/chat.nimashadloo.dev.conf). Pick a
-non-obvious path and change both.
+`ADMIN_PATH` is set here and nowhere else. Pick a non-obvious path; the nginx
+site needs no matching edit, because its most general location is a catch-all that
+carries every path no other location claims to the application, and
+`api.app.django_paths` is what hands `ADMIN_PATH` to Django and answers everything
+else with this API's `not_found` envelope. Writing the path into
+[`nginx/chat.nimashadloo.dev.conf`](nginx/chat.nimashadloo.dev.conf) would put an
+operator's chosen path into a public repository, which is the one thing the path
+buys.
 
 ---
 
@@ -312,11 +316,11 @@ Two properties of that site are worth knowing before changing it, because both
 fail silently:
 
 - **Every location states its own `client_max_body_size`**, equal to the largest
-  body that location admits, and the server block's value is the deny-by-default
-  for a path that matches none. The `/api/` cap and `BODY_CAP_BATCH_BYTES` are
-  one number in two places; so are the `/admin/` cap and `BODY_CAP_JSON_BYTES`.
-  Raise one without the other and nginx either refuses a body the routes accept
-  or carries one they refuse.
+  body that location admits, and the server block's value is the floor a location
+  that forgot one would inherit. The `/api/` cap and `BODY_CAP_BATCH_BYTES` are
+  one number in two places; so are the catch-all `/` cap — which is what serves
+  the admin path — and `BODY_CAP_JSON_BYTES`. Raise one without the other and
+  nginx either refuses a body the routes accept or carries one they refuse.
 - **`add_header` inside a location replaces every inherited one.** nginx owns
   `Strict-Transport-Security` for the whole host, because it is the only layer
   that sees every response — the proxied ones, the files it serves from disk, and
