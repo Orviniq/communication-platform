@@ -79,6 +79,7 @@ final class AuthenticationAssembly {
         login: LoginAccount(repository, session),
         restore: RestoreAccountSession(session),
         logout: LogoutAccount(session),
+        erase: EraseAccount(repository, session),
         lifecycle: lifecycle,
       ),
     );

@@ -173,6 +173,19 @@ final class CoordinatedAuthenticationSession
   @override
   Future<void> logout() => coordinator.logout();
 
+  @override
+  Future<void> forgetErasedAccount() async {
+    // Dropping the token first is what makes the logout below local. The
+    // coordinator sends `POST /auth/logout` only when the store still holds a
+    // token to revoke, so clearing it leaves exactly the rest of a logout: the
+    // session generation advances, the wipe runs, and the termination that
+    // lands the user on sign-in is emitted with `logout` rather than
+    // `revoked`. The token is already dead — the account it named is gone.
+    await tokens.clear();
+    tokens.clearMemory();
+    await coordinator.logout();
+  }
+
   SessionScope _networkScope(AccountSessionScope scope) => switch (scope) {
     AccountSessionScope.register => SessionScope.register,
     AccountSessionScope.full => SessionScope.full,

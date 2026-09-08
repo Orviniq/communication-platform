@@ -38,6 +38,7 @@ final class AuthenticationHarness {
       login: LoginAccount(repository, session),
       restore: RestoreAccountSession(session),
       logout: LogoutAccount(session),
+      erase: EraseAccount(repository, session),
       lifecycle: lifecycle,
     );
   }
@@ -63,7 +64,14 @@ final class WidgetAuthenticationRepository
   final Result<AccountRegistration> registrationResult;
   int loginCalls = 0;
   int registerCalls = 0;
+  int eraseCalls = 0;
   String? lastUsername;
+
+  @override
+  Future<Result<void>> eraseAccount({required String password}) async {
+    eraseCalls += 1;
+    return const Result.success(null);
+  }
 
   @override
   Future<Result<AccountSessionGrant>> login({
@@ -113,6 +121,13 @@ final class WidgetAuthenticationSession implements AuthenticationSessionPort {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<void> forgetErasedAccount() async {
+    forgotErasedAccount = true;
+  }
+
+  bool forgotErasedAccount = false;
 }
 
 final class WidgetLifecycle implements AuthenticationLifecyclePort {

@@ -5,6 +5,8 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/authentication/domain/authentication_model.dart';
 import 'package:communication_platform/features/authentication/infrastructure/dio_account_authentication_repository.dart';
+import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
+import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -162,6 +164,55 @@ void main() {
         );
       }
     });
+
+    test('erasure sends the password and nothing else, once', () async {
+      final adapter = RecordingAdapter([emptyResponse(204)]);
+      final repository = DioAccountAuthenticationRepository(
+        authenticatedClient(adapter),
+      );
+
+      final result = await repository.eraseAccount(
+        password: 'correct horse battery staple',
+      );
+
+      expect(result, isA<Success<void>>());
+      expect(adapter.requests.single.path, '/api/v1/me');
+      expect(adapter.requests.single.method, 'DELETE');
+      expect(jsonDecode(adapter.requests.single.data as String), {
+        'password': 'correct horse battery staple',
+      });
+      expect(
+        adapter.requests.single.headers['authorization'],
+        'Bearer access-token',
+      );
+    });
+
+    test('an erasure refusal never replays and never leaks detail', () async {
+      final adapter = RecordingAdapter([
+        jsonResponse(401, {
+          'code': 'invalid_credentials',
+          'detail': 'raw detail must not escape',
+        }),
+      ]);
+      final repository = DioAccountAuthenticationRepository(
+        authenticatedClient(adapter),
+      );
+
+      final result = await repository.eraseAccount(password: 'wrong password');
+
+      expect(
+        (result as FailureResult<void>).failure,
+        isA<BackendFailure>().having(
+          (failure) => failure.code,
+          'code',
+          BackendFailureCode.invalidCredentials,
+        ),
+      );
+      // A second attempt would spend another of the five tries the username
+      // has, so the transport must not make one on its own.
+      expect(adapter.requests, hasLength(1));
+      expect(result.toString(), isNot(contains('raw detail')));
+    });
   });
 }
 
@@ -203,6 +254,39 @@ DioRestClient client(RecordingAdapter adapter) {
     dio: dio,
   );
 }
+
+/// The client the authenticated routes need: one bound coordinator, so a
+/// `full` request can be given an `Authorization` header at all.
+DioRestClient authenticatedClient(RecordingAdapter adapter) =>
+    client(adapter)..bindTokenCoordinator(const FullScopeCoordinator());
+
+final class FullScopeCoordinator implements AccessTokenCoordinator {
+  const FullScopeCoordinator();
+
+  @override
+  Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async =>
+      Result.success(
+        AccessToken(
+          value: 'access-token',
+          expiresAt: DateTime.utc(2100),
+          scope: SessionScope.full,
+        ),
+      );
+
+  @override
+  Future<void> handleRevocation() async {}
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<Result<AccessToken>> recoverAfterUnauthorized(String rejectedToken) =>
+      accessToken(forceRefresh: true);
+}
+
+Handler emptyResponse(int status) =>
+    (options, requestStream, cancelFuture) async =>
+        ResponseBody.fromString('', status);
 
 Handler jsonResponse(
   int status,
