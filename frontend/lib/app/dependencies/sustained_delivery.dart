@@ -169,7 +169,7 @@ base class SustainedDeliveryController
   }
 
   static bool _deliverable(AuthenticationViewState view) =>
-      view.operation != AuthenticationOperation.logout &&
+      !view.isTearingDown &&
       switch (view.access) {
         AuthenticationRouteAccess.fullScope ||
         AuthenticationRouteAccess.offlineFullScope => true,

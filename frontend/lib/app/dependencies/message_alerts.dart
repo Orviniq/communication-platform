@@ -119,12 +119,13 @@ final class MessageAlertController extends Notifier<MessageAlertStage> {
     _transitions = _transitions.then((_) => _apply(userId));
   }
 
-  /// Alerts belong to a device-bound full session and stop the moment logout
-  /// begins: `TokenCoordinator.logout` wipes protected storage and closes the
-  /// database before it emits the termination a completion-triggered stop would
-  /// wait for.
+  /// Alerts belong to a device-bound full session and stop the moment a
+  /// teardown begins: `TokenCoordinator.logout` wipes protected storage and
+  /// closes the database before it emits the termination a completion-triggered
+  /// stop would wait for. An account erasure ends in that same wipe, so it is
+  /// the same stop and not a second one.
   String? _alertableUserId(AuthenticationViewState view) {
-    if (view.operation == AuthenticationOperation.logout) {
+    if (view.isTearingDown) {
       return null;
     }
     return switch (view.access) {

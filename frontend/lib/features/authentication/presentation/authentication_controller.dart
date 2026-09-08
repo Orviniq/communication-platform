@@ -17,7 +17,7 @@ enum AuthenticationRouteAccess {
   offlineFullScope,
 }
 
-enum AuthenticationOperation { idle, restoring, login, register, logout }
+enum AuthenticationOperation { idle, restoring, login, register, logout, erase }
 
 enum AuthenticationMessage {
   invalidCredentials,
@@ -56,6 +56,18 @@ final class AuthenticationViewState {
   final AuthenticationMessage? message;
 
   bool get isBusy => operation != AuthenticationOperation.idle;
+
+  /// Whether this session is being taken down *now*, before the termination
+  /// that announces it has been emitted.
+  ///
+  /// Both teardowns wipe protected storage and close the database ahead of that
+  /// termination, so everything holding the database open has to stop on the
+  /// intent rather than on the completion. They are one predicate rather than
+  /// two comparisons at each call site, so a third teardown cannot be added
+  /// and reach those guards without this answering for it.
+  bool get isTearingDown =>
+      operation == AuthenticationOperation.logout ||
+      operation == AuthenticationOperation.erase;
 
   AuthenticationViewState copyWith({
     AuthenticationRouteAccess? access,
@@ -233,6 +245,49 @@ final class AuthenticationController extends Notifier<AuthenticationViewState> {
       access: AuthenticationRouteAccess.signedOut,
       operation: AuthenticationOperation.idle,
     );
+  }
+
+  /// Erases the account, and takes this session down with it on success.
+  ///
+  /// Returns the outcome the screen has to word, or `null` when the call failed
+  /// for an ordinary reason — in which case `state.message` carries the
+  /// reviewed string for it, exactly as a refused login does.
+  ///
+  /// [password] is a parameter and reaches nothing beyond the use case. It is
+  /// deliberately not put in the view state: that object is read by widgets,
+  /// handed to listeners, and printed by `toString`.
+  Future<AccountErasureOutcome?> erase({required String password}) async {
+    if (state.isBusy) {
+      return null;
+    }
+    state = state.copyWith(
+      operation: AuthenticationOperation.erase,
+      clearMessage: true,
+    );
+    final result = await _useCases.erase(password: password);
+    switch (result) {
+      case Success(value: AccountErased()):
+        // The session port has already emitted the termination that lands the
+        // user on sign-in, and `_onTermination` has already written this state.
+        // Writing it again is what makes the outcome true even where nothing
+        // is listening — a screen test with no lifecycle stream behind it.
+        state = const AuthenticationViewState(
+          access: AuthenticationRouteAccess.signedOut,
+          operation: AuthenticationOperation.idle,
+        );
+        return const AccountErased();
+      case Success(value: final outcome):
+        // A wrong password and a cool-off both leave the account and this
+        // session exactly as they were. Nothing but the operation moves.
+        state = state.copyWith(operation: AuthenticationOperation.idle);
+        return outcome;
+      case FailureResult(failure: final failure):
+        state = state.copyWith(
+          operation: AuthenticationOperation.idle,
+          message: _messageFor(failure),
+        );
+        return null;
+    }
   }
 
   void secureSetupCompleted() {

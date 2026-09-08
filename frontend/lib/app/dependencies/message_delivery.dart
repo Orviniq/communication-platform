@@ -235,18 +235,19 @@ final class MessageDeliveryController extends Notifier<MessageDeliveryStage> {
     _transitions = _transitions.then((_) => _apply(userId));
   }
 
-  /// Delivery requires a device-bound full session, and stops the moment logout
-  /// *begins*.
+  /// Delivery requires a device-bound full session, and stops the moment a
+  /// teardown *begins* — a logout, or the account erasing itself.
   ///
   /// Stopping on the intent rather than on the completed termination matters:
   /// `TokenCoordinator.logout` wipes protected storage and closes the database
   /// before it emits the termination this controller would otherwise wait for,
   /// so waiting would leave the engine running transactions against storage
-  /// that is being erased. A revocation the server initiates has no such
-  /// warning; there the engine's storage failures and the immediate signed-out
-  /// transition are what stop it.
+  /// that is being erased. An erasure reaches the same wipe by a shorter road,
+  /// skipping only the `POST /auth/logout` a logout sends first. A revocation
+  /// the server initiates has no such warning; there the engine's storage
+  /// failures and the immediate signed-out transition are what stop it.
   String? _deliverableUserId(AuthenticationViewState view) {
-    if (view.operation == AuthenticationOperation.logout) {
+    if (view.isTearingDown) {
       return null;
     }
     return switch (view.access) {
