@@ -345,26 +345,30 @@ void main() {
   });
 
   group('DTO contract boundaries', () {
-    test('refresh DTO requires rotating pair and maps JWT expiry', () {
+    test('renew DTO requires one token and anchors the stated lifetime', () {
       final token = jwt(expirySeconds: 2000000000);
-      final refresh = jwt(expirySeconds: 2000000100);
-      final dto = TokenPairResponseDto.fromJson({
-        'access': token,
-        'refresh': refresh,
+      final receivedAt = DateTime.utc(2026, 9, 8, 12);
+      final dto = SessionTokenResponseDto.fromJson({
+        'token': token,
+        'expires_in': 2592000,
       });
-      final domain = dto.toDomain();
+      final domain = dto.toDomain(receivedAt: receivedAt);
       expect(domain.accessToken.scope, SessionScope.full);
+      expect(domain.accessToken.value, token);
+      // The lifetime is stated relative to the moment the server issued the
+      // token, not read out of the claims: the claim set is the server's and
+      // `expires_in` is published so that no client has to decode one.
       expect(
         domain.accessToken.expiresAt,
-        DateTime.fromMillisecondsSinceEpoch(2000000000 * 1000, isUtc: true),
-      );
-      expect(domain.refreshToken, refresh);
-      expect(
-        domain.refreshExpiresAt,
-        DateTime.fromMillisecondsSinceEpoch(2000000100 * 1000, isUtc: true),
+        receivedAt.add(const Duration(days: 30)),
       );
       expect(
-        () => TokenPairResponseDto.fromJson({'access': token}),
+        () => SessionTokenResponseDto.fromJson({'token': token}),
+        throwsA(isA<MalformedApiBody>()),
+      );
+      expect(
+        () =>
+            SessionTokenResponseDto.fromJson({'token': token, 'expires_in': 0}),
         throwsA(isA<MalformedApiBody>()),
       );
     });

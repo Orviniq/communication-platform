@@ -904,7 +904,6 @@ final class InMemoryTokenStore implements SessionTokenStore {
       expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
       scope: SessionScope.full,
     ),
-    refreshToken: 'refresh-token-value',
     userId: DeliveryHarness.userId,
     deviceId: DeliveryHarness.deviceId,
   );
