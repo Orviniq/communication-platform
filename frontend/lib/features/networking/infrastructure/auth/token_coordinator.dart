@@ -40,25 +40,30 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   /// decision, not this one's.
   Future<Result<AccessToken>>? _renewalInFlight;
 
-  /// The token an in-flight renewal is presenting, and null when none is.
+  /// Marks the work of one renewal, so that a question asked from inside it is
+  /// answered rather than joined.
   ///
   /// The renewal is itself an authenticated request: the reviewed client asks
   /// this coordinator for the token to put in its `Authorization` header, and
   /// that question arrives *while* the renewal it belongs to is the flight in
   /// progress. Answering it with [_renewalInFlight] would deadlock — that
   /// future cannot complete until the request waiting on this answer is sent.
-  /// The presented token is the terminating answer, and the honest one: a
-  /// renewal happens before expiry, so the token in hand is live, and a
-  /// concurrent caller handed it holds a token that works.
-  AccessToken? _presentedToken;
+  /// The presented token is the terminating answer, and the correct one: it is
+  /// the token this renewal exists to present.
+  ///
+  /// The zone is what keeps the answer to that question from reaching anybody
+  /// else. A caller outside the renewal is in no such trouble and still joins
+  /// the flight, so an ordinary request that arrives mid-renewal waits for the
+  /// new token exactly as it did before.
+  static const _renewalMarker = #tokenCoordinatorRenewal;
 
   int _sessionGeneration = 0;
 
   @override
   Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async {
-    final presented = _presentedToken;
-    if (presented != null && !forceRefresh) {
-      return Result.success(presented);
+    final presenting = Zone.current[_renewalMarker];
+    if (presenting is AccessToken) {
+      return Result.success(presenting);
     }
     final tokens = await store.read();
     if (tokens == null) {
@@ -94,12 +99,11 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   Future<Result<AccessToken>> recoverAfterUnauthorized(
     String rejectedToken,
   ) async {
-    final presented = _presentedToken;
-    if (presented != null && presented.value == rejectedToken) {
-      // The renewal itself was refused. There is nothing to recover with: the
-      // only token this coordinator holds is the one the server just rejected,
-      // and asking for another is the call that is already failing. The
-      // failure travels back to [_performRenewal], which ends the session.
+    if (Zone.current[_renewalMarker] is AccessToken) {
+      // The renewal's own request was refused. There is nothing to recover
+      // with: the only token this coordinator holds is the one the server just
+      // rejected, and asking for another is the call that is already failing.
+      // The refusal travels back to [_performRenewal], which ends the session.
       return const Result.failure(
         AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
       );
@@ -134,50 +138,49 @@ final class TokenCoordinator implements AccessTokenCoordinator {
     AccessToken presented,
     int generation,
   ) async {
-    // Set before the first suspension, because the request this call is about
-    // to make asks for it on its way out. See [_presentedToken].
-    _presentedToken = presented;
-    try {
-      final result = await renewExchange.renew();
-      switch (result) {
-        case Success(value: final renewed):
-          if (generation != _sessionGeneration) {
-            return const Result.failure(
-              AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
-            );
-          }
-          // `/auth/renew` answers a token and its lifetime and nothing else,
-          // so the value decoded from it carries no `userId`, `deviceId` or
-          // `username`. Replacing the durable record with it verbatim erased
-          // the identity the session is bound to, and the next restore read
-          // that back as a null user and reported a malformed server response
-          // - signing the account out on the first cold start after a renewal,
-          // with a durable session that was still perfectly valid. A renewal
-          // changes the credential, never whose credential it is.
-          final identity = await store.read();
-          await store.replace(
-            SessionTokens(
-              accessToken: renewed.accessToken,
-              userId: renewed.userId ?? identity?.userId,
-              deviceId: renewed.deviceId ?? identity?.deviceId,
-              username: renewed.username ?? identity?.username,
-            ),
+    // The request this call is about to make asks for the token on its way
+    // out, and the marker is how that question is answered. See
+    // [_renewalMarker].
+    final result = await runZoned(
+      renewExchange.renew,
+      zoneValues: <Object?, Object?>{_renewalMarker: presented},
+    );
+    switch (result) {
+      case Success(value: final renewed):
+        if (generation != _sessionGeneration) {
+          return const Result.failure(
+            AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
           );
-          return Result.success(renewed.accessToken);
-        case FailureResult(failure: final failure):
-          if (!_endsSession(failure)) {
-            return Result.failure(failure);
-          }
-          final reason =
-              failure is BackendFailure &&
-                  failure.code == BackendFailureCode.tokenRevoked
-              ? SessionTerminationReason.revoked
-              : SessionTerminationReason.expired;
-          await _terminate(reason);
+        }
+        // `/auth/renew` answers a token and its lifetime and nothing else,
+        // so the value decoded from it carries no `userId`, `deviceId` or
+        // `username`. Replacing the durable record with it verbatim erased
+        // the identity the session is bound to, and the next restore read
+        // that back as a null user and reported a malformed server response
+        // - signing the account out on the first cold start after a renewal,
+        // with a durable session that was still perfectly valid. A renewal
+        // changes the credential, never whose credential it is.
+        final identity = await store.read();
+        await store.replace(
+          SessionTokens(
+            accessToken: renewed.accessToken,
+            userId: renewed.userId ?? identity?.userId,
+            deviceId: renewed.deviceId ?? identity?.deviceId,
+            username: renewed.username ?? identity?.username,
+          ),
+        );
+        return Result.success(renewed.accessToken);
+      case FailureResult(failure: final failure):
+        if (!_endsSession(failure)) {
           return Result.failure(failure);
-      }
-    } finally {
-      _presentedToken = null;
+        }
+        final reason =
+            failure is BackendFailure &&
+                failure.code == BackendFailureCode.tokenRevoked
+            ? SessionTerminationReason.revoked
+            : SessionTerminationReason.expired;
+        await _terminate(reason);
+        return Result.failure(failure);
     }
   }
 
