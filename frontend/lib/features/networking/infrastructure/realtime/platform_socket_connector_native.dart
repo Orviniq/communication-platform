@@ -16,10 +16,6 @@ final class PlatformSocketConnector implements SocketConnector {
   final HttpClient Function()? _createHttpClient;
 
   @override
-  SocketAuthenticationMode get authenticationMode =>
-      SocketAuthenticationMode.nativeBearerHeader;
-
-  @override
   Future<SocketConnection> connect({
     required Uri uri,
     required String accessToken,
