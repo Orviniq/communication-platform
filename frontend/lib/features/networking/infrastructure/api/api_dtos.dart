@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 
@@ -26,53 +24,39 @@ final class HealthResponseDto {
   }
 }
 
-final class RefreshRequestDto {
-  const RefreshRequestDto(this.refreshToken);
-
-  final String refreshToken;
-
-  Map<String, Object?> toJson() => {'refresh': refreshToken};
-}
-
-final class TokenPairResponseDto {
-  const TokenPairResponseDto._({
-    required this.access,
-    required this.refresh,
-    required this.accessExpiresAt,
-    required this.refreshExpiresAt,
+/// What `POST /api/v1/auth/renew` answers: the same session, on a later token.
+///
+/// A register-scope token cannot reach the route — it answers `403
+/// scope_forbidden` — so a body that parses is always a full-scope session.
+final class SessionTokenResponseDto {
+  const SessionTokenResponseDto._({
+    required this.token,
+    required this.expiresIn,
   });
 
-  factory TokenPairResponseDto.fromJson(Object? value) {
+  factory SessionTokenResponseDto.fromJson(Object? value) {
     final json = requireJsonObject(value);
-    final access = json['access'];
-    final refresh = json['refresh'];
-    if (access is! String ||
-        access.isEmpty ||
-        refresh is! String ||
-        refresh.isEmpty) {
+    final token = json['token'];
+    if (token is! String || token.isEmpty) {
       throw const MalformedApiBody();
     }
-    return TokenPairResponseDto._(
-      access: access,
-      refresh: refresh,
-      accessExpiresAt: readJwtExpiry(access),
-      refreshExpiresAt: readJwtExpiry(refresh),
+    return SessionTokenResponseDto._(
+      token: token,
+      expiresIn: readExpiresIn(json['expires_in']),
     );
   }
 
-  final String access;
-  final String refresh;
-  final DateTime accessExpiresAt;
-  final DateTime refreshExpiresAt;
+  final String token;
+  final Duration expiresIn;
 
-  SessionTokens toDomain() => SessionTokens(
+  /// [receivedAt] anchors [expiresIn], which the server states relative to the
+  /// moment it issued the token.
+  SessionTokens toDomain({DateTime? receivedAt}) => SessionTokens(
     accessToken: AccessToken(
-      value: access,
-      expiresAt: accessExpiresAt,
+      value: token,
+      expiresAt: (receivedAt ?? DateTime.now()).toUtc().add(expiresIn),
       scope: SessionScope.full,
     ),
-    refreshToken: refresh,
-    refreshExpiresAt: refreshExpiresAt,
   );
 }
 
@@ -176,23 +160,16 @@ final class DrainEnvelopesResponseDto {
   final int prunedThrough;
 }
 
-DateTime readJwtExpiry(String token) {
-  final parts = token.split('.');
-  if (parts.length != 3 || parts[1].length > 16384) {
+/// The published lifetime of a token, in seconds.
+///
+/// The token is opaque to this client: it carries no `scope` claim, and the
+/// server publishes `expires_in` so that nothing has to read the claims to
+/// learn when a token dies (ADR-0023).
+Duration readExpiresIn(Object? value) {
+  if (value is! int || value <= 0) {
     throw const MalformedApiBody();
   }
-  try {
-    final payloadBytes = base64Url.decode(base64Url.normalize(parts[1]));
-    final payload = jsonDecode(utf8.decode(payloadBytes));
-    final json = requireJsonObject(payload);
-    final expiry = json['exp'];
-    if (expiry is! int || expiry <= 0) {
-      throw const MalformedApiBody();
-    }
-    return DateTime.fromMillisecondsSinceEpoch(expiry * 1000, isUtc: true);
-  } on FormatException {
-    throw const MalformedApiBody();
-  }
+  return Duration(seconds: value);
 }
 
 final RegExp _uuid = RegExp(

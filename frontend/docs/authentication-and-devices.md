@@ -15,7 +15,7 @@ a production artifact accidentally.
 4. If unreachable with no usable identity, remain on the connection screen with Retry.
    With a usable Android identity, open cached content in offline mode. The Web client is
    online-session-first and remains at the connection gate.
-5. If a valid device session exists, refresh if required and enter the app.
+5. If a valid device session exists, renew if required and enter the app.
 6. Otherwise show Login; a remembered username is non-secret and may be prefilled.
 
 ## Registration
@@ -36,8 +36,10 @@ a production artifact accidentally.
 Login without a known live device ID returns register scope. Before registration, the
 client generates the device Ed25519/X25519 identity, classical and ML-KEM-768 prekeys,
 and—only after the [PQ MLS production gates](mls-profile.md#production-gates) pass—MLS
-KeyPackages. It calls `POST /api/v1/me/devices` without `cross_sig` or `bundle_version`;
-the `201` response supplies the assigned `device_id` and full-scope tokens.
+KeyPackages. It calls `POST /api/v1/me/devices` without `cross_sig` or `bundle_version`,
+and without `keypackages`: `RegisterDeviceIn` has no such field and refuses an extra one,
+so the closed MLS gates cost nothing here. The `201` response supplies the assigned
+`device_id` and one full-scope session token with its `expires_in`.
 
 For the first device, the client publishes the account identity, signs the canonical
 bundle containing the assigned ID, sends `cross_sig` plus `bundle_version: 1` through
@@ -64,15 +66,33 @@ state.
 
 ## Token handling
 
-- Android stores refresh material encrypted under a Keystore-wrapped storage key.
+There is one token. Login and device registration each answer a session token and the
+`expires_in` beside it, and `POST /api/v1/auth/renew` answers another of the same kind.
+The server issues no second credential to hold, so there is no pair to keep in step, no
+rotation, and no route named `refresh` — server-side ADR-0023 retired all three, and
+`frontend/docs/decisions.md` ADR-068 records what that costs this client.
+
+- Android stores the session token encrypted under a Keystore-wrapped storage key. It is
+  the credential itself, not a placeholder: nothing retires it, and a token outlives a
+  cold start, so a restore returns a token that is ready to use.
 - Web stores encrypted token material under the origin's non-extractable wrapping key;
   page code can still use it while trusted code is running.
-- Access tokens live in memory where possible.
-- Dio authentication, proactive refresh, retry, logout, and WebSocket reconnect share one
+- The token is cached in memory per isolate to spare an ordinary request a SQLCipher read.
+  Any decision that could *end* a session reads the durable row instead, because that row
+  is shared with every other delivery owner in the process (ADR-050).
+- Dio authentication, proactive renewal, retry, logout, and WebSocket reconnect share one
   token coordinator.
+- A renewal carries its token in the `Authorization` header and sends no body. It writes
+  nothing and moves no generation, so it is safe to repeat: a renewal whose answer was
+  lost costs a retry rather than the session, and two that race simply produce two working
+  tokens.
+- A renewal that cannot be read is the server's fault, not a refused token, and the live
+  session survives it. Only a logout, a device revocation, or a deactivated account ends a
+  token before its own expiry.
 - Tokens and decoded claims never enter logs or crash reports.
-- Logout posts the current refresh token when possible, then wipes locally even if the
-  network request fails.
+- Logout posts the current session token when possible, then wipes locally even if the
+  network request fails. It advances the device's token generation, so every outstanding
+  token of that device dies at once.
 
 ## Linked devices
 

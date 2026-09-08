@@ -44,8 +44,7 @@ final class LocalAuthenticationTerminationHandler
       case SessionTerminationReason.revoked:
         await runtime.wipeForRemoteRevocation();
         lifecycle.emit(AuthenticationTermination.revoked);
-      case SessionTerminationReason.refreshRejected ||
-          SessionTerminationReason.expired:
+      case SessionTerminationReason.expired:
         lifecycle.emit(AuthenticationTermination.expired);
     }
   }
@@ -84,8 +83,6 @@ final class CoordinatedAuthenticationSession
           expiresAt: grant.accessExpiresAt,
           scope: _networkScope(grant.scope),
         ),
-        refreshToken: grant.refreshToken,
-        refreshExpiresAt: grant.refreshExpiresAt,
         userId: grant.userId,
         deviceId: grant.deviceId,
         username: username,

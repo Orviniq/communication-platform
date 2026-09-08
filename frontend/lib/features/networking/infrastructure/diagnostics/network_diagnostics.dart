@@ -2,7 +2,7 @@ enum NetworkOperation {
   health,
   authRegister,
   authLogin,
-  authRefresh,
+  authRenew,
   authLogout,
   api,
   websocket,

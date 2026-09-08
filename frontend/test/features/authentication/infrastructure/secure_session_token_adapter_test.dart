@@ -30,25 +30,61 @@ void main() {
       await harness.runtime.close();
     });
 
+    test('persists the session token and restores it ready to use', () async {
+      final adapter = SecureSessionTokenAdapter(harness.runtime);
+      await adapter.replace(fullTokens());
+      final database =
+          (await harness.runtime.open() as Success<LocalDatabase>).value;
+      final row = await database.select(database.accountSessions).getSingle();
+      final metadata = utf8.decode(row.tokenMetadataCiphertext);
+
+      expect(metadata, contains('session-secret'));
+
+      final restarted = SecureSessionTokenAdapter(harness.runtime);
+      final restored = await restarted.read();
+      // Not a placeholder: nothing rotates, so the restored token is the one
+      // the next request presents rather than an expired stand-in whose only
+      // job was to force a rotation first.
+      expect(restored?.accessToken.value, 'session-secret');
+      expect(restored?.accessToken.expiresAt, DateTime.utc(2026, 7, 28, 11));
+      expect(restored?.accessToken.scope, SessionScope.full);
+      expect(restored?.userId, userId);
+      expect(restored?.deviceId, deviceId);
+    });
+
     test(
-      'persists refresh material but keeps access token in memory',
+      'a row written as a token pair is unreadable and is deleted',
       () async {
         final adapter = SecureSessionTokenAdapter(harness.runtime);
         await adapter.replace(fullTokens());
         final database =
             (await harness.runtime.open() as Success<LocalDatabase>).value;
-        final row = await database.select(database.accountSessions).getSingle();
-        final metadata = utf8.decode(row.tokenMetadataCiphertext);
-
-        expect(metadata, contains('refresh-secret'));
-        expect(metadata, isNot(contains('access-secret')));
+        // What a build before ADR-0023 wrote: the refresh half of a pair, under
+        // the same format version. It has no readable shape here, so the guard
+        // deletes it and the account signs in once more.
+        await database
+            .update(database.accountSessions)
+            .write(
+              AccountSessionsCompanion(
+                tokenMetadataCiphertext: Value(
+                  Uint8List.fromList(
+                    utf8.encode(
+                      jsonEncode(<String, Object?>{
+                        'version': 1,
+                        'refresh': 'refresh-secret',
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            );
 
         final restarted = SecureSessionTokenAdapter(harness.runtime);
-        final restored = await restarted.read();
-        expect(restored?.accessToken.value, isEmpty);
-        expect(restored?.refreshToken, 'refresh-secret');
-        expect(restored?.userId, userId);
-        expect(restored?.deviceId, deviceId);
+        expect(await restarted.read(), isNull);
+        expect(
+          await database.select(database.accountSessions).getSingleOrNull(),
+          isNull,
+        );
       },
     );
 
@@ -98,7 +134,7 @@ void main() {
         final lifecycle = AuthenticationLifecycleBus();
         final coordinator = TokenCoordinator(
           store: adapter,
-          refreshExchange: const FixedRefreshExchange(
+          renewExchange: const FixedRenewExchange(
             Result.failure(TransportFailure(TransportFailureKind.offline)),
           ),
           terminationHandler: LocalAuthenticationTerminationHandler(
@@ -138,7 +174,7 @@ void main() {
         );
         final coordinator = TokenCoordinator(
           store: adapter,
-          refreshExchange: const FixedRefreshExchange(
+          renewExchange: const FixedRenewExchange(
             Result.failure(BackendFailure(BackendFailureCode.tokenRevoked)),
           ),
           terminationHandler: LocalAuthenticationTerminationHandler(
@@ -238,12 +274,10 @@ EnrollmentIntentsCompanion enrollmentIntent(String owner) =>
 
 SessionTokens fullTokens() => SessionTokens(
   accessToken: AccessToken(
-    value: 'access-secret',
+    value: 'session-secret',
     expiresAt: DateTime.utc(2026, 7, 28, 11),
     scope: SessionScope.full,
   ),
-  refreshToken: 'refresh-secret',
-  refreshExpiresAt: DateTime.utc(2026, 8),
   userId: userId,
   deviceId: deviceId,
   username: 'alice',
@@ -301,13 +335,13 @@ final class FakeCleanup implements LocalArtifactCleanupPort {
   }
 }
 
-final class FixedRefreshExchange implements RefreshTokenExchange {
-  const FixedRefreshExchange(this.result);
+final class FixedRenewExchange implements RenewTokenExchange {
+  const FixedRenewExchange(this.result);
 
   final Result<SessionTokens> result;
 
   @override
-  Future<Result<SessionTokens>> rotate(String refreshToken) async => result;
+  Future<Result<SessionTokens>> renew() async => result;
 }
 
 final class FixedTimeSource implements TimeSource {

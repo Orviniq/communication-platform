@@ -29,56 +29,49 @@ final class RegisterDeviceRequestDto {
       for (final prekey in public.pqOtpks)
         {'key_id': prekey.keyId, 'pub': base64Encode(prekey.publicKey)},
     ],
-    // Present and empty, never omitted: `keypackages` is a required field of the
-    // registration serializer (empty is allowed, absent is
-    // `400 {"keypackages": ["This field is required."]}`), and a device has no
-    // key packages to offer at registration — they arrive later through
-    // `PUT /me/devices/{device_id}/keypackages`.
-    'keypackages': const <String>[],
   };
 }
 
 final class RegisterDeviceResponseDto {
   const RegisterDeviceResponseDto({
     required this.deviceId,
-    required this.access,
-    required this.refresh,
+    required this.token,
+    required this.expiresIn,
   });
 
   factory RegisterDeviceResponseDto.fromJson(Object? value) {
     final json = requireJsonObject(value);
     final deviceId = json['device_id'];
-    final access = json['access'];
-    final refresh = json['refresh'];
+    final token = json['token'];
     final scope = json['scope'];
     if (deviceId is! String ||
         !_uuid.hasMatch(deviceId) ||
-        access is! String ||
-        access.isEmpty ||
-        refresh is! String ||
-        refresh.isEmpty ||
+        token is! String ||
+        token.isEmpty ||
         scope != 'full') {
       throw const MalformedApiBody();
     }
     return RegisterDeviceResponseDto(
       deviceId: deviceId,
-      access: access,
-      refresh: refresh,
+      token: token,
+      expiresIn: readExpiresIn(json['expires_in']),
     );
   }
 
   final String deviceId;
-  final String access;
-  final String refresh;
 
-  DeviceRegistrationResponse toDomain(String userId) =>
+  /// The new device's session token, and what this client cross-signs with.
+  final String token;
+  final Duration expiresIn;
+
+  /// [receivedAt] anchors [expiresIn], which the server states relative to the
+  /// moment it issued the token.
+  DeviceRegistrationResponse toDomain(String userId, {DateTime? receivedAt}) =>
       DeviceRegistrationResponse(
         deviceId: deviceId,
         userId: userId,
-        accessToken: access,
-        accessExpiresAt: readJwtExpiry(access),
-        refreshToken: refresh,
-        refreshExpiresAt: readJwtExpiry(refresh),
+        accessToken: token,
+        accessExpiresAt: (receivedAt ?? DateTime.now()).toUtc().add(expiresIn),
       );
 }
 

@@ -48,56 +48,53 @@ final class LoginAccountRequestDto {
   };
 }
 
+/// The two login success shapes, told apart by `scope`.
+///
+/// A `full` body names the live device the request asked for; a `register` body
+/// names no device, because a session token is bound to one and this token's
+/// only power is `POST /me/devices`.
 final class LoginAccountResponseDto {
   const LoginAccountResponseDto._({
-    required this.access,
-    required this.accessExpiresAt,
+    required this.token,
+    required this.expiresIn,
     required this.userId,
     required this.scope,
-    this.refresh,
-    this.refreshExpiresAt,
     this.deviceId,
   });
 
   factory LoginAccountResponseDto.fromJson(Object? value) {
     final json = requireJsonObject(value);
-    final access = json['access'];
+    final token = json['token'];
     final userId = json['user_id'];
     final scope = json['scope'];
-    if (access is! String ||
-        access.isEmpty ||
+    if (token is! String ||
+        token.isEmpty ||
         userId is! String ||
         !_uuid.hasMatch(userId) ||
         scope is! String) {
       throw const MalformedApiBody();
     }
 
-    final accessExpiresAt = readJwtExpiry(access);
+    final expiresIn = readExpiresIn(json['expires_in']);
     switch (scope) {
       case 'register':
-        if (json['refresh'] != null || json['device_id'] != null) {
+        if (json['device_id'] != null) {
           throw const MalformedApiBody();
         }
         return LoginAccountResponseDto._(
-          access: access,
-          accessExpiresAt: accessExpiresAt,
+          token: token,
+          expiresIn: expiresIn,
           userId: userId,
           scope: AccountSessionScope.register,
         );
       case 'full':
-        final refresh = json['refresh'];
         final deviceId = json['device_id'];
-        if (refresh is! String ||
-            refresh.isEmpty ||
-            deviceId is! String ||
-            !_uuid.hasMatch(deviceId)) {
+        if (deviceId is! String || !_uuid.hasMatch(deviceId)) {
           throw const MalformedApiBody();
         }
         return LoginAccountResponseDto._(
-          access: access,
-          accessExpiresAt: accessExpiresAt,
-          refresh: refresh,
-          refreshExpiresAt: readJwtExpiry(refresh),
+          token: token,
+          expiresIn: expiresIn,
           userId: userId,
           deviceId: deviceId,
           scope: AccountSessionScope.full,
@@ -107,19 +104,17 @@ final class LoginAccountResponseDto {
     }
   }
 
-  final String access;
-  final DateTime accessExpiresAt;
-  final String? refresh;
-  final DateTime? refreshExpiresAt;
+  final String token;
+  final Duration expiresIn;
   final String userId;
   final String? deviceId;
   final AccountSessionScope scope;
 
-  AccountSessionGrant toDomain() => AccountSessionGrant(
-    accessToken: access,
-    accessExpiresAt: accessExpiresAt,
-    refreshToken: refresh,
-    refreshExpiresAt: refreshExpiresAt,
+  /// [receivedAt] anchors [expiresIn], which the server states relative to the
+  /// moment it issued the token.
+  AccountSessionGrant toDomain({DateTime? receivedAt}) => AccountSessionGrant(
+    accessToken: token,
+    accessExpiresAt: (receivedAt ?? DateTime.now()).toUtc().add(expiresIn),
     userId: userId,
     deviceId: deviceId,
     scope: scope,

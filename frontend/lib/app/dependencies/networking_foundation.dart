@@ -16,12 +16,12 @@ import 'package:dio/dio.dart';
 /// token coordinator, and the socket origin they share.
 ///
 /// Exactly one of these exists per running application, and
-/// `AuthenticationAssembly` is what builds it. A second instance would be a
-/// second [TokenCoordinator] holding the same *rotating* refresh token: two
-/// coordinators that both rotate it race, and the loser presents a refresh
-/// token the server has already retired, which ends the session for both. The
-/// socket is therefore not given its own client or its own coordinator; it is
-/// built from this one by [realtimeGateway].
+/// `AuthenticationAssembly` is what builds it. One client is what keeps every
+/// request on the provisioned trust and inside the same reviewed transport,
+/// and one coordinator is what keeps a renewal, a logout and a revocation
+/// deciding the session together rather than three at a time. The socket is
+/// therefore not given its own client or its own coordinator; it is built from
+/// this one by [realtimeGateway].
 final class NetworkingFoundation {
   NetworkingFoundation._({
     required this.restClient,
@@ -54,7 +54,7 @@ final class NetworkingFoundation {
     );
     final tokenCoordinator = TokenCoordinator(
       store: tokenStore,
-      refreshExchange: DioRefreshTokenExchange(restClient),
+      renewExchange: DioRenewTokenExchange(restClient),
       logoutExchange: DioLogoutTokenExchange(restClient),
       terminationHandler: terminationHandler,
       timeSource: timeSource,
@@ -83,9 +83,8 @@ final class NetworkingFoundation {
   /// The gateway is deliberately per-session rather than per-application: it
   /// holds one connection and one close-code recovery budget, and a delivery
   /// session that has stopped must not leave either behind. What it does *not*
-  /// own is the coordinator — close 4001 refreshes, and close 4003 revokes,
-  /// through the one coordinator the whole application shares, so a socket
-  /// revocation terminates the REST session too.
+  /// own is the coordinator: it recovers through the one the whole application
+  /// shares, so a socket revocation terminates the REST session too.
   ///
   /// [keepAlive] is supplied only by a session that holds this connection
   /// while nobody is looking at the application, and is null for every other

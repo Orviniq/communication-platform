@@ -33,9 +33,16 @@ import 'package:flutter_test/flutter_test.dart';
 /// [SecureLocalStorageRuntime] over that shared connection, and drive the real
 /// [TokenCoordinator]. Only two things are stood in for: the Keystore, which a
 /// host has none of, and the server, which is a port rather than a socket — and
-/// that server enforces the one rule the real one enforces, which is the rule
-/// this whole piece exists because of: **rotating a refresh token blacklists
-/// it**, so presenting it a second time is a 401.
+/// that server enforces the rule the real one enforces since ADR-0023, which is
+/// the opposite of the rule this file was first written against: **a renewal
+/// retires nothing**, so presenting one token twice answers twice and both
+/// answers work.
+///
+/// What that changes is the subject. The race is still arranged here, exactly
+/// as before, because it still happens — two owners do reach the renewal
+/// window together. What is checked is that it no longer *costs* anything:
+/// there is no loser to repair, no row to arbitrate over, and no interleaving
+/// in which a user who did nothing is signed out.
 ///
 /// What is *not* covered here is the exclusion mechanism itself. That lives on
 /// the application's main looper in Kotlin, and no Dart test can drive it; see
@@ -76,13 +83,12 @@ void main() {
   Future<SessionTokens?> durableSession() async =>
       (await observer()).readDurable();
 
-  Future<void> seed() async =>
-      (await observer()).replace(_tokens('refresh-0', accessValue: 'access-0'));
+  Future<void> seed() async => (await observer()).replace(_tokens('token-0'));
 
-  group('two owners rotating one refresh token', () {
+  group('two owners renewing one session', () {
     for (final firstToBeServed in const [0, 1]) {
       test(
-        'owner $firstToBeServed served first: neither session is destroyed',
+        'owner $firstToBeServed served first: both keep working tokens',
         () async {
           await seed();
           final backend = _Backend(rendezvous: 2, serveFirst: firstToBeServed);
@@ -96,26 +102,24 @@ void main() {
 
           backend.beginRound();
           final reports = await Future.wait(
-            owners.map((owner) => owner.refresh()),
+            owners.map((owner) => owner.renew()),
           );
 
-          // Both contenders presented `refresh-0`. That is the contention, and
-          // it is real: the backend saw one token twice and answered the second
-          // presentation the way the deployed backend answers it.
+          // Both contenders presented `token-0`. That is the contention, and
+          // it is real: the backend saw one token twice and answered the
+          // second presentation the way the deployed backend answers it.
           expect(
-            backend.presentations.take(2),
-            ['refresh-0', 'refresh-0'],
+            backend.presentations,
+            ['token-0', 'token-0'],
             reason: 'both owners genuinely raced the same durable row',
           );
           expect(
             backend.rejections,
-            1,
-            reason: 'exactly one of them lost, as the backend defines losing',
+            0,
+            reason: 'nothing was retired, so there was nothing to refuse',
           );
 
-          // Neither owner ended a session. Before ADR-050 the loser read its
-          // 401 as the server ending the session, cleared the shared row, and
-          // signed out a user who did nothing.
+          // Neither owner ended a session, and neither had to repair one.
           for (final report in reports) {
             expect(report.terminations, isEmpty, reason: report.toString());
             expect(
@@ -124,27 +128,28 @@ void main() {
               reason: 'every owner ends with a token it can use: $report',
             );
           }
+          expect(
+            reports.map((report) => report.accessToken).toSet(),
+            hasLength(2),
+            reason: 'two renewals are two tokens, and both of them work',
+          );
 
-          // The loser adopted what the winner persisted and rotated that,
-          // which is the third presentation.
-          expect(backend.presentations, hasLength(3));
-          expect(backend.presentations[2], isNot('refresh-0'));
-
-          // And the shared row still holds exactly one live session, whose
-          // refresh token is the newest the backend issued.
+          // The shared row holds one live session, whose token is one of the
+          // two just issued. Which one is whichever write landed last, and it
+          // does not matter: the other owner holds a token that still works.
           final durable = await durableSession();
           expect(durable, isNotNull);
-          expect(durable!.refreshToken, backend.issued.last);
+          expect(backend.issued, contains(durable!.accessToken.value));
         },
       );
     }
 
-    test('repeated rapid contention converges every time', () async {
+    test('repeated rapid contention costs nothing every time', () async {
       await seed();
       // Eight rounds, alternating which owner the backend serves first, with
-      // both owners forced into flight together on every one of them. One clean
-      // race proves very little; a mechanism that only usually holds shows up
-      // here.
+      // both owners forced into flight together on every one of them. One
+      // clean race proves very little; a mechanism that only usually holds
+      // shows up here.
       final backend = _Backend(rendezvous: 2, serveFirst: 0);
       addTearDown(backend.close);
 
@@ -156,9 +161,7 @@ void main() {
 
       for (var round = 0; round < 8; round += 1) {
         backend.beginRound(serveFirst: round.isEven ? 0 : 1);
-        final reports = await Future.wait(
-          owners.map((owner) => owner.refresh()),
-        );
+        final reports = await Future.wait(owners.map((owner) => owner.renew()));
         for (final report in reports) {
           expect(report.terminations, isEmpty, reason: 'round $round: $report');
           expect(report.accessToken, isNotNull, reason: 'round $round');
@@ -167,26 +170,26 @@ void main() {
 
       expect(
         backend.rejections,
-        greaterThanOrEqualTo(8),
+        0,
         reason:
-            'at least one presentation per round was rejected, so every round '
-            'was a real race rather than a lucky serialization - and the count '
-            'runs higher than the round count because an owner that lost one '
-            'round starts the next holding a token the other has already '
-            'rotated past, which is sustained contention rather than a single '
-            'clean race repeated',
+            'sustained contention is not a failure mode any more: an owner '
+            'that starts a round holding a token the other has renewed past '
+            'presents a token that is still perfectly good',
       );
-      expect((await durableSession())?.refreshToken, backend.issued.last);
+      expect(backend.presentations, hasLength(16));
+      expect(
+        backend.issued,
+        contains((await durableSession())?.accessToken.value),
+      );
     });
 
-    test('an owner killed mid-rotation leaves nothing behind', () async {
+    test('an owner killed mid-renewal leaves nothing behind', () async {
       await seed();
-      // The hardest case the mechanism has to survive: a contender that stops
-      // existing without ever getting to clean up, killed while the server is
-      // holding its request, which is the widest window it has. Nothing it held
-      // was durable, so there is nothing to expire and nothing to reclaim - and
-      // the surviving owner must carry on immediately, not after a lease times
-      // out.
+      // A contender that stops existing without ever getting to clean up,
+      // killed while the server is holding its request, which is the widest
+      // window it has. Nothing it held was durable, so there is nothing to
+      // expire and nothing to reclaim - and the surviving owner must carry on
+      // immediately, not after a lease times out.
       final backend = _Backend(rendezvous: 2, serveFirst: 1);
       addTearDown(backend.close);
 
@@ -195,12 +198,12 @@ void main() {
       addTearDown(survivor.stop);
 
       backend.beginRound();
-      unawaited(doomed.refresh().then((_) {}, onError: (Object _) {}));
-      final survivorRefresh = survivor.refresh();
+      unawaited(doomed.renew().then((_) {}, onError: (Object _) {}));
+      final survivorRenewal = survivor.renew();
       await backend.awaitRendezvous();
       await doomed.kill();
 
-      final report = await survivorRefresh;
+      final report = await survivorRenewal;
       expect(report.terminations, isEmpty, reason: report.toString());
       expect(report.accessToken, isNotNull);
 
@@ -213,21 +216,22 @@ void main() {
         backend.port,
       );
       addTearDown(replacement.stop);
-      final after = await replacement.refresh();
+      final after = await replacement.renew();
       expect(after.terminations, isEmpty, reason: after.toString());
       expect(after.accessToken, isNotNull);
-      expect((await durableSession())?.refreshToken, backend.issued.last);
+      expect(
+        backend.issued,
+        contains((await durableSession())?.accessToken.value),
+      );
     });
 
-    test('a winner that dies before it persists really has ended it', () async {
+    test('an owner that dies before it persists costs nothing', () async {
       await seed();
-      // The one interleaving nothing can repair, stated rather than hidden. The
-      // owner the server served obtained a replacement pair and stopped
-      // existing before it could write it down, so that pair is lost and the
-      // token it retired is retired for good. The loser waits its full repair
-      // window, observes a row that never moves, and ends the session - which
-      // is correct, not merely safe, because there is no longer any token that
-      // works.
+      // The one interleaving that used to be unrepairable. The owner the
+      // server served obtained a replacement and stopped existing before it
+      // could write it down, so that token is lost - and losing it costs
+      // nothing now, because obtaining it retired none of the others. The
+      // survivor renews the same token it was already holding and carries on.
       final backend = _Backend(rendezvous: 2, serveFirst: 0);
       addTearDown(backend.close);
 
@@ -236,94 +240,54 @@ void main() {
       addTearDown(survivor.stop);
 
       backend.beginRound();
-      unawaited(doomed.refresh().then((_) {}, onError: (Object _) {}));
-      final survivorRefresh = survivor.refresh();
+      unawaited(doomed.renew().then((_) {}, onError: (Object _) {}));
+      final survivorRenewal = survivor.renew();
       await backend.awaitRendezvous();
       // Killed after its request is queued and before anything it is given can
       // reach the shared row.
       await doomed.kill();
 
-      final report = await survivorRefresh;
-      expect(report.accessToken, isNull);
+      final report = await survivorRenewal;
       expect(
-        report.terminations,
-        ['refreshRejected'],
-        reason: 'no token that works exists any more, so the session is over',
+        report.accessToken,
+        isNotNull,
+        reason: 'a token nobody wrote down is not a session anybody lost',
       );
-      expect(
-        await durableSession(),
-        isNull,
-        reason: 'and the row is cleared rather than left holding a dead token',
-      );
-    });
-
-    test('without the repair the same race destroys the session', () async {
-      await seed();
-      // The same harness, the same two isolates, the same shared row, and the
-      // same server rule - with the repair window set to nothing, so a loser
-      // concludes from a row the winner has not written yet. This is what the
-      // artifact did before, and it is here so that the hazard is demonstrated
-      // rather than asserted: the loser signs the device out, and it takes the
-      // pair the winner had just persisted with it.
-      final backend = _Backend(rendezvous: 2, serveFirst: 0);
-      addTearDown(backend.close);
-
-      final owners = await Future.wait([
-        _Owner.start(0, server.connectPort, backend.port, repair: false),
-        _Owner.start(1, server.connectPort, backend.port, repair: false),
-      ]);
-      addTearDown(() => Future.wait(owners.map((owner) => owner.stop())));
-
-      backend.beginRound();
-      final reports = await Future.wait(owners.map((owner) => owner.refresh()));
-
-      expect(
-        reports.map((report) => report.terminations).expand((it) => it),
-        contains('refreshRejected'),
-        reason:
-            'the loser reads its 401 as the server ending the session, clears '
-            'the shared row and signs the device out - which in the artifact '
-            'is the user being sent to the login screen having done nothing. '
-            'Whether the row is also left empty depends on which of the two '
-            'writes lands last, so only the sign-out is asserted here; both '
-            'orderings are the same user-visible failure',
-      );
+      expect(report.terminations, isEmpty, reason: report.toString());
+      expect(await durableSession(), isNotNull);
     });
 
     test('one owner alone pays nothing for the other one existing', () async {
       await seed();
-      // The normal case, which is no contention at all. The repair path costs a
-      // second durable read only on the failure branch, so a lone owner makes
-      // exactly one presentation and reads the row exactly as it did before.
+      // The normal case, which is no contention at all: one presentation, one
+      // answer, one write.
       final backend = _Backend(rendezvous: 1, serveFirst: 0);
       addTearDown(backend.close);
 
       final owner = await _Owner.start(0, server.connectPort, backend.port);
       addTearDown(owner.stop);
 
-      final report = await owner.refresh();
+      final report = await owner.renew();
 
       expect(report.accessToken, isNotNull);
       expect(report.terminations, isEmpty);
-      expect(backend.presentations, ['refresh-0']);
+      expect(backend.presentations, ['token-0']);
       expect(backend.rejections, 0);
     });
 
     test('a session the server really ended still ends', () async {
       await seed();
-      // The repair must not turn into a way of ignoring the server. A device
-      // whose token generation was bumped, or that was revoked, answers
-      // `token_revoked` — a different answer with a different meaning — and
-      // that ends the session on the first try, with no adoption and no second
+      // A device whose token generation was bumped, or that was revoked,
+      // answers `token_revoked` - the one answer that still ends a session
+      // before its own expiry. It ends it on the first try, with no second
       // request.
-      final backend = _Backend(rendezvous: 1, serveFirst: 0)
-        ..revoke('refresh-0');
+      final backend = _Backend(rendezvous: 1, serveFirst: 0)..revoke('token-0');
       addTearDown(backend.close);
 
       final owner = await _Owner.start(0, server.connectPort, backend.port);
       addTearDown(owner.stop);
 
-      final report = await owner.refresh();
+      final report = await owner.renew();
 
       expect(report.accessToken, isNull);
       expect(report.terminations, ['revoked']);
@@ -397,14 +361,14 @@ void _databaseServerEntrypoint(({String path, SendPort reply}) message) {
 }
 
 // ---------------------------------------------------------------------------
-// The backend: rotation with blacklist-after-rotation, and a rendezvous so the
+// The backend: renewal that retires nothing, and a rendezvous so the
 // contention is arranged rather than hoped for.
 // ---------------------------------------------------------------------------
 
-/// Emulates `POST /api/v1/auth/refresh` as `backend/accounts/API.md` documents
-/// it, and as `config/settings/base.py` configures it: `ROTATE_REFRESH_TOKENS`
-/// with `BLACKLIST_AFTER_ROTATION`, so an already-rotated token is a 401
-/// `invalid_token`.
+/// Emulates `POST /api/v1/auth/renew` as `backend/accounts/API.md` documents
+/// it: nothing is written and no generation moves, so a token may be presented
+/// again and again and every answer is another working token. The one refusal
+/// left is `token_revoked`, for a device or an account that is gone.
 final class _Backend {
   _Backend({required this.rendezvous, required int serveFirst})
     // ignore: prefer_initializing_formals
@@ -419,7 +383,6 @@ final class _Backend {
 
   final ReceivePort _incoming = ReceivePort();
   final List<({int owner, String token, SendPort reply})> _waiting = [];
-  final Set<String> _blacklisted = {};
   final List<String> presentations = [];
   final List<String> issued = [];
   Completer<void>? _rendezvousReached;
@@ -431,8 +394,7 @@ final class _Backend {
   SendPort get port => _incoming.sendPort;
 
   /// Starts holding presentations again, so that the next [rendezvous] of them
-  /// are in flight together. Anything after that batch — a loser adopting and
-  /// rotating again — is answered at once.
+  /// are in flight together.
   void beginRound({int? serveFirst}) {
     _holding = true;
     if (serveFirst != null) {
@@ -491,20 +453,14 @@ final class _Backend {
       request.reply.send(const ['revoked']);
       return;
     }
-    if (_blacklisted.contains(request.token)) {
-      rejections += 1;
-      request.reply.send(const ['blacklisted']);
-      return;
-    }
-    _blacklisted.add(request.token);
     _counter += 1;
-    final refresh = 'refresh-$_counter';
-    issued.add(refresh);
-    request.reply.send(['ok', refresh, 'access-$_counter']);
+    final renewed = 'token-$_counter';
+    issued.add(renewed);
+    request.reply.send(['ok', renewed]);
   }
 
-  /// Tokens the server treats as belonging to a device it has revoked, which is
-  /// a different answer from a blacklisted one and means something else.
+  /// Tokens the server treats as belonging to a device it has revoked, which
+  /// is the only answer left that ends a session before its own expiry.
   final Set<String> _revoked = {};
 
   void revoke(String token) => _revoked.add(token);
@@ -530,16 +486,14 @@ final class _Owner {
   static Future<_Owner> start(
     int id,
     SendPort database,
-    SendPort backend, {
-    bool repair = true,
-  }) async {
+    SendPort backend,
+  ) async {
     final replies = ReceivePort();
     final stream = replies.asBroadcastStream();
     final isolate = await Isolate.spawn(_ownerEntrypoint, (
       id: id,
       database: database,
       backend: backend,
-      repair: repair,
       reply: replies.sendPort,
     ));
     final commands = await stream.first as SendPort;
@@ -550,9 +504,9 @@ final class _Owner {
   final SendPort _commands;
   final Stream<Object?> _replies;
 
-  Future<_OwnerReport> refresh() async {
+  Future<_OwnerReport> renew() async {
     final answer = _replies.first;
-    _commands.send('refresh');
+    _commands.send('renew');
     final message = await answer as List<Object?>;
     return _OwnerReport(
       accessToken: message[0] as String?,
@@ -573,8 +527,7 @@ final class _Owner {
 }
 
 Future<void> _ownerEntrypoint(
-  ({int id, SendPort database, SendPort backend, bool repair, SendPort reply})
-  message,
+  ({int id, SendPort database, SendPort backend, SendPort reply}) message,
 ) async {
   final commands = ReceivePort();
   final connection = await DriftIsolate.fromConnectPort(
@@ -582,17 +535,14 @@ Future<void> _ownerEntrypoint(
   ).connect();
   final store = SecureSessionTokenAdapter(_runtimeOn(connection));
   final terminations = <String>[];
+  final exchange = _PortRenewExchange(message.id, message.backend);
   final coordinator = TokenCoordinator(
     store: store,
-    refreshExchange: _PortRefreshExchange(message.id, message.backend),
+    renewExchange: exchange,
     terminationHandler: _RecordingTermination(terminations),
     timeSource: const _RealClock(),
-    // Zero attempts still reads the shared row once, and then concludes on
-    // whatever it saw. That is the behaviour this piece replaced: a loser that
-    // decides the session is over from a row the winner has not written yet.
-    rotationRepairAttempts: message.repair ? 40 : 0,
-    rotationRepairInterval: const Duration(milliseconds: 25),
   );
+  exchange.coordinator = coordinator;
 
   message.reply.send(commands.sendPort);
   await for (final _ in commands) {
@@ -615,39 +565,44 @@ SecureLocalStorageRuntime _runtimeOn(QueryExecutor executor) =>
       executorFactory: (_) => executor,
     );
 
-SessionTokens _tokens(String refresh, {required String accessValue}) =>
-    SessionTokens(
-      accessToken: AccessToken(
-        value: accessValue,
-        // Already expired, which is what a restored process actually holds:
-        // the access token is never persisted, so the first authenticated call
-        // in any owner rotates the shared refresh token. That is why this race
-        // is reachable at all rather than only near expiry.
-        expiresAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-        scope: SessionScope.full,
-      ),
-      refreshToken: refresh,
-      userId: '11111111-1111-4111-8111-111111111111',
-      deviceId: '22222222-2222-4222-8222-222222222222',
-      username: 'contender',
-    );
+SessionTokens _tokens(String token) => SessionTokens(
+  accessToken: AccessToken(
+    value: token,
+    // Already run out, which is the lever this harness renews on demand with.
+    // A real session token lives thirty days; an owner asked for one that has
+    // aged out renews on the spot, which is what puts two of them in the
+    // window together on command.
+    expiresAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    scope: SessionScope.full,
+  ),
+  userId: '11111111-1111-4111-8111-111111111111',
+  deviceId: '22222222-2222-4222-8222-222222222222',
+  username: 'contender',
+);
 
-final class _PortRefreshExchange implements RefreshTokenExchange {
-  const _PortRefreshExchange(this.owner, this._backend);
+/// Asks the coordinator for the token to present, which is what the reviewed
+/// client does for an `AuthenticationRequirement.full` request — and the
+/// renewal is one.
+final class _PortRenewExchange implements RenewTokenExchange {
+  _PortRenewExchange(this.owner, this._backend);
 
   final int owner;
   final SendPort _backend;
+  late final AccessTokenCoordinator coordinator;
 
   @override
-  Future<Result<SessionTokens>> rotate(String refreshToken) async {
+  Future<Result<SessionTokens>> renew() async {
+    final header = await coordinator.accessToken();
+    if (header case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final presented = (header as Success<AccessToken>).value.value;
     final answer = ReceivePort();
-    _backend.send([owner, refreshToken, answer.sendPort]);
+    _backend.send([owner, presented, answer.sendPort]);
     final reply = (await answer.first)! as List<Object?>;
     answer.close();
     return switch (reply[0]) {
-      'ok' => Result.success(
-        _tokens(reply[1]! as String, accessValue: reply[2]! as String),
-      ),
+      'ok' => Result.success(_tokens(reply[1]! as String)),
       'revoked' => const Result.failure(
         BackendFailure(BackendFailureCode.tokenRevoked),
       ),

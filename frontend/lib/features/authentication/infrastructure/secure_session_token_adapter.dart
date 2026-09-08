@@ -7,11 +7,19 @@ import 'package:communication_platform/features/networking/application/ports/tok
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:drift/drift.dart';
 
-/// Persists refresh material only inside the Keystore-protected SQLCipher store.
+/// Persists the session token inside the Keystore-protected SQLCipher store.
 ///
-/// Access tokens remain in this adapter's memory. On process restoration an expired
-/// non-secret placeholder forces the coordinator to rotate the persisted refresh
-/// token before any authenticated request can be sent.
+/// There is one token now, so the store holds one token (ADR-0023). The pair it
+/// used to hold was split — a refresh token durable, an access token in this
+/// adapter's memory and nowhere else — and restoration wrote back an expired
+/// placeholder so that the first authenticated request had to rotate before it
+/// could be sent. Nothing rotates, and a session token outlives a cold start,
+/// so the row carries the credential itself and restoration returns a token
+/// that is ready to use.
+///
+/// A row written by a build that stored a pair has no readable shape here: the
+/// guard in [_readDurableRow] finds no `token`, deletes the row, and the user
+/// signs in once more.
 final class SecureSessionTokenAdapter implements SessionTokenStore {
   SecureSessionTokenAdapter(this.runtime);
 
@@ -39,10 +47,10 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
   /// [read] answers from `_memoryTokens` so an ordinary request does not pay a
   /// SQLCipher round trip for a value this isolate already has. That cache is
   /// per-isolate and the row behind it is shared with every other delivery
-  /// owner in this process, so a decision that could *end a session* is made
-  /// against this instead (ADR-050). It deliberately does not disturb the
-  /// cache: the cached access token is still this owner's, and it is the only
-  /// copy of it — the durable row never holds one.
+  /// owner in this process, so a caller that must see what another owner wrote
+  /// asks this instead (ADR-050). It deliberately does not disturb the cache:
+  /// a token this owner holds keeps working whatever the row now says, because
+  /// nothing retires it (ADR-0023).
   @override
   Future<SessionTokens?> readDurable() => _readDurableRow();
 
@@ -59,15 +67,17 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     }
     try {
       final metadata = _decodeObject(row.tokenMetadataCiphertext);
-      final refresh = metadata['refresh'];
+      final token = metadata['token'];
       final version = metadata['version'];
+      final expiresAt = row.expiresAt;
       final userId = utf8.decode(row.userIdCiphertext);
       final deviceBytes = row.deviceIdCiphertext;
       final deviceId = deviceBytes == null ? null : utf8.decode(deviceBytes);
       final username = utf8.decode(row.serverProfileCiphertext);
       if (version != _formatVersion ||
-          refresh is! String ||
-          refresh.isEmpty ||
+          token is! String ||
+          token.isEmpty ||
+          expiresAt == null ||
           !_uuid.hasMatch(userId) ||
           deviceId == null ||
           !_uuid.hasMatch(deviceId) ||
@@ -77,12 +87,10 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
       }
       final restored = SessionTokens(
         accessToken: AccessToken(
-          value: '',
-          expiresAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+          value: token,
+          expiresAt: expiresAt.toUtc(),
           scope: SessionScope.full,
         ),
-        refreshToken: refresh,
-        refreshExpiresAt: row.expiresAt,
         userId: userId,
         deviceId: deviceId,
         username: username,
@@ -133,8 +141,6 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     final previous = _memoryTokens ?? await read();
     return SessionTokens(
       accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      refreshExpiresAt: tokens.refreshExpiresAt ?? previous?.refreshExpiresAt,
       userId: tokens.userId ?? previous?.userId,
       deviceId: tokens.deviceId ?? previous?.deviceId,
       username: tokens.username ?? previous?.username,
@@ -145,12 +151,11 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     LocalDatabase database,
     SessionTokens merged,
   ) async {
-    final refresh = merged.refreshToken;
+    final token = merged.accessToken.value;
     final userId = merged.userId;
     final deviceId = merged.deviceId;
     final username = merged.username;
-    if (refresh == null ||
-        refresh.isEmpty ||
+    if (token.isEmpty ||
         userId == null ||
         !_uuid.hasMatch(userId) ||
         deviceId == null ||
@@ -180,12 +185,12 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
               utf8.encode(
                 jsonEncode(<String, Object?>{
                   'version': _formatVersion,
-                  'refresh': refresh,
+                  'token': token,
                 }),
               ),
             ),
             serverProfileCiphertext: Uint8List.fromList(utf8.encode(username)),
-            expiresAt: Value(merged.refreshExpiresAt),
+            expiresAt: Value(merged.accessToken.expiresAt),
           ),
         );
     await writeLoginHint(LoginHint(username: username, deviceId: deviceId));

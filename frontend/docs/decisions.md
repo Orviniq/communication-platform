@@ -78,6 +78,150 @@ is not silently edited out of history.
 | ADR-065 | Accepted | A delivery cycle asks the network once per person instead of two to four times, through a thirty-second process-local cache that sits below every authentication gate and never touches a prekey claim; and the device-log gossip a send owes becomes a debt the cycle records and pays after the outbox instead of a second fan-out awaited in front of the first one's ciphertext; closes the RCA ADR-060 opened (2026-08-28) | `ClientAuthenticationService` was entirely uncached, so one `prepareOwedSend` fetched a peer's identity — an unconditional full `200`, because `/identity` offers no ETag — twice, three times when a session had to be started, and again for the gossip owed to the same peer moments later, against a round trip ADR-060 measured at **107-137 ms**. Measured on the composed send path with a synthetic 122 ms round trip: a first contact and its gossip fall from **14 round trips / 1828 ms to 6 / 788**, a send and its gossip from **8 / 1051 to 4 / 528**, two sends to one peer from **8 / 1037 to 4 / 522**, and the time from `prepare` starting to a postable ciphertext from **8 / 1028 to 4 / 512** — the last of those is F7 alone, because half of it was a fan-out owed to somebody else. The cache decorates `PeerIdentityRemotePort` rather than memoizing `AuthenticatedPeer`, so a hit is the *same* verification over the same bytes: the master-key comparison, the unsigned-device rejection, the transition check, the hash chain, `requireCurrentLiveSet`, the trust states and the global fork gate all still run, and a suite proves each rejection is reproduced on a hit with zero further requests. `claimPrekeyBundles` reaches no map, no in-flight entry and no bypass check, because it consumes one-time prekeys and is `ReplaySafety.never`. The device log is coalesced but never stored: a stored page outlives the head that said what to expect, and a mismatched head is read as a fork, which would withhold every send to every peer. `refreshPeer` and `confirmOutOfBand` are forced live by the service itself, which is what makes user verification and the `stale_devices` path bypass it with no call site changed. Gossip's failure isolation stops being a swallowed `try`/`catch` and becomes a `void` return with no future to await; a bare `unawaited` was rejected because a headless catch-up (ADR-049/ADR-050) disposes its container and closes its database the moment `synchronize()` returns. Schema stays at 18; no migration, table, column or index, no endpoint, header or status-code change, no cryptographic construction touched, and no `backend/` file. |
 | ADR-066 | Accepted | Supersedes ADR-007: the conversation timeline is an app-owned reversed sliver because Flyer requires mutable controller-owned message state and ADR-002 puts that state in drift, not because a package was slow; custom ownership is bounded to the timeline surface and Material keeps every surface the user types into or selects within; and the first thing owning it costs is a first-strong direction resolver that is correct where neither the previous regex nor `intl`'s `Bidi` is (2026-08-30) | ADR-007 named a package `pubspec.yaml` has not carried since ADR-054, and it did so for the whole interval between piece 15 replacing the adapter's contents and this row. The reason on the checklist is the durable one and was never promoted into the register: Flyer 2.11.1 keeps messages in a mutable controller it owns, and ADR-002 makes drift the single source of truth, so the two want the same state in two places — an architectural conflict, decided before any frame was measured. **The performance record is corrected rather than inherited**: ADR-062, ADR-063 and ADR-064 fixed F8's whole-window mapper re-derivation, F9's unpruned `GlobalKey` walk and F10's per-keystroke draft write, and all three were application-layer costs that no package choice caused and no package choice would have fixed. Custom rendering did not buy that performance; measuring the mapper, the key registry and the provider cascade did. **The boundary is stated so "custom" cannot drift into "from scratch"**: app-owned covers the timeline surface — the reversed sliver, the keys and `findChildIndexCallback`, pagination, author grouping and bubble geometry — while Material remains the foundation for text fields, sheets, menus, dialogs, selection and focus traversal, because IME composition, RTL caret placement, selection handles and TalkBack semantics are not being re-implemented here. ADR-006's rule for Forui and the assertion in `design_system_boundary_test.dart` are unchanged and still the thing that keeps the package out of `lib/features`. **What owning the bubble actually costs is measured on its first bill.** `_contentDirection` was not first-strong: its class was the block range `֐-ࣿ`, which contains Arabic-Indic (U+0660-U+0669, class AN) and Persian (U+06F0-U+06F9, class EN) digits, so `۱۲۳ hello` resolved RTL where UAX #9 P2 skips both and answers LTR, and it contained neither Arabic Presentation Forms block, so a `ﻲ` pasted from a legacy Windows source resolved to nothing at all. `intl` 0.20.2 was read in the pub cache rather than recalled and **rejected as a replacement on evidence**: its `Bidi.startsWithRtl` is structurally first-strong but its `_RTL_CHARS` is `֑-߿`, which repeats the digit defect exactly, while its `_LTR_CHARS` claims `ࠀ-῿` wholesale and hands Samaritan, Mandaic, Syriac Supplement and Arabic Extended-A to LTR; `Bidi.detectRtlDirectionality` is not first-strong at all but a whitespace-token count against a 0.40 threshold, with a `^http://` special case a `https://` URL does not meet. The two implementations are wrong on **different** inputs and neither is a superset, so `resolveFirstStrongDirection` replaces both, on R/AL/L ranges from `DerivedBidiClass` with the weak, neutral, mark and format classes falling through, plus P2's isolate-run skipping; 29 tests hold it, including the executable comparison against both predecessors. **The isolation half of the finding was tested and half of it did not exist**: an embedded Latin URL with trailing punctuation inside Persian needs no FSI/PDI, because Flutter runs UAX #9 per paragraph and there is no second direction spliced into that string, and that non-defect is recorded so it is not re-fixed; the real one is the composer's character counter, where `20 / 500` is two EN runs around a neutral and N1 resolves the separator to an RTL base, reversing the pair to `500 / 20`. It is pinned to LTR, which is how the expression reads in either locale. A fourth golden, `chat_medium_rtl_mixed.png`, holds all three mixed-direction cases in one RTL frame; the existing three were not regenerated. Schema stays at 18; no migration, table, column or index, no repository, projector, outbox or delivery behaviour, no endpoint, header or status code, no cryptographic construction, no protocol, no wire format and no `backend/` file. **Opens no production gate.** |
 | ADR-067 | Accepted | Supersedes ADR-042: the serving origin becomes `chat.orviniq.com` and the flavors move to `com.orviniq.chat{,.beta,.development}`, the Beta signing identity is reissued under a matching subject, and the private CA is reused rather than replaced — but the leaf reissue moved the primary SPKI pin, which is the one thing in this migration that would have been unrecoverable a day later (2026-09-07) | ADR-042 froze the application ID on a premise that has since become false: the flavors took `dev.nimashadloo.chat{,.beta,.development}` "under a domain the project already operates", and the project no longer operates that domain. **Its reasoning is not what failed — only its premise.** Everything ADR-042 says about why the identity must be frozen is unchanged and now governs the new one: Android accepts an update only when the application ID and the signing certificate both match, the only path past a mismatch is uninstall, and uninstall destroys the SQLCipher database and the `no_backup` envelope holding its key with `allowBackup="false"` and a non-exportable AndroidKeyStore key behind them. **The freeze was breakable here because it had not yet bound.** No external install existed — no device, no emulator outside CI, no archived artifact in anyone's hands — so there was no update path to break and no local history to destroy. That is a fact about 2026-09-07 and not a property of the decision: the freeze re-binds from this point, and the next time this question is asked the answer is no. **The private CA is untouched and did not need touching**: it is hostname-agnostic by construction — subject `CN=chat private root CA`, `CA:TRUE, pathlen:0`, no `nameConstraints` and no SAN of its own — so it signs for the new host unchanged, and `BETA_PRIVATE_CA_SHA256` and `BETA_PRIVATE_CA_PEM_BASE64` keep their values. Verified rather than assumed: `ca.crt` and `ca.key` carry their original 2026-08-19 mtimes, and the reissue archive holds a leaf pair and no CA. **One pin moved, and the premise that neither would was wrong.** A pin covers a key, not a hostname, so a leaf reissued for a new name over the same key would have held both pins — but `ops/tls/make_ca.sh` does not reissue that way. It guards `ca.key` and `backup.key` behind `if [ ! -f ]` and mints `server.key` unconditionally on every run, so reissuing the leaf regenerated the server key and the **primary** SPKI pin with it; the backup pin, keyed to the untouched `backup.key`, did not move. Measured off the archived and current certificates, not argued. `BETA_PRIMARY_SPKI_SHA256` must therefore be re-read before the next Beta build, and a client carrying the old primary pin cannot complete a handshake against the new leaf at all. Today that costs nothing, for the same reason the identity move costs nothing; on any later day it locks out every provisioned device, which is the sharper half of ADR-043's two-pin rule and the reason the second pin exists. **The Beta signing identity was reissued as coherence, not correctness.** Nothing in Android, Gradle or `verify_release_apk.sh` enforces a match between a certificate subject and an application ID; a key reading `CN=dev.nimashadloo.chat.beta` would have kept signing `com.orviniq.chat.beta` artifacts indefinitely and no check would have objected. It was reissued because the freeze could still be broken safely and would not be again, so the incoherence would have been permanent. Created 2026-09-07, certificate SHA-256 `a1189203…fb9a7ba9`, subject `CN=com.orviniq.chat.beta`, valid to 2054-01-23, read back out of the keystore and matching `android/beta-release-identity.properties` exactly. The previous keystore is **archived, not destroyed**, under `archived-nimashadloo-` names beside the live one. Off-site encrypted backups do not exist for the reissued key: the reissue reset that obligation rather than inheriting it, and `docs/release-signing.md` still requires two of them before the first external install. **Every artifact built before this date is superseded and may not be distributed** — each carries the old origin, the old application ID, the old signing certificate and the old primary pin, and any one of the four is disqualifying on its own. |
+| ADR-068 | Accepted | Client-side record of server ADR-0023, which supersedes server ADR-0006: there is one session token and nothing rotates, so the login body reads `token` and `expires_in` rather than `access`, device registration sends no `keypackages` field to a request that refuses extras, and the retired anonymous `POST /api/v1/auth/refresh` becomes an authenticated bodiless `POST /api/v1/auth/renew` (2026-09-08) | Three independent breaks presented together as "a fresh install cannot log in", and fixing the field names alone would have left the harder half standing. A renewal now writes nothing and retires nothing, so the race the rotating pair was guarded against — two owners renewing at once, the loser presenting a token the winner retired, the session ending for both — cannot occur: single-flight renewal survives as an optimization rather than a safety property, and a refused token is simply a refused session. Revocation stays immediate through the device row's `token_generation` counter, which is what the pair's short access lifetime had been buying. The protected row now holds the credential itself instead of a refresh token beside an expired placeholder, so a restore returns a token that is ready to use rather than one that must rotate before the first request after every cold start; a pair-era row has no readable shape and is deleted, which costs every existing user exactly one sign-in and nothing else. Two bugs were found in making that true and are recorded in full: the renewal asks itself for its own header token, which must be answered from a zone value rather than joined to the in-flight future or it deadlocks; and `/auth/renew` answers no identity, so replacing the durable record verbatim erased the user the session is bound to and signed the account out on the next cold start with a valid session. |
+
+## ADR-068 in full — one session token, and the three breaks that hid behind the pair (2026-09-08)
+
+**Status:** Accepted. Client-side record of server ADR-0023, which supersedes server ADR-0006.
+Authentication and transport decision. **The local schema stays at 18**: no migration, table,
+column or index, no repository, projector, outbox or delivery behaviour, no cryptographic
+construction, ciphersuite identifier, or message wire format. **Opens no production gate.**
+
+### The question
+
+> The server issues one token and no longer rotates anything. This client was built against a
+> pair. What in it was actually broken, what does the correction cost a user who is already
+> signed in, and which of the pair's safety properties were real?
+
+### D1. The three breaks were not one break
+
+They were reported together because they present together — a fresh install cannot get past
+login — but they are independent, and each would have survived the other two being fixed.
+
+**The login body moved from `access` to `token`.** The success shapes are `FullScopeOut` and
+`RegisterScopeOut`, discriminated by `scope`, each carrying `token`, `expires_in` and `user_id`,
+and the full one also `device_id`. There is no `access` and no `refresh`. A client reading
+`access` finds nothing and fails the body, so login never completed.
+
+**The device registration sent a `keypackages` field the server refuses.** `RegisterDeviceIn` is
+`additionalProperties: false` and has no such field, so the extra key is a `400` rather than
+something the route ignores. This one is worth stating precisely, because the closed PQ MLS
+gates in [`mls-profile.md`](mls-profile.md#production-gates) meant the client had nothing to put
+there in the first place: it was sending an empty list to a field that does not exist. The
+correction removes a key; it opens nothing and it generates no KeyPackage.
+
+**`POST /api/v1/auth/refresh` answers `404`.** The route is `POST /api/v1/auth/renew`, and it is
+not the same route renamed. The old one was anonymous and carried its secret in the body. The new
+one is an ordinary authenticated call: no body at all, the session token in the `Authorization`
+header the reviewed client already attaches, and a register-scope token refused there with `403
+scope_forbidden`. So the client sends `AuthenticationRequirement.full` and no payload.
+
+The contract is [`backend/openapi.json`](../../backend/openapi.json), which CI gates in both
+directions and which therefore cannot describe a server that does not run. Its 28 paths list
+`/api/v1/auth/renew` and no `/api/v1/auth/refresh`, and its `SessionOut` is `token` plus
+`expires_in`. Every shape above was read there rather than from prose.
+
+### D2. What the pair was protecting against no longer exists
+
+This is the part that changes code beyond the field names, and it is the reason this decision is
+written down rather than treated as three typo fixes.
+
+A rotating pair has a race with real consequences. Two delivery owners renew at once; the loser
+presents a refresh token the winner has already retired; the server refuses it; the session ends
+for both. Guarding that race is why `TokenCoordinator` single-flights renewals and why ADR-050
+put every owner on one durable row.
+
+Against this server the race cannot happen. `POST /auth/renew` writes nothing and moves no
+generation, so it issues another token and retires none. Several live tokens for one device is
+the normal state, not a fault. Two concurrent renewals produce two working tokens.
+
+Three consequences follow, and each is now the plain reading:
+
+- **Single-flight is an optimization.** It still exists, because N callers arriving inside the
+  renewal window should cost one call rather than N. It is no longer a safety property, and the
+  code says so rather than implying a race it is still holding shut.
+- **A refused token is a refused session.** Nothing but a logout, a device revocation, or a
+  deactivated account ends a token before its own `exp`, so `_endsSession` no longer has to treat
+  a `401` as possibly the debris of a lost rotation.
+- **A lost answer costs a retry, not the session.** The renewal is marked
+  `ReplaySafety.contractIdempotent` on that basis: a dropped connection can be repeated safely.
+
+**What replaced the pair's guarantee is `token_generation`**, a counter on the device row checked
+on every request and every socket bind. Revoking a device bumps it and kills that device's
+outstanding tokens at once; logout does the same for the calling device. Revocation is therefore
+still immediate, which was the property the pair's short access lifetime was buying.
+
+### D3. The renewal asks itself for a token, and that had to be answered rather than joined
+
+The renewal is an authenticated request like any other, so the reviewed client asks the
+coordinator for the header token — and that question arrives *while* the renewal it belongs to is
+the flight in progress. Handing back the in-flight future deadlocks: it cannot complete until the
+request waiting on the answer is sent.
+
+The answer is the token the renewal was started with, and it is carried in a zone value rather
+than in a field. The zone is what keeps that answer from reaching anybody else: a caller outside
+the renewal is in no such trouble and still joins the flight, so an ordinary request arriving
+mid-renewal waits for the new token exactly as before. A field would have handed the old token to
+every concurrent caller for the duration of the renewal, which is a different bug wearing the
+same fix.
+
+### D4. What this costs a user who is already signed in
+
+**One sign-in, on first launch of the corrected build.** The protected row used to hold a refresh
+token and an expired access placeholder; it now holds the session token itself. A row written by
+a build that stored a pair has no readable shape here — the guard finds no `token`, deletes the
+row, and the login screen appears.
+
+That is the whole cost, and it is bounded on purpose. The row is deleted rather than migrated
+because a refresh token from the retired scheme is not exchangeable for anything: the route that
+would have spent it answers `404`. Nothing else in protected storage is touched, the SQLCipher
+database and its Keystore-wrapped key are untouched, and no message history is lost.
+
+**Restoration is now a plain read.** Storing a placeholder meant the first authenticated request
+after every cold start had to rotate before it could be sent. A session token outlives a cold
+start and nothing retires it, so a restore returns a credential that is ready to use.
+
+**One bug found while making that true, and it is worth naming.** `/auth/renew` answers a token
+and its lifetime and no identity at all. Replacing the durable record with the decoded answer
+verbatim erased the `user_id`, `device_id` and `username` the session is bound to; the next cold
+start read the null user back as a malformed server response and signed the account out while its
+session was still perfectly valid. A renewal changes the credential, never whose credential it
+is, and the store now merges rather than replaces.
+
+### Alternatives considered
+
+**1. Keep a client-side pair over the single-token server — REJECTED.** Synthesizing a second
+credential the server does not issue means inventing a wire format, which the authority rules
+forbid outright. It would also re-create the retirement race in the client, against a server that
+does not have one.
+
+**2. Rename `refresh` to `renew` and change nothing else — REJECTED.** The two routes differ in
+authentication, in where the secret travels, in whether there is a body, and in whether anything
+is retired. A rename would have left the client sending a body to a route that takes none, and
+would have left the single-flight guard standing as a safety property it no longer is.
+
+**3. Migrate the pair-era row instead of deleting it — REJECTED.** The stored refresh token has
+no exchange left: the only route that consumed it is gone. Migration could at best preserve an
+access token that has already expired, which buys nothing and leaves an unreadable shape in the
+store to reason about later.
+
+**4. Leave `keypackages` in place as a forward-compatible field — REJECTED.** The request is
+`additionalProperties: false`. There is no forward compatibility to preserve; there is a `400`.
+
+### Consequences
+
+Login, device registration, and renewal work against the running server. `SessionTokens` carries
+one `AccessToken`; `SessionScope` is the login body's discriminator rather than a token claim,
+because the server no longer puts `scope` in the claims. `RenewTokenExchange.renew()` takes no
+argument, since the token it presents is the one the client already holds.
+
+Every user of the previous build signs in once more, and nothing else about their installation
+changes. The PQ MLS gates are untouched and remain closed; no production KeyPackage is generated
+or uploaded by this decision or by the field it removed.
+
+**Reversal trigger.** Re-open this decision if the server reintroduces a second credential or a
+route that retires the token presented to it — server ADR-0023 is the thing being tracked, and
+both properties this client now relies on are stated there.
 
 ## ADR-067 in full — the origin moves, and the one thing that moved with it (2026-09-07)
 

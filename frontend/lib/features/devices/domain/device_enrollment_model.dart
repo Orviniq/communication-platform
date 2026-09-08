@@ -148,16 +148,12 @@ final class DeviceRegistrationResponse {
     required this.userId,
     required this.accessToken,
     required this.accessExpiresAt,
-    required this.refreshToken,
-    required this.refreshExpiresAt,
   });
 
   final String deviceId;
   final String userId;
   final String accessToken;
   final DateTime accessExpiresAt;
-  final String refreshToken;
-  final DateTime refreshExpiresAt;
 }
 
 final class PublishedIdentity {

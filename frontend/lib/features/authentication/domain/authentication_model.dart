@@ -31,15 +31,11 @@ final class AccountSessionGrant {
     required this.accessExpiresAt,
     required this.userId,
     required this.scope,
-    this.refreshToken,
-    this.refreshExpiresAt,
     this.deviceId,
   });
 
   final String accessToken;
   final DateTime accessExpiresAt;
-  final String? refreshToken;
-  final DateTime? refreshExpiresAt;
   final String userId;
   final String? deviceId;
   final AccountSessionScope scope;
