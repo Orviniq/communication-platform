@@ -146,7 +146,6 @@ class Devices extends Table {
       .withDefault(const Constant(0))
       .check(lastSignedPrekeyRotationUnixDay.isBiggerOrEqualValue(0))();
   TextColumn get createdDate => text().nullable()();
-  TextColumn get lastActiveDate => text().nullable()();
   BoolColumn get isCurrentDevice =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get ownerListing => boolean().withDefault(const Constant(false))();
@@ -1195,7 +1194,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 18;
+  static const currentSchemaVersion = 19;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1374,10 +1373,19 @@ final class LocalDatabase extends _$LocalDatabase {
             devices.decryptedLabel.$name,
             () => migrator.addColumn(devices, devices.decryptedLabel),
           );
+          // `last_active_date`, added here and dropped again by the schema-19
+          // step below. The column is gone from the table declaration, so this
+          // can no longer name a Dart getter and is spelled as the statement
+          // `addColumn` used to issue. It stays because it is what this
+          // version did: a database still at schema 6 has to arrive at 19 the
+          // way it would have, and the drop below then finds what it expects.
           await addIfMissing(
             devices.actualTableName,
-            devices.lastActiveDate.$name,
-            () => migrator.addColumn(devices, devices.lastActiveDate),
+            'last_active_date',
+            () => customStatement(
+              'ALTER TABLE "${devices.actualTableName}" '
+              'ADD COLUMN "last_active_date" TEXT NULL',
+            ),
           );
           await addIfMissing(
             devices.actualTableName,
@@ -1777,6 +1785,40 @@ final class LocalDatabase extends _$LocalDatabase {
                 ),
               );
             }
+          }
+        }
+        if (from < 19) {
+          // `GET /api/v1/me/devices` stopped carrying `last_active_date`, and
+          // the server records no activity day for a device at all. Nothing
+          // writes this column and nothing reads it.
+          //
+          // Dropping it rather than leaving it nullable and idle is the point
+          // of the step, not tidiness. Whatever days this device already
+          // stored were the last thing on it that answered "when was this
+          // device last used", and the server discarded its own copy for that
+          // reason. A column no code reads is still a column a seized phone
+          // yields.
+          //
+          // Checked rather than assumed, in the style of the schema-14, -15
+          // and -16 steps, and here it is load-bearing rather than defensive:
+          // the column is gone from the table declaration, so `createAll` no
+          // longer creates it. Any database created by this build and then
+          // stamped to an earlier version — which is what the migration tests
+          // do, and what a development build does — reaches this step with no
+          // column to drop.
+          //
+          // `ALTER TABLE ... DROP COLUMN` needs SQLite 3.35 or later. The
+          // SQLCipher build this client links is well past that, and the
+          // column carries no index, view, trigger or foreign key, so the
+          // table does not need re-creating around it.
+          final existing = await customSelect(
+            'PRAGMA table_info("${devices.actualTableName}")',
+          ).get();
+          final present = existing.any(
+            (row) => row.read<String>('name') == 'last_active_date',
+          );
+          if (present) {
+            await migrator.dropColumn(devices, 'last_active_date');
           }
         }
         await _migrationHooks.afterUpgrade(from, to);
