@@ -80,6 +80,194 @@ is not silently edited out of history.
 | ADR-067 | Accepted | Supersedes ADR-042: the serving origin becomes `chat.orviniq.com` and the flavors move to `com.orviniq.chat{,.beta,.development}`, the Beta signing identity is reissued under a matching subject, and the private CA is reused rather than replaced — but the leaf reissue moved the primary SPKI pin, which is the one thing in this migration that would have been unrecoverable a day later (2026-09-07) | ADR-042 froze the application ID on a premise that has since become false: the flavors took `dev.nimashadloo.chat{,.beta,.development}` "under a domain the project already operates", and the project no longer operates that domain. **Its reasoning is not what failed — only its premise.** Everything ADR-042 says about why the identity must be frozen is unchanged and now governs the new one: Android accepts an update only when the application ID and the signing certificate both match, the only path past a mismatch is uninstall, and uninstall destroys the SQLCipher database and the `no_backup` envelope holding its key with `allowBackup="false"` and a non-exportable AndroidKeyStore key behind them. **The freeze was breakable here because it had not yet bound.** No external install existed — no device, no emulator outside CI, no archived artifact in anyone's hands — so there was no update path to break and no local history to destroy. That is a fact about 2026-09-07 and not a property of the decision: the freeze re-binds from this point, and the next time this question is asked the answer is no. **The private CA is untouched and did not need touching**: it is hostname-agnostic by construction — subject `CN=chat private root CA`, `CA:TRUE, pathlen:0`, no `nameConstraints` and no SAN of its own — so it signs for the new host unchanged, and `BETA_PRIVATE_CA_SHA256` and `BETA_PRIVATE_CA_PEM_BASE64` keep their values. Verified rather than assumed: `ca.crt` and `ca.key` carry their original 2026-08-19 mtimes, and the reissue archive holds a leaf pair and no CA. **One pin moved, and the premise that neither would was wrong.** A pin covers a key, not a hostname, so a leaf reissued for a new name over the same key would have held both pins — but `ops/tls/make_ca.sh` does not reissue that way. It guards `ca.key` and `backup.key` behind `if [ ! -f ]` and mints `server.key` unconditionally on every run, so reissuing the leaf regenerated the server key and the **primary** SPKI pin with it; the backup pin, keyed to the untouched `backup.key`, did not move. Measured off the archived and current certificates, not argued. `BETA_PRIMARY_SPKI_SHA256` must therefore be re-read before the next Beta build, and a client carrying the old primary pin cannot complete a handshake against the new leaf at all. Today that costs nothing, for the same reason the identity move costs nothing; on any later day it locks out every provisioned device, which is the sharper half of ADR-043's two-pin rule and the reason the second pin exists. **The Beta signing identity was reissued as coherence, not correctness.** Nothing in Android, Gradle or `verify_release_apk.sh` enforces a match between a certificate subject and an application ID; a key reading `CN=dev.nimashadloo.chat.beta` would have kept signing `com.orviniq.chat.beta` artifacts indefinitely and no check would have objected. It was reissued because the freeze could still be broken safely and would not be again, so the incoherence would have been permanent. Created 2026-09-07, certificate SHA-256 `a1189203…fb9a7ba9`, subject `CN=com.orviniq.chat.beta`, valid to 2054-01-23, read back out of the keystore and matching `android/beta-release-identity.properties` exactly. The previous keystore is **archived, not destroyed**, under `archived-nimashadloo-` names beside the live one. Off-site encrypted backups do not exist for the reissued key: the reissue reset that obligation rather than inheriting it, and `docs/release-signing.md` still requires two of them before the first external install. **Every artifact built before this date is superseded and may not be distributed** — each carries the old origin, the old application ID, the old signing certificate and the old primary pin, and any one of the four is disqualifying on its own. |
 | ADR-068 | Accepted | Client-side record of server ADR-0023, which supersedes server ADR-0006: there is one session token and nothing rotates, so the login body reads `token` and `expires_in` rather than `access`, device registration sends no `keypackages` field to a request that refuses extras, and the retired anonymous `POST /api/v1/auth/refresh` becomes an authenticated bodiless `POST /api/v1/auth/renew` (2026-09-08) | Three independent breaks presented together as "a fresh install cannot log in", and fixing the field names alone would have left the harder half standing. A renewal now writes nothing and retires nothing, so the race the rotating pair was guarded against — two owners renewing at once, the loser presenting a token the winner retired, the session ending for both — cannot occur: single-flight renewal survives as an optimization rather than a safety property, and a refused token is simply a refused session. Revocation stays immediate through the device row's `token_generation` counter, which is what the pair's short access lifetime had been buying. The protected row now holds the credential itself instead of a refresh token beside an expired placeholder, so a restore returns a token that is ready to use rather than one that must rotate before the first request after every cold start; a pair-era row has no readable shape and is deleted, which costs every existing user exactly one sign-in and nothing else. Two bugs were found in making that true and are recorded in full: the renewal asks itself for its own header token, which must be answered from a zone value rather than joined to the in-flight future or it deadlocks; and `/auth/renew` answers no identity, so replacing the durable record verbatim erased the user the session is bound to and signed the account out on the next cold start with a valid session. |
 | ADR-069 | Accepted | Client-side record of server ADR-0020 and ADR-0022: the gateway handles `ack` and `signal` and emits `envelope` and `signal`, so the in-band `auth` frame, close codes `4001` and `4403`, the `presence` frame, the four room frames and the two limits behind them are deleted from the client rather than kept against a server that could accept them (2026-09-08) | The client validated an outbound surface it never sent and decoded an inbound one the server no longer emits, and the dead code was not inert: it made two documents and one provider assert things about the wire that are false. **Authentication moved before the accept**, so a refusal is a failed upgrade carrying `403` and never a close code (server ADR-0020, `CLIENT_CONTRACT.md` §O). `4001` could therefore not arrive, which retires the one-shot token-recovery budget it spent and the `markStableConnection` call that re-armed it; the port method stays, because the synchronization layer owns it, and it is now a documented no-op. `4403` goes with the Origin allowlist that a native client never populated. `1012` is deliberately left unnamed in the reconnecting arm: a restart is a deploy rather than a fault, and the plain backoff reaches neither a stop action nor a budget that could refuse a later attempt. **The server holds no presence at all** (server ADR-0022) — no subscription frame, no `presence` frame, no announcement on connect or disconnect — so ADR-060's D10 was right about the symptom and wrong about the cause: what was missing was never a subscription this client could send, and `presenceProjectionProvider` was machinery behind a frame that does not exist. **The four room frames went with the SFU** (server ADR-0021). `maximumPresenceTargets` and `maximumRoomSubscriptions` are deleted as wire constants with no wire; `maximumSignalCharacters` stays until the voice phase replaces it with the `SIGNAL_BUCKETS` rule — base64 of exactly 1024, 4096 or 16384 bytes — which is why the voice documents now mark their `SIGNAL_MAX` and `room_signal` rows for that phase rather than restating them. Nothing in `lib/` called `RealtimeGateway.send`, so no live path changed; the gateway test asserts each retired frame is refused outbound and ignored inbound, so the surface cannot return unnoticed. Schema stays at 18; no migration, endpoint, header, status code, cryptographic construction or wire format is touched, and no `backend/` file. **Opens no production gate.** |
+| ADR-070 | Accepted | Client-side record of server ADR-0024 and ADR-0025: the linked-devices screen loses the last-active value because the server records no activity day for a device at all, and the account gains the erase action `DELETE /api/v1/me` — whose confirmation states, as a requirement rather than as copy, that the call reaches one server's rows and no other device (2026-09-08) | Two changes that look unrelated share one server decision each and one property: both are about what this client may *claim*. **The last-active value had no source.** ADR-0024 stopped the server writing `Device.last_active_date`, so `GET /api/v1/me/devices` carries no such field and a DTO requiring it fails to parse the whole response — the screen was not showing a stale value, it was about to show none at all. The column, the DTO field, the domain property, the repository read and both catalogue strings are deleted rather than defaulted, because a rendered "unknown" is a claim that the answer exists somewhere; local schema 19 drops the column that cached it. **The erase action existed only as an operator request before this**, and the operator can only deactivate — the rows stay. ADR-0025 adds `DELETE /api/v1/me`, the one irreversible route this API offers and the only authenticated one that asks for a password, because a session token lives thirty days and nothing detects its theft (server AR-18). **The wording is the deliverable, not the dialog.** `backend/SECURITY.md` § "Best-effort features, worded honestly" keeps three deletion meanings apart — a best-effort remote-deletion request, server ciphertext deletion, and cryptographic erasure — and forbids describing any as another. "Delete my data" claims the third and performs the second, so the confirmation carries four statements and none of them is optional: what the server deletes; that the copies peers already hold are untouched and unreachable, because every message this account sent was decrypted on the recipient's device and nothing in this call leaves this server; that attachments stay up to thirty days, since nothing on a stored attachment names an account and there is therefore no set of them the call could identify; and that the username is free again at once. The thirty is `ATTACH_TTL_DAYS`'s default copied into `AccountErasureDisclosure` and marked as a copy — `attachment_ttl_days` from `GET /api/v1/config` is unread by any client code, which is why the sentence says *up to*, the one form a hard-coded number can honestly take. **Two answers are one outcome.** A `204` and the `401 token_revoked` that a retry of a lost answer gets both mean the account is gone: the device the token named went with it, so the first call landed. Reporting the second as a revoked session would tell the user something that did not happen, which is why the teardown drops the token from the store before running the rest of a logout instead of sending `POST /auth/logout` with a token that is already dead. **The refusals are counted and worded, never quoted.** A wrong password is stated with the tries used and with the cost of the fifth *before* it is spent — five lock the username for fifteen minutes on `POST /api/v1/auth/login` as well, so the user would be locked out of the application entirely; the tally is this client's own, so an attempt from another device is absent from it and the server may lock sooner than the number suggests, which is why it warns and never gates. A `429` shows `Retry-After` rounded up, because naming a moment the server still refuses costs a second refusal; one wording serves both the per-name lock and the account's ordinary rate limit, since only the `detail` prose separates them and prose is not a thing to branch on. **The password reaches the request body and nothing else** — not storage, not a cache, not a log, not the view state — and the ten-character rule this client applies when a password is *created* is deliberately not applied here, so an account whose password predates that rule can still leave. `AuthenticationOperation.erase` joins `logout` behind one `isTearingDown` predicate, because both wipe protected storage and close the database before emitting the termination that announces it, and the three subscribers that stop on a logout would otherwise have kept running transactions against storage being erased. Local schema moves 18 → 19 for the dropped column; no endpoint, header, status code, cryptographic construction or wire format is otherwise touched, and no `backend/` file. **Opens no production gate.** |
+
+## ADR-070 in full — leaving, and the sentence that makes the offer honest (2026-09-08)
+
+**Status:** Accepted. Client-side record of server ADR-0024 (no activity dates) and server
+ADR-0025 (unlinked attachments, erasure, day granularity). Account-lifecycle and UI
+decision. **The local schema moves 18 → 19**, for one dropped column and nothing else: no
+new table, no index, no repository, projector, outbox or delivery behaviour, no
+cryptographic construction, ciphersuite identifier, or message wire format. **Opens no
+production gate.**
+
+### The question
+
+> The server stopped answering with a device's last-active day, and started offering an
+> account a way to delete itself. What may this client show, what must it say before it
+> spends the second one, and which of those two is actually the hard part?
+
+The second one is. The call is a `DELETE` with a password in the body; the wording around
+it is the part that can be wrong in a way no test of the call would catch.
+
+### D1. The last-active value was not stale — it had no source
+
+Server ADR-0024 stopped writing `Device.last_active_date`. Not coarsened to a day, not
+withheld from peers: the server records no activity day for a device at all, which
+`backend/devices/API.md` states in those words and `SECURITY.md` § seizure yield relies
+on.
+
+So `GET /api/v1/me/devices` carries no such field, and this matters more than a blank
+cell would: the client's DTO required it, and a required field that is absent fails the
+whole response. The Linked Devices screen was not about to show a stale date. It was
+about to show nothing, having failed to parse the list it was rendering.
+
+**Deleted rather than defaulted.** The field leaves the DTO, the domain model, the
+repository read, the screen and both catalogues, and schema 19 drops the column that
+cached it. Rendering "unknown" was rejected: it is a claim that the answer exists and
+this device does not have it, and the true statement is that nothing anywhere has it.
+What the screen is for is unaffected — which devices the account has, which are live,
+and the button that removes one.
+
+### D2. The erase action is the first way out that does not go through a person
+
+Before it, a user who wanted to leave asked the operator, and the operator could only
+deactivate: the rows stay. Server ADR-0025 adds `DELETE /api/v1/me`, which deletes the
+account and everything depending on it in one transaction — the devices, the one-time
+prekeys of both kinds, the published identity, the key backup, the device-list log, the
+profile blob, and every queued envelope of every device — frees the username, and closes
+every live socket of the account's devices with `4003`.
+
+It is the only authenticated route in this API that asks for a password, and the reason is
+stated rather than assumed: a session token lives `SESSION_TOKEN_DAYS` days and nothing
+detects its theft (server AR-18), so the one irreversible act asks for the secret a stolen
+token does not carry. The password goes in the body of that one request.
+
+**The ten-character rule is deliberately not applied.** `AuthenticationInputPolicy
+.isPasswordValid` is what this client requires when a password is *created*. An account
+whose password predates that rule must still be able to leave, so the only local refusal
+is what the route itself cannot accept — empty, or past the 256-character `maxLength`
+every password field in `backend/openapi.json` carries — and refusing locally spends none
+of the five tries the username has.
+
+### D3. The wording is the requirement, and it is the part that could have been wrong
+
+`backend/SECURITY.md` § "Best-effort features, worded honestly" keeps three deletion
+meanings distinct in code, in documentation, and in every client-facing string:
+
+1. a **remote-deletion request**, which asks peers to drop content and cannot force a
+   device that already decrypted it to forget;
+2. **server ciphertext deletion**, which removes blobs from this server; and
+3. **cryptographic erasure**, which makes content undecryptable once every surviving key
+   copy is destroyed.
+
+None may ever be described as another. A confirmation reading "delete my data" or "erase
+my messages" claims the third and performs the second, and it would be the most
+consequential false sentence this application contains — read at exactly the moment
+somebody is deciding whether they are safe.
+
+So the dialog states four things before it asks for anything, and the screen test asserts
+the statements rather than that a dialog opened:
+
+- **What it erases.** Everything the server holds for this account.
+- **What it does not.** The copies other people hold. Every message this account sent was
+  decrypted on the recipient's phone and is stored there; nothing in this call reaches
+  another device. This is the load-bearing sentence and is the one that carries the
+  warning colour — emphasis only, never meaning: it says what it says with the styling
+  stripped off.
+- **Attachments.** They stay on the server up to thirty days. Nothing on a stored
+  attachment names an account any more (server ADR-0025), so there is no set of them this
+  call could identify as the account's, and the capability ids that reach them travel only
+  inside end-to-end encrypted messages, which go with the mailbox.
+- **The username.** Free again at once, and another person may register it.
+
+**The thirty is a copy and is marked as one.** `AccountErasureDisclosure
+.attachmentRetentionDays` carries `ATTACH_TTL_DAYS`'s default from
+`backend/config/settings/base.py`. The authoritative value is `attachment_ttl_days` from
+`GET /api/v1/config`, which an operator may change and which no client code reads yet.
+That is exactly why the sentence says **up to**: it is the only form a hard-coded number
+can honestly take, it stays true if the operator's window is shorter, and a longer one is
+the case this has to be revisited for.
+
+### D4. A `204` and a `401 token_revoked` are one outcome, and saying otherwise would lie
+
+A retry of a call whose answer was lost gets `401 token_revoked`, because the first call
+killed that token along with the device it named. The first call landed. The account is
+gone.
+
+Reporting that as a revoked session would tell the user something that did not happen —
+and it is what would have happened by default, because the transport treats
+`token_revoked` as a remote revocation. The teardown therefore drops the token from the
+store *first* and then runs the rest of a logout, rather than sending
+`POST /api/v1/auth/logout` with a credential that is already dead. What is left is exactly
+a logout minus its request: the session generation advances, the wipe runs, and the
+termination emitted is `logout`, which lands the user on the sign-in screen.
+
+### D5. The refusals are counted and worded here, never quoted from the server
+
+**A wrong password** leaves the account and the session untouched, and is worth saying
+plainly. What is not obvious to the person typing is the cost of the fifth: five failures
+on a username inside fifteen minutes lock it for fifteen minutes on
+`POST /api/v1/auth/login` as well, so a user who exhausts them here cannot sign in on any
+device until it lifts. The wording says that before the try is spent.
+
+The tally is this client's own. An attempt made from another device is absent from it, so
+the server may lock sooner than the number suggests — which is precisely why it warns and
+never gates: nothing local refuses a call on the strength of a count that can be wrong in
+the direction that matters.
+
+**A `429`** shows the `Retry-After` wait, rounded **up**. Rounding down names a moment the
+server still refuses, which costs a second refusal and teaches the user that the wait is
+not real. One wording serves both cases the code covers, because the same `throttled` code
+carries the per-name lock and the account's ordinary rate limit and only the `detail`
+prose separates them — and prose is not a thing to branch on or to show.
+
+### D6. `erase` joins `logout` behind one predicate, because three subscribers depend on it
+
+`MessageDeliveryController`, the alert controller and the sustained-delivery controller
+all stopped on `operation == AuthenticationOperation.logout`, each for the same recorded
+reason: `TokenCoordinator.logout` wipes protected storage and closes the database *before*
+it emits the termination a completion-triggered stop would wait for, so waiting leaves an
+engine running transactions against storage that is being erased.
+
+An erasure reaches that same wipe by a shorter road. Adding `AuthenticationOperation
+.erase` without touching those three would have left all three running through it. They
+now read `AuthenticationViewState.isTearingDown`, which is one predicate rather than three
+comparisons, so a fourth teardown cannot be added and reach those guards without this
+answering for it. The window costs nothing when the call is refused: the controllers
+reconcile on every transition, so a wrong password restarts what the attempt paused.
+
+### Alternatives considered
+
+**1. Show the last-active value as "unknown" — REJECTED.** It reads as this device not
+having an answer that exists elsewhere. Nothing has it.
+
+**2. Put the erase action beside log out — REJECTED.** They are not a pair. One ends a
+session on one phone and is undone by signing in again; the other ends the account
+everywhere and is undone by nothing. The row is last, marked destructive, and separated by
+a gap of its own, so a thumb that missed the reversible one cannot land on the other.
+
+**3. Confirm with a typed username or a plain "are you sure" — REJECTED.** The route
+requires the password and checks it, for the reason in D2. A second confirmation in front
+of it would be ceremony that protects nothing a stolen token could not already do.
+
+**4. Let the barrier dismiss the dialog — REJECTED.** A statement dialog may be dismissed
+by tapping beside it. This one holds a typed password, and losing it to a stray tap is a
+worse outcome than one more deliberate press of Cancel. Both doors are explicit.
+
+**5. Offer the saved sign-in credential to the field — REJECTED.** The autofill hint is
+omitted deliberately. The stored password belongs to signing in, and offering it here puts
+the account one tap from the button that spends it.
+
+**6. Show the server's `detail` on a failure — REJECTED** by the standing rule that
+user-facing errors are reviewed localized strings, and independently by D5: the `detail`
+is the only thing separating two `throttled` cases and it is English operator prose.
+
+### Consequences
+
+Settings offers a way out, in both languages, at both text scales. `AccountErasureOutcome`
+is what the screen switches on, so no widget reads a `code` or a `detail`. The password is
+held in a controller that is cleared before disposal, is passed to the use case, and
+appears in no store, no cache, no log and no view-state field — asserted, not asserted-to.
+
+Every existing user is unaffected until they use it. The Linked Devices screen shows one
+fewer value and parses a response it previously could not.
+
+**Reversal trigger.** Re-open this decision if the server begins recording an activity day
+again, if `attachment_ttl_days` becomes readable and the copied thirty is therefore a
+second statement of a limit rather than the only one available, or if the per-name lock
+stops being shared with the sign-in route — the warning's sharper half is that sentence,
+and it would become false.
 
 ## ADR-068 in full — one session token, and the three breaks that hid behind the pair (2026-09-08)
 
