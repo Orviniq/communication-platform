@@ -30,6 +30,19 @@ final class RegisterAccountResponseDto {
   AccountRegistration toDomain() => AccountRegistration(userId: userId);
 }
 
+/// The body of `DELETE /api/v1/me`: the password, and nothing else.
+///
+/// The route forbids every other field, so a mistyped one is a refusal rather
+/// than an erasure performed with a field the caller thought was a
+/// confirmation. This type carries no other field for the same reason.
+final class EraseAccountRequestDto {
+  const EraseAccountRequestDto({required this.password});
+
+  final String password;
+
+  Map<String, Object?> toJson() => {'password': password};
+}
+
 final class LoginAccountRequestDto {
   const LoginAccountRequestDto({
     required this.username,

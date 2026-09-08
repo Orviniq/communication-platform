@@ -18,7 +18,6 @@ void main() {
       label: 'Pixel',
       labelState: LinkedDeviceLabelState.available,
       createdDate: DateTime.utc(2026),
-      lastActiveDate: DateTime.utc(2026, 8),
       thisDevice: true,
       encryptedLabel: Uint8List(256),
     ),
@@ -27,7 +26,6 @@ void main() {
       label: 'Desktop',
       labelState: LinkedDeviceLabelState.available,
       createdDate: DateTime.utc(2026, 2),
-      lastActiveDate: DateTime.utc(2026, 7, 31),
       thisDevice: false,
       encryptedLabel: Uint8List(256),
     ),
@@ -58,11 +56,16 @@ void main() {
       expect(find.text('Pixel'), findsOneWidget);
       expect(find.text('The device you are using now'), findsOneWidget);
       expect(find.text('Desktop'), findsOneWidget);
+      // The row shows the day the device was added, which is the only date the
+      // server still reports about one, and says so rather than passing it off
+      // as a last-seen day.
+      //
       // The backend reports a calendar day with no time zone, and the row shows
       // that day. Rendering it through `toLocal()` used to move it back one day
       // for every reader west of UTC, which made the value both wrong and
       // finer-grained than the one the server holds.
-      expect(find.text('Last active: 2026-07-31'), findsOneWidget);
+      expect(find.text('Added: 2026-02-01'), findsOneWidget);
+      expect(find.textContaining('Last active'), findsNothing);
 
       await tester.tap(find.byTooltip('Refresh'));
       await tester.pumpAndSettle();

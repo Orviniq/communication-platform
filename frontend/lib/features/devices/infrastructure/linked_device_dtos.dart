@@ -49,8 +49,7 @@ final class OwnDeviceListResponseDto {
     final json = requireJsonObject(value);
     final id = json['device_id'];
     final label = json['label_blob'];
-    final created = _date(json['created_date'], required: true);
-    final active = _date(json['last_active_date'], required: false);
+    final created = _date(json['created_date']);
     final current = json['this_device'];
     Uint8List? labelBytes;
     if (label != null) {
@@ -74,15 +73,13 @@ final class OwnDeviceListResponseDto {
       labelState: labelBytes == null
           ? LinkedDeviceLabelState.notSet
           : LinkedDeviceLabelState.unreadable,
-      createdDate: created!,
-      lastActiveDate: active,
+      createdDate: created,
       thisDevice: current,
       encryptedLabel: labelBytes,
     );
   }
 
-  static DateTime? _date(Object? value, {required bool required}) {
-    if (value == null && !required) return null;
+  static DateTime _date(Object? value) {
     if (value is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
       throw const MalformedApiBody();
     }

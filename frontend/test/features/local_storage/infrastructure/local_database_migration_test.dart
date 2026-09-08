@@ -1074,7 +1074,105 @@ void main() {
       await upgraded.close();
     },
   );
+
+  test('version-eighteen upgrade drops the activity day it stored', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    // A device at 18 has the column, because every build up to this one
+    // created it. This build does not, so it has to be put back before the
+    // step has anything to drop.
+    final versionEighteen = sqlite3.open(databaseFile.path)
+      ..execute('ALTER TABLE devices ADD COLUMN last_active_date TEXT NULL')
+      ..execute(
+        'INSERT INTO users (user_id, activated, '
+        'directory_entry_ciphertext, local_state) VALUES (?, ?, ?, ?)',
+        <Object?>[
+          _userV19,
+          1,
+          Uint8List.fromList(const [1]),
+          0,
+        ],
+      )
+      ..execute(
+        'INSERT INTO devices (device_id, user_id, public_bundle, '
+        'revocation_state, created_date, last_active_date, is_current_device, '
+        'owner_listing) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          _deviceV19,
+          _userV19,
+          Uint8List.fromList(const [2]),
+          0,
+          '2026-08-01',
+          '2026-09-02',
+          1,
+          1,
+        ],
+      )
+      ..execute('PRAGMA user_version = 18');
+    versionEighteen.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info("devices")')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(columns, isNot(contains('last_active_date')));
+    // The rest of the row is untouched: the drop is one column, not a rewrite
+    // of what identifies a device.
+    final device = await upgraded
+        .customSelect(
+          'SELECT * FROM devices WHERE device_id = ?',
+          variables: [Variable<String>(_deviceV19)],
+        )
+        .getSingle();
+    expect(device.read<String>('created_date'), '2026-08-01');
+    expect(device.read<int>('is_current_device'), 1);
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test('the drop tolerates a database that never had the column', () async {
+    // A development build that already took this change and was then stamped
+    // back reaches the step with nothing to drop. `createAll` no longer makes
+    // the column, so this is the shape the check exists for, and an upgrade
+    // that failed here would leave the application unable to open its storage.
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final stampedBack = sqlite3.open(databaseFile.path)
+      ..execute('PRAGMA user_version = 18');
+    stampedBack.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info("devices")')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(columns, isNot(contains('last_active_date')));
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
 }
+
+const _userV19 = '00000000-0000-0000-0000-0000000000a1';
+const _deviceV19 = '00000000-0000-0000-0000-0000000000d1';
 
 const _conversationV17 =
     '0909090909090909090909090909090909090909090909090909090909090909';

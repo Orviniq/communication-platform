@@ -16,7 +16,9 @@ final class AuthenticationHarness {
   AuthenticationHarness({
     Result<AccountSessionGrant>? loginResult,
     Result<AccountRegistration>? registrationResult,
+    List<Result<void>> eraseResults = const [],
   }) : repository = WidgetAuthenticationRepository(
+         eraseResults: eraseResults,
          loginResult:
              loginResult ??
              Result.success(
@@ -38,6 +40,7 @@ final class AuthenticationHarness {
       login: LoginAccount(repository, session),
       restore: RestoreAccountSession(session),
       logout: LogoutAccount(session),
+      erase: EraseAccount(repository, session),
       lifecycle: lifecycle,
     );
   }
@@ -57,13 +60,41 @@ final class WidgetAuthenticationRepository
   WidgetAuthenticationRepository({
     required this.loginResult,
     required this.registrationResult,
+    this.eraseResults = const [],
   });
 
   final Result<AccountSessionGrant> loginResult;
   final Result<AccountRegistration> registrationResult;
+
+  /// The answers `DELETE /api/v1/me` gives, in order, one per call.
+  ///
+  /// A list rather than one value because the states worth testing are
+  /// sequences: a wrong password is only interesting alongside the try after
+  /// it. A call past the end answers `204`, so a test that cares about one
+  /// refusal states one refusal and nothing else.
+  final List<Result<void>> eraseResults;
+
   int loginCalls = 0;
   int registerCalls = 0;
   String? lastUsername;
+
+  /// Every password this repository was handed, in order.
+  ///
+  /// Recorded so a test can prove the typed password reached the request body
+  /// — and, by being the only place it is recorded, that it reached nothing
+  /// else.
+  final List<String> erasePasswords = [];
+
+  int get eraseCalls => erasePasswords.length;
+
+  @override
+  Future<Result<void>> eraseAccount({required String password}) async {
+    final index = erasePasswords.length;
+    erasePasswords.add(password);
+    return index < eraseResults.length
+        ? eraseResults[index]
+        : const Result.success(null);
+  }
 
   @override
   Future<Result<AccountSessionGrant>> login({
@@ -113,6 +144,13 @@ final class WidgetAuthenticationSession implements AuthenticationSessionPort {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<void> forgetErasedAccount() async {
+    forgotErasedAccount = true;
+  }
+
+  bool forgotErasedAccount = false;
 }
 
 final class WidgetLifecycle implements AuthenticationLifecyclePort {

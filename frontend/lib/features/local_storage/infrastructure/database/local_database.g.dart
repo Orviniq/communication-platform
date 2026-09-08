@@ -3180,17 +3180,6 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _lastActiveDateMeta = const VerificationMeta(
-    'lastActiveDate',
-  );
-  @override
-  late final GeneratedColumn<String> lastActiveDate = GeneratedColumn<String>(
-    'last_active_date',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _isCurrentDeviceMeta = const VerificationMeta(
     'isCurrentDevice',
   );
@@ -3233,7 +3222,6 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     bundleVersion,
     lastSignedPrekeyRotationUnixDay,
     createdDate,
-    lastActiveDate,
     isCurrentDevice,
     ownerListing,
   ];
@@ -3341,15 +3329,6 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         ),
       );
     }
-    if (data.containsKey('last_active_date')) {
-      context.handle(
-        _lastActiveDateMeta,
-        lastActiveDate.isAcceptableOrUnknown(
-          data['last_active_date']!,
-          _lastActiveDateMeta,
-        ),
-      );
-    }
     if (data.containsKey('is_current_device')) {
       context.handle(
         _isCurrentDeviceMeta,
@@ -3417,10 +3396,6 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         DriftSqlType.string,
         data['${effectivePrefix}created_date'],
       ),
-      lastActiveDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}last_active_date'],
-      ),
       isCurrentDevice: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_current_device'],
@@ -3449,7 +3424,6 @@ class Device extends DataClass implements Insertable<Device> {
   final int? bundleVersion;
   final int lastSignedPrekeyRotationUnixDay;
   final String? createdDate;
-  final String? lastActiveDate;
   final bool isCurrentDevice;
   final bool ownerListing;
   const Device({
@@ -3463,7 +3437,6 @@ class Device extends DataClass implements Insertable<Device> {
     this.bundleVersion,
     required this.lastSignedPrekeyRotationUnixDay,
     this.createdDate,
-    this.lastActiveDate,
     required this.isCurrentDevice,
     required this.ownerListing,
   });
@@ -3492,9 +3465,6 @@ class Device extends DataClass implements Insertable<Device> {
     if (!nullToAbsent || createdDate != null) {
       map['created_date'] = Variable<String>(createdDate);
     }
-    if (!nullToAbsent || lastActiveDate != null) {
-      map['last_active_date'] = Variable<String>(lastActiveDate);
-    }
     map['is_current_device'] = Variable<bool>(isCurrentDevice);
     map['owner_listing'] = Variable<bool>(ownerListing);
     return map;
@@ -3522,9 +3492,6 @@ class Device extends DataClass implements Insertable<Device> {
       createdDate: createdDate == null && nullToAbsent
           ? const Value.absent()
           : Value(createdDate),
-      lastActiveDate: lastActiveDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastActiveDate),
       isCurrentDevice: Value(isCurrentDevice),
       ownerListing: Value(ownerListing),
     );
@@ -3548,7 +3515,6 @@ class Device extends DataClass implements Insertable<Device> {
         json['lastSignedPrekeyRotationUnixDay'],
       ),
       createdDate: serializer.fromJson<String?>(json['createdDate']),
-      lastActiveDate: serializer.fromJson<String?>(json['lastActiveDate']),
       isCurrentDevice: serializer.fromJson<bool>(json['isCurrentDevice']),
       ownerListing: serializer.fromJson<bool>(json['ownerListing']),
     );
@@ -3569,7 +3535,6 @@ class Device extends DataClass implements Insertable<Device> {
         lastSignedPrekeyRotationUnixDay,
       ),
       'createdDate': serializer.toJson<String?>(createdDate),
-      'lastActiveDate': serializer.toJson<String?>(lastActiveDate),
       'isCurrentDevice': serializer.toJson<bool>(isCurrentDevice),
       'ownerListing': serializer.toJson<bool>(ownerListing),
     };
@@ -3586,7 +3551,6 @@ class Device extends DataClass implements Insertable<Device> {
     Value<int?> bundleVersion = const Value.absent(),
     int? lastSignedPrekeyRotationUnixDay,
     Value<String?> createdDate = const Value.absent(),
-    Value<String?> lastActiveDate = const Value.absent(),
     bool? isCurrentDevice,
     bool? ownerListing,
   }) => Device(
@@ -3609,9 +3573,6 @@ class Device extends DataClass implements Insertable<Device> {
     lastSignedPrekeyRotationUnixDay:
         lastSignedPrekeyRotationUnixDay ?? this.lastSignedPrekeyRotationUnixDay,
     createdDate: createdDate.present ? createdDate.value : this.createdDate,
-    lastActiveDate: lastActiveDate.present
-        ? lastActiveDate.value
-        : this.lastActiveDate,
     isCurrentDevice: isCurrentDevice ?? this.isCurrentDevice,
     ownerListing: ownerListing ?? this.ownerListing,
   );
@@ -3644,9 +3605,6 @@ class Device extends DataClass implements Insertable<Device> {
       createdDate: data.createdDate.present
           ? data.createdDate.value
           : this.createdDate,
-      lastActiveDate: data.lastActiveDate.present
-          ? data.lastActiveDate.value
-          : this.lastActiveDate,
       isCurrentDevice: data.isCurrentDevice.present
           ? data.isCurrentDevice.value
           : this.isCurrentDevice,
@@ -3671,7 +3629,6 @@ class Device extends DataClass implements Insertable<Device> {
             'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
           )
           ..write('createdDate: $createdDate, ')
-          ..write('lastActiveDate: $lastActiveDate, ')
           ..write('isCurrentDevice: $isCurrentDevice, ')
           ..write('ownerListing: $ownerListing')
           ..write(')'))
@@ -3690,7 +3647,6 @@ class Device extends DataClass implements Insertable<Device> {
     bundleVersion,
     lastSignedPrekeyRotationUnixDay,
     createdDate,
-    lastActiveDate,
     isCurrentDevice,
     ownerListing,
   );
@@ -3715,7 +3671,6 @@ class Device extends DataClass implements Insertable<Device> {
           other.lastSignedPrekeyRotationUnixDay ==
               this.lastSignedPrekeyRotationUnixDay &&
           other.createdDate == this.createdDate &&
-          other.lastActiveDate == this.lastActiveDate &&
           other.isCurrentDevice == this.isCurrentDevice &&
           other.ownerListing == this.ownerListing);
 }
@@ -3731,7 +3686,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
   final Value<int?> bundleVersion;
   final Value<int> lastSignedPrekeyRotationUnixDay;
   final Value<String?> createdDate;
-  final Value<String?> lastActiveDate;
   final Value<bool> isCurrentDevice;
   final Value<bool> ownerListing;
   final Value<int> rowid;
@@ -3746,7 +3700,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.bundleVersion = const Value.absent(),
     this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
     this.createdDate = const Value.absent(),
-    this.lastActiveDate = const Value.absent(),
     this.isCurrentDevice = const Value.absent(),
     this.ownerListing = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3762,7 +3715,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.bundleVersion = const Value.absent(),
     this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
     this.createdDate = const Value.absent(),
-    this.lastActiveDate = const Value.absent(),
     this.isCurrentDevice = const Value.absent(),
     this.ownerListing = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3781,7 +3733,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Expression<int>? bundleVersion,
     Expression<int>? lastSignedPrekeyRotationUnixDay,
     Expression<String>? createdDate,
-    Expression<String>? lastActiveDate,
     Expression<bool>? isCurrentDevice,
     Expression<bool>? ownerListing,
     Expression<int>? rowid,
@@ -3798,7 +3749,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       if (lastSignedPrekeyRotationUnixDay != null)
         'last_signed_prekey_rotation_unix_day': lastSignedPrekeyRotationUnixDay,
       if (createdDate != null) 'created_date': createdDate,
-      if (lastActiveDate != null) 'last_active_date': lastActiveDate,
       if (isCurrentDevice != null) 'is_current_device': isCurrentDevice,
       if (ownerListing != null) 'owner_listing': ownerListing,
       if (rowid != null) 'rowid': rowid,
@@ -3816,7 +3766,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Value<int?>? bundleVersion,
     Value<int>? lastSignedPrekeyRotationUnixDay,
     Value<String?>? createdDate,
-    Value<String?>? lastActiveDate,
     Value<bool>? isCurrentDevice,
     Value<bool>? ownerListing,
     Value<int>? rowid,
@@ -3834,7 +3783,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
           lastSignedPrekeyRotationUnixDay ??
           this.lastSignedPrekeyRotationUnixDay,
       createdDate: createdDate ?? this.createdDate,
-      lastActiveDate: lastActiveDate ?? this.lastActiveDate,
       isCurrentDevice: isCurrentDevice ?? this.isCurrentDevice,
       ownerListing: ownerListing ?? this.ownerListing,
       rowid: rowid ?? this.rowid,
@@ -3876,9 +3824,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     if (createdDate.present) {
       map['created_date'] = Variable<String>(createdDate.value);
     }
-    if (lastActiveDate.present) {
-      map['last_active_date'] = Variable<String>(lastActiveDate.value);
-    }
     if (isCurrentDevice.present) {
       map['is_current_device'] = Variable<bool>(isCurrentDevice.value);
     }
@@ -3906,7 +3851,6 @@ class DevicesCompanion extends UpdateCompanion<Device> {
             'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
           )
           ..write('createdDate: $createdDate, ')
-          ..write('lastActiveDate: $lastActiveDate, ')
           ..write('isCurrentDevice: $isCurrentDevice, ')
           ..write('ownerListing: $ownerListing, ')
           ..write('rowid: $rowid')
@@ -27314,7 +27258,6 @@ typedef $$DevicesTableCreateCompanionBuilder =
       Value<int?> bundleVersion,
       Value<int> lastSignedPrekeyRotationUnixDay,
       Value<String?> createdDate,
-      Value<String?> lastActiveDate,
       Value<bool> isCurrentDevice,
       Value<bool> ownerListing,
       Value<int> rowid,
@@ -27331,7 +27274,6 @@ typedef $$DevicesTableUpdateCompanionBuilder =
       Value<int?> bundleVersion,
       Value<int> lastSignedPrekeyRotationUnixDay,
       Value<String?> createdDate,
-      Value<String?> lastActiveDate,
       Value<bool> isCurrentDevice,
       Value<bool> ownerListing,
       Value<int> rowid,
@@ -27410,11 +27352,6 @@ class $$DevicesTableFilterComposer
 
   ColumnFilters<String> get createdDate => $composableBuilder(
     column: $table.createdDate,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get lastActiveDate => $composableBuilder(
-    column: $table.lastActiveDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -27507,11 +27444,6 @@ class $$DevicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get lastActiveDate => $composableBuilder(
-    column: $table.lastActiveDate,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<bool> get isCurrentDevice => $composableBuilder(
     column: $table.isCurrentDevice,
     builder: (column) => ColumnOrderings(column),
@@ -27599,11 +27531,6 @@ class $$DevicesTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get lastActiveDate => $composableBuilder(
-    column: $table.lastActiveDate,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<bool> get isCurrentDevice => $composableBuilder(
     column: $table.isCurrentDevice,
     builder: (column) => column,
@@ -27677,7 +27604,6 @@ class $$DevicesTableTableManager
                 Value<int> lastSignedPrekeyRotationUnixDay =
                     const Value.absent(),
                 Value<String?> createdDate = const Value.absent(),
-                Value<String?> lastActiveDate = const Value.absent(),
                 Value<bool> isCurrentDevice = const Value.absent(),
                 Value<bool> ownerListing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -27693,7 +27619,6 @@ class $$DevicesTableTableManager
                 lastSignedPrekeyRotationUnixDay:
                     lastSignedPrekeyRotationUnixDay,
                 createdDate: createdDate,
-                lastActiveDate: lastActiveDate,
                 isCurrentDevice: isCurrentDevice,
                 ownerListing: ownerListing,
                 rowid: rowid,
@@ -27711,7 +27636,6 @@ class $$DevicesTableTableManager
                 Value<int> lastSignedPrekeyRotationUnixDay =
                     const Value.absent(),
                 Value<String?> createdDate = const Value.absent(),
-                Value<String?> lastActiveDate = const Value.absent(),
                 Value<bool> isCurrentDevice = const Value.absent(),
                 Value<bool> ownerListing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -27727,7 +27651,6 @@ class $$DevicesTableTableManager
                 lastSignedPrekeyRotationUnixDay:
                     lastSignedPrekeyRotationUnixDay,
                 createdDate: createdDate,
-                lastActiveDate: lastActiveDate,
                 isCurrentDevice: isCurrentDevice,
                 ownerListing: ownerListing,
                 rowid: rowid,

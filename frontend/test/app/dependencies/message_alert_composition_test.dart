@@ -204,6 +204,7 @@ final class AlertCompositionHarness {
           login: LoginAccount(_FakeAccounts(), session),
           restore: RestoreAccountSession(session),
           logout: LogoutAccount(session),
+          erase: EraseAccount(_FakeAccounts(), session),
           lifecycle: lifecycle,
         ),
       ),
@@ -369,6 +370,9 @@ final class _FakeSession implements AuthenticationSessionPort {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<void> forgetErasedAccount() async {}
 }
 
 final class _FakeAccounts implements AccountAuthenticationRepository {
@@ -384,6 +388,10 @@ final class _FakeAccounts implements AccountAuthenticationRepository {
     required String password,
     String? deviceId,
   }) async => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> eraseAccount({required String password}) async =>
+      throw UnimplementedError();
 }
 
 final class RecordingProviders extends ProviderObserver {

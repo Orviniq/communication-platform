@@ -469,6 +469,7 @@ final class DeliveryHarness {
           login: LoginAccount(FakeAccountRepository(), session),
           restore: RestoreAccountSession(session),
           logout: LogoutAccount(session),
+          erase: EraseAccount(FakeAccountRepository(), session),
           lifecycle: lifecycle,
         ),
       ),
@@ -949,6 +950,9 @@ final class FakeAuthenticationSession implements AuthenticationSessionPort {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<void> forgetErasedAccount() async {}
 }
 
 final class FakeAccountRepository implements AccountAuthenticationRepository {
@@ -964,6 +968,10 @@ final class FakeAccountRepository implements AccountAuthenticationRepository {
     required String password,
     String? deviceId,
   }) async => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> eraseAccount({required String password}) async =>
+      throw UnimplementedError();
 }
 
 /// A crypto core that answers the one pairwise operation the inbox reaches,
