@@ -1,5 +1,5 @@
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
-import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security_native.dart';
 
 /// Maps provisioned trust material onto the transport that enforces it.
 ///

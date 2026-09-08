@@ -4,7 +4,7 @@ import 'package:communication_platform/features/local_storage/domain/local_stora
 import 'package:communication_platform/features/local_storage/infrastructure/database/drift_conversation_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/local_storage_runtime.dart';
-import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage_native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final localStorageRuntimeProvider = Provider<SecureLocalStorageRuntime>((ref) {

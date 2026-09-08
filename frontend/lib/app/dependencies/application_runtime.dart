@@ -13,11 +13,11 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/local_storage_runtime.dart';
-import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage_native.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
-import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security_native.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core_native.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter/widgets.dart';
