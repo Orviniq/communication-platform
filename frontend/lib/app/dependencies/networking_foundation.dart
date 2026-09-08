@@ -9,7 +9,7 @@ import 'package:communication_platform/features/networking/infrastructure/auth/t
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/dio_websocket_gateway.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/socket_connector.dart';
-import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security_native.dart';
 import 'package:dio/dio.dart';
 
 /// Scope-owned composition for the single reviewed REST client, the single

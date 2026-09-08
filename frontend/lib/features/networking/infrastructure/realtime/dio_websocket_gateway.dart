@@ -51,9 +51,7 @@ final class DioWebSocketGateway implements RealtimeGateway {
 
   SocketConnection? _channel;
   StreamSubscription<Object?>? _subscription;
-  String? _connectionToken;
   bool _closingLocally = false;
-  bool _authenticationRecoveryAvailable = true;
 
   @override
   Stream<RealtimeEvent> get events => _events.stream;
@@ -82,12 +80,7 @@ final class DioWebSocketGateway implements RealtimeGateway {
         timeout: connectTimeout,
       );
       _channel = channel;
-      _connectionToken = token.value;
       _closingLocally = false;
-      if (_connector.authenticationMode ==
-          SocketAuthenticationMode.webFirstFrame) {
-        channel.add(jsonEncode({'type': 'auth', 'access': token.value}));
-      }
       _subscription = channel.messages.listen(
         _onMessage,
         onError: (_) => _onDone(),
@@ -167,27 +160,6 @@ final class DioWebSocketGateway implements RealtimeGateway {
     return switch (type) {
       'envelope' => _decodeEnvelope(json),
       'signal' => RealtimeSignal(_requiredBlob(json)),
-      'presence' => RealtimePresence(
-        deviceId: _requiredUuid(json, 'device_id'),
-        state: switch (json['state']) {
-          'online' => PresenceState.online,
-          'offline' => PresenceState.offline,
-          _ => throw const MalformedApiBody(),
-        },
-      ),
-      'room_signal' => RealtimeRoomSignal(
-        roomId: _requiredUuid(json, 'room_id'),
-        blob: _requiredBlob(json),
-      ),
-      'room_presence' => RealtimeRoomPresence(
-        roomId: _requiredUuid(json, 'room_id'),
-        deviceId: _requiredUuid(json, 'device_id'),
-        state: switch (json['state']) {
-          'join' => RoomPresenceState.join,
-          'leave' => RoomPresenceState.leave,
-          _ => throw const MalformedApiBody(),
-        },
-      ),
       _ => const UnsupportedRealtimeEvent(),
     };
   }
@@ -213,12 +185,10 @@ final class DioWebSocketGateway implements RealtimeGateway {
     return value;
   }
 
-  String _requiredBlob(
-    Map<String, Object?> json, {
-    int maximumCharacters = ApiContractLimits.maximumSignalCharacters,
-  }) {
+  String _requiredBlob(Map<String, Object?> json) {
     final value = json['blob'];
-    if (value is! String || value.length > maximumCharacters) {
+    if (value is! String ||
+        value.length > ApiContractLimits.maximumSignalCharacters) {
       throw const MalformedApiBody();
     }
     return value;
@@ -239,67 +209,50 @@ final class DioWebSocketGateway implements RealtimeGateway {
   Future<void> _onDone() async {
     final channel = _channel;
     final closeCode = channel?.closeCode;
-    final rejectedToken = _connectionToken;
     _channel = null;
-    _connectionToken = null;
     await _subscription?.cancel();
     _subscription = null;
     if (!_closingLocally) {
-      await _dispatchClose(closeCode, rejectedToken: rejectedToken);
+      await _dispatchClose(closeCode);
     }
   }
 
-  Future<void> _dispatchClose(int? code, {String? rejectedToken}) async {
-    final (reason, initialAction) = switch (code) {
-      4001 => (
-        RealtimeCloseReason.authenticationFailed,
-        _authenticationRecoveryAvailable
-            ? ReconnectAction.refreshThenReconnectOnce
-            : ReconnectAction.none,
-      ),
+  Future<void> _dispatchClose(int? code) async {
+    final (reason, action) = switch (code) {
       4003 => (RealtimeCloseReason.revoked, ReconnectAction.stopRevoked),
       4008 => (
         RealtimeCloseReason.protocolViolation,
         ReconnectAction.openCircuit,
       ),
-      4403 => (
-        RealtimeCloseReason.originRejected,
-        ReconnectAction.stopOriginRejected,
-      ),
       1000 => (RealtimeCloseReason.normal, ReconnectAction.none),
+      // 1012 is here, in the reconnecting arm, and deliberately not named: a
+      // restart is a deploy rather than a fault, so it takes the plain backoff
+      // and reaches neither a stop action nor a budget that could refuse a
+      // later attempt.
       _ => (
         RealtimeCloseReason.transportLost,
         ReconnectAction.reconnectWithBackoff,
       ),
     };
-    var action = initialAction;
     if (code == 4003) {
       await _tokenCoordinator.handleRevocation();
-    } else if (code == 4001 && _authenticationRecoveryAvailable) {
-      _authenticationRecoveryAvailable = false;
-      if (rejectedToken != null) {
-        final recovery = await _tokenCoordinator.recoverAfterUnauthorized(
-          rejectedToken,
-        );
-        if (recovery is FailureResult<AccessToken>) {
-          action = ReconnectAction.none;
-        }
-      }
     }
     await _reconnectHook.onDisconnected(reason: reason, action: action);
   }
 
+  /// Nothing to reset.
+  ///
+  /// This existed for the one-shot token-refresh budget close code `4001` spent.
+  /// Authentication is decided before the accept now, so a refusal arrives as a
+  /// failed upgrade and no close code opens a recovery this could re-arm.
   @override
-  void markStableConnection() {
-    _authenticationRecoveryAvailable = true;
-  }
+  void markStableConnection() {}
 
   @override
   Future<void> close() async {
     _closingLocally = true;
     final channel = _channel;
     _channel = null;
-    _connectionToken = null;
     await _subscription?.cancel();
     _subscription = null;
     await channel?.close(1000);
@@ -324,7 +277,6 @@ final class DioWebSocketGateway implements RealtimeGateway {
             _isUuidList(
               frame['ids'],
               maximum: ApiContractLimits.maximumAcknowledgementIds,
-              allowEmpty: false,
             ),
       'signal' =>
         _hasOnlyKeys(frame, const {'type', 'to_device', 'blob'}) &&
@@ -333,35 +285,12 @@ final class DioWebSocketGateway implements RealtimeGateway {
               frame['blob'],
               ApiContractLimits.maximumSignalCharacters,
             ),
-      'subscribe_presence' =>
-        _hasOnlyKeys(frame, const {'type', 'device_ids'}) &&
-            _isUuidList(
-              frame['device_ids'],
-              maximum: ApiContractLimits.maximumPresenceTargets,
-              allowEmpty: true,
-            ),
-      'room_subscribe' || 'room_leave' =>
-        _hasOnlyKeys(frame, const {'type', 'room_id'}) &&
-            _isUuid(frame['room_id']),
-      'room_signal' =>
-        _hasOnlyKeys(frame, const {'type', 'room_id', 'blob'}) &&
-            _isUuid(frame['room_id']) &&
-            _isBoundedString(
-              frame['blob'],
-              ApiContractLimits.maximumSignalCharacters,
-            ),
       _ => false,
     };
   }
 
-  bool _isUuidList(
-    Object? value, {
-    required int maximum,
-    required bool allowEmpty,
-  }) {
-    if (value is! List<Object?> ||
-        value.length > maximum ||
-        (!allowEmpty && value.isEmpty)) {
+  bool _isUuidList(Object? value, {required int maximum}) {
+    if (value is! List<Object?> || value.isEmpty || value.length > maximum) {
       return false;
     }
     return value.every(_isUuid);

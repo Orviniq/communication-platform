@@ -8,7 +8,6 @@ import 'package:communication_platform/features/bootstrap/infrastructure/dio_hea
 import 'package:communication_platform/features/bootstrap/infrastructure/provisioned_trust_port.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/protected_storage_bootstrap_adapter.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/platform_deferred_delivery_scheduler.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 Future<void> bootstrap(AppEnvironment environment) async {
@@ -27,7 +26,7 @@ Future<void> bootstrap(AppEnvironment environment) async {
   await const DeliveryOwnershipGate().awaitExclusiveOwnership();
   final runtime = await ApplicationRuntime.create(
     environment,
-    platform: kIsWeb ? BootstrapPlatform.web : BootstrapPlatform.android,
+    platform: BootstrapPlatform.android,
   );
   final flow = BootstrapFlow(
     configuration: _ResolvedBootstrapConfiguration(runtime.configuration),

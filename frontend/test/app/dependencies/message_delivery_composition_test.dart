@@ -714,10 +714,6 @@ final class FakeSocketConnector implements SocketConnector {
   final List<FakeSocketConnection> connections = [];
 
   @override
-  SocketAuthenticationMode get authenticationMode =>
-      SocketAuthenticationMode.nativeBearerHeader;
-
-  @override
   Future<SocketConnection> connect({
     required Uri uri,
     required String accessToken,

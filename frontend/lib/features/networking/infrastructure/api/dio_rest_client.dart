@@ -13,7 +13,7 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/backend_error_mapper.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
-import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security_native.dart';
 import 'package:dio/dio.dart';
 
 abstract interface class RetryScheduler {

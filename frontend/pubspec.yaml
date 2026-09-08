@@ -1,5 +1,5 @@
 name: communication_platform
-description: "Android and Web client foundation for Communication Platform."
+description: "Android client for Communication Platform."
 publish_to: 'none'
 version: 0.1.0+1
 

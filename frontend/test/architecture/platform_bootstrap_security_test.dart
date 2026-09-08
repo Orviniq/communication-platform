@@ -36,15 +36,6 @@ void main() {
     expect(template, isNot(contains('src="user"')));
   });
 
-  test('Web bootstrap declares only same-artifact runtime resources', () {
-    final index = File('web/index.html').readAsStringSync();
-
-    expect(index, contains('src="flutter_bootstrap.js"'));
-    expect(index, contains('href="manifest.json"'));
-    expect(index, isNot(contains('src="http')));
-    expect(index, isNot(contains('href="http')));
-  });
-
   test('the app transport trusts only the provisioned authority', () {
     final native = File(
       'lib/features/networking/infrastructure/tls/transport_security_native.dart',

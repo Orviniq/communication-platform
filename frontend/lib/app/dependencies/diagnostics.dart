@@ -18,7 +18,6 @@ import 'package:communication_platform/features/diagnostics/infrastructure/netwo
 import 'package:communication_platform/features/notifications/domain/message_alert_model.dart';
 import 'package:communication_platform/features/synchronization/domain/sustained_delivery_model.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The report a user asked for, built once per visit to the screen.
@@ -125,7 +124,7 @@ final class _RuntimeDiagnosticsSource implements DiagnosticsSourcePort {
       ),
       DiagnosticEntry(
         DiagnosticField.platform,
-        DiagnosticValue.constant(kIsWeb ? 'other' : 'android'),
+        DiagnosticValue.constant('android'),
       ),
       DiagnosticEntry(
         DiagnosticField.nativeAbi,

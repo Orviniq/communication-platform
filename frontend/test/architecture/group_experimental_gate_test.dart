@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/group_production_gate.dart';
-import 'package:communication_platform/app/config/runtime_abi.dart';
+import 'package:communication_platform/app/config/runtime_abi_native.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/features/groups/infrastructure/unsupported_group_mls.dart';
@@ -300,9 +300,9 @@ void main() {
 
     test('a target this artifact packages no library for has no evidence', () {
       // The artifact packages three ABIs. Anything else - a desktop host
-      // running this suite, the web target, an Android RISC-V device, an ABI
-      // added later without a run - resolves to no cell at all, and must fail
-      // closed rather than inherit another cell's record.
+      // running this suite, an Android RISC-V device, an ABI added later
+      // without a run - resolves to no cell at all, and must fail closed
+      // rather than inherit another cell's record.
       expect(GroupExperimentalGate.ledger.hasEvidenceFor(null), isFalse);
       expect(
         GroupExperimentalGate.forEvidence(_fullLedger).hasEvidenceFor(null),
@@ -319,11 +319,11 @@ void main() {
     });
 
     test('the native resolver really runs, and answers null off the map', () {
-      // Not a source assertion: this suite runs on the Dart VM, so
-      // `dart.library.io` is true and `runtime_abi_native.dart` is the variant
-      // that loads. Calling it here exercises the conditional export, the
-      // `Abi.current()` read and the default arm for real - on a host the
-      // artifact packages no library for, which must resolve to no cell.
+      // Not a source assertion: `runtime_abi_native.dart` is the one resolver
+      // there is, and this suite runs it on the Dart VM. Calling it here
+      // exercises the `Abi.current()` read and the default arm for real - on a
+      // host the artifact packages no library for, which must resolve to no
+      // cell.
       expect(currentGroupMlsAbiCell(), isNull);
       expect(
         ProviderContainer().read(runtimeAbiProvider),
@@ -333,11 +333,11 @@ void main() {
     });
 
     test('the platform seam maps every packaged ABI and nothing else', () {
-      // The mapping lives behind a conditional import, because `dart:ffi` does
-      // not exist on the web and importing it from the composition root breaks
-      // a target this repository still compiles. What is asserted here is the
-      // shape of that seam: every cell appears in the native resolver, the
-      // default is null, and the two non-native variants answer null outright.
+      // Android is the only target, so the seam is one file rather than a
+      // conditional import selecting between several. What is asserted here is
+      // its shape: every packaged cell appears in the resolver, and the default
+      // arm is null, so an ABI this artifact carries no library for reports
+      // nothing rather than borrowing another cell's answer.
       final native = File(
         'lib/app/config/runtime_abi_native.dart',
       ).readAsStringSync();
@@ -349,15 +349,6 @@ void main() {
         );
       }
       expect(native, contains('_ => null'));
-      for (final variant in const [
-        'lib/app/config/runtime_abi_web.dart',
-        'lib/app/config/runtime_abi_stub.dart',
-      ]) {
-        final source = File(variant).readAsStringSync();
-        expect(source, contains('GroupMlsFieldCell? currentGroupMlsAbiCell()'));
-        expect(source, contains('=> null;'));
-        expect(source, isNot(contains("import 'dart:ffi'")));
-      }
     });
   });
 

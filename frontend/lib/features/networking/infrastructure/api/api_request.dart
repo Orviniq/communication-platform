@@ -36,8 +36,6 @@ abstract final class ApiContractLimits {
   static const maximumAcknowledgementIds = 200;
   static const maximumClaimDeviceIds = 100;
   static const maximumDeviceLogRecords = 50;
-  static const maximumPresenceTargets = 500;
-  static const maximumRoomSubscriptions = 100;
   static const maximumWebSocketFrameBytes = 524288;
   static const maximumSignalCharacters = 16384;
   static const maximumAttachmentBytes = 67108864;

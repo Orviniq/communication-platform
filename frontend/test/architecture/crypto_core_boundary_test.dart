@@ -58,11 +58,13 @@ void main() {
     expect(bindings, isNot(contains('error_message')));
   });
 
-  test('Web is explicitly unsupported and Dart contains no crypto package', () {
-    final webAdapter = File(
-      'lib/shared/infrastructure/crypto/platform_crypto_core_web.dart',
+  test('a target without the native core is unsupported, not reimplemented', () {
+    // The one adapter fails closed off Android rather than reaching for a Dart
+    // primitive, and no Dart cryptographic package is available to reach for.
+    final adapter = File(
+      'lib/shared/infrastructure/crypto/platform_crypto_core_native.dart',
     ).readAsStringSync();
-    expect(webAdapter, contains('UnsupportedCryptoCore'));
+    expect(adapter, contains('UnsupportedCryptoCore'));
 
     final violations = <String>[];
     for (final entry in Directory('lib').listSync(recursive: true)) {

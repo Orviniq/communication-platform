@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/group_production_gate.dart';
-import 'package:communication_platform/app/config/runtime_abi.dart';
+import 'package:communication_platform/app/config/runtime_abi_native.dart';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
@@ -20,7 +20,7 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/pairwise_session_crypto.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core_native.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

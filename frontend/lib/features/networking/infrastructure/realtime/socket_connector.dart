@@ -1,5 +1,3 @@
-enum SocketAuthenticationMode { nativeBearerHeader, webFirstFrame }
-
 abstract interface class SocketConnection {
   Stream<Object?> get messages;
 
@@ -11,8 +9,6 @@ abstract interface class SocketConnection {
 }
 
 abstract interface class SocketConnector {
-  SocketAuthenticationMode get authenticationMode;
-
   /// [keepAlive], when supplied, is how often this connection proves it is
   /// still alive.
   ///

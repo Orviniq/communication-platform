@@ -1,9 +1,9 @@
 # Frontend documentation
 
-This directory is the engineering contract for the Flutter client. Version 1 targets
-Android only, talks only to the self-hosted backend, and treats the server as an
-untrusted relay for end-to-end encrypted content. The preserved Web design is post-v1
-and is not a version-1 release or acceptance gate.
+This directory is the engineering contract for the Flutter client. It targets Android
+only, talks only to the self-hosted backend, and treats the server as an untrusted
+relay for end-to-end encrypted content. There is no browser target: the server serves
+no browser surface, so a web build of this client cannot connect.
 
 The documents use three requirement words:
 
@@ -39,7 +39,6 @@ The documents use three requirement words:
 - [Local data model](local-data-model.md)
 - [Synchronization engine](sync-engine.md)
 - [Android platform](platform-android.md)
-- [Web platform (post-v1)](platform-web.md)
 
 ## Delivery
 

@@ -16,4 +16,3 @@ flutter build apk --release --flavor production --target lib/main_production.dar
 # Android build gave it, so the name alone must never be taken as evidence.
 sh ./tool/verify_release_apk.sh --production \
   build/app/outputs/flutter-apk/app-production-release.apk
-flutter build web --release --target lib/main_production.dart

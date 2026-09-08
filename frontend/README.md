@@ -1,24 +1,24 @@
 # Communication Platform frontend
 
-Flutter client for Android, with a preserved post-v1 Web foundation. The product name
-and all brand assets remain provisional. Registration, login, device enrollment and
-cross-signing, contacts, direct messaging, Saved Messages, local search, linked devices,
-history transfer, notifications, background delivery, the settings surfaces, the
-user-initiated diagnostics export and the closed-beta group stack are implemented; voice
-rooms, file attachments, shared media and profile publishing are not, and every surface
-that is routed without an implementation behind it says so
-([ADR-045](docs/decisions.md)). `docs/implementation-checklist.md` is the live status.
+Flutter client for Android. There is no browser target: the server serves no browser
+surface, so a web build cannot connect. The product name and all brand assets remain
+provisional. Registration, login, device enrollment and cross-signing, contacts, direct
+messaging, Saved Messages, local search, linked devices, history transfer,
+notifications, background delivery, the settings surfaces, the user-initiated
+diagnostics export and the closed-beta group stack are implemented; voice rooms, file
+attachments, shared media and profile publishing are not, and every surface that is
+routed without an implementation behind it says so ([ADR-045](docs/decisions.md)).
+`docs/implementation-checklist.md` is the live status.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
 `assets/fonts/vazirmatn/`. The exact artifact and checksum provenance is recorded in
-`docs/visual-design-system.md`; neither Android nor Web fetches fonts or visual assets at
-runtime.
+`docs/visual-design-system.md`; no font or visual asset is fetched at runtime.
 
 ## Toolchain
 
 - Flutter `3.44.7` (also recorded in `.fvmrc`)
 - Dart `3.12.2`
-- Android and Web targets only
+- Android is the only target
 
 Run dependency resolution from this directory:
 
@@ -97,15 +97,12 @@ Closed-beta MLS transport v3 authenticates later Welcome/re-add with
 the complete bounded signed control transcript. V2 beta groups and queued group objects
 lack that evidence and must be recreated/rejoined rather than silently migrated.
 Android also requires the build-local resource generation described in
-`android/provisioning/README.md`. Web has no CA-install or pinning API: the operator must
-install the private CA into the OS/browser trust store out of band before the page can
-connect, and a trust failure has no bypass.
+`android/provisioning/README.md`.
 
 ```sh
 flutter run --flavor development --target lib/main_development.dart
 flutter build apk --release --flavor beta --target lib/main_beta.dart
 flutter build apk --release --flavor production --target lib/main_production.dart
-flutter build web --release --target lib/main_production.dart
 ```
 
 The beta flavor signs with the frozen persistent release identity described in
@@ -130,8 +127,8 @@ sh ./tool/generate.sh
 ```
 
 The local CI commands run locked dependency resolution, generation with a clean-diff
-check, strict Flutter analysis, widget/unit tests, a development Android build,
-production Android compilation, and a production Web build:
+check, strict Flutter analysis, widget/unit tests, a development Android build, and
+production Android compilation:
 
 ```powershell
 ./tool/ci.ps1

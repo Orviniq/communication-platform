@@ -8,7 +8,7 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
-import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security_native.dart';
 
 /// The bootstrap health adapter uses only the configured origin and the typed client.
 final class DioHealthReachabilityPort implements HealthReachabilityPort {

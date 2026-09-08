@@ -11,50 +11,30 @@ import 'package:communication_platform/features/networking/infrastructure/realti
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'web connect uses wss and sends access only in the first auth frame',
-    () async {
-      final connection = FakeSocketConnection();
-      final connector = FakeSocketConnector(
-        authenticationMode: SocketAuthenticationMode.webFirstFrame,
-        connection: connection,
-      );
-      final gateway = gatewayFor(connector: connector);
-
-      final result = await gateway.connect();
-      expect(result, isA<Success<void>>());
-      expect(connector.uri, Uri.parse('wss://chat.example.test/ws'));
-      expect(connector.uri!.hasQuery, isFalse);
-      expect(connector.accessToken, 'socket-access');
-      expect(jsonDecode(connection.sent.single as String), {
-        'type': 'auth',
-        'access': 'socket-access',
-      });
-      await gateway.close();
-    },
-  );
-
-  test('native connect sends no in-band auth frame', () async {
+  test('connect uses wss and sends nothing in band', () async {
     final connection = FakeSocketConnection();
-    final connector = FakeSocketConnector(
-      authenticationMode: SocketAuthenticationMode.nativeBearerHeader,
-      connection: connection,
-    );
+    final connector = FakeSocketConnector(connection: connection);
     final gateway = gatewayFor(connector: connector);
 
-    await gateway.connect();
-    expect(connection.sent, isEmpty);
+    final result = await gateway.connect();
+    expect(result, isA<Success<void>>());
+    expect(connector.uri, Uri.parse('wss://chat.example.test/ws'));
+    expect(connector.uri!.hasQuery, isFalse);
     expect(connector.accessToken, 'socket-access');
+    expect(
+      connection.sent,
+      isEmpty,
+      reason:
+          'the token rides on the upgrade header and `auth` is not a frame '
+          'type',
+    );
     await gateway.close();
   });
 
   test('decodes transport events without retaining business state', () async {
     final connection = FakeSocketConnection();
     final gateway = gatewayFor(
-      connector: FakeSocketConnector(
-        authenticationMode: SocketAuthenticationMode.webFirstFrame,
-        connection: connection,
-      ),
+      connector: FakeSocketConnector(connection: connection),
     );
     await gateway.connect();
     final eventFuture = gateway.events.first;
@@ -73,14 +53,44 @@ void main() {
     await gateway.close();
   });
 
+  test('a retired server frame decodes as unsupported', () async {
+    const retired = <String>['presence', 'room_signal', 'room_presence'];
+    for (final type in retired) {
+      final connection = FakeSocketConnection();
+      final gateway = gatewayFor(
+        connector: FakeSocketConnector(connection: connection),
+      );
+      await gateway.connect();
+      final eventFuture = gateway.events.first;
+      connection.serverMessage(
+        jsonEncode({
+          'type': type,
+          'room_id': 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b',
+          'device_id': 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b',
+          'state': 'online',
+          'blob': 'opaque',
+        }),
+      );
+
+      expect(
+        await eventFuture,
+        isA<UnsupportedRealtimeEvent>(),
+        reason: '$type is no longer a frame the gateway emits',
+      );
+      expect(
+        connection.closeCode,
+        isNull,
+        reason: 'an unknown type is ignored rather than a protocol violation',
+      );
+      await gateway.close();
+    }
+  });
+
   test('malformed or binary server frame opens the protocol circuit', () async {
     final connection = FakeSocketConnection();
     final hook = RecordingReconnectHook();
     final gateway = gatewayFor(
-      connector: FakeSocketConnector(
-        authenticationMode: SocketAuthenticationMode.webFirstFrame,
-        connection: connection,
-      ),
+      connector: FakeSocketConnector(connection: connection),
       hook: hook,
     );
     await gateway.connect();
@@ -96,21 +106,18 @@ void main() {
 
   test('maps every backend close code to its reconnect hook', () async {
     const cases = <(int, RealtimeCloseReason, ReconnectAction)>[
-      (
-        4001,
-        RealtimeCloseReason.authenticationFailed,
-        ReconnectAction.refreshThenReconnectOnce,
-      ),
       (4003, RealtimeCloseReason.revoked, ReconnectAction.stopRevoked),
       (
         4008,
         RealtimeCloseReason.protocolViolation,
         ReconnectAction.openCircuit,
       ),
+      // A restart is a deploy, not a fault: it reconnects on the ordinary
+      // backoff and reaches no stop action.
       (
-        4403,
-        RealtimeCloseReason.originRejected,
-        ReconnectAction.stopOriginRejected,
+        1012,
+        RealtimeCloseReason.transportLost,
+        ReconnectAction.reconnectWithBackoff,
       ),
       (1000, RealtimeCloseReason.normal, ReconnectAction.none),
     ];
@@ -120,10 +127,7 @@ void main() {
       final hook = RecordingReconnectHook();
       final tokens = FakeSocketTokenCoordinator();
       final gateway = gatewayFor(
-        connector: FakeSocketConnector(
-          authenticationMode: SocketAuthenticationMode.webFirstFrame,
-          connection: connection,
-        ),
+        connector: FakeSocketConnector(connection: connection),
         hook: hook,
         tokenCoordinator: tokens,
       );
@@ -132,33 +136,42 @@ void main() {
       await pumpEvents();
 
       expect(hook.records.single, (entry.$2, entry.$3));
-      expect(tokens.recoveries, entry.$1 == 4001 ? 1 : 0);
       expect(tokens.revocations, entry.$1 == 4003 ? 1 : 0);
+      expect(
+        tokens.recoveries,
+        0,
+        reason:
+            'authentication is decided before the accept, so no close code '
+            'opens a token recovery',
+      );
     }
   });
 
-  test(
-    '4001 authentication recovery is circuit-limited until stable',
-    () async {
-      final connector = MultiSocketConnector();
+  test('a retired close code reconnects rather than stopping', () async {
+    // 4001 and 4403 were an in-band authentication failure and an Origin
+    // refusal. Neither can arrive now, and a server that sent one would be
+    // sending an unexplained drop.
+    for (final code in const <int>[4001, 4403]) {
+      final connection = FakeSocketConnection();
       final hook = RecordingReconnectHook();
-      final gateway = gatewayFor(connector: connector, hook: hook);
+      final tokens = FakeSocketTokenCoordinator();
+      final gateway = gatewayFor(
+        connector: FakeSocketConnector(connection: connection),
+        hook: hook,
+        tokenCoordinator: tokens,
+      );
+      await gateway.connect();
+      await connection.serverClose(code);
+      await pumpEvents();
 
-      await gateway.connect();
-      await connector.connections[0].serverClose(4001);
-      await pumpEvents();
-      await gateway.connect();
-      await connector.connections[1].serverClose(4001);
-      await pumpEvents();
-      expect(hook.records[1].$2, ReconnectAction.none);
-
-      await gateway.connect();
-      gateway.markStableConnection();
-      await connector.connections[2].serverClose(4001);
-      await pumpEvents();
-      expect(hook.records[2].$2, ReconnectAction.refreshThenReconnectOnce);
-    },
-  );
+      expect(hook.records.single, (
+        RealtimeCloseReason.transportLost,
+        ReconnectAction.reconnectWithBackoff,
+      ));
+      expect(tokens.recoveries, 0);
+      expect(tokens.revocations, 0);
+    }
+  });
 
   test('rejects non-HTTPS origins and oversized outbound frames', () async {
     expect(
@@ -173,10 +186,7 @@ void main() {
 
     final connection = FakeSocketConnection();
     final gateway = gatewayFor(
-      connector: FakeSocketConnector(
-        authenticationMode: SocketAuthenticationMode.webFirstFrame,
-        connection: connection,
-      ),
+      connector: FakeSocketConnector(connection: connection),
     );
     await gateway.connect();
     final result = await gateway.send({
@@ -184,21 +194,14 @@ void main() {
       'blob': List<String>.filled(524289, 'x').join(),
     });
     expect(result, isA<FailureResult<void>>());
-    expect(
-      connection.sent.length,
-      1,
-      reason: 'only the web auth frame is sent',
-    );
+    expect(connection.sent, isEmpty, reason: 'nothing was sent');
     await gateway.close();
   });
 
   test('enforces documented outgoing frame field and count limits', () async {
     final connection = FakeSocketConnection();
     final gateway = gatewayFor(
-      connector: FakeSocketConnector(
-        authenticationMode: SocketAuthenticationMode.webFirstFrame,
-        connection: connection,
-      ),
+      connector: FakeSocketConnector(connection: connection),
     );
     await gateway.connect();
     const id = 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b';
@@ -213,9 +216,9 @@ void main() {
       'type': 'ack',
       'ids': List<Object?>.filled(201, id),
     });
-    final tooManyPresenceTargets = await gateway.send({
-      'type': 'subscribe_presence',
-      'device_ids': List<Object?>.filled(501, id),
+    final emptyAck = await gateway.send({
+      'type': 'ack',
+      'ids': const <Object?>[],
     });
     final extraField = await gateway.send({
       'type': 'signal',
@@ -224,9 +227,38 @@ void main() {
       'plaintext': 'must never be sent',
     });
     expect(tooManyAcks, isA<FailureResult<void>>());
-    expect(tooManyPresenceTargets, isA<FailureResult<void>>());
+    expect(emptyAck, isA<FailureResult<void>>());
     expect(extraField, isA<FailureResult<void>>());
-    expect(connection.sent.length, 2, reason: 'auth plus one valid ack only');
+    expect(connection.sent.length, 1, reason: 'one valid ack only');
+    await gateway.close();
+  });
+
+  test('refuses every retired outgoing frame', () async {
+    final connection = FakeSocketConnection();
+    final gateway = gatewayFor(
+      connector: FakeSocketConnector(connection: connection),
+    );
+    await gateway.connect();
+    const id = 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b';
+
+    final retired = <Map<String, Object?>>[
+      {
+        'type': 'subscribe_presence',
+        'device_ids': const <Object?>[id],
+      },
+      {'type': 'room_subscribe', 'room_id': id},
+      {'type': 'room_leave', 'room_id': id},
+      {'type': 'room_signal', 'room_id': id, 'blob': 'opaque'},
+      {'type': 'auth', 'access': 'socket-access'},
+    ];
+    for (final frame in retired) {
+      expect(
+        await gateway.send(frame),
+        isA<FailureResult<void>>(),
+        reason: '${frame['type']} is not a frame the gateway sends',
+      );
+    }
+    expect(connection.sent, isEmpty);
     await gateway.close();
   });
 }
@@ -272,13 +304,8 @@ final class FakeSocketConnection implements SocketConnection {
 }
 
 final class FakeSocketConnector implements SocketConnector {
-  FakeSocketConnector({
-    required this.authenticationMode,
-    required this.connection,
-  });
+  FakeSocketConnector({required this.connection});
 
-  @override
-  final SocketAuthenticationMode authenticationMode;
   final FakeSocketConnection connection;
   Uri? uri;
   String? accessToken;
@@ -298,10 +325,6 @@ final class FakeSocketConnector implements SocketConnector {
 
 final class MultiSocketConnector implements SocketConnector {
   final List<FakeSocketConnection> connections = [];
-
-  @override
-  SocketAuthenticationMode get authenticationMode =>
-      SocketAuthenticationMode.webFirstFrame;
 
   @override
   Future<SocketConnection> connect({

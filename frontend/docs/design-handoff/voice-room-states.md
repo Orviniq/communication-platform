@@ -174,16 +174,18 @@ number. On wide layouts that sheet becomes a dialog or panel.
 
 ### 5.6 Ephemeral text panel
 
-`room_signal` relays an opaque blob to every subscriber **including the sender**, so the
-sender's own message echoes back — the send state has to account for that, not assume a
-one-way write.
+**For the voice phase.** `room_signal` is not a frame (server ADR-0021). Room text is
+relayed `signal` by `signal`, addressed to one device at a time, so there is no subscriber
+fan-out and no echo of the sender's own message to account for; the panel renders what this
+client sent because it sent it. The states below survive that change and the triggers are
+restated when the phase specifies the relay.
 
 | State | Trigger | On screen |
 |---|---|---|
 | Idle | — | Persistent, plain indication that it is ephemeral and best-effort |
 | Empty | No messages | One line explaining messages vanish when the room empties |
 | Sending | Blob relayed | Simple send state; no pin, star, reply, edit, receipts |
-| Too large | Blob over `SIGNAL_MAX`, 16384 chars — **frame silently dropped** | Composer limit must prevent this; there is no server error to surface |
+| Too large | **For the voice phase.** `SIGNAL_MAX` is gone: a `signal` blob is now base64 of exactly 1024, 4096 or 16384 bytes, and anything off a bucket is **silently dropped** (server ADR-0022). The phase sets the composer rule against the bucket the plaintext is padded to, not against a ceiling | Composer limit must prevent this; there is no server error to surface |
 | Stale | Socket degraded | Marked stale rather than appearing merely quiet |
 | Dropped | Membership invalid or room emptied | Panel clears with an explanation |
 
