@@ -333,12 +333,16 @@ Typing, presence, and ephemeral room signals do not enter the durable inbox. The
 strict expiry, bounded maps, and are cleared on disconnect. UI never converts absence of
 a signal into durable message or membership state.
 
-**Presence is not subscribed, and is therefore not shown.** `subscribe_presence` is a frame
-this client validates and never sends — the only frame it writes is `auth` — so the server
-has no target to emit presence to and `onlineDeviceCount` is zero by construction. The chat
-header rendered "offline" for every peer forever because of it. [ADR-060](decisions.md)
-withdraws the claim rather than shipping one that is always wrong; the port, the projection
-and the frame validation stay, because what is missing is the subscription.
+**The server holds no presence, so none is shown.** `subscribe_presence` is not a frame:
+the gateway never announces who is connected, on a subscription or on a disconnect, and it
+composes nothing out of its own knowledge — it relays an envelope from a mailbox and a
+signal from another device, and that is all (server ADR-0022). `onlineDeviceCount` was
+therefore zero by construction, and the chat header rendered "offline" for every peer
+forever because of it. [ADR-060](decisions.md) withdrew the claim and
+[ADR-069](decisions.md) removes the machinery: the projection and the frame validation are
+gone, because what was missing was never a subscription this client could send. Presence
+between the members of a conversation is client protocol over `signal` frames, like every
+other announcement, if it is ever built.
 
 ## Android lifecycle and post-v1 Web direction
 

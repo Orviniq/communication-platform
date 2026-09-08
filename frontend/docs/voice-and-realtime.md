@@ -10,8 +10,10 @@ core exports no media-key operation, and no run record exists under
 means visibly missing rather than half-present.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
-validates and routes `envelope`, `signal`, `presence`, `room_signal` and `room_presence`
-frames today. Room *frames* are typed; room *behaviour* is not built.
+validates and routes `envelope` and `signal` frames today, and nothing else. The four room
+frames and the `presence` frame were retired by server ADR-0021 and ADR-0022, and
+[ADR-069](decisions.md) deleted the client half; neither room frames nor room behaviour
+exists now. Everything a room needs rides `signal`, which the voice phase specifies.
 
 **What piece 20 is waiting for is [ADR-058](decisions.md), not a schedule.** It replaces
 ADR-044's re-scope — itself a replacement for an unreachable public-release condition —
@@ -148,7 +150,9 @@ encryption, no media cipher is invented here, and no foreign service is substitu
 
 ## Ephemeral room text
 
-Room text uses authenticated `room_signal` ciphertext and is held in memory only. It is
+**For the voice phase.** `room_signal` is not a frame (server ADR-0021); room text is one
+more thing members tell each other over `signal`, under the bucket rule that frame obeys.
+Room text uses authenticated ciphertext and is held in memory only. It is
 never appended to history or the durable message queue. Clients drop it when they leave,
 when room membership becomes invalid, and when the observed room empties. Wording remains
 best-effort because another participant can retain decrypted content.

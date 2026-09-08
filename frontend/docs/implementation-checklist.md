@@ -105,7 +105,7 @@ prompt's "after piece 19 passes every production gate" — unreachable, because
 | Capability | Backend | Flutter |
 |---|---|---|
 | Create/read/rename room | Ready opaque name | Pending |
-| Room live count/signals | Ready volatile relay | Frame types only. `dio_websocket_gateway.dart` validates and routes `room_signal` and `room_presence`; no room behaviour is built on them |
+| Room live count/signals | Ready volatile relay | None. `room_signal` and `room_presence` were retired by server ADR-0021 and deleted from the client by ADR-069; the voice phase carries both over `signal` |
 | LiveKit token | Ready | Pending join/reconnect client. No media dependency is declared, and `dependency_policy_test.dart` fails if one is added without an ADR-054 review |
 | Self-hosted LiveKit/TURN | Deployment ready | Pending. No deployment is recorded and no integration test exists (ADR-058 P6) |
 | Room invitations/membership | Client protocol | Leave semantics specified (ADR-023); implementation pending |
