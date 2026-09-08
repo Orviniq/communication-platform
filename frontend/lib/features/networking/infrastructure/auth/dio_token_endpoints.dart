@@ -6,23 +6,34 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 
-final class DioRefreshTokenExchange implements RefreshTokenExchange {
-  const DioRefreshTokenExchange(this.client);
+/// `POST /api/v1/auth/renew`, which replaced `POST /api/v1/auth/refresh`.
+///
+/// The route it replaced was anonymous and carried its secret in the body.
+/// This one is an ordinary authenticated call: it takes no body at all, and
+/// the session token travels in the `Authorization` header the reviewed client
+/// attaches for [AuthenticationRequirement.full]. A register token is refused
+/// there (`403 scope_forbidden`), so the requirement is the full one.
+final class DioRenewTokenExchange implements RenewTokenExchange {
+  const DioRenewTokenExchange(this.client);
 
   final DioRestClient client;
 
   @override
-  Future<Result<SessionTokens>> rotate(String refreshToken) async {
-    final result = await client.send<TokenPairResponseDto>(
-      ApiRequest<TokenPairResponseDto>(
+  Future<Result<SessionTokens>> renew() async {
+    final result = await client.send<SessionTokenResponseDto>(
+      ApiRequest<SessionTokenResponseDto>(
         method: RestMethod.post,
-        path: '/api/v1/auth/refresh',
-        decode: TokenPairResponseDto.fromJson,
+        path: '/api/v1/auth/renew',
+        decode: SessionTokenResponseDto.fromJson,
         acceptedStatusCodes: const {200},
-        authentication: AuthenticationRequirement.none,
+        authentication: AuthenticationRequirement.full,
         limits: ApiContractLimits.smallJson,
-        operation: NetworkOperation.authRefresh,
-        body: RefreshRequestDto(refreshToken).toJson(),
+        operation: NetworkOperation.authRenew,
+        // Stated by the route: nothing is written and no generation moves, so
+        // a repeat issues another token and retires none. A renewal whose
+        // answer was lost is therefore replayable, which is what makes a
+        // dropped connection cost a retry rather than the session.
+        replaySafety: ReplaySafety.contractIdempotent,
       ),
     );
     return result.fold(
@@ -32,26 +43,27 @@ final class DioRefreshTokenExchange implements RefreshTokenExchange {
   }
 }
 
+/// `POST /api/v1/auth/logout`, which answers `204` and takes no body.
+///
+/// The device is named by the token, not by the request: `token_generation`
+/// advances and every token of that device dies at once, so there is nothing
+/// to send and nothing to leak.
 final class DioLogoutTokenExchange implements LogoutTokenExchange {
   const DioLogoutTokenExchange(this.client);
 
   final DioRestClient client;
 
   @override
-  Future<void> revoke({
-    required String accessToken,
-    required String refreshToken,
-  }) async {
+  Future<void> revoke({required String accessToken}) async {
     await client.send<EmptyResponseDto>(
       ApiRequest<EmptyResponseDto>(
         method: RestMethod.post,
         path: '/api/v1/auth/logout',
         decode: EmptyResponseDto.fromJson,
-        acceptedStatusCodes: const {205},
+        acceptedStatusCodes: const {204},
         authentication: AuthenticationRequirement.full,
         limits: ApiContractLimits.smallJson,
         operation: NetworkOperation.authLogout,
-        body: RefreshRequestDto(refreshToken).toJson(),
       ),
     );
   }
