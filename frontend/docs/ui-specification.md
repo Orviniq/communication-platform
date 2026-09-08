@@ -798,6 +798,9 @@ appear pinned in the Chats list.
    the packaged version, which build it is, and the revision of the statement this
    build carries. It states that nothing on it was fetched. Behind it sits
    **Diagnostics** (§15.3).
+10. **Erase this account** → confirm (§15.4). Last in the list, marked destructive, and
+   separated from log out by a gap of its own: the two are not a pair, and a thumb that
+   missed the reversible one must not land on the irreversible one.
 
 ### 15.1 Edit Profile
 - Set display name and avatar. State clearly what is visible to contacts. (Keep personal
@@ -844,6 +847,61 @@ while the chrome around it is translated.
 
 **States.** *Reading this device*, *report*, *copied*, *clipboard refused*, and a re-read
 action.
+
+### 15.4 Erase this account
+
+**Purpose.** Leave. `DELETE /api/v1/me` deletes the account and every row that depends
+on it — devices, prekeys, published identity, key backup, device-list log, profile
+blob, and every queued envelope of every device. Until the client offered it, a user who
+wanted to go had to ask the operator, who could only deactivate.
+
+**The confirmation asks for the account password.** It is the only authenticated route in
+this API that does, because a session token lives thirty days and nothing detects its
+theft, so the one irreversible act asks for the secret a stolen token does not carry. The
+password goes in the request body and is stored, cached and logged nowhere. The
+ten-character rule this client applies when a password is *created* is deliberately not
+applied here: an account whose password predates that rule must still be able to leave.
+
+**[PRIVACY] The wording is the requirement, not decoration around it.** `SECURITY.md`
+§ "Best-effort features, worded honestly" keeps three deletion meanings apart — a
+remote-deletion request, server ciphertext deletion, and cryptographic erasure — and
+none may ever be described as another. A dialog reading "delete my data" or "erase my
+messages" claims the third and performs the second. All four statements below are
+present before the field, and none may be dropped, summarised into another, or moved
+behind a "more" affordance:
+
+1. **What it erases** — everything the server holds for this account.
+2. **What it does not** — the copies other people hold. Every message this account sent
+   was decrypted on the recipient's device and is stored there; nothing in this call
+   reaches another device. This is the load-bearing sentence and carries the emphasis.
+3. **Attachments** — they stay on the server until the retention window expires them,
+   stated as *up to N days*. Nothing on a stored attachment names an account, so there is
+   no set of them this call could identify as the account's. `N` is 30 while it is a
+   constant in client code; a later phase reads `attachment_ttl_days` from
+   `GET /api/v1/config`, which an operator may change.
+4. **The username** — free again at once, and another person may register it.
+
+**States.** *Confirm* (the four statements, the password field, erase and cancel) →
+*working* → gone. Cancel is a complete outcome and the barrier is not a way out: a form
+holding a typed password may not be dismissed by a stray tap beside it.
+
+**Failure states**, each in reviewed application strings and never a server `detail`:
+
+- **Wrong password** — said plainly, with the tries counted, and with the cost of the
+  last one stated *before* it is spent: five wrong tries lock the username for fifteen
+  minutes on this route and on the sign-in route alike, on every device. The count is
+  this client's own tally, so an attempt from another device is absent from it and the
+  server may lock sooner than the number suggests.
+- **Throttled** — the `Retry-After` wait, rounded *up*, because naming a moment the
+  server still refuses costs the user a second refusal. The same `throttled` code carries
+  both the account's ordinary rate limit and the per-name lock, and only the `detail`
+  text tells them apart — which is not a thing to branch on — so one wording holds for
+  both.
+
+**After it lands.** The local store is cleared the way a log-out clears it and the user
+arrives at the sign-in screen. A retry whose first answer was lost gets `401
+token_revoked`; the device that token named went with the account, so that is the same
+outcome and is never reported as a revoked session.
 
 ---
 
