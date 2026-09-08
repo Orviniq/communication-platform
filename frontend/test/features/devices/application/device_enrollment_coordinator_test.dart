@@ -604,8 +604,6 @@ final class _MemoryEnrollmentRepository implements DeviceEnrollmentRepository {
           userId: userId,
           accessToken: 'access',
           accessExpiresAt: nullDate,
-          refreshToken: 'refresh',
-          refreshExpiresAt: nullDate,
         ),
       ),
     );

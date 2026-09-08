@@ -86,10 +86,8 @@ void main() {
         response: DeviceRegistrationResponse(
           deviceId: deviceId,
           userId: userId,
-          accessToken: 'memory-only-access',
+          accessToken: 'durable-session-token',
           accessExpiresAt: DateTime.utc(2030),
-          refreshToken: 'durable-refresh',
-          refreshExpiresAt: DateTime.utc(2031),
         ),
       );
       expect(persisted, isA<Success<void>>());
@@ -104,8 +102,8 @@ void main() {
       final session = await restartedTokens.read();
       final restored = await restartedStore.read(userId: userId);
 
-      expect(session?.accessToken.value, isEmpty);
-      expect(session?.refreshToken, 'durable-refresh');
+      expect(session?.accessToken.value, 'durable-session-token');
+      expect(session?.accessToken.expiresAt, DateTime.utc(2030));
       expect(session?.deviceId, deviceId);
       expect(
         (restored as Success<EnrollmentJournal?>).value?.phase,

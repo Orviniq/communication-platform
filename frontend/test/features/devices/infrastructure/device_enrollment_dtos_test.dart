@@ -22,45 +22,50 @@ void main() {
           'pq_spk',
           'otpks',
           'pq_otpks',
-          'keypackages',
         ]);
         expect(json, isNot(containsPair('cross_sig', anything)));
         expect(json, isNot(containsPair('bundle_version', anything)));
         expect((json['otpks']! as List<Object?>), hasLength(2));
         expect((json['pq_otpks']! as List<Object?>), hasLength(1));
-        // Required by the endpoint even with nothing to send: omitting it is a
-        // `400`, which fails the very first call of enrollment and leaves the
-        // account with no device.
-        expect(json['keypackages'], isEmpty);
+        // `RegisterDeviceIn` has no `keypackages` field at all, so sending one
+        // is not a courtesy the route ignores.
+        expect(json, isNot(containsPair('keypackages', anything)));
       },
     );
 
-    test(
-      'registration response requires full scope and rotating token pair',
-      () {
-        final decoded = RegisterDeviceResponseDto.fromJson({
+    test('registration response requires full scope and one token', () {
+      final receivedAt = DateTime.utc(2026, 9, 8, 12);
+      final decoded = RegisterDeviceResponseDto.fromJson({
+        'device_id': deviceId,
+        'token': _jwt(2000000000),
+        'expires_in': 2592000,
+        'scope': 'full',
+      }).toDomain(userId, receivedAt: receivedAt);
+
+      expect(decoded.deviceId, deviceId);
+      expect(decoded.userId, userId);
+      expect(decoded.accessToken, _jwt(2000000000));
+      expect(decoded.accessExpiresAt, receivedAt.add(const Duration(days: 30)));
+      // The one route a register token reaches answers a session token; a
+      // register scope back would mean it minted no device.
+      expect(
+        () => RegisterDeviceResponseDto.fromJson({
           'device_id': deviceId,
-          'access': _jwt(2000000000),
-          'refresh': _jwt(2000000100),
+          'token': _jwt(2000000000),
+          'expires_in': 2592000,
+          'scope': 'register',
+        }),
+        throwsA(isA<MalformedApiBody>()),
+      );
+      expect(
+        () => RegisterDeviceResponseDto.fromJson({
+          'device_id': deviceId,
+          'token': _jwt(2000000000),
           'scope': 'full',
-        }).toDomain(userId);
-
-        expect(decoded.deviceId, deviceId);
-        expect(decoded.userId, userId);
-        expect(
-          decoded.accessExpiresAt,
-          DateTime.fromMillisecondsSinceEpoch(2000000000 * 1000, isUtc: true),
-        );
-        expect(
-          () => RegisterDeviceResponseDto.fromJson({
-            'device_id': deviceId,
-            'access': _jwt(2000000000),
-            'scope': 'register',
-          }),
-          throwsA(isA<MalformedApiBody>()),
-        );
-      },
-    );
+        }),
+        throwsA(isA<MalformedApiBody>()),
+      );
+    });
 
     test('backup accepts only exact documented opaque buckets', () {
       final valid = BackupResponseDto.fromJson({

@@ -37,13 +37,14 @@ void main() {
       () async {
         final adapter = RecordingAdapter([
           jsonResponse(200, {
-            'access': jwt(2000000000),
+            'token': jwt(2000000000),
+            'expires_in': 600,
             'user_id': userId,
             'scope': 'register',
           }),
           jsonResponse(200, {
-            'access': jwt(2000000001),
-            'refresh': jwt(2000000100),
+            'token': jwt(2000000001),
+            'expires_in': 2592000,
             'user_id': userId,
             'device_id': deviceId,
             'scope': 'full',
@@ -63,14 +64,9 @@ void main() {
 
         final register = (first as Success<AccountSessionGrant>).value;
         expect(register.scope, AccountSessionScope.register);
-        expect(register.refreshToken, isNull);
         final full = (returning as Success<AccountSessionGrant>).value;
         expect(full.scope, AccountSessionScope.full);
         expect(full.deviceId, deviceId);
-        expect(
-          full.refreshExpiresAt,
-          DateTime.fromMillisecondsSinceEpoch(2000000100 * 1000, isUtc: true),
-        );
         expect(jsonDecode(adapter.requests.last.data as String), {
           'username': 'alice',
           'password': 'correct horse battery staple',

@@ -98,8 +98,6 @@ const deviceId = '9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611';
 final fullGrant = AccountSessionGrant(
   accessToken: 'access',
   accessExpiresAt: DateTime.utc(2026, 7, 28, 12),
-  refreshToken: 'refresh',
-  refreshExpiresAt: DateTime.utc(2026, 8),
   userId: userId,
   deviceId: deviceId,
   scope: AccountSessionScope.full,
