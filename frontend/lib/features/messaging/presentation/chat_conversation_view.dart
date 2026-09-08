@@ -136,12 +136,13 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                         // Only while somebody is actually typing.
                         //
                         // This line used to fall through to a presence claim,
-                        // and the claim was structurally false: no part of this
-                        // client ever sends `subscribe_presence`, so the server
-                        // has no target to emit presence to and every peer read
-                        // as offline forever — including one holding a live
-                        // socket in the same room. Saying nothing is the honest
-                        // state until the subscription exists.
+                        // and the claim was structurally false: the server
+                        // holds no presence at all (server ADR-0022), so there
+                        // is nothing for it to emit and every peer read as
+                        // offline forever — including one holding a live socket
+                        // in the same conversation. Presence between members is
+                        // client protocol over `signal` frames if it is ever
+                        // built; until then, saying nothing is the honest state.
                         if (!widget.model.savedMessages && widget.model.typing)
                           Text(
                             strings.chatTypingStatus,

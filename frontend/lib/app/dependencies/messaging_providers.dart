@@ -154,19 +154,6 @@ final typingProjectionsProvider = StreamProvider.autoDispose
           .watchTyping(conversationId);
     });
 
-/// Peer presence, with no consumer on purpose.
-///
-/// Nothing reads this, and nothing should until `subscribe_presence` is sent
-/// (ADR-060). The client validates that frame and never writes it, so the
-/// server has no target to emit presence to and this projection is zero for
-/// everyone, forever — which is what made the chat header call a peer holding a
-/// live socket "offline". The provider stays because what is missing is the
-/// subscription, not the machinery behind it.
-final presenceProjectionProvider = StreamProvider.autoDispose
-    .family<PresenceProjection, String>((ref, userId) {
-      return ref.watch(volatileConversationStateProvider).watchPresence(userId);
-    });
-
 final pairwiseFanoutCoordinatorProvider =
     FutureProvider.family<PairwiseFanoutCoordinator, MessagingScope>((
       ref,
