@@ -1502,6 +1502,70 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCancelAction => 'Cancel';
 
   @override
+  String get settingsEraseAccountTitle => 'Erase this account';
+
+  @override
+  String get settingsEraseAccountSummary =>
+      'Delete everything the server holds for this account. This cannot be undone.';
+
+  @override
+  String get eraseAccountConfirmTitle => 'Erase this account?';
+
+  @override
+  String get eraseAccountServerScope =>
+      'Everything the server holds for this account is deleted: your devices, your keys, your published identity, your profile, and every message still waiting to be delivered to you.';
+
+  @override
+  String get eraseAccountPeerCopies =>
+      'The copies other people hold are not erased. Every message you sent was decrypted on the phone of the person you sent it to and is stored there. Nothing in this reaches another device.';
+
+  @override
+  String eraseAccountAttachments(int days) {
+    return 'Files you uploaded stay on the server for up to $days days, until the retention window ends. Nothing stored with a file names your account, so there is no set of them this can delete.';
+  }
+
+  @override
+  String get eraseAccountUsernameFreed =>
+      'Your username becomes free again at once. Someone else may register it.';
+
+  @override
+  String get eraseAccountPasswordLabel => 'Your password';
+
+  @override
+  String get eraseAccountPasswordPurpose =>
+      'The password is sent with this one request and is stored nowhere.';
+
+  @override
+  String get eraseAccountAction => 'Erase account';
+
+  @override
+  String get eraseAccountWorkingAction => 'Erasing…';
+
+  @override
+  String eraseAccountWrongPassword(int used, int allowed) {
+    return 'That password is wrong. $used of $allowed tries used. After $allowed wrong tries this username is locked for fifteen minutes — here and on the sign-in screen, on every device.';
+  }
+
+  @override
+  String eraseAccountThrottled(String wait) {
+    return 'Too many attempts. Try again in $wait.';
+  }
+
+  @override
+  String get eraseAccountThrottledUnknownWait =>
+      'Too many attempts. Try again later.';
+
+  @override
+  String eraseAccountWaitMinutes(int minutes) {
+    return '$minutes minutes';
+  }
+
+  @override
+  String eraseAccountWaitSeconds(int seconds) {
+    return '$seconds seconds';
+  }
+
+  @override
   String get appearanceTitle => 'Appearance';
 
   @override

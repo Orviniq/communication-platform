@@ -2726,6 +2726,102 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get settingsCancelAction;
 
+  /// No description provided for @settingsEraseAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase this account'**
+  String get settingsEraseAccountTitle;
+
+  /// No description provided for @settingsEraseAccountSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete everything the server holds for this account. This cannot be undone.'**
+  String get settingsEraseAccountSummary;
+
+  /// No description provided for @eraseAccountConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase this account?'**
+  String get eraseAccountConfirmTitle;
+
+  /// No description provided for @eraseAccountServerScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything the server holds for this account is deleted: your devices, your keys, your published identity, your profile, and every message still waiting to be delivered to you.'**
+  String get eraseAccountServerScope;
+
+  /// No description provided for @eraseAccountPeerCopies.
+  ///
+  /// In en, this message translates to:
+  /// **'The copies other people hold are not erased. Every message you sent was decrypted on the phone of the person you sent it to and is stored there. Nothing in this reaches another device.'**
+  String get eraseAccountPeerCopies;
+
+  /// No description provided for @eraseAccountAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Files you uploaded stay on the server for up to {days} days, until the retention window ends. Nothing stored with a file names your account, so there is no set of them this can delete.'**
+  String eraseAccountAttachments(int days);
+
+  /// No description provided for @eraseAccountUsernameFreed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your username becomes free again at once. Someone else may register it.'**
+  String get eraseAccountUsernameFreed;
+
+  /// No description provided for @eraseAccountPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your password'**
+  String get eraseAccountPasswordLabel;
+
+  /// No description provided for @eraseAccountPasswordPurpose.
+  ///
+  /// In en, this message translates to:
+  /// **'The password is sent with this one request and is stored nowhere.'**
+  String get eraseAccountPasswordPurpose;
+
+  /// No description provided for @eraseAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase account'**
+  String get eraseAccountAction;
+
+  /// No description provided for @eraseAccountWorkingAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Erasing…'**
+  String get eraseAccountWorkingAction;
+
+  /// No description provided for @eraseAccountWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'That password is wrong. {used} of {allowed} tries used. After {allowed} wrong tries this username is locked for fifteen minutes — here and on the sign-in screen, on every device.'**
+  String eraseAccountWrongPassword(int used, int allowed);
+
+  /// No description provided for @eraseAccountThrottled.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Try again in {wait}.'**
+  String eraseAccountThrottled(String wait);
+
+  /// No description provided for @eraseAccountThrottledUnknownWait.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Try again later.'**
+  String get eraseAccountThrottledUnknownWait;
+
+  /// No description provided for @eraseAccountWaitMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} minutes'**
+  String eraseAccountWaitMinutes(int minutes);
+
+  /// No description provided for @eraseAccountWaitSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} seconds'**
+  String eraseAccountWaitSeconds(int seconds);
+
   /// No description provided for @appearanceTitle.
   ///
   /// In en, this message translates to:

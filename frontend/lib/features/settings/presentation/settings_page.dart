@@ -4,6 +4,7 @@ import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/notifications/presentation/notification_settings_entry.dart';
+import 'package:communication_platform/features/settings/presentation/erase_account_dialog.dart';
 import 'package:communication_platform/features/settings/presentation/settings_components.dart';
 import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -16,9 +17,10 @@ import 'package:go_router/go_router.dart';
 /// choices.
 ///
 /// Order follows §15 of the UI specification, which puts the things a person
-/// came here to change above the things they came here to read. Log out is last
-/// and is the only destructive row, so it is never adjacent to something a
-/// thumb was already reaching for.
+/// came here to change above the things they came here to read. The two
+/// destructive rows are last and are separated from everything above them and
+/// from each other, so neither is ever adjacent to something a thumb was
+/// already reaching for.
 final class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
@@ -94,6 +96,15 @@ final class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.x4),
               const _LogOutEntry(),
+              // Apart from log out, and last. The two are not neighbours and
+              // are not a pair: one ends a session on one phone and is undone
+              // by signing in again, the other ends the account everywhere and
+              // is undone by nothing. A thumb that missed the first must not
+              // land on the second, so the gap is deliberate and so is the
+              // order — the irreversible action is the furthest thing on the
+              // screen from where a scroll comes to rest.
+              const SizedBox(height: AppSpacing.x6),
+              const _EraseAccountEntry(),
             ],
           ),
         ),
@@ -246,5 +257,60 @@ final class _LogOutRow extends StatelessWidget {
     if (confirmed ?? false) {
       await logOut();
     }
+  }
+}
+
+/// Erase this account, and the confirmation that states what that does and does
+/// not reach.
+///
+/// Disabled rather than hidden without a session, for the same reason log out
+/// is: a control that disappears reads as a feature that does not exist, and
+/// leaving an account is one this deployment offers. Before it existed a user
+/// who wanted to go had to ask the operator, who could only deactivate.
+final class _EraseAccountEntry extends StatelessWidget {
+  const _EraseAccountEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      ProviderScope.containerOf(context);
+    } on StateError {
+      return const _EraseAccountRow(enabled: false);
+    }
+    return const _LiveEraseAccountEntry();
+  }
+}
+
+final class _LiveEraseAccountEntry extends ConsumerWidget {
+  const _LiveEraseAccountEntry();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    AuthenticationViewState? view;
+    try {
+      view = ref.watch(authenticationControllerProvider);
+    } on Object {
+      view = null;
+    }
+    return _EraseAccountRow(enabled: view != null && !view.isBusy);
+  }
+}
+
+final class _EraseAccountRow extends StatelessWidget {
+  const _EraseAccountRow({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SettingsEntry(
+      entryKey: const ValueKey('settings-erase-account'),
+      icon: AppIcons.delete,
+      title: l10n.settingsEraseAccountTitle,
+      summary: l10n.settingsEraseAccountSummary,
+      danger: true,
+      onTap: enabled ? () => showEraseAccountDialog(context) : null,
+    );
   }
 }

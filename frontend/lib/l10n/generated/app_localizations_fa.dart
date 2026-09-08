@@ -1500,6 +1500,70 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsCancelAction => 'انصراف';
 
   @override
+  String get settingsEraseAccountTitle => 'پاک‌سازی این حساب';
+
+  @override
+  String get settingsEraseAccountSummary =>
+      'هر چه سرور دربارهٔ این حساب نگه می‌دارد حذف می‌شود. این کار برگشت‌پذیر نیست.';
+
+  @override
+  String get eraseAccountConfirmTitle => 'این حساب پاک شود؟';
+
+  @override
+  String get eraseAccountServerScope =>
+      'هر چه سرور دربارهٔ این حساب نگه می‌دارد حذف می‌شود: دستگاه‌های شما، کلیدهایتان، هویت منتشرشده‌تان، نمایه‌تان، و هر پیامی که هنوز منتظر رسیدن به شماست.';
+
+  @override
+  String get eraseAccountPeerCopies =>
+      'نسخه‌هایی که دیگران دارند پاک نمی‌شوند. هر پیامی که فرستاده‌اید روی گوشی گیرنده رمزگشایی شده و همان‌جا ذخیره است. هیچ بخشی از این کار به دستگاه دیگری نمی‌رسد.';
+
+  @override
+  String eraseAccountAttachments(int days) {
+    return 'فایل‌هایی که بارگذاری کرده‌اید تا $days روز روی سرور می‌مانند، تا وقتی بازهٔ نگهداری تمام شود. هیچ چیزِ ذخیره‌شده کنار یک فایل نام حساب شما را ندارد، پس مجموعه‌ای از آن‌ها وجود ندارد که این کار بتواند حذفش کند.';
+  }
+
+  @override
+  String get eraseAccountUsernameFreed =>
+      'نام کاربری شما بی‌درنگ آزاد می‌شود. شخص دیگری می‌تواند آن را ثبت کند.';
+
+  @override
+  String get eraseAccountPasswordLabel => 'گذرواژهٔ شما';
+
+  @override
+  String get eraseAccountPasswordPurpose =>
+      'گذرواژه فقط با همین درخواست فرستاده می‌شود و هیچ‌جا ذخیره نمی‌شود.';
+
+  @override
+  String get eraseAccountAction => 'پاک‌سازی حساب';
+
+  @override
+  String get eraseAccountWorkingAction => 'در حال پاک‌سازی…';
+
+  @override
+  String eraseAccountWrongPassword(int used, int allowed) {
+    return 'گذرواژه نادرست است. $used تلاش از $allowed تلاش مصرف شد. پس از $allowed تلاش نادرست، این نام کاربری پانزده دقیقه قفل می‌شود — هم اینجا و هم در صفحهٔ ورود، روی همهٔ دستگاه‌ها.';
+  }
+
+  @override
+  String eraseAccountThrottled(String wait) {
+    return 'تلاش بیش از حد. $wait دیگر دوباره تلاش کنید.';
+  }
+
+  @override
+  String get eraseAccountThrottledUnknownWait =>
+      'تلاش بیش از حد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String eraseAccountWaitMinutes(int minutes) {
+    return '$minutes دقیقه';
+  }
+
+  @override
+  String eraseAccountWaitSeconds(int seconds) {
+    return '$seconds ثانیه';
+  }
+
+  @override
   String get appearanceTitle => 'ظاهر';
 
   @override

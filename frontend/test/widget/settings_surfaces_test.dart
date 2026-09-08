@@ -30,9 +30,8 @@ import '../support/recovery_rotation_fakes.dart';
 /// and in the states that make each screen honest.
 void main() {
   group('Settings home', () {
-    testWidgets('offers every documented destination, log out last', (
-      tester,
-    ) async {
+    testWidgets('offers every documented destination, the two destructive '
+        'rows last', (tester) async {
       await _pump(tester, const SettingsPage());
 
       for (final key in const [
@@ -45,6 +44,7 @@ void main() {
         'settings-security-notice',
         'settings-about',
         'settings-log-out',
+        'settings-erase-account',
       ]) {
         // Scrolled into view one at a time: the list is longer than a phone
         // screen, and a row that only exists off-screen is still a row.
