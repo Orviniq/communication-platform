@@ -4,10 +4,10 @@
 
 These instructions apply to everything under `frontend/`.
 
-- Implement version 1 of the Flutter client for Android only. The existing Web
-  scaffold and non-crypto foundation may remain for post-v1 work, but Web is not a
-  version-1 release target or acceptance gate. Crypto-dependent Web behavior remains
-  fail-closed until a later approved Web/Wasm milestone.
+- Implement the Flutter client for Android only. There is no Web target and no Web
+  scaffold: the server serves no browser surface, so a web build cannot connect and
+  none is built. Do not reintroduce a browser target, a conditional import selecting
+  one, or a `kIsWeb` branch.
 - Treat every file under `backend/` as read-only. Backend code and documentation may be
   inspected, but MUST NOT be edited from a frontend implementation task.
 - Work on one numbered piece from `docs/implementation-prompts.md` at a time. Do not
@@ -121,8 +121,7 @@ available frontend-wide gates:
 2. `flutter analyze`;
 3. Flutter unit/widget tests;
 4. relevant Rust tests and Android fixtures;
-5. Android build/tests when the piece affects the version-1 target. Web build/tests
-   are post-v1 work unless a later approved Web milestone explicitly reopens them; and
+5. Android build/tests when the piece affects the release target; and
 6. `git diff --check` and a final scope review.
 
 If a required tool or dependency is unavailable, report the exact unrun command and
