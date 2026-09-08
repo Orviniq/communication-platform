@@ -87,12 +87,43 @@ rotation, and no route named `refresh` — server-side ADR-0023 retired all thre
   lost costs a retry rather than the session, and two that race simply produce two working
   tokens.
 - A renewal that cannot be read is the server's fault, not a refused token, and the live
-  session survives it. Only a logout, a device revocation, or a deactivated account ends a
-  token before its own expiry.
+  session survives it. Only a logout, a device revocation, a deactivated account, or an
+  account erasure ends a token before its own expiry.
 - Tokens and decoded claims never enter logs or crash reports.
 - Logout posts the current session token when possible, then wipes locally even if the
   network request fails. It advances the device's token generation, so every outstanding
   token of that device dies at once.
+
+## Account erasure
+
+`DELETE /api/v1/me` is the one irreversible route the API offers, and the only
+authenticated one that asks for a password. The client sends the typed password in the
+body and retains it nowhere: not stored, not cached, not logged.
+
+The use case maps the route's four documented answers, branching on the error `code` and
+never on the `detail` text:
+
+- `204` — the account is gone. The local store is cleared exactly as a logout clears it,
+  and the termination that lands the user on sign-in is emitted.
+- `401 invalid_credentials` — a wrong password. The account is still there, the session is
+  untouched, and the user tries again. The client counts its own wrong attempts so wording
+  can warn before the last one; the server is what actually counts.
+- `401 token_revoked` — the retry of a call whose answer was lost. The device the token
+  named went with the account, so the first call landed: this is the `204` outcome.
+- `429 throttled` — a cool-off. The wait comes from `Retry-After`.
+
+Five wrong passwords on a username inside fifteen minutes lock it for fifteen on this
+route and on `POST /api/v1/auth/login` alike, so a user locked here cannot sign in on any
+device until it lifts. The screen has to say that, and has to say what an erasure does not
+reach: copies peers already hold were decrypted on their devices and are beyond this
+server.
+
+The local teardown deliberately does not send `POST /api/v1/auth/logout` first. After a
+`204` the token is dead, and presenting it would answer `401 token_revoked` — which the
+transport treats as a remote revocation and reports to the user as a revoked session,
+which is not what happened. The token is dropped from the store first, which leaves
+exactly the rest of a logout: the session generation advances, the wipe runs, and the
+termination is `logout`.
 
 ## Linked devices
 
