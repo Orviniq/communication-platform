@@ -60,13 +60,6 @@ try {
         '--production',
         'build/app/outputs/flutter-apk/app-production-release.apk'
     )
-    Invoke-CheckedCommand 'flutter' @(
-        'build',
-        'web',
-        '--release',
-        '--target',
-        'lib/main_production.dart'
-    )
 }
 finally {
     Pop-Location
