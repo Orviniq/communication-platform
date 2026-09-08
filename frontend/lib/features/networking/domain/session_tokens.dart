@@ -1,4 +1,7 @@
-/// Authentication scope encoded by the backend access token.
+/// Authentication scope carried by the login body beside the session token.
+///
+/// The server no longer puts `scope` in the token claims (ADR-0023). It is the
+/// discriminator between the two login success shapes and nothing more.
 enum SessionScope { register, full }
 
 /// Secret-bearing access material. This class deliberately has no custom string form.
@@ -14,26 +17,20 @@ final class AccessToken {
   final SessionScope scope;
 }
 
-/// A rotating device session. Register-scope login tokens have no refresh token.
+/// One device-bound session. A renewal issues another token and retires none,
+/// so several live tokens may exist for one device at once.
 final class SessionTokens {
   const SessionTokens({
     required this.accessToken,
-    this.refreshToken,
-    this.refreshExpiresAt,
     this.userId,
     this.deviceId,
     this.username,
   });
 
   final AccessToken accessToken;
-  final String? refreshToken;
-  final DateTime? refreshExpiresAt;
   final String? userId;
   final String? deviceId;
   final String? username;
-
-  bool get canRefresh =>
-      accessToken.scope == SessionScope.full && refreshToken != null;
 }
 
-enum SessionTerminationReason { logout, revoked, refreshRejected, expired }
+enum SessionTerminationReason { logout, revoked, expired }
