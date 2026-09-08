@@ -116,7 +116,6 @@ final class LinkedDeviceManager {
             label: text,
             labelState: LinkedDeviceLabelState.available,
             createdDate: device.createdDate,
-            lastActiveDate: device.lastActiveDate,
             thisDevice: device.thisDevice,
             encryptedLabel: device.encryptedLabel,
           ),

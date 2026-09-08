@@ -8,7 +8,6 @@ final class LinkedDevice {
     required this.label,
     required this.labelState,
     required this.createdDate,
-    required this.lastActiveDate,
     required this.thisDevice,
     Uint8List? encryptedLabel,
   }) : encryptedLabel = encryptedLabel == null
@@ -19,7 +18,6 @@ final class LinkedDevice {
   final String? label;
   final LinkedDeviceLabelState labelState;
   final DateTime createdDate;
-  final DateTime? lastActiveDate;
   final bool thisDevice;
   final Uint8List? encryptedLabel;
 }

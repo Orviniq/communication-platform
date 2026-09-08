@@ -3092,17 +3092,11 @@ abstract class AppLocalizations {
   /// **'The device you are using now'**
   String get linkedDevicesCurrentSubtitle;
 
-  /// No description provided for @linkedDevicesLastActive.
+  /// No description provided for @linkedDevicesAdded.
   ///
   /// In en, this message translates to:
-  /// **'Last active: {date}'**
-  String linkedDevicesLastActive(String date);
-
-  /// No description provided for @linkedDevicesLastActiveUnknown.
-  ///
-  /// In en, this message translates to:
-  /// **'Last active: not reported'**
-  String get linkedDevicesLastActiveUnknown;
+  /// **'Added: {date}'**
+  String linkedDevicesAdded(String date);
 
   /// No description provided for @linkedDevicesRenameAction.
   ///

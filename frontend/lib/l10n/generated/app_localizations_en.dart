@@ -1712,12 +1712,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get linkedDevicesCurrentSubtitle => 'The device you are using now';
 
   @override
-  String linkedDevicesLastActive(String date) {
-    return 'Last active: $date';
+  String linkedDevicesAdded(String date) {
+    return 'Added: $date';
   }
-
-  @override
-  String get linkedDevicesLastActiveUnknown => 'Last active: not reported';
 
   @override
   String get linkedDevicesRenameAction => 'Rename';

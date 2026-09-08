@@ -669,13 +669,12 @@
   "linkedDevicesThisDevice": "This device",
   "linkedDevicesUnnamed": "Unnamed device",
   "linkedDevicesCurrentSubtitle": "The device you are using now",
-  "linkedDevicesLastActive": "Last active: {date}",
-  "@linkedDevicesLastActive": {
+  "linkedDevicesAdded": "Added: {date}",
+  "@linkedDevicesAdded": {
     "placeholders": {
       "date": {"type": "String"}
     }
   },
-  "linkedDevicesLastActiveUnknown": "Last active: not reported",
   "linkedDevicesRenameAction": "Rename",
   "linkedDevicesRemoveAction": "Remove",
   "linkedDevicesRenameTitle": "Rename device",

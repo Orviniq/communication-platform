@@ -16,7 +16,6 @@ void main() {
               'device_id': deviceId,
               'label_blob': base64Encode(Uint8List(256)),
               'created_date': '2026-08-01',
-              'last_active_date': '2026-08-02',
               'this_device': true,
             },
           ],
@@ -50,7 +49,6 @@ void main() {
         'device_id': deviceId,
         'label_blob': null,
         'created_date': '2026-08-01',
-        'last_active_date': null,
         'this_device': true,
       };
       expect(

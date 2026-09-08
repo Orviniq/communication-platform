@@ -1710,12 +1710,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get linkedDevicesCurrentSubtitle => 'دستگاهی که اکنون استفاده می‌کنید';
 
   @override
-  String linkedDevicesLastActive(String date) {
-    return 'آخرین فعالیت: $date';
+  String linkedDevicesAdded(String date) {
+    return 'افزوده‌شده: $date';
   }
-
-  @override
-  String get linkedDevicesLastActiveUnknown => 'آخرین فعالیت: گزارش نشده';
 
   @override
   String get linkedDevicesRenameAction => 'تغییر نام';

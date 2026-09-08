@@ -95,9 +95,6 @@ final class DriftLinkedDeviceRepository implements LinkedDeviceLocalPort {
                   createdDate: Value(
                     device.createdDate.toIso8601String().substring(0, 10),
                   ),
-                  lastActiveDate: Value(
-                    device.lastActiveDate?.toIso8601String().substring(0, 10),
-                  ),
                   isCurrentDevice: Value(device.thisDevice),
                   ownerListing: const Value(true),
                 ),
@@ -399,9 +396,6 @@ final class DriftLinkedDeviceRepository implements LinkedDeviceLocalPort {
     createdDate:
         DateTime.tryParse(row.createdDate ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-    lastActiveDate: row.lastActiveDate == null
-        ? null
-        : DateTime.tryParse(row.lastActiveDate!),
     thisDevice: row.isCurrentDevice,
     encryptedLabel: row.labelCiphertext,
   );

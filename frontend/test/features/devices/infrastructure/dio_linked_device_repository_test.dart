@@ -24,7 +24,6 @@ void main() {
                 'device_id': '10000000-0000-4000-8000-000000000001',
                 'label_blob': base64Encode(Uint8List(256)),
                 'created_date': '2026-08-01',
-                'last_active_date': '2026-08-02',
                 'this_device': true,
               },
             ],

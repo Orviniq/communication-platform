@@ -218,7 +218,7 @@ final class _DeviceRow extends StatelessWidget {
         subtitle: Text(
           device.thisDevice
               ? l10n.linkedDevicesCurrentSubtitle
-              : _lastActive(l10n, device.lastActiveDate),
+              : _added(l10n, device.createdDate),
         ),
         trailing: PopupMenuButton<_DeviceAction>(
           key: ValueKey('linked-device-menu-${device.deviceId}'),
@@ -241,21 +241,22 @@ final class _DeviceRow extends StatelessWidget {
     );
   }
 
+  /// The day the device was added, which is the only date the server still
+  /// reports about one. It is not a last-seen day and is not labelled as one:
+  /// nothing records when a device was last used, here or on the server.
+  ///
   /// The backend reports a calendar day and no time zone, so the day is
   /// rendered exactly as it was reported.
   ///
   /// It used to go through `toLocal()`, which turned a coarse UTC day into the
   /// previous day for every reader west of UTC — a wrong date, and a value
   /// finer than the one the server actually holds.
-  static String _lastActive(AppLocalizations l10n, DateTime? date) {
-    if (date == null) {
-      return l10n.linkedDevicesLastActiveUnknown;
-    }
+  static String _added(AppLocalizations l10n, DateTime date) {
     final utc = date.toUtc();
     final year = utc.year.toString().padLeft(4, '0');
     final month = utc.month.toString().padLeft(2, '0');
     final day = utc.day.toString().padLeft(2, '0');
-    return l10n.linkedDevicesLastActive('$year-$month-$day');
+    return l10n.linkedDevicesAdded('$year-$month-$day');
   }
 }
 
