@@ -53,6 +53,62 @@ Future<T?> showAppDialog<T>({
   ),
 );
 
+/// A dialog whose body is a widget rather than a paragraph.
+///
+/// [showAppDialog] covers the common shape — a statement and some buttons — and
+/// cannot express a dialog the user has to type *into*. The chrome is the same
+/// chrome, written once here so the two cannot drift apart: same surface, same
+/// padding, same title treatment, same trailing action row.
+///
+/// [content] scrolls. A dialog that has to state four consequences before it
+/// asks for a password does not fit a phone at a large text scale, and one
+/// whose actions are pushed off the bottom cannot be cancelled either.
+///
+/// [dismissible] is offered because a form is not a statement: a stray tap on
+/// the barrier discards whatever was typed, and a caller asking for something
+/// irreversible may reasonably want the two explicit doors instead.
+///
+/// [actions] may be empty, for the dialog whose buttons depend on what has been
+/// typed into it and therefore have to live inside [content] with that state.
+/// The row and the space above it then go with them, rather than leaving a gap
+/// where a caller can see something was meant to be.
+Future<T?> showAppContentDialog<T>({
+  required BuildContext context,
+  required String title,
+  required Widget content,
+  List<Widget> actions = const [],
+  bool dismissible = true,
+}) => showFDialog<T>(
+  context: context,
+  barrierDismissible: dismissible,
+  useRootNavigator: true,
+  builder: (dialogContext, style, animation) => FDialog(
+    animation: animation,
+    semanticsLabel: title,
+    builder: (context, dialogStyle) => Padding(
+      padding: const EdgeInsets.all(AppSpacing.x6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: context.tokens.typography.section),
+          const SizedBox(height: AppSpacing.x3),
+          Flexible(child: SingleChildScrollView(child: content)),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.x6),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: AppSpacing.x2,
+              runSpacing: AppSpacing.x2,
+              children: actions,
+            ),
+          ],
+        ],
+      ),
+    ),
+  ),
+);
+
 Future<T?> showAppSheet<T>({
   required BuildContext context,
   required String semanticLabel,
