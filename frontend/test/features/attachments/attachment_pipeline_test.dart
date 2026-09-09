@@ -5,15 +5,19 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/cancellation_signal.dart';
 import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
+import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
+import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_allowance_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
 import 'package:communication_platform/features/attachments/infrastructure/attachment_storage.dart';
 import 'package:communication_platform/features/attachments/infrastructure/attachment_transport.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -264,6 +268,9 @@ void main() {
         final transport = DioAttachmentTransport(
           serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
+          config: const FixedServerConfig.fallback(),
+          allowance: _RecordingAllowance(),
+          clock: const _FixedClock(),
           dio: dio,
         );
         final root = await Directory.systemTemp.createTemp('cp_quota_test_');
@@ -291,6 +298,136 @@ void main() {
       },
     );
 
+    test('the upload reads the code, because two pairs share a status', () async {
+      // `413` is the day's allowance and it is also a body above the route's
+      // cap; `503` is the operator's disk and it is also an outage. The screen
+      // says something different for each, and the sync engine retires a body
+      // that is too large while holding one the day refused — so a status read
+      // without its code would be a coin toss between them.
+      const refusals = <(int, String, BackendFailureCode)>[
+        (413, 'quota_exceeded', BackendFailureCode.quotaExceeded),
+        (413, 'payload_too_large', BackendFailureCode.payloadTooLarge),
+        (503, 'storage_full', BackendFailureCode.storageFull),
+        (503, 'unavailable', BackendFailureCode.unavailable),
+      ];
+      final root = await Directory.systemTemp.createTemp('cp_refusal_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final file = File('${root.path}/blob')
+        ..writeAsBytesSync(Uint8List(65536));
+
+      for (final (status, wire, expected) in refusals) {
+        final dio = Dio();
+        dio.httpClientAdapter = _QueueAdapter([
+          (options, requestStream, cancelFuture) async {
+            await requestStream?.drain<void>();
+            return ResponseBody.fromString(
+              '{"code":"$wire","detail":"sensitive"}',
+              status,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          },
+        ]);
+        final allowance = _RecordingAllowance();
+        final transport = DioAttachmentTransport(
+          serverOrigin: Uri.parse('https://chat.example.test'),
+          tokens: _FullTokenCoordinator(),
+          config: const FixedServerConfig.fallback(),
+          allowance: allowance,
+          clock: const _FixedClock(),
+          dio: dio,
+        );
+
+        final result = await transport.upload(
+          encryptedFile: file,
+          bucketSize: 65536,
+        );
+
+        final failure =
+            (result as FailureResult<AttachmentUploadResponse>).failure;
+        expect(
+          failure,
+          isA<BackendFailure>().having((value) => value.code, 'code', expected),
+          reason: wire,
+        );
+        expect(failure.toString(), isNot(contains('sensitive')));
+        // A refusal spends nothing, whichever of the four it was.
+        expect(allowance.recorded, isEmpty, reason: wire);
+      }
+    });
+
+    test('what is left of the day is read before the bytes are sent', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _QueueAdapter([]);
+      // The default allowance is 256 MiB and this day has spent all but 32 KiB
+      // of it, so a 64 KiB bucket cannot fit. Nothing reaches the wire: the
+      // refusal is the same one the server would have sent, arrived at without
+      // spending the upload to discover it.
+      final allowance = _RecordingAllowance(spentBytes: 268435456 - 32768);
+      final transport = DioAttachmentTransport(
+        serverOrigin: Uri.parse('https://chat.example.test'),
+        tokens: _FullTokenCoordinator(),
+        config: const FixedServerConfig.fallback(),
+        allowance: allowance,
+        clock: const _FixedClock(),
+        dio: dio,
+      );
+      final root = await Directory.systemTemp.createTemp('cp_allowance_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final file = File('${root.path}/blob')
+        ..writeAsBytesSync(Uint8List(65536));
+
+      final result = await transport.upload(
+        encryptedFile: file,
+        bucketSize: 65536,
+      );
+
+      expect(
+        (result as FailureResult<AttachmentUploadResponse>).failure,
+        isA<BackendFailure>().having(
+          (value) => value.code,
+          'code',
+          BackendFailureCode.quotaExceeded,
+        ),
+      );
+      expect(allowance.recorded, isEmpty);
+    });
+
+    test('a length outside the published buckets never leaves', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _QueueAdapter([]);
+      final allowance = _RecordingAllowance();
+      final transport = DioAttachmentTransport(
+        serverOrigin: Uri.parse('https://chat.example.test'),
+        tokens: _FullTokenCoordinator(),
+        config: const FixedServerConfig.fallback(),
+        allowance: allowance,
+        clock: const _FixedClock(),
+        dio: dio,
+      );
+      final root = await Directory.systemTemp.createTemp('cp_bucket_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final file = File('${root.path}/blob')..writeAsBytesSync(Uint8List(4096));
+
+      final result = await transport.upload(
+        encryptedFile: file,
+        bucketSize: 4096,
+      );
+
+      expect(
+        (result as FailureResult<AttachmentUploadResponse>).failure,
+        isA<ValidationFailure>(),
+      );
+      expect(allowance.recorded, isEmpty);
+    });
+
     test('maps expired capability to not-found and writes no bytes', () async {
       final dio = Dio();
       dio.httpClientAdapter = _QueueAdapter([
@@ -300,6 +437,9 @@ void main() {
       final transport = DioAttachmentTransport(
         serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
+        config: const FixedServerConfig.fallback(),
+        allowance: _RecordingAllowance(),
+        clock: const _FixedClock(),
         dio: dio,
       );
       final sink = _CollectingSink();
@@ -603,4 +743,29 @@ final class _CollectingSink implements IOSink {
 
   @override
   void writeln([Object? object = '']) => write('$object\n');
+}
+
+/// A day's count held in memory, so a test can say what has already been spent.
+final class _RecordingAllowance implements AttachmentAllowancePort {
+  _RecordingAllowance({this.spentBytes = 0});
+
+  int spentBytes;
+  final List<int> recorded = [];
+
+  @override
+  Future<AttachmentDailyAllowance> read(DateTime now) async =>
+      AttachmentDailyAllowance(day: utcDayOf(now), spentBytes: spentBytes);
+
+  @override
+  Future<void> record({required int bytes, required DateTime now}) async {
+    recorded.add(bytes);
+    spentBytes += bytes;
+  }
+}
+
+final class _FixedClock implements TimeSource {
+  const _FixedClock();
+
+  @override
+  DateTime now() => DateTime.utc(2026, 9, 9, 12);
 }

@@ -95,10 +95,17 @@ abstract interface class DurableSyncStore implements Port {
 
   Future<Result<OutboxBatch?>> beginNextOutboxBatch({required DateTime now});
 
+  /// Applies one send answer to the batch it belongs to.
+  ///
+  /// [retryFullAt] is when a device reported full is offered its item again.
+  /// It is separate from the batch retry because nothing failed: the accepted
+  /// items are terminal, the stale ones are terminal, and only the full ones
+  /// come back.
   Future<Result<void>> recordOutboxAcceptance({
     required OutboxBatch batch,
     required OutboxAcceptance acceptance,
     required DateTime now,
+    required DateTime retryFullAt,
   });
 
   Future<Result<void>> recordOutboxRetry({

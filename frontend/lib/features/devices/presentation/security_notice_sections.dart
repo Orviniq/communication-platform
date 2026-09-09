@@ -1,8 +1,10 @@
 import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,7 +55,11 @@ final class SecurityNoticeSections extends ConsumerWidget {
         ),
         if (disclosure != null) ...[
           const SizedBox(height: AppSpacing.x6),
-          _BuildDisclosure(disclosure: disclosure, changed: changedPoints),
+          _BuildDisclosure(
+            disclosure: disclosure,
+            changed: changedPoints,
+            limits: ref.watch(publishedLimitsProvider),
+          ),
         ],
       ],
     );
@@ -92,10 +98,17 @@ final class _Section extends StatelessWidget {
 /// one paragraph because a reader who stops early should still have read the
 /// most consequential ones.
 final class _BuildDisclosure extends StatelessWidget {
-  const _BuildDisclosure({required this.disclosure, required this.changed});
+  const _BuildDisclosure({
+    required this.disclosure,
+    required this.changed,
+    required this.limits,
+  });
 
   final DeploymentDisclosure disclosure;
   final Set<DisclosurePoint> changed;
+
+  /// The deployment's published limits, for the one point that states a number.
+  final ServerConfig limits;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +142,7 @@ final class _BuildDisclosure extends StatelessWidget {
             for (final point in disclosure.points) ...[
               const SizedBox(height: AppSpacing.x3),
               _DisclosureItem(
-                text: point.text(l10n),
+                text: point.text(l10n, limits),
                 changed: changed.contains(point),
               ),
             ],

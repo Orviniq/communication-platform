@@ -11,6 +11,7 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -60,26 +61,29 @@ void main() {
     test('maps every documented backend error code without detail', () async {
       const cases = <(int, String, BackendFailureCode)>[
         (400, 'invalid_request', BackendFailureCode.invalidRequest),
-        (400, 'bad_request', BackendFailureCode.badRequest),
-        (400, 'username_taken', BackendFailureCode.usernameTaken),
+        (400, 'bad_bucket', BackendFailureCode.badBucket),
+        (400, 'identity_required', BackendFailureCode.identityRequired),
+        (401, 'unauthenticated', BackendFailureCode.invalidToken),
+        (401, 'invalid_token', BackendFailureCode.invalidToken),
+        (401, 'token_revoked', BackendFailureCode.tokenRevoked),
         (401, 'invalid_credentials', BackendFailureCode.invalidCredentials),
         (403, 'account_inactive', BackendFailureCode.accountInactive),
-        (401, 'invalid_token', BackendFailureCode.invalidToken),
-        (401, 'token_not_valid', BackendFailureCode.tokenNotValid),
-        (401, 'token_revoked', BackendFailureCode.tokenRevoked),
         (403, 'scope_forbidden', BackendFailureCode.scopeForbidden),
-        (403, 'device_scope_required', BackendFailureCode.deviceScopeRequired),
         (403, 'forbidden', BackendFailureCode.forbidden),
         (404, 'not_found', BackendFailureCode.notFound),
-        (400, 'bad_bucket', BackendFailureCode.badBucket),
+        (405, 'method_not_allowed', BackendFailureCode.methodNotAllowed),
+        (409, 'username_taken', BackendFailureCode.usernameTaken),
         (409, 'stale_version', BackendFailureCode.staleVersion),
-        (400, 'identity_required', BackendFailureCode.identityRequired),
         (409, 'device_limit', BackendFailureCode.deviceLimit),
         (409, 'prekey_limit', BackendFailureCode.prekeyLimit),
-        (409, 'keypackage_limit', BackendFailureCode.keypackageLimit),
+        (409, 'devicelog_limit', BackendFailureCode.deviceLogLimit),
+        (413, 'payload_too_large', BackendFailureCode.payloadTooLarge),
         (413, 'quota_exceeded', BackendFailureCode.quotaExceeded),
+        (429, 'throttled', BackendFailureCode.throttled),
+        (500, 'server_error', BackendFailureCode.serverError),
+        (503, 'storage_full', BackendFailureCode.storageFull),
+        (503, 'unavailable', BackendFailureCode.unavailable),
         (503, 'voice_unconfigured', BackendFailureCode.voiceUnconfigured),
-        (429, 'ignored', BackendFailureCode.rateLimited),
       ];
       final adapter = QueueAdapter([
         for (final entry in cases)
@@ -374,7 +378,7 @@ void main() {
     });
 
     test('drain DTO enforces authoritative page shape and maximum', () {
-      final parsed = DrainEnvelopesResponseDto.fromJson({
+      final parsed = DrainEnvelopesResponseDto.fromJson(<String, Object?>{
         'envelopes': [
           {
             'id': 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b',
@@ -384,12 +388,12 @@ void main() {
         ],
         'has_more': false,
         'pruned_through': 0,
-      });
+      }, ServerConfig.fallback);
       expect(parsed.envelopes.single.sequence, 12);
       expect(parsed.prunedThrough, 0);
 
       expect(
-        () => DrainEnvelopesResponseDto.fromJson({
+        () => DrainEnvelopesResponseDto.fromJson(<String, Object?>{
           'envelopes': [
             {
               'id': 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b',
@@ -399,16 +403,19 @@ void main() {
           ],
           'has_more': false,
           'pruned_through': 0,
-        }),
+        }, ServerConfig.fallback),
         throwsA(isA<MalformedApiBody>()),
       );
 
       expect(
-        () => DrainEnvelopesResponseDto.fromJson({
-          'envelopes': List<Object?>.filled(101, const <String, Object?>{}),
+        () => DrainEnvelopesResponseDto.fromJson(<String, Object?>{
+          'envelopes': List<Object?>.filled(
+            ServerConfig.fallback.drainPageMax + 1,
+            const <String, Object?>{},
+          ),
           'has_more': true,
           'pruned_through': 0,
-        }),
+        }, ServerConfig.fallback),
         throwsA(isA<MalformedApiBody>()),
       );
     });

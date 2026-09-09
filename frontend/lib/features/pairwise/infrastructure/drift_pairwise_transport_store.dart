@@ -6,12 +6,14 @@ import 'package:communication_platform/features/local_storage/infrastructure/dat
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_transport_store.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
 
 final class DriftPairwiseTransportStore implements PairwiseTransportStore {
   const DriftPairwiseTransportStore(
     this.database, {
+    this.config = const FixedServerConfig.fallback(),
     this.maximumOutboxTargets = 50000,
     this.maximumReplayMarkers = 50000,
     this.maximumOpenedPayloads = 10000,
@@ -24,6 +26,11 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
        assert(maximumConsumedPrekeyTombstones > 0),
        assert(maximumLocalApplications > 0),
        assert(maximumPendingSendPreparations > 0);
+
+  /// The deployment's own limits. Only the envelope bucket set is read here:
+  /// a sealed target whose length is off-bucket is one the upload route would
+  /// refuse with `400 bad_bucket`, so it must not reach the outbox.
+  final ServerConfigSnapshot config;
 
   static const int maximumSkippedKeysPerSession = 2000;
   static const int maximumSkippedKeysPerAccount = 20000;
@@ -1566,7 +1573,9 @@ SELECT
       if (!_isUuid(id) ||
           id == commit.currentDeviceId.toLowerCase() ||
           target.recipientUserId.isEmpty ||
-          !_isEnvelopeBucket(target.exactCiphertext.length) ||
+          !config.current.envelopeBuckets.contains(
+            target.exactCiphertext.length,
+          ) ||
           !ids.add(id) ||
           target.sessionTransition.localDeviceId.toLowerCase() !=
               commit.currentDeviceId.toLowerCase() ||
@@ -1753,10 +1762,6 @@ final class _PairwiseReplay implements Exception {
 final class _PairwiseIntegrity implements Exception {
   const _PairwiseIntegrity();
 }
-
-const _envelopeBuckets = {1024, 4096, 16384, 65536, 262144};
-
-bool _isEnvelopeBucket(int length) => _envelopeBuckets.contains(length);
 
 bool _bytesEqual(List<int> left, List<int> right) {
   if (left.length != right.length) {

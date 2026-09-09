@@ -10,6 +10,7 @@ import 'package:communication_platform/features/networking/infrastructure/diagno
 import 'package:communication_platform/features/networking/infrastructure/realtime/dio_websocket_gateway.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/socket_connector.dart';
 import 'package:communication_platform/features/networking/infrastructure/tls/transport_security_native.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:dio/dio.dart';
 
 /// Scope-owned composition for the single reviewed REST client, the single
@@ -89,14 +90,18 @@ final class NetworkingFoundation {
   /// [keepAlive] is supplied only by a session that holds this connection
   /// while nobody is looking at the application, and is null for every other
   /// caller. See [DioWebSocketGateway.keepAlive].
+  /// [config] is the ceilings a frame is measured against, read per frame so a
+  /// socket outlives the configuration read that corrects them.
   DioWebSocketGateway realtimeGateway(
     RealtimeReconnectHook reconnectHook, {
+    required ServerConfigSnapshot config,
     Duration? keepAlive,
   }) => DioWebSocketGateway(
     serverOrigin: _serverOrigin,
     connector: _socketConnector,
     tokenCoordinator: tokenCoordinator,
     reconnectHook: reconnectHook,
+    config: config,
     diagnostics: _diagnostics,
     keepAlive: keepAlive,
   );

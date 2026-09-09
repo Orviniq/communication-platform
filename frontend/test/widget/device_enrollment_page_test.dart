@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
@@ -14,6 +15,7 @@ import 'package:communication_platform/features/devices/application/ports/device
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -242,6 +244,10 @@ Future<void> _pump(
       overrides: [
         deviceEnrollmentCoordinatorProvider.overrideWithValue(coordinator),
         appEnvironmentProvider.overrideWithValue(environment),
+        // The statement is rendered from the limits in force. This harness
+        // opens no database, so it states what a first enrollment states:
+        // this build's own constants, and therefore no retention number.
+        publishedLimitsProvider.overrideWithValue(ServerConfig.fallback),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),

@@ -940,7 +940,7 @@ final class DeviceEnrollmentCoordinator {
 
   EnrollmentMessage _messageFor(Failure failure) => switch (failure) {
     TransportFailure() => EnrollmentMessage.offline,
-    BackendFailure(code: BackendFailureCode.rateLimited) =>
+    BackendFailure(code: BackendFailureCode.throttled) =>
       EnrollmentMessage.rateLimited,
     BackendFailure(code: BackendFailureCode.deviceLimit) =>
       EnrollmentMessage.deviceLimit,

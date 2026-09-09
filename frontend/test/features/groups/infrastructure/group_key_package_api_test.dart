@@ -10,6 +10,8 @@ import 'package:communication_platform/features/networking/application/ports/tok
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/api_dtos.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -65,7 +67,10 @@ void main() {
           ],
         }),
       ]);
-      final repository = DioGroupKeyPackageRepository(_client(adapter));
+      final repository = DioGroupKeyPackageRepository(
+        _client(adapter),
+        const FixedServerConfig.fallback(),
+      );
 
       expect(
         (await repository.fetchConsumableCount(deviceId: _device)
@@ -143,7 +148,10 @@ void main() {
         _jsonResponse(200, {'keypackage_count': 1}),
       ]);
       final consumable =
-          await DioGroupKeyPackageRepository(_client(consumableAdapter)).upload(
+          await DioGroupKeyPackageRepository(
+            _client(consumableAdapter),
+            const FixedServerConfig.fallback(),
+          ).upload(
             deviceId: _device,
             upload: GroupKeyPackageUpload(
               kind: MlsKeyPackageKind.consumable,
@@ -158,7 +166,10 @@ void main() {
         _jsonResponse(200, {'keypackage_count': 0}),
       ]);
       final lastResort =
-          await DioGroupKeyPackageRepository(_client(lastResortAdapter)).upload(
+          await DioGroupKeyPackageRepository(
+            _client(lastResortAdapter),
+            const FixedServerConfig.fallback(),
+          ).upload(
             deviceId: _device,
             upload: GroupKeyPackageUpload(
               kind: MlsKeyPackageKind.lastResort,
@@ -172,11 +183,16 @@ void main() {
 
   test('claim request rejects duplicate or malformed target ids locally', () {
     expect(
-      () => groupKeyPackageClaimJson(const [_peerDevice, _peerDevice]),
+      () => groupKeyPackageClaimJson(const [
+        _peerDevice,
+        _peerDevice,
+      ], claimMax: ServerConfig.fallback.claimMax),
       throwsA(isA<GroupKeyPackageFormatException>()),
     );
     expect(
-      () => groupKeyPackageClaimJson(const ['not-a-device']),
+      () => groupKeyPackageClaimJson(const [
+        'not-a-device',
+      ], claimMax: ServerConfig.fallback.claimMax),
       throwsA(isA<GroupKeyPackageFormatException>()),
     );
   });

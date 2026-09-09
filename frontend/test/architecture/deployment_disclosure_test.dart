@@ -79,7 +79,7 @@ void main() {
   test('the disclosure revision moves whenever the disclosure moves', () {
     // ADR-045 rejects periodic re-consent - repetition of an unchanged warning
     // measurably destroys it - and makes re-consent content-triggered instead.
-    expect(DeploymentDisclosure.privateExperimental.revision, 7);
+    expect(DeploymentDisclosure.privateExperimental.revision, 8);
 
     final english = _catalogue('lib/l10n/app_en.arb');
 
@@ -100,6 +100,11 @@ void main() {
       'permanent notice while it is on. Nothing about any of this is '
       'guaranteed, so do not rely on it for anything urgent.',
     );
+    // Two wordings for one point, and both are pinned. The second states the
+    // deployment's own retention window; the first is what a reader is shown
+    // until `GET /api/v1/config` has answered, because `ENVELOPE_TTL_DAYS` has
+    // no other observable and this build's default would be a guess stated as
+    // fact (revision 8).
     expect(
       english['disclosureMessagesExpireUnread'],
       'A message waits on the server only until your phone collects it. After '
@@ -107,6 +112,13 @@ void main() {
       'deleted and never arrives, and you will not be told which messages '
       'those were. If you go a long time without opening the app, assume you '
       'have missed some.',
+    );
+    expect(
+      english['disclosureMessagesExpireUnreadDays'],
+      'A message waits on the server only until your phone collects it. '
+      'Anything still waiting after {days} days is deleted and never arrives, '
+      'and you will not be told which messages those were. If you go a long '
+      'time without opening the app, assume you have missed some.',
     );
     expect(
       english['disclosureDeviceOnlyHistory'],
@@ -343,25 +355,39 @@ void main() {
     const disclosure = DeploymentDisclosure.privateExperimental;
 
     test('a current reader is asked nothing', () {
-      expect(disclosure.requiresReacknowledgement(7), isFalse);
-      expect(disclosure.changedSince(7), isEmpty);
+      expect(disclosure.requiresReacknowledgement(8), isFalse);
+      expect(disclosure.changedSince(8), isEmpty);
     });
 
-    test('a reader from revision 5 or 6 sees only the group point', () {
-      // ADR-055 withheld the group surface and ADR-056 reopened it on the one
-      // ABI that was measured. Both moved the same single point, so a reader
-      // from either revision is owed that point and nothing else - everything
-      // else they accepted still stands, and re-showing it would be the
-      // repetition ADR-045 rejects.
-      for (final accepted in const [5, 6]) {
-        expect(disclosure.requiresReacknowledgement(accepted), isTrue);
-        expect(
-          disclosure.changedSince(accepted),
-          {DisclosurePoint.experimentalGroups},
-          reason: 'a reader from revision $accepted',
-        );
-      }
+    test('a reader from revision 7 sees only the retention point', () {
+      // The client can state the deployment's retention window for the first
+      // time. Nothing else moved, so nothing else is re-shown - repeating an
+      // unchanged warning is what ADR-045 rejects.
+      expect(disclosure.requiresReacknowledgement(7), isTrue);
+      expect(disclosure.changedSince(7), {
+        DisclosurePoint.messagesExpireUnread,
+      });
     });
+
+    test(
+      'a reader from revision 5 or 6 sees the group and retention points',
+      () {
+        // ADR-055 withheld the group surface and ADR-056 reopened it on the one
+        // ABI that was measured; revision 8 moved the retention point. Nothing
+        // else they accepted has changed.
+        for (final accepted in const [5, 6]) {
+          expect(disclosure.requiresReacknowledgement(accepted), isTrue);
+          expect(
+            disclosure.changedSince(accepted),
+            {
+              DisclosurePoint.messagesExpireUnread,
+              DisclosurePoint.experimentalGroups,
+            },
+            reason: 'a reader from revision $accepted',
+          );
+        }
+      },
+    );
 
     test('a reader from revision 4 sees exactly what moved', () {
       expect(disclosure.requiresReacknowledgement(4), isTrue);

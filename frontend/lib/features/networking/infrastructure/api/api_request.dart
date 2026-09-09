@@ -31,30 +31,24 @@ final class PayloadLimits {
 }
 
 /// Wire constants copied from the authoritative backend API documents.
+///
+/// What is left here is what `GET /api/v1/config` does not publish. The batch
+/// ceilings, the envelope buckets and the attachment buckets it *does* publish
+/// have gone: an operator may move any of them between two restarts, and a
+/// client holding a copy would disagree with the deployment it is talking to.
+/// `ServerConfig` is where those live now, read through
+/// `ServerConfigSnapshot`.
 abstract final class ApiContractLimits {
-  static const maximumEnvelopeTargets = 256;
-  static const maximumAcknowledgementIds = 200;
-  static const maximumClaimDeviceIds = 100;
   static const maximumDeviceLogRecords = 50;
   static const maximumWebSocketFrameBytes = 524288;
   static const maximumSignalCharacters = 16384;
-  static const maximumAttachmentBytes = 67108864;
 
-  static const envelopeBuckets = {1024, 4096, 16384, 65536, 262144};
   static const profileBuckets = {1024, 4096};
   static const labelBuckets = {256, 1024};
   static const nameBuckets = {256, 1024};
   static const keyPackageBuckets = {4096, 16384};
   static const deviceLogBuckets = {256, 1024};
   static const backupBuckets = {4096, 16384, 65536, 262144, 1048576};
-  static const attachmentBuckets = {
-    65536,
-    262144,
-    1048576,
-    4194304,
-    16777216,
-    67108864,
-  };
 
   static const smallJson = PayloadLimits(
     maximumRequestBytes: 64 * 1024,

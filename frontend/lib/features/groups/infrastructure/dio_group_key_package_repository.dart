@@ -4,11 +4,13 @@ import 'package:communication_platform/features/groups/domain/group_key_package_
 import 'package:communication_platform/features/groups/infrastructure/group_key_package_api_dtos.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 
 final class DioGroupKeyPackageRepository implements GroupKeyPackageRemotePort {
-  const DioGroupKeyPackageRepository(this.client);
+  const DioGroupKeyPackageRepository(this.client, this.config);
 
   final DioRestClient client;
+  final ServerConfigSnapshot config;
 
   @override
   Future<Result<int>> fetchConsumableCount({required String deviceId}) => client
@@ -65,7 +67,10 @@ final class DioGroupKeyPackageRepository implements GroupKeyPackageRemotePort {
         ApiRequest<ClaimedGroupKeyPackagesResponseDto>(
           method: RestMethod.post,
           path: '/api/v1/users/$userId/keypackages/claim',
-          body: groupKeyPackageClaimJson(deviceIds),
+          body: groupKeyPackageClaimJson(
+            deviceIds,
+            claimMax: config.current.claimMax,
+          ),
           decode: ClaimedGroupKeyPackagesResponseDto.fromJson,
           acceptedStatusCodes: const {200},
           authentication: AuthenticationRequirement.full,

@@ -4,6 +4,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
+import 'package:communication_platform/app/dependencies/server_config_providers.dart';
 import 'package:communication_platform/app/dependencies/settings.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
@@ -68,6 +69,7 @@ class _CommunicationPlatformAppState
   ProviderSubscription<MessageDeliveryStage>? _deliverySubscription;
   ProviderSubscription<MessageAlertStage>? _alertSubscription;
   ProviderSubscription<SustainedDeliveryStatus>? _sustainedSubscription;
+  ProviderSubscription<ServerConfigStage>? _serverConfigSubscription;
 
   @override
   void initState() {
@@ -111,6 +113,16 @@ class _CommunicationPlatformAppState
         (previous, next) {},
         fireImmediately: true,
       );
+      // The published limits are read here for the same reason, and read
+      // exactly once: the operator's numbers belong to the deployment rather
+      // than to a screen, and nothing waits for them. The application is
+      // already running on the stored answer, or on its own constants, by the
+      // time this starts.
+      _serverConfigSubscription = ref.listenManual(
+        serverConfigControllerProvider,
+        (previous, next) {},
+        fireImmediately: true,
+      );
       WidgetsBinding.instance.addObserver(this);
     }
     _router = createAppRouter(
@@ -145,6 +157,7 @@ class _CommunicationPlatformAppState
     if (_sustainedSubscription != null) {
       WidgetsBinding.instance.removeObserver(this);
     }
+    _serverConfigSubscription?.close();
     _sustainedSubscription?.close();
     _alertSubscription?.close();
     _deliverySubscription?.close();

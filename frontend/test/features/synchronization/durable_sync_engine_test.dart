@@ -176,6 +176,53 @@ void main() {
       expect(rows.single.nextAttemptAt, isNull);
     });
 
+    test('a 5xx keeps the send owed, whichever of the three it was', () async {
+      // These three used to arrive as `unknown`, because the mapper had no
+      // name for them and every 5xx fell through to the catch-all. Naming them
+      // must not change what they mean: an outage, a disk the operator has to
+      // free and an internal failure are all facts about the server, so
+      // retiring a message on one would tell somebody their message failed
+      // because a server hiccuped once.
+      for (final code in const [
+        BackendFailureCode.unavailable,
+        BackendFailureCode.storageFull,
+        BackendFailureCode.serverError,
+      ]) {
+        await database.delete(database.pendingSendPreparations).go();
+        await owe('application:${code.name}', code.name);
+        final preparer = FailingPreparer(BackendFailure(code));
+
+        final report = await engineWith(preparer).synchronize();
+
+        expect(report, isA<FailureResult<SyncRunReport>>(), reason: code.name);
+        final owed = await database
+            .select(database.pendingSendPreparations)
+            .getSingle();
+        expect(owed.state, 0, reason: code.name);
+        expect(owed.nextAttemptAt, isA<DateTime>(), reason: code.name);
+      }
+    });
+
+    test('a body the route refuses whole retires the send', () async {
+      // The other half of the `413` pair. `payload_too_large` is decided
+      // against these bytes: the same body answers the same way forever, so
+      // holding it in the queue would be a message that never leaves and never
+      // says so.
+      await owe('application:ff', 'ff');
+      final preparer = FailingPreparer(
+        const BackendFailure(BackendFailureCode.payloadTooLarge),
+      );
+
+      final report = await engineWith(preparer).synchronize();
+
+      expect(report, isA<Success<SyncRunReport>>());
+      final row = await database
+          .select(database.pendingSendPreparations)
+          .getSingle();
+      expect(row.state, 1);
+      expect(row.nextAttemptAt, isNull);
+    });
+
     test(
       'an engine with no preparer is the engine that was there before',
       () async {
@@ -435,7 +482,7 @@ void main() {
     final retryAfter = policy.delayFor(
       attempt: 8,
       failure: const BackendFailure(
-        BackendFailureCode.rateLimited,
+        BackendFailureCode.throttled,
         retryAfter: Duration(minutes: 2),
       ),
       jitter: const MaximumJitter(),
@@ -583,6 +630,91 @@ void main() {
         await database.select(database.staleDeviceRefreshRequests).get(),
         isEmpty,
       );
+    },
+  );
+
+  test('a full mailbox keeps the device, its session and its item', () async {
+    // A full device is live. Recording it as stale would delete a working
+    // pairwise session and drop a member out of a conversation over an
+    // inbox its owner has simply not emptied.
+    await database
+        .into(database.pairwiseSessions)
+        .insert(
+          PairwiseSessionsCompanion.insert(
+            localDeviceId: uuid(1),
+            remoteDeviceId: uuid(60),
+            opaqueCryptoStateHandle: Uint8List.fromList([7]),
+            stateVersion: 1,
+          ),
+        );
+    await engine.queuePreparedOperation(
+      operationId: 'full-operation',
+      eventId: 'full-event',
+      targets: [
+        PreparedOutboxTarget(
+          recipientUserId: 'full-user',
+          recipientDeviceId: uuid(60),
+          exactCiphertext: blob(60),
+        ),
+        PreparedOutboxTarget(
+          recipientUserId: 'live-user',
+          recipientDeviceId: uuid(61),
+          exactCiphertext: blob(61),
+        ),
+      ],
+    );
+    remote.fullDeviceIds.add(uuid(60));
+
+    expect(await engine.synchronize(), isA<Success<SyncRunReport>>());
+
+    final rows = await database.select(database.outboxOperations).get();
+    final held = rows.singleWhere((row) => row.recipientDeviceId == uuid(60));
+    expect(held.attemptState, OutboxAttemptState.retryWait.index);
+    expect(held.nextAttemptAt, isA<DateTime>());
+    expect(held.terminalAt, isNull);
+    expect(
+      rows.singleWhere((row) => row.recipientDeviceId == uuid(61)).attemptState,
+      OutboxAttemptState.accepted.index,
+    );
+    // Neither the session nor the owner's device list is touched: nothing
+    // about this device has changed.
+    expect(
+      await database.select(database.pairwiseSessions).get(),
+      hasLength(1),
+    );
+    expect(staleRefresh.users, isEmpty);
+    expect(
+      await database.select(database.staleDeviceRefreshRequests).get(),
+      isEmpty,
+    );
+  });
+
+  test(
+    'an answer that does not account for the batch is not recorded',
+    () async {
+      await engine.queuePreparedOperation(
+        operationId: 'unaccounted-operation',
+        eventId: 'unaccounted-event',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'user',
+            recipientDeviceId: uuid(62),
+            exactCiphertext: blob(62),
+          ),
+        ],
+      );
+      // Counted as written *and* reported full: the two cannot both be true,
+      // and a client that took the count would report a delivery that did not
+      // happen.
+      remote.overstatedAcceptance = true;
+
+      // The run reports the malformed answer rather than swallowing it, and
+      // the batch is left waiting rather than recorded as delivered.
+      expect(await engine.synchronize(), isA<FailureResult<SyncRunReport>>());
+
+      final row = await database.select(database.outboxOperations).getSingle();
+      expect(row.attemptState, OutboxAttemptState.retryWait.index);
+      expect(row.terminalAt, isNull);
     },
   );
 
@@ -758,6 +890,7 @@ void main() {
         batch: outbox,
         acceptance: OutboxAcceptance(accepted: 0, staleDeviceIds: {uuid(72)}),
         now: clock.now(),
+        retryFullAt: clock.now().add(const Duration(minutes: 5)),
       );
       expect(failedStale, isA<FailureResult<void>>());
       expect(
@@ -844,8 +977,10 @@ final class FakeSyncRemote implements SyncRemotePort {
   final List<OutboxBatch> sentBatches = [];
   final List<List<String>> acknowledgedIds = [];
   final Set<String> staleDeviceIds = {};
+  final Set<String> fullDeviceIds = {};
   int sendFailuresRemaining = 0;
   int acknowledgementFailuresRemaining = 0;
+  bool overstatedAcceptance = false;
   int prunedThrough = 0;
 
   @override
@@ -880,14 +1015,23 @@ final class FakeSyncRemote implements SyncRemotePort {
         TransportFailure(TransportFailureKind.timeout),
       );
     }
-    final stale = batch.targets
+    final targets = batch.targets
         .map((target) => target.recipientDeviceId)
-        .where(staleDeviceIds.contains)
         .toSet();
+    final stale = targets.where(staleDeviceIds.contains).toSet();
+    final full = targets
+        .where(fullDeviceIds.contains)
+        .toSet()
+        .difference(stale);
     return Result.success(
       OutboxAcceptance(
-        accepted: batch.targets.length - stale.length,
+        accepted: overstatedAcceptance
+            ? batch.targets.length
+            : batch.targets.length - stale.length - full.length,
         staleDeviceIds: stale,
+        fullDeviceIds: overstatedAcceptance
+            ? batch.targets.map((target) => target.recipientDeviceId).toSet()
+            : full,
       ),
     );
   }

@@ -24,6 +24,41 @@ source of truth.
 - [Vault API](../../backend/vault/API.md)
 - [Voice Rooms API](../../backend/voicerooms/API.md)
 
+## The error vocabulary
+
+Every error of every route is one envelope, `{"code": ..., "detail": ...}`. The code
+table is authoritative in [core API](../../backend/core/API.md); what follows is what
+the client does with it, and is binding on this side.
+
+- **Branch on `code`, never on `detail`.** A status is not a branch either: two pairs
+  share one. `mapBackendFailure` is the only place a wire code becomes a client value,
+  and `BackendFailureCode` holds one value per code, named after it.
+- **Never show a `detail` string.** It is the server's wording, unreviewed and
+  unlocalized. Nothing but the code and the `Retry-After` seconds crosses the mapper,
+  which is what makes that rule structural rather than a habit.
+- **Read a validation `detail` field path as a flat dotted string** — `otpks.0.pub` —
+  not as a nested object. `invalid_request` is the one code whose `detail` is an object
+  at all.
+- **No error body echoes request input**, and a `500` carries no traceback.
+
+Two pairs share a status and mean different things. Each half gets its own words on
+the screen:
+
+| Pair | Which | What it means | What the client does |
+|---|---|---|---|
+| `429` / `503` | `throttled` | This client asked too often | Read `Retry-After` and back off. The same request works after the wait |
+| | `unavailable` | The server is saturated, or a store it needs is gone | Retry with a backoff of the client's own. No wait is published |
+| `413` / `503` | `quota_exceeded` | The account's upload allowance for this UTC day is spent | Hold the attachment. A retry before 00:00 UTC answers the same way |
+| | `storage_full` | The server's disk is below its free-space floor | Retry later. It is not the account's fault, nothing was charged, and the operator has to free space |
+
+`503 voice_unconfigured` is a third thing at that status and is not a backoff at all:
+the deployment serves no voice, so the client offers no call rather than retrying.
+
+Four codes were deleted from the client because no route answers them: `bad_request`
+(now `invalid_request`), `token_not_valid` (now `invalid_token`), `device_scope_required`
+(returned by nothing — it stays in the server's vocabulary and nothing reaches it), and
+`keypackage_limit` (its route is gone with MLS).
+
 ## Contract status
 
 The former device-enrollment circularity is resolved. The binding flow is now

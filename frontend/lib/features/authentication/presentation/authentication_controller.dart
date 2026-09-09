@@ -342,13 +342,11 @@ final class AuthenticationController extends Notifier<AuthenticationViewState> {
       AuthenticationMessage.accountInactive,
     BackendFailure(code: BackendFailureCode.usernameTaken) =>
       AuthenticationMessage.usernameTaken,
-    BackendFailure(code: BackendFailureCode.rateLimited) =>
+    BackendFailure(code: BackendFailureCode.throttled) =>
       AuthenticationMessage.rateLimited,
     BackendFailure(code: BackendFailureCode.tokenRevoked) =>
       AuthenticationMessage.revoked,
-    BackendFailure(
-      code: BackendFailureCode.invalidToken || BackendFailureCode.tokenNotValid,
-    ) =>
+    BackendFailure(code: BackendFailureCode.invalidToken) =>
       AuthenticationMessage.sessionExpired,
     TransportFailure() => AuthenticationMessage.offline,
     SecurityFailure(kind: SecurityFailureKind.malformedServerResponse) =>

@@ -192,9 +192,7 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   /// there is no rotation left to have lost.
   bool _endsSession(Failure failure) => switch (failure) {
     BackendFailure(
-      code: BackendFailureCode.invalidToken ||
-          BackendFailureCode.tokenNotValid ||
-          BackendFailureCode.tokenRevoked,
+      code: BackendFailureCode.invalidToken || BackendFailureCode.tokenRevoked,
     ) =>
       true,
     AuthenticationFailure(kind: AuthenticationFailureKind.sessionExpired) =>

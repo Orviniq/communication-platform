@@ -118,7 +118,7 @@ void main() {
               .having(
                 (failure) => failure.code,
                 'code',
-                BackendFailureCode.rateLimited,
+                BackendFailureCode.throttled,
               )
               .having(
                 (failure) => failure.retryAfter,

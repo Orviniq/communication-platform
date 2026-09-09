@@ -11,6 +11,7 @@ import 'package:communication_platform/features/synchronization/domain/sync_mode
 final class SyncEngineLimits {
   const SyncEngineLimits({
     this.drainPageSize = 100,
+    this.acknowledgementBatchSize = 200,
     this.maximumDrainPagesPerRun = 100,
     this.maximumInspectionsPerRun = 1000,
     this.maximumAcknowledgementBatchesPerRun = 100,
@@ -19,7 +20,8 @@ final class SyncEngineLimits {
     this.maximumStaleRefreshesPerRun = 32,
     this.maximumInspectionAttempts = 8,
     this.minimumInspectionRetry = const Duration(seconds: 1),
-  }) : assert(drainPageSize >= 1 && drainPageSize <= 100),
+  }) : assert(drainPageSize >= 1),
+       assert(acknowledgementBatchSize >= 1),
        assert(maximumDrainPagesPerRun > 0),
        assert(maximumInspectionsPerRun > 0),
        assert(maximumAcknowledgementBatchesPerRun > 0),
@@ -28,7 +30,19 @@ final class SyncEngineLimits {
        assert(maximumStaleRefreshesPerRun > 0),
        assert(maximumInspectionAttempts > 0);
 
+  /// How many envelopes one page asks for, and how many ids one
+  /// acknowledgement carries.
+  ///
+  /// Both are what this run *wants*, not what the deployment permits. The
+  /// deployment's own ceilings — `drain_page_max` and `ack_max` — are held
+  /// against these by the adapters that can see them, so a run that asks for
+  /// more than an operator allows is cut down rather than refused, and this
+  /// layer needs to know none of those numbers. They stay separate settings so
+  /// a run with reason to take smaller bites — a background catch-up on a
+  /// metered connection — still can.
   final int drainPageSize;
+  final int acknowledgementBatchSize;
+
   final int maximumDrainPagesPerRun;
   final int maximumInspectionsPerRun;
   final int maximumAcknowledgementBatchesPerRun;
@@ -79,7 +93,7 @@ final class SyncRetryPolicy {
     required JitterSource jitter,
   }) {
     if (failure case BackendFailure(
-      code: BackendFailureCode.rateLimited,
+      code: BackendFailureCode.throttled,
       retryAfter: final retryAfter?,
     )) {
       return retryAfter;
@@ -480,6 +494,18 @@ final class DurableSyncEngine {
         batch: batch,
         acceptance: acceptance,
         now: now,
+        // A full mailbox is cleared by its owner collecting their post and by
+        // nothing this device can do, so the item waits out the ordinary
+        // backoff rather than being re-offered on the next pass of this run.
+        // The attempt is the batch's, so a device that stays full backs off
+        // further each time instead of spending the run on refusals.
+        retryFullAt: now.add(
+          retryPolicy.delayFor(
+            attempt: batch.attempt,
+            failure: const StorageFailure(StorageFailureKind.capacityExceeded),
+            jitter: _jitter,
+          ),
+        ),
       );
       if (recorded case FailureResult(failure: final failure)) {
         return Result.failure(failure);
@@ -686,7 +712,7 @@ final class DurableSyncEngine {
       final now = _clock.now();
       final batchResult = await _store.beginAcknowledgementBatch(
         now: now,
-        maximumIds: 200,
+        maximumIds: limits.acknowledgementBatchSize,
       );
       if (batchResult case FailureResult(failure: final failure)) {
         return Result.failure(failure);
@@ -765,13 +791,24 @@ final class DurableSyncEngine {
     return const Result.success(null);
   }
 
+  /// Whether one answer accounts for exactly the batch that was sent.
+  ///
+  /// Every device the server names must be one this batch addressed, and
+  /// `accepted` must be the batch less the two kinds it did not write: the
+  /// stale devices, which are gone, and the full ones, which are live and out
+  /// of room. An answer that does not add up is not a partial success to
+  /// record — it is a response this client cannot act on, so the batch is
+  /// retried whole.
   bool _isValidAcceptance(OutboxBatch batch, OutboxAcceptance acceptance) {
     final targetIds = batch.targets
         .map((target) => target.recipientDeviceId)
         .toSet();
     return targetIds.containsAll(acceptance.staleDeviceIds) &&
+        targetIds.containsAll(acceptance.fullDeviceIds) &&
         acceptance.accepted ==
-            batch.targets.length - acceptance.staleDeviceIds.length;
+            batch.targets.length -
+                acceptance.staleDeviceIds.length -
+                acceptance.fullDeviceIds.length;
   }
 
   bool _isPermanentSendFailure(Failure failure) {
@@ -781,8 +818,12 @@ final class DurableSyncEngine {
     return failure is BackendFailure &&
         const {
           BackendFailureCode.invalidRequest,
-          BackendFailureCode.badRequest,
           BackendFailureCode.badBucket,
+          // The route refused this body's size or this method outright. Both
+          // are client defects, and sending the same bytes again answers the
+          // same way for as long as the outbox keeps trying.
+          BackendFailureCode.payloadTooLarge,
+          BackendFailureCode.methodNotAllowed,
         }.contains(failure.code);
   }
 
@@ -807,9 +848,16 @@ final class DurableSyncEngine {
     CancellationFailure() => true,
     AuthenticationFailure() => true,
     BackendFailure(:final code) =>
-      code == BackendFailureCode.rateLimited ||
+      code == BackendFailureCode.throttled ||
           code == BackendFailureCode.quotaExceeded ||
-          // Every 5xx the backend mapper cannot name arrives as `unknown`.
+          // Every 5xx: an outage, a disk the operator has to free, an internal
+          // failure, and whatever a proxy answered that the mapper could not
+          // name. None of them is a fact about these bytes, so none of them
+          // may retire the work — the alternative is a message dropped
+          // because a server hiccuped once.
+          code == BackendFailureCode.unavailable ||
+          code == BackendFailureCode.storageFull ||
+          code == BackendFailureCode.serverError ||
           code == BackendFailureCode.unknown,
     CryptoCoreFailure(:final code) =>
       code == CryptoCoreFailureCode.resourceExhausted ||

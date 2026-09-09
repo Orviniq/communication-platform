@@ -8,6 +8,7 @@ import 'package:communication_platform/features/networking/domain/realtime_event
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/dio_websocket_gateway.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/socket_connector.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -180,6 +181,7 @@ void main() {
         connector: MultiSocketConnector(),
         tokenCoordinator: FakeSocketTokenCoordinator(),
         reconnectHook: RecordingReconnectHook(),
+        config: const FixedServerConfig.fallback(),
       ),
       throwsArgumentError,
     );
@@ -272,6 +274,7 @@ DioWebSocketGateway gatewayFor({
   connector: connector,
   tokenCoordinator: tokenCoordinator ?? FakeSocketTokenCoordinator(),
   reconnectHook: hook ?? RecordingReconnectHook(),
+  config: const FixedServerConfig.fallback(),
 );
 
 final class FakeSocketConnection implements SocketConnection {

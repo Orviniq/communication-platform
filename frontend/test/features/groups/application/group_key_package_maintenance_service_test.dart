@@ -128,7 +128,7 @@ void main() {
     () async {
       final harness = _Harness(count: 19)
         ..remote.failures.add(
-          const BackendFailure(BackendFailureCode.rateLimited),
+          const BackendFailure(BackendFailureCode.throttled),
         );
 
       final first = await harness.service.maintain(

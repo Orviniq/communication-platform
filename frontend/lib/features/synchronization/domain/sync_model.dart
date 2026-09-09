@@ -177,14 +177,36 @@ final class PendingSendPreparation {
   final int attempt;
 }
 
+/// What `POST /api/v1/envelopes` answered about one batch.
+///
+/// The three fields are three different outcomes for the devices named in the
+/// batch, and conflating any two of them loses a message
+/// (`backend/CLIENT_CONTRACT.md` §F).
 final class OutboxAcceptance {
   OutboxAcceptance({
     required this.accepted,
     required Set<String> staleDeviceIds,
-  }) : staleDeviceIds = Set.unmodifiable(staleDeviceIds);
+    Set<String> fullDeviceIds = const {},
+  }) : staleDeviceIds = Set.unmodifiable(staleDeviceIds),
+       fullDeviceIds = Set.unmodifiable(fullDeviceIds);
 
+  /// How many items the server actually wrote. Neither a stale device's nor a
+  /// full device's item is among them.
   final int accepted;
+
+  /// Devices that are gone. Their sessions are dead, they leave the fan-out,
+  /// and the user who owned them needs a fresh device list.
   final Set<String> staleDeviceIds;
+
+  /// Devices that are **live** and whose mailbox has reached
+  /// `mailbox_max_bytes`.
+  ///
+  /// Nothing about the device is wrong and nothing about the session has
+  /// changed: the owner has not collected their post. The item is offered
+  /// again later, and the device stays in the session set — dropping it here
+  /// would silently remove a live participant from a conversation, which is
+  /// exactly the failure a stale device is supposed to signal.
+  final Set<String> fullDeviceIds;
 }
 
 final class AcknowledgementBatch {

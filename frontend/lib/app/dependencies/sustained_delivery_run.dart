@@ -7,6 +7,7 @@ import 'package:communication_platform/app/dependencies/deferred_delivery_catch_
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
@@ -166,7 +167,11 @@ Future<SustainedRunOutcome> _hold(
     realtime.attach(
       container
           .read(networkingFoundationProvider)
-          .realtimeGateway(realtime, keepAlive: sustainedKeepAlive),
+          .realtimeGateway(
+            realtime,
+            config: container.read(serverConfigSnapshotProvider),
+            keepAlive: sustainedKeepAlive,
+          ),
     );
     supervisor = SyncLifecycleSupervisor(
       engine: engine,

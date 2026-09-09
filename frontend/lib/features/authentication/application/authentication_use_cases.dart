@@ -202,7 +202,7 @@ final class EraseAccount
         );
       case FailureResult(
         failure: BackendFailure(
-          code: BackendFailureCode.rateLimited,
+          code: BackendFailureCode.throttled,
           retryAfter: final retryAfter,
         ),
       ):

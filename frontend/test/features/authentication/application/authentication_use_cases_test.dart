@@ -180,7 +180,7 @@ void main() {
           ),
           Result<void>.failure(
             BackendFailure(
-              BackendFailureCode.rateLimited,
+              BackendFailureCode.throttled,
               retryAfter: Duration(minutes: 15),
             ),
           ),

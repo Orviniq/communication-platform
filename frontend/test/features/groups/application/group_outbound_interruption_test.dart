@@ -270,6 +270,7 @@ void main() {
             staleDeviceIds: const {},
           ),
           now: now,
+          retryFullAt: now.add(const Duration(minutes: 5)),
         );
       }
       expect(sentTargets, 2);
