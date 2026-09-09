@@ -93,7 +93,7 @@ final class SyncRetryPolicy {
     required JitterSource jitter,
   }) {
     if (failure case BackendFailure(
-      code: BackendFailureCode.rateLimited,
+      code: BackendFailureCode.throttled,
       retryAfter: final retryAfter?,
     )) {
       return retryAfter;
@@ -818,7 +818,6 @@ final class DurableSyncEngine {
     return failure is BackendFailure &&
         const {
           BackendFailureCode.invalidRequest,
-          BackendFailureCode.badRequest,
           BackendFailureCode.badBucket,
         }.contains(failure.code);
   }
@@ -844,7 +843,7 @@ final class DurableSyncEngine {
     CancellationFailure() => true,
     AuthenticationFailure() => true,
     BackendFailure(:final code) =>
-      code == BackendFailureCode.rateLimited ||
+      code == BackendFailureCode.throttled ||
           code == BackendFailureCode.quotaExceeded ||
           // Every 5xx the backend mapper cannot name arrives as `unknown`.
           code == BackendFailureCode.unknown,

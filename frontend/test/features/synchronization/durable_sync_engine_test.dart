@@ -435,7 +435,7 @@ void main() {
     final retryAfter = policy.delayFor(
       attempt: 8,
       failure: const BackendFailure(
-        BackendFailureCode.rateLimited,
+        BackendFailureCode.throttled,
         retryAfter: Duration(minutes: 2),
       ),
       jitter: const MaximumJitter(),

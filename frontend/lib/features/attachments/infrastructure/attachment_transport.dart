@@ -236,10 +236,10 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
 }
 
 Failure _statusFailure(int? status) => switch (status) {
-  401 => const BackendFailure(BackendFailureCode.tokenNotValid),
+  401 => const BackendFailure(BackendFailureCode.invalidToken),
   403 => const BackendFailure(BackendFailureCode.scopeForbidden),
   404 => const BackendFailure(BackendFailureCode.notFound),
   413 => const BackendFailure(BackendFailureCode.quotaExceeded),
-  429 => const BackendFailure(BackendFailureCode.rateLimited),
+  429 => const BackendFailure(BackendFailureCode.throttled),
   _ => const SecurityFailure(SecurityFailureKind.malformedServerResponse),
 };

@@ -395,7 +395,7 @@ final class SyncLifecycleSupervisor {
       failure is TransportFailure ||
       failure is AuthenticationFailure ||
       (failure is BackendFailure &&
-          failure.code == BackendFailureCode.rateLimited);
+          failure.code == BackendFailureCode.throttled);
 
   /// Retires the reconnect backoff after a cycle that demonstrably worked.
   ///

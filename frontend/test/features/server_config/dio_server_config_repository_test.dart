@@ -71,7 +71,7 @@ void main() {
       isA<BackendFailure>().having(
         (failure) => failure.code,
         'code',
-        BackendFailureCode.rateLimited,
+        BackendFailureCode.throttled,
       ),
     );
   });

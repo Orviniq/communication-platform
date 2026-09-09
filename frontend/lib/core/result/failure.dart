@@ -177,28 +177,36 @@ final class CancellationFailure extends Failure {
 enum CancellationFailureKind { requestedByUser, lifecycleInterrupted }
 
 /// Stable backend reasons. Arbitrary backend `detail` values never cross this type.
+///
+/// One value per `code` the surface answers, named after it. The wire
+/// vocabulary is fixed and small, so a name that is not the code's own is a
+/// second spelling of the same fact and drifts from it — which is what
+/// `bad_request`, `token_not_valid`, `device_scope_required` and
+/// `keypackage_limit` did before they were deleted from here.
 enum BackendFailureCode {
   invalidRequest,
-  badRequest,
   usernameTaken,
   invalidCredentials,
   accountInactive,
   invalidToken,
-  tokenNotValid,
   tokenRevoked,
   scopeForbidden,
-  deviceScopeRequired,
   forbidden,
   notFound,
+  methodNotAllowed,
   badBucket,
   staleVersion,
   identityRequired,
   deviceLimit,
   prekeyLimit,
-  keypackageLimit,
+  deviceLogLimit,
+  payloadTooLarge,
   quotaExceeded,
+  throttled,
+  serverError,
+  storageFull,
+  unavailable,
   voiceUnconfigured,
-  rateLimited,
   unknown,
 }
 
@@ -214,24 +222,30 @@ final class BackendFailure extends Failure {
     BackendFailureCode.invalidCredentials ||
     BackendFailureCode.accountInactive ||
     BackendFailureCode.invalidToken ||
-    BackendFailureCode.tokenNotValid ||
     BackendFailureCode.tokenRevoked ||
     BackendFailureCode.scopeForbidden ||
-    BackendFailureCode.deviceScopeRequired ||
     BackendFailureCode.forbidden => FailureCategory.authentication,
-    BackendFailureCode.quotaExceeded => FailureCategory.storage,
+    // The day's allowance and the server's disk are both storage, and they are
+    // still two different sentences on a screen: see [BackendFailureCode].
+    BackendFailureCode.quotaExceeded ||
+    BackendFailureCode.storageFull => FailureCategory.storage,
     BackendFailureCode.voiceUnconfigured => FailureCategory.unsupportedProtocol,
-    BackendFailureCode.rateLimited => FailureCategory.transport,
+    // Backing off, an outage and an internal failure are all "the server, not
+    // these bytes". None of them is decided against the request in hand.
+    BackendFailureCode.throttled ||
+    BackendFailureCode.unavailable ||
+    BackendFailureCode.serverError => FailureCategory.transport,
     BackendFailureCode.invalidRequest ||
-    BackendFailureCode.badRequest ||
     BackendFailureCode.usernameTaken ||
     BackendFailureCode.notFound ||
+    BackendFailureCode.methodNotAllowed ||
     BackendFailureCode.badBucket ||
     BackendFailureCode.staleVersion ||
     BackendFailureCode.identityRequired ||
     BackendFailureCode.deviceLimit ||
     BackendFailureCode.prekeyLimit ||
-    BackendFailureCode.keypackageLimit ||
+    BackendFailureCode.deviceLogLimit ||
+    BackendFailureCode.payloadTooLarge ||
     BackendFailureCode.unknown => FailureCategory.validation,
   };
 }

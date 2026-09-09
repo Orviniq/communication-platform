@@ -272,7 +272,7 @@ void main() {
         eraseResults: const [
           Result.failure(
             BackendFailure(
-              BackendFailureCode.rateLimited,
+              BackendFailureCode.throttled,
               retryAfter: Duration(seconds: 754),
             ),
           ),
@@ -292,7 +292,7 @@ void main() {
         eraseResults: const [
           Result.failure(
             BackendFailure(
-              BackendFailureCode.rateLimited,
+              BackendFailureCode.throttled,
               retryAfter: Duration(seconds: 20),
             ),
           ),
