@@ -1,3 +1,4 @@
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/domain/authentication_model.dart';
@@ -120,9 +121,13 @@ final class _EraseAccountFormState extends ConsumerState<EraseAccountForm> {
         // the rest do not. Colour is the emphasis and never the meaning: the
         // sentence says what it says with the styling stripped off.
         _Statement(l10n.eraseAccountPeerCopies, emphasis: true),
+        // `attachment_ttl_days`, the deployment's own window, rather than the
+        // default this build was written against. It was a knowing copy until
+        // the configuration route was read; an operator who shortened or
+        // lengthened the window now changes this sentence with it.
         _Statement(
           l10n.eraseAccountAttachments(
-            AccountErasureDisclosure.attachmentRetentionDays,
+            ref.watch(publishedLimitsProvider).attachmentTtlDays,
           ),
         ),
         _Statement(l10n.eraseAccountUsernameFreed),

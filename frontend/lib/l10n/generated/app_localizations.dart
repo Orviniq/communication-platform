@@ -920,6 +920,12 @@ abstract class AppLocalizations {
   /// **'A message waits on the server only until your phone collects it. After a time set by whoever runs the server, whatever is still waiting is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.'**
   String get disclosureMessagesExpireUnread;
 
+  /// No description provided for @disclosureMessagesExpireUnreadDays.
+  ///
+  /// In en, this message translates to:
+  /// **'A message waits on the server only until your phone collects it. Anything still waiting after {days} days is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.'**
+  String disclosureMessagesExpireUnreadDays(int days);
+
   /// No description provided for @disclosureDeviceOnlyHistory.
   ///
   /// In en, this message translates to:

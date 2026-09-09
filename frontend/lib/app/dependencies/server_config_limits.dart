@@ -57,3 +57,13 @@ final serverConfigSnapshotProvider = Provider<ServerConfigSnapshot>((ref) {
   ref.onDispose(follower.close);
   return follower;
 });
+
+/// The limits in force, for anything that rebuilds.
+///
+/// [serverConfigSnapshotProvider] is for callers that cannot wait and cannot
+/// rebuild; this is for the ones that can. A screen watching it redraws when
+/// the deployment's answer arrives, which matters for the two numbers a screen
+/// states in words.
+final publishedLimitsProvider = Provider<ServerConfig>(
+  (ref) => ref.watch(serverConfigProvider).value ?? ServerConfig.fallback,
+);

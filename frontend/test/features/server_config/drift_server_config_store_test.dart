@@ -34,6 +34,32 @@ void main() {
     attachmentBuckets: {65536, 262144},
     signalBuckets: {1024},
     voiceConfigured: true,
+    // A stored row is a row the route once answered, so what comes back out of
+    // it says so — which is what lets the one number with no other observable
+    // be stated to a user.
+    fromDeployment: true,
+  );
+
+  /// A second answer, so that "replaced" is not confused with "forgotten": the
+  /// fallback would read back as the deployment's own, and correctly, because a
+  /// stored row is one the route answered whatever its values happen to be.
+  const republished = ServerConfig(
+    envelopeTtlDays: 3,
+    attachmentTtlDays: 10,
+    attachmentDailyBytes: 1048576,
+    mailboxMaxBytes: 2097152,
+    maxDevicesPerUser: 2,
+    maxDeviceLogRecords: 100,
+    sessionTokenDays: 7,
+    sendBatchMax: 16,
+    ackMax: 8,
+    drainPageMax: 4,
+    claimMax: 2,
+    envelopeBuckets: {1024},
+    attachmentBuckets: {65536},
+    signalBuckets: {1024},
+    voiceConfigured: false,
+    fromDeployment: true,
   );
 
   setUp(() {
@@ -67,14 +93,14 @@ void main() {
 
     test('a later answer replaces the earlier one', () async {
       await store.write(published);
-      await store.write(ServerConfig.fallback);
+      await store.write(republished);
 
-      expect(await store.read(), ServerConfig.fallback);
+      expect(await store.read(), republished);
     });
 
     test('it is one row, whatever the answer is', () async {
       await store.write(published);
-      await store.write(ServerConfig.fallback);
+      await store.write(republished);
 
       final rows = await database.select(database.localPreferences).get();
 

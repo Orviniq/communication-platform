@@ -74,22 +74,6 @@ final class AccountSessionBoundary {
   final bool securitySetupComplete;
 }
 
-/// The one number the erasure confirmation has to state and cannot yet ask for.
-abstract final class AccountErasureDisclosure {
-  /// How long an attachment this account uploaded stays on the server after the
-  /// account is gone, from `ATTACH_TTL_DAYS` in `backend/config/settings/base.py`
-  /// — the default this deployment runs.
-  ///
-  /// A copy, and knowingly one. The authoritative value is
-  /// `attachment_ttl_days` from `GET /api/v1/config`, which an operator may
-  /// change and which nothing in this client reads yet; a later phase replaces
-  /// this constant with that field. Until then the wording says *up to*, which
-  /// is the only form of the sentence a hard-coded number can honestly take:
-  /// it stays true if the operator's window is shorter, and a longer one is
-  /// the case this must be revisited for.
-  static const int attachmentRetentionDays = 30;
-}
-
 /// What `DELETE /api/v1/me` answered, as the three states a screen can act on.
 ///
 /// The route's other answers are ordinary failures and stay in

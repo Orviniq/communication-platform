@@ -481,6 +481,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'A message waits on the server only until your phone collects it. After a time set by whoever runs the server, whatever is still waiting is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.';
 
   @override
+  String disclosureMessagesExpireUnreadDays(int days) {
+    return 'A message waits on the server only until your phone collects it. Anything still waiting after $days days is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.';
+  }
+
+  @override
   String get disclosureDeviceOnlyHistory =>
       'Your messages are stored only on this phone. The server keeps no copy of your history and no backup exists, so uninstalling the app destroys it permanently.';
 

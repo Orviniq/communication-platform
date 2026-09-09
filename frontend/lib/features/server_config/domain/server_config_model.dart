@@ -35,6 +35,7 @@ final class ServerConfig {
     required this.attachmentBuckets,
     required this.signalBuckets,
     required this.voiceConfigured,
+    this.fromDeployment = false,
   }) : assert(envelopeTtlDays > 0, 'a retention window is at least one day'),
        assert(attachmentTtlDays > 0, 'a retention window is at least one day'),
        assert(attachmentDailyBytes > 0, 'an allowance admits one upload'),
@@ -59,6 +60,9 @@ final class ServerConfig {
   /// [voiceConfigured] falls back to `false`. A deployment serves no voice
   /// unless `TURN_URLS` is set, and a client that assumed otherwise would offer
   /// a call the relay route answers `503 voice_unconfigured` to.
+  ///
+  /// [fromDeployment] is false here and true nowhere else in this file: these
+  /// are numbers to run on, not numbers to tell a user.
   static const fallback = ServerConfig(
     envelopeTtlDays: 7,
     attachmentTtlDays: 30,
@@ -129,6 +133,21 @@ final class ServerConfig {
   /// deployment serves no voice at all, rather than that voice is failing.
   final bool voiceConfigured;
 
+  /// Whether these numbers came from the deployment, or are this build's own.
+  ///
+  /// It is not on the wire and never could be: it says where the value came
+  /// from, not what it is. Almost nothing needs it, because almost every limit
+  /// here is one the server enforces anyway — a client holding a stale
+  /// `send_batch_max` learns the real one from a `413` and loses nothing but a
+  /// round trip.
+  ///
+  /// [envelopeTtlDays] is the exception, and is the reason this exists.
+  /// It has no other observable: a client cannot learn it from a refusal,
+  /// because nothing refuses. So a sentence that tells a user how long an
+  /// undelivered message survives is either the operator's number or a guess
+  /// presented as fact, and only this distinguishes them.
+  final bool fromDeployment;
+
   /// The largest attachment this deployment accepts, which is the top bucket.
   int get largestAttachmentBucket => attachmentBuckets.last;
 
@@ -148,6 +167,7 @@ final class ServerConfig {
           other.drainPageMax == drainPageMax &&
           other.claimMax == claimMax &&
           other.voiceConfigured == voiceConfigured &&
+          other.fromDeployment == fromDeployment &&
           _sameBuckets(other.envelopeBuckets, envelopeBuckets) &&
           _sameBuckets(other.attachmentBuckets, attachmentBuckets) &&
           _sameBuckets(other.signalBuckets, signalBuckets);
@@ -166,6 +186,7 @@ final class ServerConfig {
     drainPageMax,
     claimMax,
     voiceConfigured,
+    fromDeployment,
     Object.hashAll(envelopeBuckets),
     Object.hashAll(attachmentBuckets),
     Object.hashAll(signalBuckets),

@@ -198,6 +198,8 @@
   "@disclosureMessagesExpireUnread": {
     "description": "Added at revision 5 (ADR-052). Every earlier revision described delivery only as slow, which an ordinary reader takes to mean eventual. The server prunes undelivered envelopes on a retention timer it does not publish to clients, so late and never are different outcomes and only one of them was disclosed."
   },
+  "disclosureMessagesExpireUnreadDays": "A message waits on the server only until your phone collects it. Anything still waiting after {days} days is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.",
+  "@disclosureMessagesExpireUnreadDays": {"placeholders": {"days": {"type": "int"}}},
   "disclosureDeviceOnlyHistory": "Your messages are stored only on this phone. The server keeps no copy of your history and no backup exists, so uninstalling the app destroys it permanently.",
   "disclosureRecoveryExcludesHistory": "Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.",
   "disclosureExperimentalGroups": "Group chats use experimental encryption that is not finished, not standardised, and has not been independently reviewed. An update can reset a group and delete everything in it. On a phone whose processor it has not been tested on, group chats are switched off instead.",

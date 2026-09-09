@@ -1,4 +1,5 @@
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 
 /// The maturity of one user-facing surface, relative to the maturity the whole
@@ -68,7 +69,17 @@ enum DisclosurePoint {
   /// watermark, which it surfaces for groups and not for one-to-one
   /// conversations, so the text may not promise to name what was lost
   /// (ADR-052).
-  messagesExpireUnread(since: 5),
+  ///
+  /// Revised at revision 8, when `GET /api/v1/config` gave the client the
+  /// number for the first time. Revision 5 could only say "a time set by
+  /// whoever runs the server", because `ENVELOPE_TTL_DAYS` has no other
+  /// observable — nothing refuses, so no error teaches it. The point now
+  /// states the deployment's own window **and only its own**: until the route
+  /// has answered, this build's default is a guess, and a guess in a mandatory
+  /// statement is the class of claim ADR-052 was written to remove. So the
+  /// wording without a number is kept for exactly that case rather than
+  /// deleted.
+  messagesExpireUnread(since: 8),
 
   /// The server stores no history, `allowBackup` is false and the database key
   /// is a non-exportable AndroidKeyStore key, so erasing app data is final.
@@ -108,10 +119,16 @@ enum DisclosurePoint {
   /// The revision at which this point's wording or presence last moved.
   final int since;
 
-  String text(AppLocalizations l10n) => switch (this) {
+  /// [limits] is what the deployment publishes, or this build's defaults when
+  /// it has not answered yet. Only [messagesExpireUnread] reads it, and only to
+  /// decide whether it may state a number at all.
+  String text(AppLocalizations l10n, ServerConfig limits) => switch (this) {
     DisclosurePoint.noIndependentReview => l10n.disclosureNoIndependentReview,
     DisclosurePoint.bestEffortDelivery => l10n.disclosureBestEffortDelivery,
-    DisclosurePoint.messagesExpireUnread => l10n.disclosureMessagesExpireUnread,
+    DisclosurePoint.messagesExpireUnread =>
+      limits.fromDeployment
+          ? l10n.disclosureMessagesExpireUnreadDays(limits.envelopeTtlDays)
+          : l10n.disclosureMessagesExpireUnread,
     DisclosurePoint.deviceOnlyHistory => l10n.disclosureDeviceOnlyHistory,
     DisclosurePoint.recoveryExcludesHistory =>
       l10n.disclosureRecoveryExcludesHistory,
@@ -145,7 +162,7 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 7,
+    revision: 8,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,

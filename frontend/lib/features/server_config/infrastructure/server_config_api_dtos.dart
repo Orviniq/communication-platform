@@ -36,6 +36,10 @@ final class ServerConfigResponseDto {
         attachmentBuckets: _buckets(json['attachment_buckets']),
         signalBuckets: _buckets(json['signal_buckets']),
         voiceConfigured: _boolean(json['voice_configured']),
+        // Anything this parses came from the route, whether it arrived just now
+        // or was stored by an earlier session that read it. There is no other
+        // way to reach a `ServerConfig` with this set.
+        fromDeployment: true,
       ),
     );
   }

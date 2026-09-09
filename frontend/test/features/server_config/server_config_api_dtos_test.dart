@@ -66,11 +66,16 @@ void main() {
       final config = ServerConfigResponseDto.fromJson(body()).config;
 
       expect(config, isNot(ServerConfig.fallback));
+      // Where the answer came from is not one of the published fields, and it
+      // is the whole difference between a default deployment's answer and the
+      // constants this build starts on. Everything else is equal.
+      expect(config.fromDeployment, isTrue);
+      expect(ServerConfig.fallback.fromDeployment, isFalse);
       expect(
         ServerConfigResponseDto.fromJson(
           body()..['voice_configured'] = false,
         ).config,
-        ServerConfig.fallback,
+        _asStoredAnswer(ServerConfig.fallback),
       );
     });
 
@@ -228,3 +233,25 @@ void main() {
     });
   });
 }
+
+/// The same limits, said to have come from the deployment rather than from this
+/// build. `fromDeployment` is not on the wire and cannot be, so a body parsed
+/// from the route always carries it and a constant never does.
+ServerConfig _asStoredAnswer(ServerConfig config) => ServerConfig(
+  envelopeTtlDays: config.envelopeTtlDays,
+  attachmentTtlDays: config.attachmentTtlDays,
+  attachmentDailyBytes: config.attachmentDailyBytes,
+  mailboxMaxBytes: config.mailboxMaxBytes,
+  maxDevicesPerUser: config.maxDevicesPerUser,
+  maxDeviceLogRecords: config.maxDeviceLogRecords,
+  sessionTokenDays: config.sessionTokenDays,
+  sendBatchMax: config.sendBatchMax,
+  ackMax: config.ackMax,
+  drainPageMax: config.drainPageMax,
+  claimMax: config.claimMax,
+  envelopeBuckets: config.envelopeBuckets,
+  attachmentBuckets: config.attachmentBuckets,
+  signalBuckets: config.signalBuckets,
+  voiceConfigured: config.voiceConfigured,
+  fromDeployment: true,
+);
