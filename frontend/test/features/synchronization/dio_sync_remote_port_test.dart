@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
@@ -107,7 +108,11 @@ void main() {
   test('sync diagnostics contain no token, UUID, ciphertext, or URL', () async {
     final diagnostics = CapturingDiagnostics();
     final adapter = QueueAdapter([
-      jsonResponse(202, {'accepted': 1, 'stale_devices': <Object?>[]}),
+      jsonResponse(202, {
+        'accepted': 1,
+        'stale_devices': <Object?>[],
+        'full_devices': <Object?>[],
+      }),
     ]);
     final remote = DioSyncRemotePort(
       client(adapter, diagnostics: diagnostics),
@@ -215,7 +220,7 @@ void main() {
     expect(await remote.drain(limit: 4), isA<FailureResult<DrainPage>>());
   });
 
-  test('a batch past what the routes accept never reaches the wire', () async {
+  test('a batch past what the routes accept never reaches the wire', () {
     final adapter = QueueAdapter([]);
     final remote = DioSyncRemotePort(client(adapter), _narrow);
 
@@ -229,7 +234,11 @@ void main() {
 
   test('an acceptance counting more than the batch is malformed', () async {
     final adapter = QueueAdapter([
-      jsonResponse(202, {'accepted': 3, 'stale_devices': <Object?>[]}),
+      jsonResponse(202, {
+        'accepted': 3,
+        'stale_devices': <Object?>[],
+        'full_devices': <Object?>[],
+      }),
     ]);
     final remote = DioSyncRemotePort(client(adapter), _narrow);
 
@@ -238,6 +247,88 @@ void main() {
       isA<FailureResult<OutboxAcceptance>>(),
     );
   });
+
+  test('a full device is read apart from a stale one', () async {
+    final adapter = QueueAdapter([
+      jsonResponse(202, {
+        'accepted': 0,
+        'stale_devices': [uuid(1)],
+        'full_devices': [uuid(2)],
+      }),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    final result = await remote.send(_batchOf(2));
+
+    expect(result, isA<Success<OutboxAcceptance>>());
+    final acceptance = (result as Success<OutboxAcceptance>).value;
+    expect(acceptance.accepted, 0);
+    expect(acceptance.staleDeviceIds, {uuid(1)});
+    expect(acceptance.fullDeviceIds, {uuid(2)});
+  });
+
+  test(
+    'a body without full_devices is not a send this client accepts',
+    () async {
+      final adapter = QueueAdapter([
+        jsonResponse(202, {'accepted': 1, 'stale_devices': <Object?>[]}),
+      ]);
+      final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+      expect(
+        await remote.send(_batchOf(1)),
+        isA<FailureResult<OutboxAcceptance>>(),
+      );
+    },
+  );
+
+  test('one device cannot be both gone and merely out of room', () async {
+    final adapter = QueueAdapter([
+      jsonResponse(202, {
+        'accepted': 0,
+        'stale_devices': [uuid(1)],
+        'full_devices': [uuid(1)],
+      }),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    expect(
+      await remote.send(_batchOf(1)),
+      isA<FailureResult<OutboxAcceptance>>(),
+    );
+  });
+
+  test(
+    'an item no mailbox could hold is refused rather than retried',
+    () async {
+      final adapter = QueueAdapter([]);
+      // A ceiling of one mebibyte against an item of four. The device would be
+      // reported full on every attempt however patiently its owner collected.
+      final remote = DioSyncRemotePort(client(adapter), _narrow);
+      final batch = OutboxBatch(
+        operationId: 'operation',
+        eventId: 'event',
+        batchIndex: 0,
+        attempt: 1,
+        targets: [
+          OutboxTarget(
+            recipientUserId: 'user',
+            recipientDeviceId: uuid(1),
+            exactCiphertext: Uint8List(4194304),
+          ),
+        ],
+      );
+
+      final result = await remote.send(batch);
+
+      expect(result, isA<FailureResult<OutboxAcceptance>>());
+      expect(
+        (result as FailureResult<OutboxAcceptance>).failure,
+        isA<ValidationFailure>(),
+      );
+      expect(adapter.requests, isEmpty);
+    },
+  );
 }
 
 /// A deployment whose operator moved every ceiling this port measures against.

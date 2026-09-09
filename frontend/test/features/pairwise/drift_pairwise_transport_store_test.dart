@@ -116,6 +116,7 @@ void main() {
         batch: batch,
         acceptance: OutboxAcceptance(accepted: 1, staleDeviceIds: {}),
         now: DateTime.utc(2026, 7, 29, 0, 1),
+        retryFullAt: DateTime.utc(2026, 7, 29, 1),
       );
       message = await database.select(database.messages).getSingle();
       expect(message.status, MessageTransportState.relayAccepted.index);

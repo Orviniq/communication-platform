@@ -1225,31 +1225,50 @@ WHERE c.singleton_id = 1
     }
   }
 
+  /// Three outcomes, one row each, and the two that are not `accepted` are not
+  /// the same thing.
+  ///
+  /// A **stale** device is gone: its row is terminal, its pairwise sessions are
+  /// deleted, and its owner's device list is queued for a refresh. A **full**
+  /// device is live and merely out of room, so its row goes back to waiting
+  /// with a due time, its sessions are untouched, and nothing about its owner
+  /// is re-read. Recording a full device as stale would tear down a working
+  /// session and drop a live participant out of a conversation
+  /// (`backend/CLIENT_CONTRACT.md` §F).
   @override
   Future<Result<void>> recordOutboxAcceptance({
     required OutboxBatch batch,
     required OutboxAcceptance acceptance,
     required DateTime now,
+    required DateTime retryFullAt,
   }) => _write(() async {
     for (final target in batch.targets) {
       final stale = acceptance.staleDeviceIds.contains(
         target.recipientDeviceId,
       );
+      final full =
+          !stale && acceptance.fullDeviceIds.contains(target.recipientDeviceId);
       await (database.update(database.outboxOperations)..where(
             (row) =>
                 row.operationId.equals(batch.operationId) &
                 row.recipientDeviceId.equals(target.recipientDeviceId),
           ))
           .write(
-            OutboxOperationsCompanion(
-              attemptState: Value(
-                stale
-                    ? OutboxAttemptState.stale.index
-                    : OutboxAttemptState.accepted.index,
-              ),
-              nextAttemptAt: const Value(null),
-              terminalAt: Value(now),
-            ),
+            full
+                ? OutboxOperationsCompanion(
+                    attemptState: Value(OutboxAttemptState.retryWait.index),
+                    nextAttemptAt: Value(retryFullAt),
+                    lastAttemptAt: Value(now),
+                  )
+                : OutboxOperationsCompanion(
+                    attemptState: Value(
+                      stale
+                          ? OutboxAttemptState.stale.index
+                          : OutboxAttemptState.accepted.index,
+                    ),
+                    nextAttemptAt: const Value(null),
+                    terminalAt: Value(now),
+                  ),
           );
       if (!stale) {
         continue;

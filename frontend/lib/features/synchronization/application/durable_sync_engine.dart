@@ -494,6 +494,18 @@ final class DurableSyncEngine {
         batch: batch,
         acceptance: acceptance,
         now: now,
+        // A full mailbox is cleared by its owner collecting their post and by
+        // nothing this device can do, so the item waits out the ordinary
+        // backoff rather than being re-offered on the next pass of this run.
+        // The attempt is the batch's, so a device that stays full backs off
+        // further each time instead of spending the run on refusals.
+        retryFullAt: now.add(
+          retryPolicy.delayFor(
+            attempt: batch.attempt,
+            failure: const StorageFailure(StorageFailureKind.capacityExceeded),
+            jitter: _jitter,
+          ),
+        ),
       );
       if (recorded case FailureResult(failure: final failure)) {
         return Result.failure(failure);
@@ -779,13 +791,24 @@ final class DurableSyncEngine {
     return const Result.success(null);
   }
 
+  /// Whether one answer accounts for exactly the batch that was sent.
+  ///
+  /// Every device the server names must be one this batch addressed, and
+  /// `accepted` must be the batch less the two kinds it did not write: the
+  /// stale devices, which are gone, and the full ones, which are live and out
+  /// of room. An answer that does not add up is not a partial success to
+  /// record — it is a response this client cannot act on, so the batch is
+  /// retried whole.
   bool _isValidAcceptance(OutboxBatch batch, OutboxAcceptance acceptance) {
     final targetIds = batch.targets
         .map((target) => target.recipientDeviceId)
         .toSet();
     return targetIds.containsAll(acceptance.staleDeviceIds) &&
+        targetIds.containsAll(acceptance.fullDeviceIds) &&
         acceptance.accepted ==
-            batch.targets.length - acceptance.staleDeviceIds.length;
+            batch.targets.length -
+                acceptance.staleDeviceIds.length -
+                acceptance.fullDeviceIds.length;
   }
 
   bool _isPermanentSendFailure(Failure failure) {

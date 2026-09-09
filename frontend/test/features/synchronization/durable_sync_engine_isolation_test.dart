@@ -438,10 +438,12 @@ final class CountingStore implements DurableSyncStore {
     required OutboxBatch batch,
     required OutboxAcceptance acceptance,
     required DateTime now,
+    required DateTime retryFullAt,
   }) => _inner.recordOutboxAcceptance(
     batch: batch,
     acceptance: acceptance,
     now: now,
+    retryFullAt: retryFullAt,
   );
 
   @override

@@ -690,6 +690,7 @@ final class FakeBackend implements HttpClientAdapter {
         return _json(202, {
           'accepted': messages.length,
           'stale_devices': <Object?>[],
+          'full_devices': <Object?>[],
         });
       default:
         return _json(404, {'code': 'not_found', 'detail': 'unrouted'});

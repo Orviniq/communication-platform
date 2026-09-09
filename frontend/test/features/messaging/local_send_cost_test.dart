@@ -99,6 +99,7 @@ void main() {
         batch: batch!,
         acceptance: OutboxAcceptance(accepted: 1, staleDeviceIds: const {}),
         now: DateTime.utc(2026, 1, 2),
+        retryFullAt: DateTime.utc(2026, 1, 2, 1),
       ),
       isA<Success<void>>(),
     );

@@ -80,6 +80,7 @@ void main() {
         batch: batch!,
         acceptance: OutboxAcceptance(accepted: 3, staleDeviceIds: const {}),
         now: DateTime.utc(2026, 1, 2),
+        retryFullAt: DateTime.utc(2026, 1, 2, 1),
       );
       expect(await depth(), 0);
     },
