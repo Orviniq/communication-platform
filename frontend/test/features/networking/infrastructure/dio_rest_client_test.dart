@@ -11,6 +11,7 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -374,7 +375,7 @@ void main() {
     });
 
     test('drain DTO enforces authoritative page shape and maximum', () {
-      final parsed = DrainEnvelopesResponseDto.fromJson({
+      final parsed = DrainEnvelopesResponseDto.fromJson(<String, Object?>{
         'envelopes': [
           {
             'id': 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b',
@@ -384,12 +385,12 @@ void main() {
         ],
         'has_more': false,
         'pruned_through': 0,
-      });
+      }, ServerConfig.fallback);
       expect(parsed.envelopes.single.sequence, 12);
       expect(parsed.prunedThrough, 0);
 
       expect(
-        () => DrainEnvelopesResponseDto.fromJson({
+        () => DrainEnvelopesResponseDto.fromJson(<String, Object?>{
           'envelopes': [
             {
               'id': 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b',
@@ -399,16 +400,19 @@ void main() {
           ],
           'has_more': false,
           'pruned_through': 0,
-        }),
+        }, ServerConfig.fallback),
         throwsA(isA<MalformedApiBody>()),
       );
 
       expect(
-        () => DrainEnvelopesResponseDto.fromJson({
-          'envelopes': List<Object?>.filled(101, const <String, Object?>{}),
+        () => DrainEnvelopesResponseDto.fromJson(<String, Object?>{
+          'envelopes': List<Object?>.filled(
+            ServerConfig.fallback.drainPageMax + 1,
+            const <String, Object?>{},
+          ),
           'has_more': true,
           'pruned_through': 0,
-        }),
+        }, ServerConfig.fallback),
         throwsA(isA<MalformedApiBody>()),
       );
     });

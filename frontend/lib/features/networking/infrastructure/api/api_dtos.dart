@@ -1,5 +1,5 @@
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
-import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 
 final class MalformedApiBody implements Exception {
   const MalformedApiBody();
@@ -93,7 +93,14 @@ final class EnvelopeDto {
     required this.blob,
   });
 
-  factory EnvelopeDto.fromJson(Object? value) {
+  /// [envelopeBuckets] is `envelope_buckets` from `GET /api/v1/config`.
+  ///
+  /// A blob of any other decoded length is a body this deployment cannot have
+  /// written, because the same set is what its own upload route enforces
+  /// (`400 bad_bucket`). Passing it in rather than reading a constant is what
+  /// lets an operator who changed the set keep a client that still refuses
+  /// everything outside it.
+  factory EnvelopeDto.fromJson(Object? value, Set<int> envelopeBuckets) {
     final json = requireJsonObject(value);
     final id = json['id'];
     final sequence = json['seq'];
@@ -103,7 +110,7 @@ final class EnvelopeDto {
         sequence is! int ||
         sequence < 1 ||
         blob is! String ||
-        !isCanonicalBase64Bucket(blob, ApiContractLimits.envelopeBuckets)) {
+        !isCanonicalBase64Bucket(blob, envelopeBuckets)) {
       throw const MalformedApiBody();
     }
     return EnvelopeDto(id: id, sequence: sequence, blob: blob);
@@ -136,7 +143,13 @@ final class DrainEnvelopesResponseDto {
     required this.prunedThrough,
   });
 
-  factory DrainEnvelopesResponseDto.fromJson(Object? value) {
+  /// [config] supplies both bounds this body is held to: `drain_page_max` is
+  /// the most envelopes one page may carry, and `envelope_buckets` the lengths
+  /// each of them may decode to.
+  factory DrainEnvelopesResponseDto.fromJson(
+    Object? value,
+    ServerConfig config,
+  ) {
     final json = requireJsonObject(value);
     final values = json['envelopes'];
     final hasMore = json['has_more'];
@@ -145,11 +158,13 @@ final class DrainEnvelopesResponseDto {
         hasMore is! bool ||
         prunedThrough is! int ||
         prunedThrough < 0 ||
-        values.length > 100) {
+        values.length > config.drainPageMax) {
       throw const MalformedApiBody();
     }
     return DrainEnvelopesResponseDto(
-      envelopes: values.map(EnvelopeDto.fromJson).toList(growable: false),
+      envelopes: values
+          .map((entry) => EnvelopeDto.fromJson(entry, config.envelopeBuckets))
+          .toList(growable: false),
       hasMore: hasMore,
       prunedThrough: prunedThrough,
     );

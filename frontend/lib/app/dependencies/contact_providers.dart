@@ -1,6 +1,7 @@
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/features/contacts/application/client_authentication_service.dart';
 import 'package:communication_platform/features/contacts/application/contact_services.dart';
 import 'package:communication_platform/features/contacts/application/peer_resolution_cache.dart';
@@ -17,7 +18,10 @@ final authenticatedRestClientProvider = Provider<DioRestClient>(
 );
 
 final contactRemoteProvider = Provider<DioContactRepository>(
-  (ref) => DioContactRepository(ref.watch(authenticatedRestClientProvider)),
+  (ref) => DioContactRepository(
+    ref.watch(authenticatedRestClientProvider),
+    ref.watch(serverConfigSnapshotProvider),
+  ),
 );
 
 final contactLocalProvider = FutureProvider<ContactLocalPort>((ref) async {

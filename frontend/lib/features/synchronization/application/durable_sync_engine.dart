@@ -11,6 +11,7 @@ import 'package:communication_platform/features/synchronization/domain/sync_mode
 final class SyncEngineLimits {
   const SyncEngineLimits({
     this.drainPageSize = 100,
+    this.acknowledgementBatchSize = 200,
     this.maximumDrainPagesPerRun = 100,
     this.maximumInspectionsPerRun = 1000,
     this.maximumAcknowledgementBatchesPerRun = 100,
@@ -19,7 +20,8 @@ final class SyncEngineLimits {
     this.maximumStaleRefreshesPerRun = 32,
     this.maximumInspectionAttempts = 8,
     this.minimumInspectionRetry = const Duration(seconds: 1),
-  }) : assert(drainPageSize >= 1 && drainPageSize <= 100),
+  }) : assert(drainPageSize >= 1),
+       assert(acknowledgementBatchSize >= 1),
        assert(maximumDrainPagesPerRun > 0),
        assert(maximumInspectionsPerRun > 0),
        assert(maximumAcknowledgementBatchesPerRun > 0),
@@ -28,7 +30,19 @@ final class SyncEngineLimits {
        assert(maximumStaleRefreshesPerRun > 0),
        assert(maximumInspectionAttempts > 0);
 
+  /// How many envelopes one page asks for, and how many ids one
+  /// acknowledgement carries.
+  ///
+  /// Both are what this run *wants*, not what the deployment permits. The
+  /// deployment's own ceilings — `drain_page_max` and `ack_max` — are held
+  /// against these by the adapters that can see them, so a run that asks for
+  /// more than an operator allows is cut down rather than refused, and this
+  /// layer needs to know none of those numbers. They stay separate settings so
+  /// a run with reason to take smaller bites — a background catch-up on a
+  /// metered connection — still can.
   final int drainPageSize;
+  final int acknowledgementBatchSize;
+
   final int maximumDrainPagesPerRun;
   final int maximumInspectionsPerRun;
   final int maximumAcknowledgementBatchesPerRun;
@@ -686,7 +700,7 @@ final class DurableSyncEngine {
       final now = _clock.now();
       final batchResult = await _store.beginAcknowledgementBatch(
         now: now,
-        maximumIds: 200,
+        maximumIds: limits.acknowledgementBatchSize,
       );
       if (batchResult case FailureResult(failure: final failure)) {
         return Result.failure(failure);

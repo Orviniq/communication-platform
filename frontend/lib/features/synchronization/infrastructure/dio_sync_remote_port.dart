@@ -6,25 +6,46 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 
+/// The three envelope routes, held to the ceilings this deployment publishes.
+///
+/// Every bound here is `GET /api/v1/config`'s rather than this build's:
+/// `drain_page_max`, `ack_max` and `send_batch_max` are what the routes
+/// themselves enforce, and an operator may move any of them between two
+/// restarts. Reading them per call rather than at construction is what lets the
+/// answer arrive mid-session without the delivery engine being rebuilt around
+/// it.
 final class DioSyncRemotePort implements SyncRemotePort {
-  const DioSyncRemotePort(this.client);
+  const DioSyncRemotePort(this.client, this.config);
 
   final DioRestClient client;
+  final ServerConfigSnapshot config;
 
+  /// [limit] is what the caller wants. What is asked for is that held against
+  /// `drain_page_max`, which is both the route's ceiling and its default: a
+  /// deployment that lowered it would refuse a larger request outright, and a
+  /// refused page is envelopes left undrained for a number the caller has no
+  /// business knowing. Asking for none of them is still a caller fault.
   @override
   Future<Result<DrainPage>> drain({required int limit}) async {
-    if (limit < 1 || limit > 100) {
+    final limits = config.current;
+    if (limit < 1) {
       throw ArgumentError.value(limit, 'limit');
     }
+    final page = limit < limits.drainPageMax ? limit : limits.drainPageMax;
     final result = await client.send(
       ApiRequest<DrainEnvelopesResponseDto>(
         method: RestMethod.get,
         path: '/api/v1/me/envelopes',
-        queryParameters: {'limit': limit},
-        decode: DrainEnvelopesResponseDto.fromJson,
+        queryParameters: {'limit': page},
+        // The same configuration the request was measured against decodes the
+        // response, so a page cannot be refused for a ceiling that moved
+        // between asking and answering.
+        decode: (json) => DrainEnvelopesResponseDto.fromJson(json, limits),
         acceptedStatusCodes: const {200},
         authentication: AuthenticationRequirement.full,
         limits: ApiContractLimits.envelopeDrainJson,
@@ -54,7 +75,8 @@ final class DioSyncRemotePort implements SyncRemotePort {
 
   @override
   Future<Result<int>> acknowledge(List<String> envelopeIds) async {
-    if (envelopeIds.isEmpty || envelopeIds.length > 200) {
+    final limits = config.current;
+    if (envelopeIds.isEmpty || envelopeIds.length > limits.ackMax) {
       throw ArgumentError.value(envelopeIds.length, 'envelopeIds.length');
     }
     final result = await client.send(
@@ -62,7 +84,7 @@ final class DioSyncRemotePort implements SyncRemotePort {
         method: RestMethod.post,
         path: '/api/v1/me/envelopes/ack',
         body: {'ids': envelopeIds},
-        decode: _AcknowledgementResponse.fromJson,
+        decode: (json) => _AcknowledgementResponse.fromJson(json, limits),
         acceptedStatusCodes: const {200},
         authentication: AuthenticationRequirement.full,
         limits: ApiContractLimits.smallJson,
@@ -78,7 +100,8 @@ final class DioSyncRemotePort implements SyncRemotePort {
 
   @override
   Future<Result<OutboxAcceptance>> send(OutboxBatch batch) async {
-    if (batch.targets.isEmpty || batch.targets.length > 256) {
+    final limits = config.current;
+    if (batch.targets.isEmpty || batch.targets.length > limits.sendBatchMax) {
       throw ArgumentError.value(batch.targets.length, 'batch.targets.length');
     }
     final result = await client.send(
@@ -95,7 +118,7 @@ final class DioSyncRemotePort implements SyncRemotePort {
               )
               .toList(growable: false),
         },
-        decode: _SendResponse.fromJson,
+        decode: (json) => _SendResponse.fromJson(json, limits),
         acceptedStatusCodes: const {202},
         authentication: AuthenticationRequirement.full,
         limits: ApiContractLimits.envelopeBatchJson,
@@ -120,10 +143,16 @@ final class DioSyncRemotePort implements SyncRemotePort {
 final class _AcknowledgementResponse {
   const _AcknowledgementResponse(this.deleted);
 
-  factory _AcknowledgementResponse.fromJson(Object? value) {
+  factory _AcknowledgementResponse.fromJson(
+    Object? value,
+    ServerConfig config,
+  ) {
     final json = requireJsonObject(value);
     final deleted = json['deleted'];
-    if (json.length != 1 || deleted is! int || deleted < 0 || deleted > 200) {
+    if (json.length != 1 ||
+        deleted is! int ||
+        deleted < 0 ||
+        deleted > config.ackMax) {
       throw const MalformedApiBody();
     }
     return _AcknowledgementResponse(deleted);
@@ -135,16 +164,16 @@ final class _AcknowledgementResponse {
 final class _SendResponse {
   const _SendResponse({required this.accepted, required this.staleDeviceIds});
 
-  factory _SendResponse.fromJson(Object? value) {
+  factory _SendResponse.fromJson(Object? value, ServerConfig config) {
     final json = requireJsonObject(value);
     final accepted = json['accepted'];
     final stale = json['stale_devices'];
     if (json.length != 2 ||
         accepted is! int ||
         accepted < 0 ||
-        accepted > 256 ||
+        accepted > config.sendBatchMax ||
         stale is! List<Object?> ||
-        stale.length > 256) {
+        stale.length > config.sendBatchMax) {
       throw const MalformedApiBody();
     }
     final ids = <String>{};

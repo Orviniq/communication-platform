@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/networking_foundation.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -110,7 +111,12 @@ final class MessageDeliverySession {
       // coordinator, and terminates its TLS chain at the same provisioned
       // authority as every REST call the application makes.
       realtime.attach(
-        ref.read(networkingFoundationProvider).realtimeGateway(realtime),
+        ref
+            .read(networkingFoundationProvider)
+            .realtimeGateway(
+              realtime,
+              config: ref.read(serverConfigSnapshotProvider),
+            ),
       );
       return MessageDeliverySession._(
         realtime: realtime,

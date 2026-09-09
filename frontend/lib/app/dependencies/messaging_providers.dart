@@ -1,6 +1,7 @@
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
@@ -164,7 +165,10 @@ final pairwiseFanoutCoordinatorProvider =
         peerAuthenticationServiceProvider.future,
       );
       return PairwiseFanoutCoordinator(
-        store: DriftPairwiseTransportStore(database),
+        store: DriftPairwiseTransportStore(
+          database,
+          config: ref.watch(serverConfigSnapshotProvider),
+        ),
         liveDevices: ContactPairwiseLiveDeviceResolverAdapter(
           delegate: authentication,
           currentUserId: scope.userId,

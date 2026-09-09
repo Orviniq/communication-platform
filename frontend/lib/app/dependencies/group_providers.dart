@@ -3,6 +3,7 @@ import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/core/application/ports/beta_mls_crypto_port.dart';
 import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
 import 'package:communication_platform/features/groups/application/group_mls_admission_service.dart';
@@ -91,8 +92,10 @@ final groupMlsCryptoProvider = Provider<GroupMlsCryptoPort>((ref) {
 typedef GroupKeyPackageMaintenanceScope = ({String userId, String deviceId});
 
 final groupKeyPackageRemoteProvider = Provider<GroupKeyPackageRemotePort>(
-  (ref) =>
-      DioGroupKeyPackageRepository(ref.watch(authenticatedRestClientProvider)),
+  (ref) => DioGroupKeyPackageRepository(
+    ref.watch(authenticatedRestClientProvider),
+    ref.watch(serverConfigSnapshotProvider),
+  ),
 );
 
 final groupKeyPackageMaintenanceServiceProvider =

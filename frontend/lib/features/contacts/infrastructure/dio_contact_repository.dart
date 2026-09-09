@@ -9,12 +9,16 @@ import 'package:communication_platform/features/contacts/infrastructure/contact_
 import 'package:communication_platform/features/networking/infrastructure/api/api_dtos.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 
 final class DioContactRepository
     implements DirectoryRemotePort, ProfileRemotePort, PeerIdentityRemotePort {
-  const DioContactRepository(this.client);
+  const DioContactRepository(this.client, this.config);
 
   final DioRestClient client;
+
+  /// The published ceilings this repository holds its own requests to.
+  final ServerConfigSnapshot config;
 
   @override
   Future<Result<List<DirectoryUser>>> fetchActivatedUsers() => client
@@ -140,25 +144,41 @@ final class DioContactRepository
   Future<Result<List<ClaimedPrekeyBundle>>> claimPrekeyBundles({
     required String userId,
     required List<String> deviceIds,
-  }) => client
-      .send(
-        ApiRequest<ClaimedBundlesResponseDto>(
-          method: RestMethod.post,
-          path: '/api/v1/users/$userId/keys/claim',
-          body: {'device_ids': deviceIds},
-          decode: ClaimedBundlesResponseDto.fromJson,
-          acceptedStatusCodes: const {200},
-          authentication: AuthenticationRequirement.full,
-          limits: ApiContractLimits.smallJson,
-          replaySafety: ReplaySafety.never,
-        ),
-      )
-      .then(
-        (result) => result.fold(
-          onSuccess: (value) => Result.success(value.bundles),
-          onFailure: Result.failure,
+  }) {
+    // `claim_max` is what the route enforces, and a body past it is refused
+    // whole — so a claim that would consume one one-time prekey per device
+    // gets none of them. A peer's device set is bounded by
+    // `max_devices_per_user` and cannot ordinarily reach this, which is why
+    // the answer is a refusal rather than a split into several calls: a caller
+    // that arrived here with more device ids than the deployment accepts has
+    // gone wrong somewhere the transport cannot repair.
+    if (deviceIds.length > config.current.claimMax) {
+      return Future.value(
+        const Result.failure(
+          ValidationFailure(ValidationFailureKind.limitExceeded),
         ),
       );
+    }
+    return client
+        .send(
+          ApiRequest<ClaimedBundlesResponseDto>(
+            method: RestMethod.post,
+            path: '/api/v1/users/$userId/keys/claim',
+            body: {'device_ids': deviceIds},
+            decode: ClaimedBundlesResponseDto.fromJson,
+            acceptedStatusCodes: const {200},
+            authentication: AuthenticationRequirement.full,
+            limits: ApiContractLimits.smallJson,
+            replaySafety: ReplaySafety.never,
+          ),
+        )
+        .then(
+          (result) => result.fold(
+            onSuccess: (value) => Result.success(value.bundles),
+            onFailure: Result.failure,
+          ),
+        );
+  }
 
   @override
   Future<Result<PeerDeviceLogPage>> fetchDeviceLog({

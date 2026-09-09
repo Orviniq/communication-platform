@@ -11,6 +11,7 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/socket_connector.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 
 final class DioWebSocketGateway implements RealtimeGateway {
   DioWebSocketGateway({
@@ -18,10 +19,13 @@ final class DioWebSocketGateway implements RealtimeGateway {
     required SocketConnector connector,
     required AccessTokenCoordinator tokenCoordinator,
     required RealtimeReconnectHook reconnectHook,
+    required ServerConfigSnapshot config,
     NetworkDiagnostics diagnostics = const NoopNetworkDiagnostics(),
     this.connectTimeout = const Duration(seconds: 10),
     this.keepAlive,
   }) : _socketUri = _socketUriFor(serverOrigin),
+       // ignore: prefer_initializing_formals
+       _config = config,
        // ignore: prefer_initializing_formals
        _connector = connector,
        // ignore: prefer_initializing_formals
@@ -36,6 +40,13 @@ final class DioWebSocketGateway implements RealtimeGateway {
   final AccessTokenCoordinator _tokenCoordinator;
   final RealtimeReconnectHook _reconnectHook;
   final NetworkDiagnostics _diagnostics;
+
+  /// The ceilings a frame is measured against, read per frame.
+  ///
+  /// A socket outlives the configuration read that corrects them, so the
+  /// alternative to reading here would be a connection dropped and remade for
+  /// numbers the server is enforcing on both sides of it anyway.
+  final ServerConfigSnapshot _config;
   final Duration connectTimeout;
 
   /// How often this connection proves it is still alive, or null to send
@@ -179,7 +190,7 @@ final class DioWebSocketGateway implements RealtimeGateway {
   String _requiredEnvelopeBlob(Map<String, Object?> json) {
     final value = json['blob'];
     if (value is! String ||
-        !isCanonicalBase64Bucket(value, ApiContractLimits.envelopeBuckets)) {
+        !isCanonicalBase64Bucket(value, _config.current.envelopeBuckets)) {
       throw const MalformedApiBody();
     }
     return value;
@@ -274,10 +285,7 @@ final class DioWebSocketGateway implements RealtimeGateway {
     return switch (type) {
       'ack' =>
         _hasOnlyKeys(frame, const {'type', 'ids'}) &&
-            _isUuidList(
-              frame['ids'],
-              maximum: ApiContractLimits.maximumAcknowledgementIds,
-            ),
+            _isUuidList(frame['ids'], maximum: _config.current.ackMax),
       'signal' =>
         _hasOnlyKeys(frame, const {'type', 'to_device', 'blob'}) &&
             _isUuid(frame['to_device']) &&

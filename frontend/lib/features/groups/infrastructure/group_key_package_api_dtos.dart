@@ -71,9 +71,14 @@ Map<String, Object?> groupKeyPackageUploadJson(GroupKeyPackageUpload upload) =>
       'is_last_resort': upload.kind == MlsKeyPackageKind.lastResort,
     };
 
-Map<String, Object?> groupKeyPackageClaimJson(List<String>? deviceIds) {
+/// [claimMax] is `claim_max` from `GET /api/v1/config`, the ceiling the claim
+/// route enforces on one body.
+Map<String, Object?> groupKeyPackageClaimJson(
+  List<String>? deviceIds, {
+  required int claimMax,
+}) {
   if (deviceIds == null) return const {};
-  if (deviceIds.length > ApiContractLimits.maximumClaimDeviceIds ||
+  if (deviceIds.length > claimMax ||
       deviceIds.toSet().length != deviceIds.length ||
       deviceIds.any((id) => !_uuid.hasMatch(id))) {
     throw const GroupKeyPackageFormatException();

@@ -5,6 +5,7 @@ import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/linked_device_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
@@ -32,7 +33,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final durableSyncStoreProvider = FutureProvider<DurableSyncStore>((ref) async {
   final database = await ref.watch(localDatabaseProvider.future);
-  return DriftSyncStore(database);
+  return DriftSyncStore(
+    database,
+    config: ref.watch(serverConfigSnapshotProvider),
+  );
 });
 
 /// Presentation observes this immutable Drift projection only. Socket and REST
@@ -66,7 +70,10 @@ final durableSyncEngineProvider =
       final authentication = await ref.watch(
         peerAuthenticationServiceProvider.future,
       );
-      final store = DriftSyncStore(database);
+      final store = DriftSyncStore(
+        database,
+        config: ref.watch(serverConfigSnapshotProvider),
+      );
       final groupKeyPackageMaintenance =
           GroupProductionGate.privateExperimentalPermit(
                 ref.watch(appEnvironmentProvider),
@@ -102,7 +109,10 @@ final durableSyncEngineProvider =
       );
       final inspector = PairwiseOpaqueEnvelopeInspector(
         localDeviceId: scope.deviceId,
-        store: DriftPairwiseTransportStore(database),
+        store: DriftPairwiseTransportStore(
+          database,
+          config: ref.watch(serverConfigSnapshotProvider),
+        ),
         liveDevices: ContactPairwiseLiveDeviceResolverAdapter(
           delegate: authentication,
           currentUserId: scope.userId,
@@ -138,7 +148,10 @@ final durableSyncEngineProvider =
       );
       return DurableSyncEngine(
         store: store,
-        remote: DioSyncRemotePort(ref.watch(authenticatedRestClientProvider)),
+        remote: DioSyncRemotePort(
+          ref.watch(authenticatedRestClientProvider),
+          ref.watch(serverConfigSnapshotProvider),
+        ),
         inspector: inspector,
         staleDeviceRefresh: ContactStaleDeviceRefreshAdapter(authentication),
         clock: ref.watch(timeSourceProvider),

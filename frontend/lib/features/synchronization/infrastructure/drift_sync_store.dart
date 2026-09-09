@@ -8,6 +8,7 @@ import 'package:communication_platform/features/local_storage/infrastructure/dat
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
@@ -19,6 +20,7 @@ const int _preparationFailed = 1;
 final class DriftSyncStore implements DurableSyncStore {
   const DriftSyncStore(
     this.database, {
+    this.config = const FixedServerConfig.fallback(),
     this.maximumInboxEntries = 10000,
     this.maximumOutboxTargets = 50000,
     this.projectionWindow = const Duration(milliseconds: 250),
@@ -27,6 +29,15 @@ final class DriftSyncStore implements DurableSyncStore {
        assert(projectionWindow >= Duration.zero);
 
   final LocalDatabase database;
+
+  /// The deployment's ceilings, which this store measures the server's answers
+  /// against and cuts its own batches to.
+  ///
+  /// It holds the same numbers the transport does, and must: a page the
+  /// transport accepted and this refused would be an envelope lost between two
+  /// copies of one limit.
+  final ServerConfigSnapshot config;
+
   final int maximumInboxEntries;
   final int maximumOutboxTargets;
 
@@ -261,7 +272,9 @@ WHERE c.singleton_id = 1
           (target) =>
               !_isUuid(target.recipientDeviceId) ||
               target.recipientUserId.isEmpty ||
-              !_isEnvelopeBucket(target.exactCiphertext.length),
+              !config.current.envelopeBuckets.contains(
+                target.exactCiphertext.length,
+              ),
         )) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
@@ -307,7 +320,7 @@ WHERE c.singleton_id = 1
                   eventId: eventId,
                   recipientDeviceId: target.recipientDeviceId.toLowerCase(),
                   recipientUserId: Value(target.recipientUserId),
-                  batchIndex: index ~/ 256,
+                  batchIndex: index ~/ config.current.sendBatchMax,
                   exactRecipientCiphertext: target.exactCiphertext,
                   attemptState: OutboxAttemptState.queued.index,
                 ),
@@ -340,13 +353,15 @@ WHERE c.singleton_id = 1
 
   @override
   Future<Result<void>> persistDrainPage(DrainPage page) async {
-    if (page.envelopes.length > 100 ||
+    if (page.envelopes.length > config.current.drainPageMax ||
         page.prunedThrough < 0 ||
         page.envelopes.any(
           (envelope) =>
               !_isUuid(envelope.id) ||
               envelope.sequence < 1 ||
-              !_isEnvelopeBucket(envelope.exactCiphertext.length),
+              !config.current.envelopeBuckets.contains(
+                envelope.exactCiphertext.length,
+              ),
         )) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.malformedServerResponse),
@@ -682,7 +697,10 @@ WHERE c.singleton_id = 1
         deviceControlEvent: pairwise.deviceControlEvent,
         historyApplicationEvents: pairwise.historyApplicationEvents,
       );
-      final pairwiseStore = DriftPairwiseTransportStore(database);
+      final pairwiseStore = DriftPairwiseTransportStore(
+        database,
+        config: config,
+      );
       if (group == null) {
         return pairwiseStore.commitPreparedReceive(receiveCommit);
       }
@@ -860,11 +878,16 @@ WHERE c.singleton_id = 1
     required DateTime now,
     required int maximumIds,
   }) async {
-    if (maximumIds < 1 || maximumIds > 200) {
+    if (maximumIds < 1) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.limitExceeded),
       );
     }
+    // The caller's budget, held against what one `POST /me/envelopes/ack` body
+    // may carry. A batch past `ack_max` is refused whole, and a refused batch
+    // is envelopes the server keeps re-serving.
+    final ackMax = config.current.ackMax;
+    final batchSize = maximumIds < ackMax ? maximumIds : ackMax;
     try {
       final batch = await database.writeTransaction(() async {
         final interrupted = database.select(database.inboxEnvelopes)
@@ -877,7 +900,7 @@ WHERE c.singleton_id = 1
                     row.nextAttemptAt.isSmallerOrEqualValue(now)),
           )
           ..orderBy([(row) => OrderingTerm.asc(row.sequence)])
-          ..limit(maximumIds);
+          ..limit(batchSize);
         var rows = await interrupted.get();
         if (rows.isEmpty) {
           final ready = database.select(database.inboxEnvelopes)
@@ -890,7 +913,7 @@ WHERE c.singleton_id = 1
                       row.nextAttemptAt.isSmallerOrEqualValue(now)),
             )
             ..orderBy([(row) => OrderingTerm.asc(row.sequence)])
-            ..limit(maximumIds);
+            ..limit(batchSize);
           rows = await ready.get();
         }
         if (rows.isEmpty) {
@@ -1677,10 +1700,6 @@ final class _SyncCapacity implements Exception {
 final class _ServerInvariant implements Exception {
   const _ServerInvariant();
 }
-
-const _envelopeBuckets = {1024, 4096, 16384, 65536, 262144};
-
-bool _isEnvelopeBucket(int length) => _envelopeBuckets.contains(length);
 
 bool _bytesEqual(Uint8List left, Uint8List right) {
   if (left.length != right.length) {

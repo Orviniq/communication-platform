@@ -6,6 +6,8 @@ import 'package:communication_platform/features/networking/application/ports/tok
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/dio_sync_remote_port.dart';
 import 'package:dio/dio.dart';
@@ -24,7 +26,10 @@ void main() {
           'pruned_through': 7,
         }),
       ]);
-      final remote = DioSyncRemotePort(client(adapter));
+      final remote = DioSyncRemotePort(
+        client(adapter),
+        const FixedServerConfig.fallback(),
+      );
 
       final result = await remote.drain(limit: 100);
 
@@ -39,7 +44,10 @@ void main() {
 
   test('non-idempotent send is never transport-replayed by Dio', () async {
     final adapter = QueueAdapter([connectionFailure]);
-    final remote = DioSyncRemotePort(client(adapter));
+    final remote = DioSyncRemotePort(
+      client(adapter),
+      const FixedServerConfig.fallback(),
+    );
     final exact = blob(44);
     final batch = OutboxBatch(
       operationId: 'operation',
@@ -74,7 +82,10 @@ void main() {
         connectionFailure,
         jsonResponse(200, {'deleted': 0}),
       ]);
-      final remote = DioSyncRemotePort(client(adapter));
+      final remote = DioSyncRemotePort(
+        client(adapter),
+        const FixedServerConfig.fallback(),
+      );
       final ids = [uuid(51), uuid(52)];
 
       final result = await remote.acknowledge(ids);
@@ -98,7 +109,10 @@ void main() {
     final adapter = QueueAdapter([
       jsonResponse(202, {'accepted': 1, 'stale_devices': <Object?>[]}),
     ]);
-    final remote = DioSyncRemotePort(client(adapter, diagnostics: diagnostics));
+    final remote = DioSyncRemotePort(
+      client(adapter, diagnostics: diagnostics),
+      const FixedServerConfig.fallback(),
+    );
     final secretBlob = blob(93);
     const token = 'sensitive-access-token';
     final targetId = uuid(93);
@@ -127,7 +141,140 @@ void main() {
     expect(diagnostic, isNot(contains(base64Encode(secretBlob))));
     expect(diagnostic, isNot(contains('/api/v1/envelopes')));
   });
+
+  test(
+    'a page larger than the deployment allows is cut, not refused',
+    () async {
+      final adapter = QueueAdapter([
+        jsonResponse(200, {
+          'envelopes': <Object?>[],
+          'has_more': false,
+          'pruned_through': 0,
+        }),
+      ]);
+      final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+      // The caller's own budget is 100. Refusing it would leave envelopes
+      // undrained over a number the caller has no business knowing.
+      final result = await remote.drain(limit: 100);
+
+      expect(result, isA<Success<DrainPage>>());
+      expect(adapter.requests.single.queryParameters, {'limit': 4});
+    },
+  );
+
+  test('a page under the ceiling is asked for as it stands', () async {
+    final adapter = QueueAdapter([
+      jsonResponse(200, {
+        'envelopes': <Object?>[],
+        'has_more': false,
+        'pruned_through': 0,
+      }),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    await remote.drain(limit: 2);
+
+    expect(adapter.requests.single.queryParameters, {'limit': 2});
+  });
+
+  test('a page past the published ceiling is a malformed answer', () async {
+    final adapter = QueueAdapter([
+      jsonResponse(200, {
+        'envelopes': [
+          for (var index = 0; index < 5; index += 1)
+            {
+              'id': uuid(index + 1),
+              'seq': index + 1,
+              'blob': base64Encode(blob(index + 1)),
+            },
+        ],
+        'has_more': false,
+        'pruned_through': 0,
+      }),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    expect(await remote.drain(limit: 4), isA<FailureResult<DrainPage>>());
+  });
+
+  test('an envelope outside the published buckets is refused', () async {
+    final adapter = QueueAdapter([
+      jsonResponse(200, {
+        'envelopes': [
+          // A length this build was born believing in, and one this deployment
+          // no longer publishes.
+          {'id': uuid(1), 'seq': 1, 'blob': base64Encode(Uint8List(65536))},
+        ],
+        'has_more': false,
+        'pruned_through': 0,
+      }),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    expect(await remote.drain(limit: 4), isA<FailureResult<DrainPage>>());
+  });
+
+  test('a batch past what the routes accept never reaches the wire', () async {
+    final adapter = QueueAdapter([]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    expect(
+      () => remote.acknowledge([uuid(1), uuid(2), uuid(3), uuid(4)]),
+      throwsArgumentError,
+    );
+    expect(() => remote.send(_batchOf(3)), throwsArgumentError);
+    expect(adapter.requests, isEmpty);
+  });
+
+  test('an acceptance counting more than the batch is malformed', () async {
+    final adapter = QueueAdapter([
+      jsonResponse(202, {'accepted': 3, 'stale_devices': <Object?>[]}),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter), _narrow);
+
+    expect(
+      await remote.send(_batchOf(2)),
+      isA<FailureResult<OutboxAcceptance>>(),
+    );
+  });
 }
+
+/// A deployment whose operator moved every ceiling this port measures against.
+const _narrow = FixedServerConfig(
+  ServerConfig(
+    envelopeTtlDays: 3,
+    attachmentTtlDays: 10,
+    attachmentDailyBytes: 1048576,
+    mailboxMaxBytes: 1048576,
+    maxDevicesPerUser: 2,
+    maxDeviceLogRecords: 100,
+    sessionTokenDays: 1,
+    sendBatchMax: 2,
+    ackMax: 3,
+    drainPageMax: 4,
+    claimMax: 2,
+    envelopeBuckets: {1024, 4096},
+    attachmentBuckets: {65536},
+    signalBuckets: {1024},
+    voiceConfigured: false,
+  ),
+);
+
+OutboxBatch _batchOf(int targets) => OutboxBatch(
+  operationId: 'operation',
+  eventId: 'event',
+  batchIndex: 0,
+  attempt: 1,
+  targets: [
+    for (var index = 0; index < targets; index += 1)
+      OutboxTarget(
+        recipientUserId: 'user',
+        recipientDeviceId: uuid(index + 1),
+        exactCiphertext: blob(index + 1),
+      ),
+  ],
+);
 
 typedef AdapterHandler =
     Future<ResponseBody> Function(
