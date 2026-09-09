@@ -8,6 +8,7 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
+import 'package:communication_platform/features/networking/infrastructure/api/backend_error_mapper.dart';
 import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:dio/dio.dart';
 
@@ -107,13 +108,10 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
           },
         ),
       );
-      if (response.statusCode == 413) {
-        return const Result.failure(
-          BackendFailure(BackendFailureCode.quotaExceeded),
-        );
-      }
       if (response.statusCode != 201 || response.data is! Map) {
-        return Result.failure(_statusFailure(response.statusCode));
+        return Result.failure(
+          _responseFailure(response.statusCode, response.data),
+        );
       }
       final json = response.data! as Map;
       final id = json['attachment_id'];
@@ -235,11 +233,36 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
   }
 }
 
+/// The upload's refusal, read from the envelope this route answers with.
+///
+/// The status alone is not enough on this one route. `413` is `quota_exceeded`
+/// — the day's allowance, spent, so the attachment is held until 00:00 UTC —
+/// and it is also `payload_too_large`, a body above the route's cap, which no
+/// waiting fixes. `503` is `storage_full`, the operator's disk, and it is also
+/// `unavailable`, an outage. Reading the status would pick one of each pair by
+/// coin toss, so the `code` decides and the mapper is what knows the
+/// vocabulary.
+Failure _responseFailure(int? status, Object? body) {
+  if (status == null) {
+    return const SecurityFailure(SecurityFailureKind.malformedServerResponse);
+  }
+  final code = body is Map ? body['code'] : null;
+  return mapBackendFailure(
+    statusCode: status,
+    wireCode: code is String ? code : null,
+  );
+}
+
+/// The download's refusal.
+///
+/// The body is a byte stream here rather than JSON, so there is no envelope to
+/// read and the status is all there is. It is enough: this route answers
+/// neither of the two shared statuses, because nothing is uploaded to it — no
+/// allowance is spent and no disk fills.
 Failure _statusFailure(int? status) => switch (status) {
   401 => const BackendFailure(BackendFailureCode.invalidToken),
   403 => const BackendFailure(BackendFailureCode.scopeForbidden),
   404 => const BackendFailure(BackendFailureCode.notFound),
-  413 => const BackendFailure(BackendFailureCode.quotaExceeded),
   429 => const BackendFailure(BackendFailureCode.throttled),
   _ => const SecurityFailure(SecurityFailureKind.malformedServerResponse),
 };

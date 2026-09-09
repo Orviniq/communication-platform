@@ -298,6 +298,67 @@ void main() {
       },
     );
 
+    test('the upload reads the code, because two pairs share a status', () async {
+      // `413` is the day's allowance and it is also a body above the route's
+      // cap; `503` is the operator's disk and it is also an outage. The screen
+      // says something different for each, and the sync engine retires a body
+      // that is too large while holding one the day refused — so a status read
+      // without its code would be a coin toss between them.
+      const refusals = <(int, String, BackendFailureCode)>[
+        (413, 'quota_exceeded', BackendFailureCode.quotaExceeded),
+        (413, 'payload_too_large', BackendFailureCode.payloadTooLarge),
+        (503, 'storage_full', BackendFailureCode.storageFull),
+        (503, 'unavailable', BackendFailureCode.unavailable),
+      ];
+      final root = await Directory.systemTemp.createTemp('cp_refusal_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final file = File('${root.path}/blob')
+        ..writeAsBytesSync(Uint8List(65536));
+
+      for (final (status, wire, expected) in refusals) {
+        final dio = Dio();
+        dio.httpClientAdapter = _QueueAdapter([
+          (options, requestStream, cancelFuture) async {
+            await requestStream?.drain<void>();
+            return ResponseBody.fromString(
+              '{"code":"$wire","detail":"sensitive"}',
+              status,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          },
+        ]);
+        final allowance = _RecordingAllowance();
+        final transport = DioAttachmentTransport(
+          serverOrigin: Uri.parse('https://chat.example.test'),
+          tokens: _FullTokenCoordinator(),
+          config: const FixedServerConfig.fallback(),
+          allowance: allowance,
+          clock: const _FixedClock(),
+          dio: dio,
+        );
+
+        final result = await transport.upload(
+          encryptedFile: file,
+          bucketSize: 65536,
+        );
+
+        final failure =
+            (result as FailureResult<AttachmentUploadResponse>).failure;
+        expect(
+          failure,
+          isA<BackendFailure>().having((value) => value.code, 'code', expected),
+          reason: wire,
+        );
+        expect(failure.toString(), isNot(contains('sensitive')));
+        // A refusal spends nothing, whichever of the four it was.
+        expect(allowance.recorded, isEmpty, reason: wire);
+      }
+    });
+
     test('what is left of the day is read before the bytes are sent', () async {
       final dio = Dio();
       dio.httpClientAdapter = _QueueAdapter([]);
