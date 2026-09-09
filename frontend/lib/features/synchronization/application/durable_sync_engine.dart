@@ -819,6 +819,11 @@ final class DurableSyncEngine {
         const {
           BackendFailureCode.invalidRequest,
           BackendFailureCode.badBucket,
+          // The route refused this body's size or this method outright. Both
+          // are client defects, and sending the same bytes again answers the
+          // same way for as long as the outbox keeps trying.
+          BackendFailureCode.payloadTooLarge,
+          BackendFailureCode.methodNotAllowed,
         }.contains(failure.code);
   }
 
@@ -845,7 +850,14 @@ final class DurableSyncEngine {
     BackendFailure(:final code) =>
       code == BackendFailureCode.throttled ||
           code == BackendFailureCode.quotaExceeded ||
-          // Every 5xx the backend mapper cannot name arrives as `unknown`.
+          // Every 5xx: an outage, a disk the operator has to free, an internal
+          // failure, and whatever a proxy answered that the mapper could not
+          // name. None of them is a fact about these bytes, so none of them
+          // may retire the work — the alternative is a message dropped
+          // because a server hiccuped once.
+          code == BackendFailureCode.unavailable ||
+          code == BackendFailureCode.storageFull ||
+          code == BackendFailureCode.serverError ||
           code == BackendFailureCode.unknown,
     CryptoCoreFailure(:final code) =>
       code == CryptoCoreFailureCode.resourceExhausted ||

@@ -176,6 +176,53 @@ void main() {
       expect(rows.single.nextAttemptAt, isNull);
     });
 
+    test('a 5xx keeps the send owed, whichever of the three it was', () async {
+      // These three used to arrive as `unknown`, because the mapper had no
+      // name for them and every 5xx fell through to the catch-all. Naming them
+      // must not change what they mean: an outage, a disk the operator has to
+      // free and an internal failure are all facts about the server, so
+      // retiring a message on one would tell somebody their message failed
+      // because a server hiccuped once.
+      for (final code in const [
+        BackendFailureCode.unavailable,
+        BackendFailureCode.storageFull,
+        BackendFailureCode.serverError,
+      ]) {
+        await database.delete(database.pendingSendPreparations).go();
+        await owe('application:${code.name}', code.name);
+        final preparer = FailingPreparer(BackendFailure(code));
+
+        final report = await engineWith(preparer).synchronize();
+
+        expect(report, isA<FailureResult<SyncRunReport>>(), reason: code.name);
+        final owed = await database
+            .select(database.pendingSendPreparations)
+            .getSingle();
+        expect(owed.state, 0, reason: code.name);
+        expect(owed.nextAttemptAt, isA<DateTime>(), reason: code.name);
+      }
+    });
+
+    test('a body the route refuses whole retires the send', () async {
+      // The other half of the `413` pair. `payload_too_large` is decided
+      // against these bytes: the same body answers the same way forever, so
+      // holding it in the queue would be a message that never leaves and never
+      // says so.
+      await owe('application:ff', 'ff');
+      final preparer = FailingPreparer(
+        const BackendFailure(BackendFailureCode.payloadTooLarge),
+      );
+
+      final report = await engineWith(preparer).synchronize();
+
+      expect(report, isA<Success<SyncRunReport>>());
+      final row = await database
+          .select(database.pendingSendPreparations)
+          .getSingle();
+      expect(row.state, 1);
+      expect(row.nextAttemptAt, isNull);
+    });
+
     test(
       'an engine with no preparer is the engine that was there before',
       () async {
