@@ -60,8 +60,15 @@ abstract final class AppIcons {
     FLucideIcons.bell,
     'notifications',
   );
+  // The second tick means *seen*, and nothing else is allowed to draw it.
+  // Arrival and reading are different claims about different people — one is
+  // about a device, the other about a person — and a reader who has learned
+  // that two ticks means somebody read their message will not re-learn it for
+  // this application. Both arrival states are one tick, told apart by colour
+  // and by the label every one of them carries.
   static const accepted = AppIconData._(FLucideIcons.check, 'accepted');
-  static const delivered = AppIconData._(FLucideIcons.checkCheck, 'delivered');
+  static const delivered = AppIconData._(FLucideIcons.check, 'delivered');
+  static const read = AppIconData._(FLucideIcons.checkCheck, 'read');
   static const jumpDown = AppIconData._(
     FLucideIcons.arrowDown,
     'jumpDown',

@@ -229,3 +229,24 @@ final manageLocalConversationStateProvider =
       final repository = await ref.watch(conversationRepositoryProvider.future);
       return ManageLocalConversationState(repository);
     });
+
+/// Clearing a conversation's unread state *and* telling the sender it was read.
+///
+/// The two halves belong to one call because they answer the same question and
+/// must not be able to disagree: the receipt names exactly the messages the
+/// local mark cleared, so a message can never be reported read here while it is
+/// still unread on this device, and the second call for the same conversation
+/// finds nothing to clear and therefore sends nothing.
+final markConversationVisiblyReadProvider =
+    FutureProvider.family<MarkConversationVisiblyRead, MessagingScope>((
+      ref,
+      scope,
+    ) async {
+      final repository = await ref.watch(conversationRepositoryProvider.future);
+      return MarkConversationVisiblyRead(
+        repository: repository,
+        sender: await ref.watch(
+          sendConversationEventsProvider(scope).future,
+        ),
+      );
+    });
