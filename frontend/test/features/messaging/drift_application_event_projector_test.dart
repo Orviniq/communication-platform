@@ -356,6 +356,149 @@ void main() {
   );
 
   test(
+    "a peer's slow clock does not seat its reply above the message",
+    () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final sent = _id(70, 16);
+      final reply = _id(71, 16);
+      final sentAt = authenticatedAt.millisecondsSinceEpoch;
+      await _apply(
+        database,
+        _commit(
+          eventSeed: 70,
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: currentUser,
+          senderDevice: currentDevice,
+          counter: 1,
+          body: MessageCreateBody(messageId: sent, text: 'the remark'),
+          createdMs: sentAt,
+          localOrigin: true,
+          authenticatedAt: authenticatedAt,
+        ),
+      );
+      await _apply(
+        database,
+        _commit(
+          eventSeed: 71,
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: peerUser,
+          senderDevice: peerDevice,
+          counter: 1,
+          body: MessageCreateBody(messageId: reply, text: 'the laugh'),
+          // Written after the remark, stamped before it, because the phone
+          // that wrote it runs thirty seconds behind.
+          createdMs: sentAt - 30000,
+          authenticatedAt: authenticatedAt.add(const Duration(seconds: 20)),
+        ),
+      );
+      final rows = await database.select(database.messages).get();
+      final remark = rows.singleWhere(
+        (row) => row.messageId == protocolBytesToHex(sent),
+      );
+      final laugh = rows.singleWhere(
+        (row) => row.messageId == protocolBytesToHex(reply),
+      );
+      expect(laugh.orderingMs, greaterThan(remark.orderingMs));
+      // What a bubble shows never contradicts where the bubble sits.
+      expect(
+        laugh.createdAt.millisecondsSinceEpoch,
+        greaterThanOrEqualTo(remark.createdAt.millisecondsSinceEpoch),
+      );
+    },
+  );
+
+  test('a message that really is late keeps the time it was written', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sent = _id(72, 16);
+    final late = _id(73, 16);
+    final sentAt = authenticatedAt.millisecondsSinceEpoch;
+    await _apply(
+      database,
+      _commit(
+        eventSeed: 72,
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: currentUser,
+        senderDevice: currentDevice,
+        counter: 1,
+        body: MessageCreateBody(messageId: sent, text: 'the remark'),
+        createdMs: sentAt,
+        localOrigin: true,
+        authenticatedAt: authenticatedAt,
+      ),
+    );
+    await _apply(
+      database,
+      _commit(
+        eventSeed: 73,
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: peerUser,
+        senderDevice: peerDevice,
+        counter: 1,
+        body: MessageCreateBody(messageId: late, text: 'from the tunnel'),
+        createdMs: sentAt - const Duration(minutes: 10).inMilliseconds,
+        authenticatedAt: authenticatedAt.add(const Duration(minutes: 10)),
+      ),
+    );
+    final row =
+        await (database.select(
+              database.messages,
+            )..where((item) => item.messageId.equals(protocolBytesToHex(late))))
+            .getSingle();
+    expect(row.orderingMs, sentAt - const Duration(minutes: 10).inMilliseconds);
+  });
+
+  test('a corrected sender keeps the order it wrote its messages in', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sentAt = authenticatedAt.millisecondsSinceEpoch;
+    await _apply(
+      database,
+      _commit(
+        eventSeed: 74,
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: currentUser,
+        senderDevice: currentDevice,
+        counter: 1,
+        body: MessageCreateBody(messageId: _id(74, 16), text: 'the remark'),
+        createdMs: sentAt,
+        localOrigin: true,
+        authenticatedAt: authenticatedAt,
+      ),
+    );
+    for (final (seed, behind) in [(75, 30000), (76, 25000)]) {
+      await _apply(
+        database,
+        _commit(
+          eventSeed: seed,
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: peerUser,
+          senderDevice: peerDevice,
+          counter: seed,
+          body: MessageCreateBody(
+            messageId: _id(seed, 16),
+            text: 'laugh $seed',
+          ),
+          createdMs: sentAt - behind,
+          authenticatedAt: authenticatedAt.add(const Duration(seconds: 20)),
+        ),
+      );
+    }
+    final first =
+        await (database.select(database.messages)..where(
+              (item) => item.messageId.equals(protocolBytesToHex(_id(75, 16))),
+            ))
+            .getSingle();
+    final second =
+        await (database.select(database.messages)..where(
+              (item) => item.messageId.equals(protocolBytesToHex(_id(76, 16))),
+            ))
+            .getSingle();
+    expect(second.orderingMs, greaterThan(first.orderingMs));
+  });
+
+  test(
     'one event ID with different canonical bytes invalidates the fact',
     () async {
       final database = LocalDatabase(NativeDatabase.memory());
