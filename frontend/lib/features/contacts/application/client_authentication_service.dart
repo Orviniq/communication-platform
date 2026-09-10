@@ -204,9 +204,17 @@ final class ClientAuthenticationService
     }
     final cachedDevices =
         (cachedDevicesResult as Success<List<PeerPublicDevice>>).value;
+    // Only a peer whose last answer this client accepted may be revalidated
+    // conditionally. A blocked record names an answer that was read and
+    // refused, while the stored device list is the one from before it — so a
+    // `304` hands back the copy that is already known to be wrong, and the
+    // record blocks itself again on it forever. Records written before
+    // [_persistBlocked] stopped keeping the tag still carry one, and this is
+    // what lets those installs read the corrected list on their first attempt
+    // rather than their second.
     final devicesResult = await remote.fetchDevices(
       userId: userId,
-      etag: previous?.etag,
+      etag: _isBlocked(previous?.state) ? null : previous?.etag,
     );
     if (devicesResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -228,7 +236,6 @@ final class ClientAuthenticationService
         userId,
         ContactTrustState.invalidDevice,
         identity: identity,
-        etag: etag,
       );
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.unauthenticatedInput),
@@ -237,10 +244,10 @@ final class ClientAuthenticationService
     if (advertisedHead == null ||
         (previous?.logHeadSequence != null &&
             advertisedHead < previous!.logHeadSequence!)) {
-      return _fork(previous, userId, identity, etag);
+      return _fork(previous, userId, identity);
     }
     if (!_isValidDeviceTransition(cachedDevices, devices)) {
-      return _invalidDevice(previous, userId, identity, etag);
+      return _invalidDevice(previous, userId, identity);
     }
     if (listChanged && advertisedHead == previous?.logHeadSequence) {
       // Device registration, revocation, and prekey rotation are separate
@@ -269,11 +276,11 @@ final class ClientAuthenticationService
         final page = (pageResult as Success<PeerDeviceLogPage>).value;
         if (page.headSequence != advertisedHead ||
             (page.records.isEmpty && expectedSequence <= advertisedHead)) {
-          return _fork(previous, userId, identity, etag);
+          return _fork(previous, userId, identity);
         }
         for (final record in page.records) {
           if (record.sequence != expectedSequence) {
-            return _fork(previous, userId, identity, etag);
+            return _fork(previous, userId, identity);
           }
           final inspectedResult = await crypto.inspectPeerDeviceLog(
             userId: userBytes,
@@ -288,7 +295,6 @@ final class ClientAuthenticationService
               userId,
               ContactTrustState.deviceLogFork,
               identity: identity,
-              etag: etag,
             );
             return Result.failure(failure);
           }
@@ -298,7 +304,7 @@ final class ClientAuthenticationService
               !_same(inspected.previousHash, expectedPrevious) ||
               (record.sequence == advertisedHead &&
                   inspected.identityVersion != identity.version)) {
-            return _fork(previous, userId, identity, etag);
+            return _fork(previous, userId, identity);
           }
           verifiedRecords.add(
             VerifiedDeviceLogRecord(
@@ -314,7 +320,7 @@ final class ClientAuthenticationService
         hasMore = page.hasMore;
       }
       if (after != advertisedHead) {
-        return _fork(previous, userId, identity, etag);
+        return _fork(previous, userId, identity);
       }
     }
 
@@ -327,7 +333,7 @@ final class ClientAuthenticationService
       if (requestedDeviceIds.any(
         (deviceId) => !liveDeviceIds.contains(deviceId),
       )) {
-        return _invalidDevice(previous, userId, identity, etag);
+        return _invalidDevice(previous, userId, identity);
       }
       final claimResult = await remote.claimPrekeyBundles(
         userId: userId,
@@ -338,7 +344,7 @@ final class ClientAuthenticationService
       }
       claimed = (claimResult as Success<List<ClaimedPrekeyBundle>>).value;
       if (claimed.length != requestedDeviceIds.length) {
-        return _invalidDevice(previous, userId, identity, etag);
+        return _invalidDevice(previous, userId, identity);
       }
       for (final deviceId in requestedDeviceIds) {
         final device = devices.singleWhere(
@@ -350,7 +356,7 @@ final class ClientAuthenticationService
         if (matches.length != 1 ||
             !matches.single.hasPostQuantumSignedPrekey ||
             !_bundleMatches(device, matches.single)) {
-          return _invalidDevice(previous, userId, identity, etag);
+          return _invalidDevice(previous, userId, identity);
         }
         final verified = await crypto.verifyClaimedBundle(
           userId: userBytes,
@@ -359,7 +365,7 @@ final class ClientAuthenticationService
           bundle: matches.single,
         );
         if (verified case FailureResult()) {
-          return _invalidDevice(previous, userId, identity, etag);
+          return _invalidDevice(previous, userId, identity);
         }
       }
     }
@@ -506,14 +512,12 @@ final class ClientAuthenticationService
     ContactTrustRecord? previous,
     String userId,
     PeerIdentityPublic identity,
-    String? etag,
   ) async {
     await _persistBlocked(
       previous,
       userId,
       ContactTrustState.deviceLogFork,
       identity: identity,
-      etag: etag,
     );
     return const Result.failure(
       SecurityFailure(SecurityFailureKind.policyBlocked),
@@ -524,26 +528,45 @@ final class ClientAuthenticationService
     ContactTrustRecord? previous,
     String userId,
     PeerIdentityPublic identity,
-    String? etag,
   ) async {
     await _persistBlocked(
       previous,
       userId,
       ContactTrustState.invalidDevice,
       identity: identity,
-      etag: etag,
     );
     return const Result.failure(
       SecurityFailure(SecurityFailureKind.unauthenticatedInput),
     );
   }
 
+  /// Whether this record names an answer this client read and refused.
+  static bool _isBlocked(ContactTrustState? state) => switch (state) {
+    null || ContactTrustState.unverified || ContactTrustState.verified => false,
+    ContactTrustState.invalidDevice ||
+    ContactTrustState.masterKeyChanged ||
+    ContactTrustState.deviceLogFork ||
+    ContactTrustState.identityUnavailable => true,
+  };
+
+  /// Records why this peer is blocked, and forgets the cache validator.
+  ///
+  /// An `ETag` is a claim about the answer a client is *holding*. Every caller
+  /// here refused the answer it read and left the stored device list alone, so
+  /// keeping that answer's tag pointed a later `If-None-Match` at a copy this
+  /// client does not have: the server replied `304`, the refused list came back
+  /// out of local storage, and it was refused again. Nothing else changed for
+  /// as long as the deployment served that representation — which, for an own
+  /// device blocked over its first cross-signature, is forever.
+  ///
+  /// Dropping the tag costs one unconditional device read the next time this
+  /// peer is resolved, and is what lets a client that has already blocked
+  /// itself read the corrected list and recover.
   Future<void> _persistBlocked(
     ContactTrustRecord? previous,
     String userId,
     ContactTrustState state, {
     PeerIdentityPublic? identity,
-    String? etag,
   }) async {
     await local.writeTrust(
       ContactTrustRecord(
@@ -552,7 +575,6 @@ final class ClientAuthenticationService
         identity: identity ?? previous?.identity,
         confirmedMasterPublic: previous?.confirmedMasterPublic,
         attestation: previous?.attestation,
-        etag: etag ?? previous?.etag,
         logHeadSequence: previous?.logHeadSequence,
         logHeadHash: previous?.logHeadHash,
       ),
@@ -606,10 +628,23 @@ final class ClientAuthenticationService
       if (signatureChanged != versionChanged) {
         return false;
       }
-      if (signatureChanged &&
-          (old.bundleVersion == null ||
-              device.bundleVersion != old.bundleVersion! + 1)) {
-        return false;
+      if (signatureChanged) {
+        final version = device.bundleVersion;
+        final previousVersion = old.bundleVersion;
+        // A device is registered unsigned — registration assigns the device id
+        // the canonical bundle covers, so no signature made before the response
+        // can be over the right bytes — and cross-signs itself afterwards. Its
+        // first signature therefore arrives against no version at all, and a
+        // rule that demanded one refused the one transition every device in
+        // this deployment makes, this account's own device included.
+        //
+        // A signature that replaces one this client already read is a different
+        // claim, and still has to move the version on by exactly one: that is
+        // what stops an old bundle being served back in place of a new one.
+        if (version == null ||
+            (previousVersion != null && version != previousVersion + 1)) {
+          return false;
+        }
       }
     }
     return true;
