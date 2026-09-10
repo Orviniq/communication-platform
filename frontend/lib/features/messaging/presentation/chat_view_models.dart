@@ -324,10 +324,6 @@ final class JumpToMessageIntent extends ChatIntent {
   final String messageId;
 }
 
-final class MarkConversationReadIntent extends ChatIntent {
-  const MarkConversationReadIntent();
-}
-
 final class SaveDraftIntent extends ChatIntent {
   const SaveDraftIntent(this.text);
 

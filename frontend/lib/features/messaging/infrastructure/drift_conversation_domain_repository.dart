@@ -714,6 +714,15 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
                       row.deletedForMe.equals(false),
                 ))
                 .get();
+        // Nothing to say, and saying it anyway is not free. This is called
+        // every time the conversation on screen becomes visible or receives
+        // anything, and a `conversations` write is observed by the chat list
+        // whether or not it changed a value: re-deriving every summary for a
+        // count that was already zero is the cost, and an observer that marks
+        // read in response to the write it just caused is the loop.
+        if (unread.isEmpty && conversation.unreadCount == 0) {
+          return const <String>[];
+        }
         if (unread.isNotEmpty) {
           await (database.update(database.messages)..where(
                 (row) =>
@@ -722,6 +731,8 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
               ))
               .write(const MessagesCompanion(unread: Value(false)));
         }
+        // Reached with no unread rows when the aggregate has drifted above
+        // them, which is the one case worth a write that changes nothing else.
         await (database.update(database.conversations)
               ..where((row) => row.conversationId.equals(conversationId)))
             .write(const ConversationsCompanion(unreadCount: Value(0)));

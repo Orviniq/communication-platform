@@ -97,6 +97,95 @@ final class VisibleConversationRegistry with WidgetsBindingObserver {
   }
 }
 
+/// Marks one conversation read for as long as the user is looking at it.
+///
+/// The distinction this exists to hold is between a route being *mounted* and a
+/// conversation being *read*. Mounting is not reading: a chat route stays in
+/// the navigator behind a backgrounded application, and it is built and laid
+/// out before the platform has said the application is in front of anybody. A
+/// mark-read hung on `initState` therefore fires for messages nobody has seen —
+/// the user opens the application and finds them already read.
+///
+/// So the trigger is [VisibleConversationRegistry.conversationId], which is
+/// mounted-and-foregrounded by construction and nothing else, and the marking
+/// is re-run rather than fired once: the application returning to the
+/// foreground is a read, and so is a message arriving into the conversation on
+/// screen. [notify] is what a caller hands the second of those in.
+///
+/// [markRead] must be a no-op when nothing is unread. Marking is a write, a
+/// write is observed, and an observer that calls [notify] back is the ordinary
+/// case rather than a strange one; it is the emptiness of the second pass that
+/// ends the exchange.
+final class VisibleConversationReadMarker {
+  VisibleConversationReadMarker({
+    required this.registry,
+    required this.conversationId,
+    required this.markRead,
+  });
+
+  final VisibleConversationRegistry registry;
+  final String conversationId;
+
+  /// Clears this conversation's unread state. Failure is the caller's to
+  /// absorb: nothing here is user-initiated, so there is nobody to tell.
+  final Future<void> Function() markRead;
+
+  StreamSubscription<void>? _changes;
+  bool _running = false;
+  bool _pending = false;
+  bool _disposed = false;
+
+  /// Begins following visibility, and evaluates what it already says.
+  ///
+  /// The initial evaluation is not redundant with the subscription. A route
+  /// replacing another one for the same conversation registers a value the
+  /// registry already holds, which is correctly not a change and so emits
+  /// nothing.
+  void start() {
+    if (_disposed || _changes != null) {
+      return;
+    }
+    _changes = registry.changes.listen((_) => notify());
+    notify();
+  }
+
+  /// Re-evaluates visibility, and marks read if this conversation has it.
+  void notify() {
+    if (_disposed || registry.conversationId != conversationId) {
+      return;
+    }
+    if (_running) {
+      _pending = true;
+      return;
+    }
+    _running = true;
+    unawaited(_drain());
+  }
+
+  Future<void> _drain() async {
+    try {
+      while (!_disposed && registry.conversationId == conversationId) {
+        _pending = false;
+        await markRead();
+        if (!_pending) {
+          return;
+        }
+      }
+    } finally {
+      _running = false;
+    }
+  }
+
+  void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    unawaited(_changes?.cancel());
+    _changes = null;
+  }
+}
+
 /// Registers the conversation this subtree shows for as long as it is mounted.
 class VisibleConversationScope extends StatefulWidget {
   const VisibleConversationScope({
