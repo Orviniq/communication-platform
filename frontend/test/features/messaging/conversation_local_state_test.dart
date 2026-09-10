@@ -133,6 +133,98 @@ void main() {
     },
   );
 
+  test('marking a conversation read again writes nothing at all', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final repository = DriftConversationDomainRepository(database);
+    await database
+        .into(database.conversations)
+        .insert(
+          ConversationsCompanion.insert(
+            conversationId: 'conversation',
+            kind: ConversationKind.direct.index,
+            peerUserId: const Value('peer'),
+            listProjectionCiphertext: Uint8List.fromList('preview'.codeUnits),
+            sortKey: 10,
+            unreadCount: const Value(1),
+          ),
+        );
+    await database
+        .into(database.messages)
+        .insert(
+          MessagesCompanion.insert(
+            messageId: 'message',
+            conversationId: 'conversation',
+            currentEventId: 'event',
+            projectionCiphertext: Uint8List.fromList('content'.codeUnits),
+            status: MessageTransportState.received.index,
+            revision: 0,
+            createdAt: DateTime.utc(2026, 9, 10),
+            senderUserId: const Value('peer'),
+            senderDeviceId: const Value('peer-device'),
+            orderingMs: const Value(10),
+            orderingEventId: const Value('event'),
+            unread: const Value(true),
+          ),
+        );
+
+    final writes = <Set<TableUpdate>>[];
+    final observed = database
+        .tableUpdates(
+          TableUpdateQuery.onAllTables([
+            database.conversations,
+            database.messages,
+          ]),
+        )
+        .listen(writes.add);
+    addTearDown(observed.cancel);
+
+    expect(
+      await repository.markConversationRead('conversation'),
+      isA<Success<List<String>>>().having(
+        (result) => result.value,
+        'cleared',
+        ['message'],
+      ),
+    );
+    await pumpEventQueue();
+    expect(writes, isNotEmpty);
+
+    // The conversation on screen asks for this every time it becomes visible
+    // and every time anything lands in it. A repeat that rewrote a count that
+    // was already zero would re-derive every summary in the chat list, and
+    // would answer the very observer that provoked it.
+    writes.clear();
+    expect(
+      await repository.markConversationRead('conversation'),
+      isA<Success<List<String>>>().having(
+        (result) => result.value,
+        'cleared',
+        isEmpty,
+      ),
+    );
+    await pumpEventQueue();
+    expect(writes, isEmpty);
+
+    // The aggregate drifting above the rows is still worth one write, because
+    // nothing else will ever bring it back down.
+    await database.customStatement(
+      'UPDATE conversations SET unread_count = 3 '
+      "WHERE conversation_id = 'conversation'",
+    );
+    writes.clear();
+    expect(
+      await repository.markConversationRead('conversation'),
+      isA<Success<List<String>>>(),
+    );
+    await pumpEventQueue();
+    expect(writes, isNotEmpty);
+    expect(
+      (await database.select(database.conversations).getSingle()).unreadCount,
+      0,
+    );
+  });
+
   test(
     'typing expires conservatively and presence means socket count only',
     () async {

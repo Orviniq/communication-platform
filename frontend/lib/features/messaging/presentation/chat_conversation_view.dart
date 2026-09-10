@@ -43,14 +43,6 @@ class _ChatConversationViewState extends State<ChatConversationView> {
   final GlobalKey<ChatComposerBuilderState> _composerKey = GlobalKey();
   String? _highlightedMessageId;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onIntent(const MarkConversationReadIntent());
-    });
-  }
-
   void _handleIntent(ChatIntent intent) {
     if (intent is ReplyToMessageIntent || intent is BeginEditMessageIntent) {
       _composerKey.currentState?.handleIntent(intent);

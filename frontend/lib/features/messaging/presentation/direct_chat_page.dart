@@ -148,6 +148,11 @@ class _ProjectedConversationPageState
   final ChatMessageProjection _timelineProjection = ChatMessageProjection();
   final ChatMessageProjection _pinnedProjection = ChatMessageProjection();
 
+  /// Reading, as distinct from opening. Owned here rather than by the view
+  /// because this is the layer that resolved a conversation identity, and the
+  /// same layer that registers the identity as on screen.
+  VisibleConversationReadMarker? _readMarker;
+
   @override
   void initState() {
     super.initState();
@@ -160,6 +165,48 @@ class _ProjectedConversationPageState
       conversationSummariesProvider(widget.currentUserId),
       (_, _) {},
     );
+    _readMarker = VisibleConversationReadMarker(
+      registry: ref.read(visibleConversationProvider),
+      conversationId: widget.conversationId,
+      markRead: _markRead,
+    );
+    // After the first frame, because the scope that tells the registry this
+    // conversation is on screen is created in `build`, and until it has run
+    // the registry is still naming whatever was on screen before.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _readMarker?.start());
+    // A message that lands in the conversation the user is looking at has been
+    // read by them. Only the window is inspected, which is all this needs to
+    // decide: anything unread outside it is cleared by the same call.
+    ref.listenManual(
+      conversationMessagesProvider((
+        currentUserId: widget.currentUserId,
+        conversationId: widget.conversationId,
+      )),
+      (_, next) {
+        final page = next.value?.page;
+        if (page != null && page.messages.any((message) => message.unread)) {
+          _readMarker?.notify();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _readMarker?.dispose();
+    _readMarker = null;
+    super.dispose();
+  }
+
+  /// Clears this conversation's unread state, silently.
+  ///
+  /// Silence is the point: this runs because the user looked at a screen, not
+  /// because they asked for anything, and storage that cannot be written to
+  /// has nothing to say to them here. The unread state simply stays, and the
+  /// next time the conversation becomes visible this runs again.
+  Future<void> _markRead() async {
+    final manager = await ref.read(manageLocalConversationStateProvider.future);
+    await manager.markRead(widget.conversationId);
   }
 
   @override
@@ -478,14 +525,6 @@ class _ProjectedConversationPageState
           }
         }
         result ??= const Result.success(null);
-      case MarkConversationReadIntent():
-        final manager = await ref.read(
-          manageLocalConversationStateProvider.future,
-        );
-        result = (await manager.markRead(conversationId)).fold(
-          onSuccess: (_) => const Result.success(null),
-          onFailure: Result.failure,
-        );
       default:
         break;
     }
