@@ -303,6 +303,91 @@ void main() {
       },
     );
 
+    test('accepts the first cross-signature a cached device gains', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_unsignedDevice()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.unverified,
+          identity: _identity(),
+          etag: '"old"',
+        );
+
+      final result = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      expect(result, isA<Success<AuthenticatedPeer>>());
+      expect(harness.local.trust?.state, ContactTrustState.unverified);
+      expect(harness.local.devices.single.crossSignature, isNotNull);
+      expect(harness.local.devices.single.bundleVersion, 1);
+    });
+
+    test('refuses a signature that does not move the version on', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_device()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.unverified,
+          identity: _identity(),
+          etag: '"old"',
+        );
+      harness.remote.devices = [
+        PeerPublicDevice(
+          deviceId: _peerDeviceId,
+          identityPublic: _bytes(64, 7),
+          registrationId: 9,
+          crossSignature: _bytes(64, 6),
+          bundleVersion: 3,
+        ),
+      ];
+
+      final result = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      expect(result, isA<FailureResult<AuthenticatedPeer>>());
+      expect(harness.local.trust?.state, ContactTrustState.invalidDevice);
+    });
+
+    test('a blocked record is revalidated without its stored tag', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_unsignedDevice()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.invalidDevice,
+          identity: _identity(),
+          etag: '"stale"',
+        );
+
+      final result = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      expect(result, isA<Success<AuthenticatedPeer>>());
+      expect(harness.remote.etags, [null]);
+    });
+
+    test('a refused device list never becomes a cache validator', () async {
+      final harness = _Harness();
+      harness.remote.devices = [_unsignedDevice()];
+
+      final first = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+      harness.remote.devices = [_device()];
+      final second = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      expect(first, isA<FailureResult<AuthenticatedPeer>>());
+      expect(second, isA<Success<AuthenticatedPeer>>());
+      expect(harness.remote.etags, [null, null]);
+    });
+
     test('own-device claims reject substituted own account identity', () async {
       final harness = _Harness()..remote.identity = _identity(master: 99);
 
@@ -331,6 +416,13 @@ PeerIdentityPublic _identity({int master = 1}) => PeerIdentityPublic(
   userSigningPublic: _bytes(32, 3),
   masterSignature: _bytes(64, 4),
   version: 1,
+);
+
+PeerPublicDevice _unsignedDevice() => PeerPublicDevice(
+  deviceId: _peerDeviceId,
+  identityPublic: _bytes(64, 7),
+  registrationId: 9,
+  bundleVersion: null,
 );
 
 PeerPublicDevice _device() => PeerPublicDevice(
