@@ -912,7 +912,7 @@ class _DeliveryIndicator extends StatelessWidget {
         context.tokens.colors.success,
       ),
       ChatDeliveryViewState.read => (
-        AppIcons.delivered,
+        AppIcons.read,
         context.tokens.colors.accent,
       ),
       ChatDeliveryViewState.failed => (

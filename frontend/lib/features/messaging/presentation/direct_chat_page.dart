@@ -198,15 +198,41 @@ class _ProjectedConversationPageState
     super.dispose();
   }
 
-  /// Clears this conversation's unread state, silently.
+  /// Clears this conversation's unread state and reports it read, silently.
+  ///
+  /// The receipt is what puts the second tick on the sender's copy, so it is
+  /// deliberately on the same trigger as the local mark and no other: the two
+  /// ticks and this device's unread state are then two readings of one fact,
+  /// and neither can claim the user saw something the other says they did not.
+  /// Saved Messages sends nothing, having nobody to send to.
   ///
   /// Silence is the point: this runs because the user looked at a screen, not
-  /// because they asked for anything, and storage that cannot be written to
-  /// has nothing to say to them here. The unread state simply stays, and the
-  /// next time the conversation becomes visible this runs again.
+  /// because they asked for anything, and neither unwritable storage nor an
+  /// unreachable peer has anything to say to them here. The receipt is a
+  /// durable local commit before it is a network call, so one sent with no
+  /// connection is delivered by the ordinary cycle rather than lost; a failure
+  /// earlier than that leaves the state alone, and the next time the
+  /// conversation becomes visible this runs again.
   Future<void> _markRead() async {
-    final manager = await ref.read(manageLocalConversationStateProvider.future);
-    await manager.markRead(widget.conversationId);
+    try {
+      final deviceId = await ref.read(currentMessagingDeviceIdProvider.future);
+      final markRead = await ref.read(
+        markConversationVisiblyReadProvider((
+          userId: widget.currentUserId,
+          deviceId: deviceId,
+        )).future,
+      );
+      await markRead(
+        currentUserId: widget.currentUserId,
+        currentDeviceId: deviceId,
+        conversationId: widget.conversationId,
+        allowReadReceipts: !widget.savedMessages,
+      );
+    } on Object {
+      // Composing the send path can throw where the use case would only have
+      // returned a failure — an identity that cannot be read, most plausibly.
+      // Reading a screen is not a place to raise that.
+    }
   }
 
   @override

@@ -154,6 +154,43 @@ void main() {
     },
   );
 
+  test('a conversation already read reports itself read once', () async {
+    repository
+      ..conversation = const ConversationSummary(
+        conversationId: _directConversationHex,
+        kind: ConversationKind.direct,
+        peerUserId: peerUser,
+        lastMessage: null,
+        lastActivityMs: 0,
+        unreadCount: 1,
+        mutedUntil: null,
+        draft: null,
+        pinnedMessageIds: {},
+      )
+      ..unreadIds = [_messageOne];
+    final useCase = MarkConversationVisiblyRead(
+      repository: repository,
+      sender: sender,
+    );
+    Future<Result<void>> visiblyRead() => useCase(
+      currentUserId: currentUser,
+      currentDeviceId: currentDevice,
+      conversationId: _directConversationHex,
+      allowReadReceipts: true,
+    );
+
+    expect(await visiblyRead(), isA<Success<void>>());
+    expect(fanout.events, hasLength(1));
+
+    // Becoming visible again is the ordinary case, not a strange one: this
+    // runs on every return to the foreground and on every arrival into the
+    // conversation on screen. What bounds the receipts is that the mark has
+    // nothing left to clear, so there is nothing left to report.
+    expect(await visiblyRead(), isA<Success<void>>());
+    expect(await visiblyRead(), isA<Success<void>>());
+    expect(fanout.events, hasLength(1));
+  });
+
   test(
     'durable delivered work is removed only after fan-out is queued',
     () async {
