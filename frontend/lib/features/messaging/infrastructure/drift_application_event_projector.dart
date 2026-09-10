@@ -35,6 +35,17 @@ final class DriftApplicationEventProjector {
   static const int maximumFutureClockSkewMs = 5 * 60 * 1000;
   static const int earliestPlausibleTimestampMs = 946684800000;
 
+  /// How far behind the conversation a sender's clock may be and still be read
+  /// as a clock that is wrong rather than as a message that is late.
+  ///
+  /// Both are real. A phone with no time source drifts, and a phone that was in
+  /// a tunnel sends something genuinely written minutes ago. Nothing in the
+  /// event tells the two apart, so the correction is bounded instead: a minute
+  /// covers the drift of a phone nobody has synchronised, and it is short
+  /// enough that a message which really was late is moved by less than the
+  /// timeline's own display resolution can show.
+  static const int maximumOrderingClockSkewMs = 60 * 1000;
+
   static const int _stateCandidate = 0;
   static const int _stateEventIdConflict = 1;
   static const int _stateCounterConflict = 2;
@@ -148,7 +159,14 @@ final class DriftApplicationEventProjector {
               ),
             );
 
-    final orderingMs = _orderingTimestamp(event, commit.authenticatedAt);
+    // `sort_key` is the newest message already projected into this
+    // conversation, refreshed by `_refreshConversationAggregates` at the end of
+    // every apply. The row is in hand, so the floor costs no read at all.
+    final orderingMs = _orderingTimestamp(
+      event,
+      commit.authenticatedAt,
+      conversation.sortKey,
+    );
     final fact = await _insertEvent(
       commit,
       applyState: _stateCandidate,
@@ -1081,9 +1099,14 @@ final class DriftApplicationEventProjector {
     bool rewriteReactions = true,
     bool rewriteReceipts = true,
   }) async {
+    // The ordering time, not the sender's raw one. They are the same number
+    // wherever the sender's clock agreed with this conversation, and where it
+    // did not, showing the raw one would print the contradiction the ordering
+    // correction exists to remove: a bubble reading 7:09 seated below one
+    // reading 7:10.
     final createdAtMs =
         message.timestampState == MessageTimestampState.plausible
-        ? message.createdMs
+        ? message.orderingMs
         : 0;
     await database
         .into(database.messages)
@@ -1307,17 +1330,42 @@ final class DriftApplicationEventProjector {
     };
   }
 
+  /// Where one event sits in its conversation's total order.
+  ///
+  /// The sender's own clock, which is the only account of when an event was
+  /// written that anyone here has, and which `message-protocol.md` calls a
+  /// display value rather than an authority. An implausible one is refused
+  /// outright, as it always was.
+  ///
+  /// [conversationFloorMs] is what the clock alone cannot supply. Two phones in
+  /// one conversation keep two unsynchronised clocks, and the timeline seated
+  /// every message exactly where its sender's clock said — so a phone running
+  /// half a minute behind put its replies above the messages they answered, on
+  /// both phones, because both computed the same order from the same wrong
+  /// number. Measured here at thirty seconds between two ordinary handsets.
+  ///
+  /// Neither device can read the other's clock. Both know something the clock
+  /// does not: what was already in the conversation. An event that lands in a
+  /// conversation which already holds something newer cannot have been written
+  /// before it, so its ordering time is lifted to sit just after — and only
+  /// then, only forward, and only across the gap a wrong clock can explain.
   int _orderingTimestamp(
     ApplicationEventRecord event,
     DateTime authenticatedAt,
+    int conversationFloorMs,
   ) {
     final maximum =
         authenticatedAt.toUtc().millisecondsSinceEpoch +
         maximumFutureClockSkewMs;
-    return event.createdMs >= earliestPlausibleTimestampMs &&
-            event.createdMs <= maximum
-        ? event.createdMs
-        : 0;
+    if (event.createdMs < earliestPlausibleTimestampMs ||
+        event.createdMs > maximum) {
+      return 0;
+    }
+    if (event.createdMs >= conversationFloorMs ||
+        conversationFloorMs - event.createdMs > maximumOrderingClockSkewMs) {
+      return event.createdMs;
+    }
+    return conversationFloorMs + 1;
   }
 
   bool _referencesAreValid(_EventFact fact) {
