@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
-import 'package:communication_platform/core/application/ports/beta_mls_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/device_control_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
@@ -11,7 +10,6 @@ import 'package:communication_platform/core/application/ports/identity_crypto_po
 import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
@@ -73,54 +71,6 @@ abstract interface class AttachmentCryptoWorker {
   Future<Result<Uint8List>> randomBytes(int length);
 }
 
-abstract interface class BetaMlsCryptoWorker {
-  Future<Result<GeneratedMlsKeyPackages>> generateBetaMlsKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  );
-
-  Future<Result<BetaMlsCommitOutput>> createBetaMlsGroup(
-    BetaMlsCreateRequest request,
-  );
-
-  Future<Result<BetaMlsJoinOutput>> joinBetaMlsGroup(
-    BetaMlsJoinRequest request,
-  );
-
-  Future<Result<BetaMlsCommitOutput>> addBetaMlsMembers(
-    BetaMlsAddMembersRequest request,
-  );
-
-  Future<Result<BetaMlsCommitOutput>> removeBetaMlsMembers(
-    BetaMlsRemoveMembersRequest request,
-  );
-
-  Future<Result<BetaMlsMessageOutput>> sendBetaMlsApplication(
-    BetaMlsSendApplicationRequest request,
-  );
-
-  Future<Result<BetaMlsProcessedMessage>> processBetaMlsMessage(
-    BetaMlsProcessMessageRequest request,
-  );
-
-  Future<Result<BetaMlsMessageOutput>> proposeBetaMlsUpdate(
-    BetaMlsPendingCommitRequest request,
-  );
-
-  Future<Result<BetaMlsCommitOutput>> commitBetaMlsPendingProposals(
-    BetaMlsPendingCommitRequest request,
-  );
-
-  Future<Result<BetaMlsSignedControlOutput>> signBetaMlsControl(
-    BetaMlsSignControlRequest request,
-  );
-
-  Future<Result<BetaMlsSignedControlOutput>> verifyBetaMlsControl(
-    BetaMlsVerifyControlRequest request,
-  );
-
-  Future<Result<Uint8List>> hashBetaMlsObject(BetaMlsHashObjectRequest request);
-}
-
 /// Scope-owned lifecycle wrapper around the platform crypto worker.
 final class CryptoCoreRuntime
     implements
@@ -130,8 +80,7 @@ final class CryptoCoreRuntime
         PairwiseCryptoPort,
         ApplicationProtocolPort,
         DeviceControlCryptoPort,
-        AttachmentCryptoPort,
-        BetaMlsCryptoPort {
+        AttachmentCryptoPort {
   CryptoCoreRuntime({
     required this.worker,
     this.enrollmentWorker,
@@ -139,7 +88,6 @@ final class CryptoCoreRuntime
     this.pairwiseWorker,
     this.applicationWorker,
     this.attachmentWorker,
-    this.betaMlsWorker,
   });
 
   final CryptoCoreWorker worker;
@@ -148,76 +96,7 @@ final class CryptoCoreRuntime
   final PairwiseCryptoWorker? pairwiseWorker;
   final ApplicationProtocolWorker? applicationWorker;
   final AttachmentCryptoWorker? attachmentWorker;
-  final BetaMlsCryptoWorker? betaMlsWorker;
   bool _closed = false;
-
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateBetaMlsKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) {
-    if (_closed || betaMlsWorker == null) {
-      return Future.value(
-        const Result.failure(
-          UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
-        ),
-      );
-    }
-    return betaMlsWorker!.generateBetaMlsKeyPackages(request);
-  }
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> createBetaMlsGroup(
-    BetaMlsCreateRequest request,
-  ) => _withBetaMls((worker) => worker.createBetaMlsGroup(request));
-
-  @override
-  Future<Result<BetaMlsJoinOutput>> joinBetaMlsGroup(
-    BetaMlsJoinRequest request,
-  ) => _withBetaMls((worker) => worker.joinBetaMlsGroup(request));
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> addBetaMlsMembers(
-    BetaMlsAddMembersRequest request,
-  ) => _withBetaMls((worker) => worker.addBetaMlsMembers(request));
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> removeBetaMlsMembers(
-    BetaMlsRemoveMembersRequest request,
-  ) => _withBetaMls((worker) => worker.removeBetaMlsMembers(request));
-
-  @override
-  Future<Result<BetaMlsMessageOutput>> sendBetaMlsApplication(
-    BetaMlsSendApplicationRequest request,
-  ) => _withBetaMls((worker) => worker.sendBetaMlsApplication(request));
-
-  @override
-  Future<Result<BetaMlsProcessedMessage>> processBetaMlsMessage(
-    BetaMlsProcessMessageRequest request,
-  ) => _withBetaMls((worker) => worker.processBetaMlsMessage(request));
-
-  @override
-  Future<Result<BetaMlsMessageOutput>> proposeBetaMlsUpdate(
-    BetaMlsPendingCommitRequest request,
-  ) => _withBetaMls((worker) => worker.proposeBetaMlsUpdate(request));
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> commitBetaMlsPendingProposals(
-    BetaMlsPendingCommitRequest request,
-  ) => _withBetaMls((worker) => worker.commitBetaMlsPendingProposals(request));
-
-  Future<Result<T>> _withBetaMls<T>(
-    Future<Result<T>> Function(BetaMlsCryptoWorker worker) operation,
-  ) {
-    final betaWorker = betaMlsWorker;
-    if (_closed || betaWorker == null) {
-      return Future.value(
-        const Result.failure(
-          UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
-        ),
-      );
-    }
-    return operation(betaWorker);
-  }
 
   @override
   Future<Result<CryptoCoreCapabilities>> capabilities() {
@@ -912,21 +791,6 @@ final class CryptoCoreRuntime
   Future<Result<T>> _unsupported<T>() async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
-
-  @override
-  Future<Result<BetaMlsSignedControlOutput>> signBetaMlsControl(
-    BetaMlsSignControlRequest request,
-  ) => _withBetaMls((worker) => worker.signBetaMlsControl(request));
-
-  @override
-  Future<Result<BetaMlsSignedControlOutput>> verifyBetaMlsControl(
-    BetaMlsVerifyControlRequest request,
-  ) => _withBetaMls((worker) => worker.verifyBetaMlsControl(request));
-
-  @override
-  Future<Result<Uint8List>> hashBetaMlsObject(
-    BetaMlsHashObjectRequest request,
-  ) => _withBetaMls((worker) => worker.hashBetaMlsObject(request));
 
   @override
   String toString() => 'CryptoCoreRuntime(<redacted>)';
