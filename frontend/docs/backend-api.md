@@ -74,11 +74,7 @@ followed by X25519). The Android version-1 implementation MUST reproduce those v
 byte-for-byte; a future Web implementation must reproduce the same bytes before Web
 release.
 
-One client-side security gate remains: the backend requires a reviewed PQ MLS
-ciphersuite for groups. The frontend-owned [PQ MLS profile](mls-profile.md) selects the
-IETF hybrid ML-KEM-768/X25519 candidate, but its ciphersuite identifier is still
-unassigned and maintained Android library support and interoperability evidence are not
-yet available. Android group production release remains blocked by that profile's
-Android gates; Web gates are post-v1. The client MUST NOT invent an identifier or
-silently use a classical MLS suite.
-the client MUST NOT invent an identifier or silently use a classical MLS suite.
+The backend serves no MLS. The three KeyPackage routes answer `404`, and a group is a set
+of pairwise sessions with no group endpoint and no group key material
+([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F,
+[server ADR-0001](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)).

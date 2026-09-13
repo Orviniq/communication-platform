@@ -2,9 +2,15 @@
 
 ## Status
 
-This document prepares the *engagement* that production gate 7 in
-[the MLS profile](mls-profile.md) and ADR-017 require. **It retains nobody, names nobody as
-retained, and closes nothing.**
+**Updated 2026-09-13.** The MLS track this document was prepared for is cancelled: the
+server deleted MLS
+([server ADR-0001](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)),
+and the MLS profile and the closed-beta PQ MLS review packet were deleted from this tree.
+Every MLS gate, prerequisite, and packet named below is historical and can no longer
+open. The pairwise scope is unaffected.
+
+This document prepares the *engagement* that production gate 7 in the MLS profile and
+ADR-017 require. **It retains nobody, names nobody as retained, and closes nothing.**
 
 - No reviewer, firm, or individual named below has been approached, contacted, solicited,
   or engaged. Nobody has agreed to anything. Availability, willingness, price, and
@@ -24,7 +30,7 @@ retained, and closes nothing.**
 
 The two assembled review packets are the input material for the engagement described here:
 
-- [Closed-beta PQ MLS independent-review packet](mls-beta-review-readiness.md)
+- Closed-beta PQ MLS independent-review packet (deleted)
 - [Pairwise v1 independent-review packet](pairwise-review-readiness.md)
 
 Everything in sections 1-3 below is complete locally and needs no external party.
@@ -36,8 +42,8 @@ Everything in sections 4-6 is a *proposal for evaluation*, not an action taken.
 |---|---|---|
 | ADR-017 | [decision register](decisions.md) | Shared reviewed crypto core **and independent assessment**; "a custom, unaudited cryptographic implementation is not production-ready" |
 | ADR-026 | [decision register](decisions.md) | Review is one of the mandatory conditions alongside registry assignment, suite identifier, provider support, and Android interoperability. ADR-026 also forbids assigning a production identifier locally, which is why no review outcome can substitute for gate 2 |
-| Production gate 7 | [MLS profile](mls-profile.md) | "An independent cryptographic review closes all blocking findings" |
-| Phase-A prerequisite 5 | [MLS profile](mls-profile.md) | A qualified independent reviewer must be *available and retained*, with a recorded scope of work and schedule |
+| Production gate 7 | MLS profile (deleted) | "An independent cryptographic review closes all blocking findings" |
+| Phase-A prerequisite 5 | MLS profile (deleted) | A qualified independent reviewer must be *available and retained*, with a recorded scope of work and schedule |
 | Pairwise production gate | [pairwise transport v1](pairwise-transport-v1.md), [pairwise packet](pairwise-review-readiness.md) | An independent assessor records a disposition for every blocking finding, with reviewed source hashes and residual-risk acceptance |
 | Threat-model sign-off | [threat model](threat-model.md) | An independent reviewer signs off the protocol, implementation boundary, and Android key handling |
 
@@ -60,7 +66,7 @@ mandatory item does not meet the bar, regardless of standing.
 | # | Requirement | Evidence that satisfies it | Why this implementation needs it |
 |---|---|---|---|
 | **Q1** | **Demonstrated MLS competence** | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | The construction is MLS. A reviewer who learns MLS on this engagement is being paid to acquire the competence the engagement exists to apply |
-| **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The beta's KEM diverges from `TBD2` in ten recorded ways (rows D1-D10, [MLS profile](mls-profile.md)) and the pairwise track is hybrid PQXDH. Judging whether a *non-standard* hybrid combiner is sound is the single hardest question in the packet, and it is not answerable from an MLS background alone |
+| **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The beta's KEM diverges from `TBD2` in ten recorded ways (rows D1-D10 of the deleted MLS profile) and the pairwise track is hybrid PQXDH. Judging whether a *non-standard* hybrid combiner is sound is the single hardest question in the packet, and it is not answerable from an MLS background alone |
 | **Q3** | **Implementation-level review, not design-only** | At least one published engagement that read source and reported source-anchored findings, not solely a design/architecture opinion | The two packets are implementation packets. A design review of the profile documents would leave the entire inventory unread |
 | **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with 46 `unsafe` blocks in the shared C ABI and one 1 MiB-bounded `dart:ffi` allocation path; `mls_beta.rs` itself contains no `unsafe` and inherits `lib.rs`'s |
 | **Q5** | **Protocol-invention review capability** | Evidence of reviewing bespoke state machines, concurrency, and persistence — not only primitive or parameter checking | The ten project inventions in the packet are the highest-value targets *precisely because* no external specification or vector can validate them: credential binding, control transcript, fork convergence, leave/eviction, queue-gap re-admission, the transactional commit boundary, state sealing, per-recipient re-wrapping, the FFI boundary, and redaction |
@@ -138,7 +144,7 @@ engagement, they become a *second* recorded revision in D2, or they wait.
 |---|---|---|---|
 | **WP0** | Scope agreement and threat-model reconciliation. Confirm the claims in scope, confirm the out-of-scope list is understood and accepted, and reconcile against [the threat model](threat-model.md) | Both packets' "Security claims in scope" and "Explicitly out of scope"; [threat model](threat-model.md) | D1 |
 | **WP1** | **The ten project inventions.** Credential binding to the Authentication Service; the control transcript and later-member admission (ADR-037); fork convergence (ADR-041); leave and eviction (ADR-039); queue-gap re-admission; the transactional commit boundary; state sealing and versioning; per-recipient envelope re-wrapping (ADR-011); the FFI boundary; redaction and the error surface | MLS packet, "The project's own protocol inventions"; `group_model.dart`, `native_beta_group_mls.dart`, `drift_group_repository.dart`, `mls_beta.rs` | D3 |
-| **WP2** | **Suite assembly and the recorded KEM divergence.** Whether rows D1-D10 are complete and correctly characterised; whether the divergence has consequences beyond the loss of `TBD2` interoperability that ADR-040 asserts; whether an unassigned HPKE `kem_id` reaching every key schedule is confined as claimed | [MLS profile](mls-profile.md) rows D1-D10; `docs/upstream/mls-rs-hybrid-kem-defect-report.md`; `mls_beta.rs`; `beta_kem_vectors.rs` | D3 |
+| **WP2** | **Suite assembly and the recorded KEM divergence.** Whether rows D1-D10 are complete and correctly characterised; whether the divergence has consequences beyond the loss of `TBD2` interoperability that ADR-040 asserts; whether an unassigned HPKE `kem_id` reaching every key schedule is confined as claimed | MLS profile (deleted) rows D1-D10; `docs/upstream/mls-rs-hybrid-kem-defect-report.md`; `mls_beta.rs`; `beta_kem_vectors.rs` | D3 |
 | **WP3** | **Pairwise transport v1.** Hybrid PQXDH composition and transcript, the ratchet state machine, skipped-key bounds, repair, rotation overlap, revocation | [pairwise transport v1](pairwise-transport-v1.md); [pairwise packet](pairwise-review-readiness.md) | D3 |
 | **WP4** | **Persistence, concurrency, and the commit boundary.** Compare-and-swap under control revision and hash; crash between commit and fan-out; exact-ciphertext retry; the 20,000-key account bound under concurrent transactions | `drift_group_repository.dart`, `drift_pairwise_transport_store.dart`, `drift_sync_store.dart`, `local_database.dart` (schema 11) | D3 |
 | **WP5** | **The boundary.** The single C ABI operation, the 46 `unsafe` blocks in `lib.rs`, the 1 MiB-bounded `dart:ffi` allocation and its zero-and-free path, isolate ownership, typed-response decoding | `lib.rs`, `beta_mls_ffi.dart`, `beta_mls_native_session.dart`, `isolate_crypto_core_worker.dart` | D3 |
@@ -352,7 +358,7 @@ Externally blocked, and not satisfiable by any work in this repository:
 | **Gates 4, 5, 6** | Need the packaged Android artifact on hardware, the bucket evidence, and the full multi-device crash matrix — implementation work, not review work, and not part of this task | Separate implementation and device-matrix work |
 
 The gate list is unchanged by this document. All seven production gates in
-[the MLS profile](mls-profile.md) remain open. The Phase-A preflight still shows five of
+the MLS profile remain open. The Phase-A preflight still shows five of
 five prerequisites blocked.
 
 ---
@@ -397,7 +403,7 @@ read on **2026-08-18** unless stated otherwise.
 
 | Check | Result |
 |---|---|
-| Gate list unchanged | **Pass.** No gate in [the MLS profile](mls-profile.md) is marked satisfied, partially satisfied, or advanced by this document. All seven remain open |
+| Gate list unchanged | **Pass.** No gate in the MLS profile is marked satisfied, partially satisfied, or advanced by this document. All seven remain open |
 | Phase-A prerequisite 5 | **Pass.** Still recorded as Blocked. This document supplies the scope-of-work half only, and says so |
 | No reviewer named as retained | **Pass.** Every candidate is marked not approached and not retained, in section 4.1 and in the status banner |
 | Consistent with the MLS packet's review-status section | **Pass.** Both state that assembling material is not review, that gates 1-3 cannot be moved from this repository, and that gate 7 needs an external party |

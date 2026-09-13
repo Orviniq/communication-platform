@@ -298,12 +298,9 @@ with the backend/proxy configuration and a REST health probe only when necessary
   considered complete. A peer observing the narrow intermediate state waits for an
   extending log record; it does not convert an otherwise exact monotonic rotation into
   permanent fork evidence.
-- After the [PQ MLS production gates](mls-profile.md#production-gates) pass, MLS key
-  packages are replenished when the server count falls below 25, up to a target of 75,
-  staying below the backend cap of 100. Before then, no production package is uploaded.
-- One PQ MLS last-resort KeyPackage is then maintained separately from the consumable
-  count; its use is surfaced as degraded initial-join forward secrecy and triggers
-  immediate consumable replenishment.
+- No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
+  serves no MLS, and a group is a set of pairwise sessions
+  ([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F).
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.

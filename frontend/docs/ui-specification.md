@@ -223,8 +223,8 @@ only**.
 ## 4. Encryption Setup (First Run on a Device)
 
 **Purpose.** The first installation creates account cross-signing keys plus independent
-X25519 and ML-KEM-768 device material. MLS device material is created only after the
-[PQ MLS production gates](mls-profile.md#production-gates) pass. A new account creates a
+X25519 and ML-KEM-768 device material. No MLS device material is created: a group is a
+set of pairwise sessions. A new account creates a
 recovery-protected identity backup; an existing account restores that identity material.
 Message history is a later transfer from an existing online device, not part of the
 backup.
