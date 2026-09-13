@@ -309,7 +309,6 @@ void main() {
       const flavors = {
         'lib/main.dart': 'AppEnvironment.development',
         'lib/main_development.dart': 'AppEnvironment.development',
-        'lib/main_beta.dart': 'AppEnvironment.beta',
         'lib/main_production.dart': 'AppEnvironment.production',
       };
       flavors.forEach((path, environment) {
