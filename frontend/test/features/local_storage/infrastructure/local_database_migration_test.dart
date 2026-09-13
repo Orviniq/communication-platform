@@ -441,13 +441,13 @@ void main() {
     },
   );
 
-  // Schema 11 adds nullable transcript-evidence columns. ADR-036/ADR-037 make
-  // pre-v3 group state disposable, so the upgrade must carry the opaque MLS
-  // handle across untouched and must leave absent evidence absent. Fabricating
-  // either would be the storage-layer form of the silent reinterpretation the
-  // crypto core rejects.
+  // Schema 11 adds nullable transcript-evidence columns, and the upgrade must
+  // leave absent evidence absent: fabricating it would be the storage-layer
+  // form of the silent reinterpretation the crypto core rejects. Schema 21
+  // drops the sealed MLS state the group row carried, and nothing else in the
+  // row may move with it.
   test(
-    'version-ten upgrade preserves opaque group state and fabricates no evidence',
+    'version-ten upgrade keeps the group row and fabricates no evidence',
     () async {
       final current = LocalDatabase(NativeDatabase(databaseFile));
       await current.customSelect('SELECT 1').getSingle();
@@ -470,6 +470,10 @@ void main() {
           'ALTER TABLE group_control_events '
           'DROP COLUMN signer_authentication_proof',
         )
+        // Every schema up to 20 had the sealed MLS state column and this
+        // build does not make it, so the table is put back with it.
+        ..execute('DROP TABLE mls_groups')
+        ..execute(_mlsGroupsTableV20)
         ..execute(
           'INSERT INTO mls_groups (group_id, opaque_crypto_state_handle, '
           'accepted_epoch, state_version) VALUES (?, ?, ?, ?)',
@@ -506,9 +510,9 @@ void main() {
           .getSingle();
 
       expect(
-        group.read<Uint8List>('opaque_crypto_state_handle'),
-        opaqueState,
-        reason: 'the upgrade never rewrites opaque MLS state',
+        group.data.containsKey('opaque_crypto_state_handle'),
+        isFalse,
+        reason: 'schema 21 drops the sealed MLS state',
       );
       expect(group.read<int>('accepted_epoch'), 3);
       expect(group.read<int>('state_version'), 1);
@@ -1265,10 +1269,114 @@ void main() {
     );
     await upgraded.close();
   });
+
+  test('version-twenty upgrade drops the sealed MLS group state', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    // A device at 20 has the column, because every build up to this one
+    // created it. This build does not, and the column is NOT NULL with no
+    // default, so the table is put back the way schema 20 made it before the
+    // step has anything to drop.
+    final versionTwenty = sqlite3.open(databaseFile.path)
+      ..execute('DROP TABLE mls_groups')
+      ..execute(_mlsGroupsTableV20)
+      ..execute(
+        'INSERT INTO mls_groups (group_id, opaque_crypto_state_handle, '
+        'accepted_epoch, state_version, control_revision, lifecycle) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          _groupV20,
+          Uint8List.fromList(const [9, 9, 9]),
+          4,
+          2,
+          3,
+          1,
+        ],
+      )
+      ..execute('PRAGMA user_version = 20');
+    versionTwenty.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info("mls_groups")')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(columns, isNot(contains('opaque_crypto_state_handle')));
+    // One column, not a rewrite of the group row around it.
+    final group = await upgraded
+        .customSelect(
+          'SELECT * FROM mls_groups WHERE group_id = ?',
+          variables: [Variable<String>(_groupV20)],
+        )
+        .getSingle();
+    expect(group.read<int>('accepted_epoch'), 4);
+    expect(group.read<int>('state_version'), 2);
+    expect(group.read<int>('control_revision'), 3);
+    expect(group.read<int>('lifecycle'), 1);
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test('the MLS state drop tolerates a database that never had it', () async {
+    // A database this build created and something stamped back to 20 has no
+    // column, because `createAll` no longer makes one. An upgrade that failed
+    // here would leave the application unable to open its storage.
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final stampedBack = sqlite3.open(databaseFile.path)
+      ..execute('PRAGMA user_version = 20');
+    stampedBack.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info("mls_groups")')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(columns, isNot(contains('opaque_crypto_state_handle')));
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
 }
 
 const _userV19 = '00000000-0000-0000-0000-0000000000a1';
 const _deviceV19 = '00000000-0000-0000-0000-0000000000d1';
+const _groupV20 = 'group-v20';
+
+/// `mls_groups` as schema 20 created it, copied from `sqlite_master` before
+/// the sealed MLS state column was deleted.
+const _mlsGroupsTableV20 =
+    'CREATE TABLE "mls_groups" ("group_id" TEXT NOT NULL, '
+    '"opaque_crypto_state_handle" BLOB NOT NULL, '
+    '"accepted_epoch" INTEGER NOT NULL CHECK("accepted_epoch" >= 0), '
+    '"state_version" INTEGER NOT NULL CHECK("state_version" > 0), '
+    '"queue_gap_recovery_state" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("queue_gap_recovery_state" BETWEEN 0 AND 2), '
+    '"control_projection_ciphertext" BLOB NULL, '
+    '"control_revision" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("control_revision" >= 0), '
+    '"control_state_hash" BLOB NULL, '
+    '"lifecycle" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("lifecycle" BETWEEN 0 AND 6), '
+    '"pending_mutation_id" TEXT NULL, '
+    'PRIMARY KEY ("group_id"))';
 
 /// `mls_key_package_maintenance_states` as schema 9 created it, copied from
 /// `sqlite_master` before its declaration was deleted.

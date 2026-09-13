@@ -87,20 +87,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
   }
 
   @override
-  Future<Result<Uint8List?>> readOpaqueMlsState(String groupId) async {
-    try {
-      final row = await (database.select(
-        database.mlsGroups,
-      )..where((item) => item.groupId.equals(groupId))).getSingleOrNull();
-      return Result.success(row?.opaqueCryptoStateHandle);
-    } on Object {
-      return const Result.failure(
-        StorageFailure(StorageFailureKind.unavailable),
-      );
-    }
-  }
-
-  @override
   Future<Result<List<GroupControlTranscriptEntry>>> readVerifiedTranscript(
     String groupId,
   ) async {
@@ -219,7 +205,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
           .insert(
             MlsGroupsCompanion.insert(
               groupId: next.groupId,
-              opaqueCryptoStateHandle: prepared.newOpaqueMlsState,
               acceptedEpoch: next.acceptedEpoch,
               stateVersion: 1,
               controlProjectionCiphertext: Value(_encodeState(next)),
@@ -257,7 +242,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
               ))
               .write(
                 MlsGroupsCompanion(
-                  opaqueCryptoStateHandle: Value(prepared.newOpaqueMlsState),
                   acceptedEpoch: Value(next.acceptedEpoch),
                   stateVersion: Value(current.stateVersion + 1),
                   controlProjectionCiphertext: Value(_encodeState(next)),
@@ -364,7 +348,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
             ))
             .write(
               MlsGroupsCompanion(
-                opaqueCryptoStateHandle: Value(prepared.newOpaqueMlsState),
                 acceptedEpoch: Value(next.acceptedEpoch),
                 stateVersion: Value(current.stateVersion + 1),
                 queueGapRecoveryState: const Value(0),
@@ -533,10 +516,7 @@ final class DriftGroupRepository extends DriftRepositoryBase
                   item.controlRevision.equals(expectedGroup.controlRevision),
             ))
             .write(
-              MlsGroupsCompanion(
-                opaqueCryptoStateHandle: Value(prepared.newOpaqueMlsState),
-                stateVersion: Value(row.stateVersion + 1),
-              ),
+              MlsGroupsCompanion(stateVersion: Value(row.stateVersion + 1)),
             );
     if (updated != 1) throw const _GroupConflict();
     await database

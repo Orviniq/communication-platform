@@ -315,7 +315,6 @@ class MlsGroups extends Table {
   String get tableName => 'mls_groups';
 
   TextColumn get groupId => text()();
-  BlobColumn get opaqueCryptoStateHandle => blob()();
   IntColumn get acceptedEpoch =>
       integer().check(acceptedEpoch.isBiggerOrEqualValue(0))();
   IntColumn get stateVersion =>
@@ -1170,7 +1169,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 20;
+  static const currentSchemaVersion = 21;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1814,6 +1813,32 @@ final class LocalDatabase extends _$LocalDatabase {
           // migration tests do, and what a development build does — reaches
           // this step with nothing to drop.
           await migrator.deleteTable('mls_key_package_maintenance_states');
+        }
+        if (from < 21) {
+          // The server deleted MLS. This column held each group's sealed MLS
+          // state, which only the closed-beta core could open, and nothing
+          // reads it now that the port that consumed it is gone.
+          //
+          // Production never wrote a group row. Only the closed-beta build and
+          // the development preview did, and neither can use the state any
+          // more. The rest of the row stays: it is the group's own projection,
+          // not MLS state.
+          //
+          // Checked rather than assumed, as in the schema-19 step: the column
+          // is gone from the declaration, so `createAll` no longer makes it,
+          // and a database created by this build and stamped back reaches
+          // this step with no column to drop. The column carries no index,
+          // view or trigger, and both tables that reference `mls_groups` name
+          // `group_id`, so the table does not need re-creating around it.
+          final existing = await customSelect(
+            'PRAGMA table_info("${mlsGroups.actualTableName}")',
+          ).get();
+          final present = existing.any(
+            (row) => row.read<String>('name') == 'opaque_crypto_state_handle',
+          );
+          if (present) {
+            await migrator.dropColumn(mlsGroups, 'opaque_crypto_state_handle');
+          }
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

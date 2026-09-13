@@ -7954,17 +7954,6 @@ class $MlsGroupsTable extends MlsGroups
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _opaqueCryptoStateHandleMeta =
-      const VerificationMeta('opaqueCryptoStateHandle');
-  @override
-  late final GeneratedColumn<Uint8List> opaqueCryptoStateHandle =
-      GeneratedColumn<Uint8List>(
-        'opaque_crypto_state_handle',
-        aliasedName,
-        false,
-        type: DriftSqlType.blob,
-        requiredDuringInsert: true,
-      );
   static const VerificationMeta _acceptedEpochMeta = const VerificationMeta(
     'acceptedEpoch',
   );
@@ -8065,7 +8054,6 @@ class $MlsGroupsTable extends MlsGroups
   @override
   List<GeneratedColumn> get $columns => [
     groupId,
-    opaqueCryptoStateHandle,
     acceptedEpoch,
     stateVersion,
     queueGapRecoveryState,
@@ -8094,17 +8082,6 @@ class $MlsGroupsTable extends MlsGroups
       );
     } else if (isInserting) {
       context.missing(_groupIdMeta);
-    }
-    if (data.containsKey('opaque_crypto_state_handle')) {
-      context.handle(
-        _opaqueCryptoStateHandleMeta,
-        opaqueCryptoStateHandle.isAcceptableOrUnknown(
-          data['opaque_crypto_state_handle']!,
-          _opaqueCryptoStateHandleMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_opaqueCryptoStateHandleMeta);
     }
     if (data.containsKey('accepted_epoch')) {
       context.handle(
@@ -8192,10 +8169,6 @@ class $MlsGroupsTable extends MlsGroups
         DriftSqlType.string,
         data['${effectivePrefix}group_id'],
       )!,
-      opaqueCryptoStateHandle: attachedDatabase.typeMapping.read(
-        DriftSqlType.blob,
-        data['${effectivePrefix}opaque_crypto_state_handle'],
-      )!,
       acceptedEpoch: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}accepted_epoch'],
@@ -8239,7 +8212,6 @@ class $MlsGroupsTable extends MlsGroups
 
 class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   final String groupId;
-  final Uint8List opaqueCryptoStateHandle;
   final int acceptedEpoch;
   final int stateVersion;
   final int queueGapRecoveryState;
@@ -8250,7 +8222,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   final String? pendingMutationId;
   const MlsGroup({
     required this.groupId,
-    required this.opaqueCryptoStateHandle,
     required this.acceptedEpoch,
     required this.stateVersion,
     required this.queueGapRecoveryState,
@@ -8264,9 +8235,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['group_id'] = Variable<String>(groupId);
-    map['opaque_crypto_state_handle'] = Variable<Uint8List>(
-      opaqueCryptoStateHandle,
-    );
     map['accepted_epoch'] = Variable<int>(acceptedEpoch);
     map['state_version'] = Variable<int>(stateVersion);
     map['queue_gap_recovery_state'] = Variable<int>(queueGapRecoveryState);
@@ -8289,7 +8257,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   MlsGroupsCompanion toCompanion(bool nullToAbsent) {
     return MlsGroupsCompanion(
       groupId: Value(groupId),
-      opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
       acceptedEpoch: Value(acceptedEpoch),
       stateVersion: Value(stateVersion),
       queueGapRecoveryState: Value(queueGapRecoveryState),
@@ -8315,9 +8282,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return MlsGroup(
       groupId: serializer.fromJson<String>(json['groupId']),
-      opaqueCryptoStateHandle: serializer.fromJson<Uint8List>(
-        json['opaqueCryptoStateHandle'],
-      ),
       acceptedEpoch: serializer.fromJson<int>(json['acceptedEpoch']),
       stateVersion: serializer.fromJson<int>(json['stateVersion']),
       queueGapRecoveryState: serializer.fromJson<int>(
@@ -8341,9 +8305,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'groupId': serializer.toJson<String>(groupId),
-      'opaqueCryptoStateHandle': serializer.toJson<Uint8List>(
-        opaqueCryptoStateHandle,
-      ),
       'acceptedEpoch': serializer.toJson<int>(acceptedEpoch),
       'stateVersion': serializer.toJson<int>(stateVersion),
       'queueGapRecoveryState': serializer.toJson<int>(queueGapRecoveryState),
@@ -8359,7 +8320,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
 
   MlsGroup copyWith({
     String? groupId,
-    Uint8List? opaqueCryptoStateHandle,
     int? acceptedEpoch,
     int? stateVersion,
     int? queueGapRecoveryState,
@@ -8370,8 +8330,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     Value<String?> pendingMutationId = const Value.absent(),
   }) => MlsGroup(
     groupId: groupId ?? this.groupId,
-    opaqueCryptoStateHandle:
-        opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
     acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
     stateVersion: stateVersion ?? this.stateVersion,
     queueGapRecoveryState: queueGapRecoveryState ?? this.queueGapRecoveryState,
@@ -8390,9 +8348,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   MlsGroup copyWithCompanion(MlsGroupsCompanion data) {
     return MlsGroup(
       groupId: data.groupId.present ? data.groupId.value : this.groupId,
-      opaqueCryptoStateHandle: data.opaqueCryptoStateHandle.present
-          ? data.opaqueCryptoStateHandle.value
-          : this.opaqueCryptoStateHandle,
       acceptedEpoch: data.acceptedEpoch.present
           ? data.acceptedEpoch.value
           : this.acceptedEpoch,
@@ -8422,7 +8377,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   String toString() {
     return (StringBuffer('MlsGroup(')
           ..write('groupId: $groupId, ')
-          ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
           ..write('stateVersion: $stateVersion, ')
           ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
@@ -8438,7 +8392,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   @override
   int get hashCode => Object.hash(
     groupId,
-    $driftBlobEquality.hash(opaqueCryptoStateHandle),
     acceptedEpoch,
     stateVersion,
     queueGapRecoveryState,
@@ -8453,10 +8406,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       identical(this, other) ||
       (other is MlsGroup &&
           other.groupId == this.groupId &&
-          $driftBlobEquality.equals(
-            other.opaqueCryptoStateHandle,
-            this.opaqueCryptoStateHandle,
-          ) &&
           other.acceptedEpoch == this.acceptedEpoch &&
           other.stateVersion == this.stateVersion &&
           other.queueGapRecoveryState == this.queueGapRecoveryState &&
@@ -8475,7 +8424,6 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
 
 class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   final Value<String> groupId;
-  final Value<Uint8List> opaqueCryptoStateHandle;
   final Value<int> acceptedEpoch;
   final Value<int> stateVersion;
   final Value<int> queueGapRecoveryState;
@@ -8487,7 +8435,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   final Value<int> rowid;
   const MlsGroupsCompanion({
     this.groupId = const Value.absent(),
-    this.opaqueCryptoStateHandle = const Value.absent(),
     this.acceptedEpoch = const Value.absent(),
     this.stateVersion = const Value.absent(),
     this.queueGapRecoveryState = const Value.absent(),
@@ -8500,7 +8447,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   });
   MlsGroupsCompanion.insert({
     required String groupId,
-    required Uint8List opaqueCryptoStateHandle,
     required int acceptedEpoch,
     required int stateVersion,
     this.queueGapRecoveryState = const Value.absent(),
@@ -8511,12 +8457,10 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     this.pendingMutationId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : groupId = Value(groupId),
-       opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
        acceptedEpoch = Value(acceptedEpoch),
        stateVersion = Value(stateVersion);
   static Insertable<MlsGroup> custom({
     Expression<String>? groupId,
-    Expression<Uint8List>? opaqueCryptoStateHandle,
     Expression<int>? acceptedEpoch,
     Expression<int>? stateVersion,
     Expression<int>? queueGapRecoveryState,
@@ -8529,8 +8473,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   }) {
     return RawValuesInsertable({
       if (groupId != null) 'group_id': groupId,
-      if (opaqueCryptoStateHandle != null)
-        'opaque_crypto_state_handle': opaqueCryptoStateHandle,
       if (acceptedEpoch != null) 'accepted_epoch': acceptedEpoch,
       if (stateVersion != null) 'state_version': stateVersion,
       if (queueGapRecoveryState != null)
@@ -8547,7 +8489,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
 
   MlsGroupsCompanion copyWith({
     Value<String>? groupId,
-    Value<Uint8List>? opaqueCryptoStateHandle,
     Value<int>? acceptedEpoch,
     Value<int>? stateVersion,
     Value<int>? queueGapRecoveryState,
@@ -8560,8 +8501,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   }) {
     return MlsGroupsCompanion(
       groupId: groupId ?? this.groupId,
-      opaqueCryptoStateHandle:
-          opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
       acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
       stateVersion: stateVersion ?? this.stateVersion,
       queueGapRecoveryState:
@@ -8581,11 +8520,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     final map = <String, Expression>{};
     if (groupId.present) {
       map['group_id'] = Variable<String>(groupId.value);
-    }
-    if (opaqueCryptoStateHandle.present) {
-      map['opaque_crypto_state_handle'] = Variable<Uint8List>(
-        opaqueCryptoStateHandle.value,
-      );
     }
     if (acceptedEpoch.present) {
       map['accepted_epoch'] = Variable<int>(acceptedEpoch.value);
@@ -8625,7 +8559,6 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   String toString() {
     return (StringBuffer('MlsGroupsCompanion(')
           ..write('groupId: $groupId, ')
-          ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
           ..write('stateVersion: $stateVersion, ')
           ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
@@ -29313,7 +29246,6 @@ typedef $$PrekeyMaintenancePlansTableProcessedTableManager =
 typedef $$MlsGroupsTableCreateCompanionBuilder =
     MlsGroupsCompanion Function({
       required String groupId,
-      required Uint8List opaqueCryptoStateHandle,
       required int acceptedEpoch,
       required int stateVersion,
       Value<int> queueGapRecoveryState,
@@ -29327,7 +29259,6 @@ typedef $$MlsGroupsTableCreateCompanionBuilder =
 typedef $$MlsGroupsTableUpdateCompanionBuilder =
     MlsGroupsCompanion Function({
       Value<String> groupId,
-      Value<Uint8List> opaqueCryptoStateHandle,
       Value<int> acceptedEpoch,
       Value<int> stateVersion,
       Value<int> queueGapRecoveryState,
@@ -29410,11 +29341,6 @@ class $$MlsGroupsTableFilterComposer
   });
   ColumnFilters<String> get groupId => $composableBuilder(
     column: $table.groupId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
-    column: $table.opaqueCryptoStateHandle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -29524,11 +29450,6 @@ class $$MlsGroupsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
-    column: $table.opaqueCryptoStateHandle,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get acceptedEpoch => $composableBuilder(
     column: $table.acceptedEpoch,
     builder: (column) => ColumnOrderings(column),
@@ -29582,11 +29503,6 @@ class $$MlsGroupsTableAnnotationComposer
   });
   GeneratedColumn<String> get groupId =>
       $composableBuilder(column: $table.groupId, builder: (column) => column);
-
-  GeneratedColumn<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
-    column: $table.opaqueCryptoStateHandle,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<int> get acceptedEpoch => $composableBuilder(
     column: $table.acceptedEpoch,
@@ -29712,7 +29628,6 @@ class $$MlsGroupsTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> groupId = const Value.absent(),
-                Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
                 Value<int> acceptedEpoch = const Value.absent(),
                 Value<int> stateVersion = const Value.absent(),
                 Value<int> queueGapRecoveryState = const Value.absent(),
@@ -29725,7 +29640,6 @@ class $$MlsGroupsTableTableManager
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion(
                 groupId: groupId,
-                opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
                 queueGapRecoveryState: queueGapRecoveryState,
@@ -29739,7 +29653,6 @@ class $$MlsGroupsTableTableManager
           createCompanionCallback:
               ({
                 required String groupId,
-                required Uint8List opaqueCryptoStateHandle,
                 required int acceptedEpoch,
                 required int stateVersion,
                 Value<int> queueGapRecoveryState = const Value.absent(),
@@ -29752,7 +29665,6 @@ class $$MlsGroupsTableTableManager
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion.insert(
                 groupId: groupId,
-                opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
                 queueGapRecoveryState: queueGapRecoveryState,

@@ -17,8 +17,6 @@ abstract interface class GroupRepositoryPort {
 
   Future<Result<GroupState?>> readGroup(String groupId);
 
-  Future<Result<Uint8List?>> readOpaqueMlsState(String groupId);
-
   Future<Result<void>> commitTransition({
     required GroupState? expectedPrevious,
     required GroupState next,
