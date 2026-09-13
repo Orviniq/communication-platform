@@ -119,20 +119,6 @@ final class GroupKeyPackageAuthenticationEvidence {
   String toString() => 'GroupKeyPackageAuthenticationEvidence(<redacted>)';
 }
 
-/// Minimal group-owned projection of one account-authenticated live device.
-/// Pairwise public keys remain owned by the pairwise feature and never cross
-/// into group application policy.
-final class GroupAuthenticatedLiveDevice {
-  GroupAuthenticatedLiveDevice({required this.userId, required this.deviceId}) {
-    if (!_uuid.hasMatch(userId) || !_uuid.hasMatch(deviceId)) {
-      throw const GroupKeyPackageFormatException();
-    }
-  }
-
-  final String userId;
-  final String deviceId;
-}
-
 final class GroupAuthenticatedPeerDevice {
   GroupAuthenticatedPeerDevice({
     required this.userId,

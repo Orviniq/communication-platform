@@ -149,6 +149,21 @@ final class GroupMember {
   );
 }
 
+/// Minimal group-owned projection of one account-authenticated live device.
+/// Pairwise public keys remain owned by the pairwise feature and never cross
+/// into group application policy.
+final class GroupAuthenticatedLiveDevice {
+  GroupAuthenticatedLiveDevice({required this.userId, required this.deviceId}) {
+    if (!_groupUuid.hasMatch(userId.toLowerCase()) ||
+        !_groupUuid.hasMatch(deviceId.toLowerCase())) {
+      throw const FormatException('invalid authenticated live device');
+    }
+  }
+
+  final String userId;
+  final String deviceId;
+}
+
 final class GroupState {
   GroupState({
     required this.groupId,

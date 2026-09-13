@@ -1,7 +1,7 @@
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
-import 'package:communication_platform/features/groups/application/ports/group_key_package_ports.dart';
-import 'package:communication_platform/features/groups/domain/group_key_package_model.dart';
+import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
+import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 
 /// Infrastructure-only bridge from the authenticated pairwise device view to

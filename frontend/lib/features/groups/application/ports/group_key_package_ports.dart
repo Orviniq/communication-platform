@@ -54,11 +54,6 @@ abstract interface class GroupKeyPackageAuthenticationPort implements Port {
   });
 }
 
-abstract interface class GroupLiveDeviceResolverPort implements Port {
-  Future<Result<List<GroupAuthenticatedLiveDevice>>>
-  resolveAuthenticatedLiveDevices(String userId);
-}
-
 abstract interface class GroupKeyPackageMaintenanceStore implements Port {
   Future<Result<GroupKeyPackageGenerationContext>> readGenerationContext({
     required String deviceId,

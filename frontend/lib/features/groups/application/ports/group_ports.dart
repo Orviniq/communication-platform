@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/application/ports/port.dart';
 import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -129,4 +130,9 @@ abstract interface class GroupOutboundEnvelopePort {
 
 abstract interface class GroupApplicationIdentityPort {
   Future<Result<int>> reserveSenderCounter(String deviceId);
+}
+
+abstract interface class GroupLiveDeviceResolverPort implements Port {
+  Future<Result<List<GroupAuthenticatedLiveDevice>>>
+  resolveAuthenticatedLiveDevices(String userId);
 }
