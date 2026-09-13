@@ -14,10 +14,14 @@ final class DriftApplicationConversationResolver
   const DriftApplicationConversationResolver({
     required this.database,
     required this.protocol,
+    this.groupMembership,
   });
 
   final LocalDatabase database;
   final ApplicationProtocolPort protocol;
+
+  /// Decides every event that names a group. Without it, none is admitted.
+  final GroupConversationMembershipPort? groupMembership;
 
   @override
   Future<Result<ResolvedApplicationConversation>> resolve({
@@ -59,9 +63,7 @@ final class DriftApplicationConversationResolver
       if (existing != null) {
         final kind = ConversationKind.values[existing.kind];
         if (kind == ConversationKind.group) {
-          return Result.success(
-            ResolvedApplicationConversation(kind: kind, peerUserId: null),
-          );
+          return _group(conversationId, sender, current);
         }
         final peer = existing.peerUserId;
         if (kind != ConversationKind.direct ||
@@ -85,9 +87,7 @@ final class DriftApplicationConversationResolver
                   peerUserId: sender,
                 ),
               )
-            : const Result.failure(
-                SecurityFailure(SecurityFailureKind.unauthenticatedInput),
-              );
+            : _group(conversationId, sender, current);
       }
 
       // An own-device copy does not expose the peer outside the encrypted event.
@@ -113,14 +113,42 @@ final class DriftApplicationConversationResolver
           );
         }
       }
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
-      );
+      return _group(conversationId, sender, current);
     } on Object {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.unauthenticatedInput),
       );
     }
+  }
+
+  /// A conversation that is neither this account's saved messages nor a
+  /// direct conversation can only be a group. Whether this event may enter it
+  /// is the group's own roster's decision, never the conversation row's.
+  Future<Result<ResolvedApplicationConversation>> _group(
+    String conversationId,
+    String senderUserId,
+    String currentUserId,
+  ) async {
+    final membership = groupMembership;
+    if (membership == null) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+    }
+    final authorized = await membership.authorizeGroupEvent(
+      groupId: conversationId,
+      senderUserId: senderUserId,
+      currentUserId: currentUserId,
+    );
+    return authorized.fold(
+      onSuccess: (_) => const Result.success(
+        ResolvedApplicationConversation(
+          kind: ConversationKind.group,
+          peerUserId: null,
+        ),
+      ),
+      onFailure: Result.failure,
+    );
   }
 
   Future<String> _directId(List<int> first, List<int> second) async {

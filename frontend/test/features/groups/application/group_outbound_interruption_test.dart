@@ -1,11 +1,14 @@
+import 'dart:convert';
+
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
+import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
-import 'package:communication_platform/features/groups/infrastructure/development_in_memory_group_mls.dart';
+import 'package:communication_platform/features/groups/domain/group_sync_payload.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/groups/infrastructure/pairwise_group_outbound_envelope_adapter.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
@@ -21,22 +24,22 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/storage_fault_injection.dart';
 
-/// Crash and transaction-failure coverage for the leg between the piece-18
+/// Crash and transaction-failure coverage for the leg between the group
 /// compare-and-swap commit and the network, run against the real Drift group
 /// repository, the real durable pairwise outbox, and the real fan-out
-/// coordinator. Only the device resolver, the prekey claim, and the native
-/// encryption call are stand-ins, and the encryption stand-in counts its own
-/// invocations, which is how "the retry never advanced the ratchet twice"
-/// becomes an assertion instead of a claim.
+/// coordinator. Only the device resolver, the prekey claim, the signing call
+/// and the native encryption call are stand-ins, and the encryption stand-in
+/// counts its own invocations, which is how "the retry never advanced the
+/// ratchet twice" becomes an assertion instead of a claim.
 ///
 /// The design ordering under test, from `docs/local-data-model.md` and
 /// `docs/sync-engine.md`:
 ///
-///   T1  opaque MLS state + accepted fact + projections + exact prepared
-///       outbound object, one compare-and-swap transaction
+///   T1  signed control event + roster projection + exact outbound payload,
+///       one compare-and-swap transaction
 ///   T2  per-recipient Double Ratchet envelopes into the durable outbox, one
 ///       transaction per recipient user, idempotent on the operation id
-///   T3  the group object is marked routed
+///   T3  the group payload is marked routed
 ///   T4  network I/O over the persisted exact ciphertext
 ///
 /// Every gap between those steps is a place a process can die, and every one
@@ -105,11 +108,15 @@ void main() {
     () async {
       await _create(groups, [_member]);
 
-      // Nothing ran after T1. The object is durable, unrouted, and untouched.
+      // Nothing ran after T1. The payload is durable, unrouted, and untouched.
       final pending =
           await groups.readPendingOutbound()
               as Success<List<GroupOutboundWork>>;
       expect(pending.value, hasLength(1));
+      expect(
+        GroupSyncPayloadCodec.decode(pending.value.single.payload),
+        isA<GroupControlDelivery>(),
+      );
       expect(await database.select(database.outboxOperations).get(), isEmpty);
       expect(crypto.calls, isEmpty);
 
@@ -126,7 +133,7 @@ void main() {
     await _create(groups, [_member]);
     // T2 completes, then the process dies before T3. This is the widest
     // window in the whole path: the envelopes are already durable and the
-    // group object still looks unrouted, so the next run walks it again.
+    // group payload still looks unrouted, so the next run walks it again.
     await faults.failOn('group_outbound_objects', InjectedWrite.update);
 
     final interrupted = await dispatch();
@@ -196,9 +203,9 @@ void main() {
   });
 
   test('a group with two remote recipients reaches both of them', () async {
-    // One logical group object becomes one pairwise operation per recipient
-    // user, so nothing about the send may be keyed on the group event id
-    // alone. Two remote members is the smallest case that proves it.
+    // One group payload becomes one pairwise operation per recipient user, so
+    // nothing about the send may be keyed on the group event id alone. Two
+    // remote members is the smallest case that proves it.
     await _create(groups, [_member, _second]);
 
     final result = await dispatch();
@@ -254,7 +261,7 @@ void main() {
 
       // T4 ran on the envelopes T2 persisted, even though T3 never did. The
       // accepted targets must still satisfy the next dispatch pass, or the
-      // group object would be stuck unrouted while its ciphertext is long gone.
+      // group payload would be stuck unrouted while its ciphertext is gone.
       final sync = DriftSyncStore(database);
       final now = DateTime.utc(2026, 8, 18, 10);
       var sentTargets = 0;
@@ -370,23 +377,20 @@ Future<GroupState> _create(
   final created =
       await CreateGroup(
             repository: repository,
-            crypto: DevelopmentInMemoryGroupMls.forTests(seed: seed),
+            crypto: const _GroupCrypto(),
+            identity: _Identity(seed),
             clock: const _Clock(),
-            developmentPreviewOnly: false,
           )(
             currentUserId: _owner,
             currentDeviceId: _ownerDevice,
             ownerDisplayName: 'Owner',
-            metadata: GroupMetadata(name: 'Beta $seed'),
+            metadata: GroupMetadata(name: 'Group $seed'),
             selectedMembers: [
               for (final member in members)
                 GroupMember(
                   userId: member,
                   displayName: 'Member',
                   role: GroupRole.member,
-                  deviceIds: [
-                    member == _member ? _memberDevice : _secondDevice,
-                  ],
                 ),
             ],
           )
@@ -395,18 +399,6 @@ Future<GroupState> _create(
 }
 
 Future<void> _seed(LocalDatabase database) async {
-  for (final userId in const [_owner, _member, _second]) {
-    await database
-        .into(database.users)
-        .insert(
-          UsersCompanion.insert(
-            userId: userId,
-            activated: true,
-            directoryEntryCiphertext: Uint8List.fromList([1]),
-            localState: 0,
-          ),
-        );
-  }
   await database
       .into(database.secureSecrets)
       .insert(
@@ -470,6 +462,49 @@ VerifiedPairwiseLiveDevice _device(String userId, String deviceId) =>
 
 Uint8List _bytes(int length, int marker) =>
     Uint8List.fromList(List<int>.filled(length, marker & 0xff));
+
+final class _Identity implements GroupIdentityPort {
+  _Identity(this.seed);
+
+  final int seed;
+  var _issued = 0;
+
+  @override
+  Future<Result<Uint8List>> randomIdentifier() async {
+    _issued += 1;
+    return Result.success(
+      Uint8List.fromList(
+        List<int>.generate(
+          16,
+          (index) => (seed * 7 + _issued * 13 + index) & 0xff,
+        ),
+      ),
+    );
+  }
+}
+
+/// Stands in for the native signing operation. Nothing in this suite opens
+/// what it returns, so it only has to be stable and well formed.
+final class _GroupCrypto implements GroupControlCryptoPort {
+  const _GroupCrypto();
+
+  @override
+  Future<Result<SignedGroupControlEvent>> seal(GroupControlEvent event) async =>
+      Result.success(
+        SignedGroupControlEvent(
+          event: event,
+          controlStateHash: '${event.eventId}${event.eventId}',
+          canonicalBytes: Uint8List.fromList(utf8.encode(event.eventId)),
+          signature: Uint8List(SignedGroupControlEvent.signatureBytes),
+        ),
+      );
+
+  @override
+  Future<Result<SignedGroupControlEvent>> open({
+    required GroupSignedControlBytes control,
+    required Uint8List signerSigningPublic,
+  }) => throw UnimplementedError();
+}
 
 final class _Resolver implements PairwiseLiveDeviceResolverPort {
   _Resolver(this.devices);

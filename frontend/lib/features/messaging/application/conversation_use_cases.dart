@@ -471,12 +471,27 @@ final class SendConversationEvents {
           target.peerUserId,
         ),
         SavedConversationTarget() => _deriveSaved(currentUserId),
+        GroupConversationTarget() => _existingGroup(target.groupId),
       };
     } on Object {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
     }
+  }
+
+  /// A group message names no peer. Who receives it is decided when the send
+  /// is prepared, from the group's members at that moment.
+  Future<Result<_OutboundConversation>> _existingGroup(String groupId) async {
+    final result = await _existingConversation(groupId);
+    return result.fold(
+      onSuccess: (conversation) => conversation.kind == ConversationKind.group
+          ? Result.success(conversation)
+          : const Result.failure(
+              ValidationFailure(ValidationFailureKind.invalidInput),
+            ),
+      onFailure: Result.failure,
+    );
   }
 
   Future<Result<_OutboundConversation>> _deriveDirect(

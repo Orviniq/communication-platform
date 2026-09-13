@@ -17,8 +17,9 @@ final class PairwiseGroupOutboundEnvelopeAdapter
     required String currentUserId,
     required String currentDeviceId,
     required String targetUserId,
-    required Uint8List openedMlsPayload,
+    required Uint8List payload,
     required bool includeOwnDevices,
+    String? onlyRecipientDeviceId,
   }) async {
     final result = await coordinator.prepareAndQueue(
       operationId: operationId,
@@ -26,7 +27,8 @@ final class PairwiseGroupOutboundEnvelopeAdapter
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
       peerUserId: targetUserId,
-      openedOpaquePayload: openedMlsPayload,
+      openedOpaquePayload: payload,
+      onlyRecipientDeviceId: onlyRecipientDeviceId,
       includeOwnDevices: includeOwnDevices,
     );
     return result.fold(

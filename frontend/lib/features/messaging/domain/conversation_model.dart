@@ -255,6 +255,14 @@ final class SavedConversationTarget extends ConversationTarget {
   const SavedConversationTarget();
 }
 
+/// A group this device already holds. Its identifier is the conversation
+/// identifier every member's events carry.
+final class GroupConversationTarget extends ConversationTarget {
+  const GroupConversationTarget(this.groupId);
+
+  final String groupId;
+}
+
 final class ResolvedApplicationConversation {
   const ResolvedApplicationConversation({
     required this.kind,

@@ -13,8 +13,8 @@ final class GroupOutboundDispatchReport {
   final int fanoutOperations;
 }
 
-/// Moves only transactionally persisted MLS work into recipient-bound durable
-/// Double Ratchet outboxes. No network call is made here.
+/// Moves transactionally persisted group payloads into recipient-bound durable
+/// pairwise outboxes. No network call is made here.
 final class GroupOutboundDispatcher {
   const GroupOutboundDispatcher({
     required this.repository,
@@ -46,7 +46,7 @@ final class GroupOutboundDispatcher {
       // Pending work is ordered by creation, so ending the pass on the first
       // failure would let one operation nobody can route — an unreachable
       // recipient, a corrupt persisted row — strand every later group's
-      // durable ciphertext behind it for as long as its cause lasts. Each
+      // durable payload behind it for as long as its cause lasts. Each
       // operation is independent and idempotent, so the rest continue and the
       // first failure is still surfaced to the caller.
       if (routed case FailureResult(failure: final failure)) {
@@ -63,49 +63,63 @@ final class GroupOutboundDispatcher {
           );
   }
 
-  /// Fans one persisted object out to every recipient, then marks it routed.
+  /// Fans one persisted payload out to every recipient, then marks it routed.
   ///
-  /// The marker is deliberately last and deliberately separate: a crash
-  /// between the two leaves the object pending, and the next pass reuses the
-  /// exact ciphertext already persisted for each recipient rather than
-  /// advancing any ratchet a second time.
+  /// Each recipient user is one pairwise operation, so one member whose
+  /// devices cannot be reached yet delays that member's copies and nobody
+  /// else's. The marker is deliberately last and deliberately separate: a
+  /// crash between the two leaves the payload pending, and the next pass
+  /// reuses the exact ciphertext already persisted for each recipient rather
+  /// than advancing any ratchet a second time.
   Future<Result<void>> _route(
     GroupOutboundWork work, {
     required String currentUserId,
     required String currentDeviceId,
     required void Function() onFanout,
   }) async {
-    final recipients = work.recipientUserIds
-        .map((value) => value.toLowerCase())
-        .toSet();
-    if (!recipients.contains(currentUserId)) {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
-      );
-    }
-    final remoteUsers =
-        recipients
-            .where((value) => value != currentUserId)
-            .toList(growable: false)
-          ..sort();
-    final targets = remoteUsers.isEmpty ? <String>[currentUserId] : remoteUsers;
-    for (var index = 0; index < targets.length; index += 1) {
-      final target = targets[index];
+    final deviceId = work.recipientDeviceId;
+    if (deviceId != null) {
+      final target = work.recipientUserIds.single;
       final queued = await envelopes.prepareAndQueue(
         operationId: '${work.operationId}:$target',
-        // One group object becomes one pairwise operation per recipient user,
-        // and a pairwise operation owns its logical send outright: the durable
-        // outbox holds at most one local application per event id. The group
-        // event id is therefore qualified the same way the operation id is,
-        // so a group with two or more remote members can fan out at all.
-        // Recipients still deduplicate on the identifiers inside the MLS
-        // object, which this does not touch.
         eventId: '${work.eventId}:$target',
         currentUserId: currentUserId,
         currentDeviceId: currentDeviceId,
         targetUserId: target,
-        openedMlsPayload: work.openedMlsPayload,
-        includeOwnDevices: index == 0,
+        payload: work.payload,
+        includeOwnDevices: false,
+        onlyRecipientDeviceId: deviceId,
+      );
+      if (queued case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      onFanout();
+      return repository.markOutboundRouted(operationId: work.operationId);
+    }
+    final remoteUsers =
+        work.recipientUserIds
+            .where((value) => value != currentUserId)
+            .toList(growable: false)
+          ..sort();
+    // A payload for nobody but this account's other devices is one operation
+    // addressed to this account.
+    final targets = remoteUsers.isEmpty ? [currentUserId] : remoteUsers;
+    for (var index = 0; index < targets.length; index += 1) {
+      final target = targets[index];
+      final queued = await envelopes.prepareAndQueue(
+        operationId: '${work.operationId}:$target',
+        // One group payload becomes one pairwise operation per recipient user,
+        // and a pairwise operation owns its logical send outright: the durable
+        // outbox holds at most one local application per event id. The event
+        // id is therefore qualified the same way the operation id is, so a
+        // group with two or more remote members can fan out at all.
+        eventId: '${work.eventId}:$target',
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        targetUserId: target,
+        payload: work.payload,
+        includeOwnDevices:
+            index == 0 && (work.includeOwnDevices || remoteUsers.isEmpty),
       );
       if (queued case FailureResult(failure: final failure)) {
         return Result.failure(failure);
