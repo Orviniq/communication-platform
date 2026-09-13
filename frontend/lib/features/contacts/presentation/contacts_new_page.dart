@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
-import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -100,9 +99,6 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
     required bool waiting,
   }) {
     final strings = AppLocalizations.of(context);
-    final groupsAvailable = ref
-        .watch(groupFeatureAvailabilityProvider)
-        .isAvailable;
     final normalized = _search.text.trim().toLowerCase();
     final filtered = (contacts ?? const <ContactProjection>[])
         .where(
@@ -137,16 +133,10 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
                 kind: AppStatusKind.warning,
                 message: strings.contactsOfflineMessage,
               ),
-            // The entry point tells the truth about the build behind it rather
-            // than offering a route to a closed gate. Before ADR-055 this row
-            // was unconditional, so production advertised group creation and
-            // answered it with a refusal page; a withheld surface that still
-            // presents its own entry point is hidden, not withheld.
             ActionRow(
               label: strings.contactsNewGroup,
               icon: AppIcons.add,
-              subtitle: groupsAvailable ? null : strings.contactsNewGroupClosed,
-              onTap: groupsAvailable ? () => context.push('/groups/new') : null,
+              onTap: () => context.push('/groups/new'),
             ),
             ActionRow(
               label: strings.contactsNewVoiceRoom,

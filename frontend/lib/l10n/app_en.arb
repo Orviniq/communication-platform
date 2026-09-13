@@ -216,10 +216,6 @@
   "disclosureChangedLabel": "New or changed",
   "contactsNewTitle": "New",
   "contactsNewGroup": "New Group",
-  "contactsNewGroupClosed": "Not available on this device",
-  "@contactsNewGroupClosed": {
-    "description": "Subtitle on the disabled New Group row when this build has no reachable group stack (ADR-055)."
-  },
   "contactsNewVoiceRoom": "New Voice Room",
   "contactsSearchLabel": "Search contacts",
   "contactsLoadingTitle": "Loading contacts",
@@ -457,24 +453,6 @@
   "chatStateRead": "read receipt received",
   "chatStateFailed": "send failed",
   "chatStateReceived": "received",
-  "groupProductionUnavailableTitle": "Production groups are not available",
-  "groupProductionUnavailableMessage": "The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.",
-  "groupExperimentalWithheldTitle": "Group messaging is not available on this device",
-  "@groupExperimentalWithheldTitle": {
-    "description": "Title of the closed gate in the private experimental build, where the group stack exists but is withheld for want of on-device evidence (ADR-055)."
-  },
-  "groupExperimentalWithheldMessage": "The experimental group encryption has been tested on 64-bit ARM phones, and this device uses a different processor. Rather than run it untested, group chats are switched off here: no keys are published for you and no group message can reach this device. Direct messages are unaffected.",
-  "@groupExperimentalWithheldMessage": {
-    "description": "Explains that the group surface is withheld pending measurement, that it is off in substance rather than hidden, and that direct messages still work."
-  },
-  "groupDevelopmentPreviewBanner": "Development preview only — no production group ciphertext is sent",
-  "@groupDevelopmentPreviewBanner": {
-    "description": "Shown on group screens in a development build, where the in-memory fake never transmits anything."
-  },
-  "groupExperimentalBanner": "Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.",
-  "@groupExperimentalBanner": {
-    "description": "Shown on group screens in the private experimental build. Group objects really are transmitted here, and the state they produce is disposable by decision, so the wording must not reuse the development preview's promise that nothing is sent."
-  },
   "groupCreateTitle": "Create Group",
   "groupPickMembersTitle": "Pick members",
   "groupDetailsTitle": "Group details",

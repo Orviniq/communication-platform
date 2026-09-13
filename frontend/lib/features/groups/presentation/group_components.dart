@@ -1,13 +1,9 @@
-import 'package:communication_platform/app/config/deployment_disclosure.dart';
-import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
-import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The group's identity block: avatar, name, description and member count.
 ///
@@ -58,78 +54,6 @@ class GroupInfoSummary extends StatelessWidget {
             label: strings.groupMemberCount(state.activeMembers.length),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// States what this build's group stack actually is.
-///
-/// The two reachable states make materially different promises, so one shared
-/// string cannot cover both: the development preview sends nothing at all,
-/// while the private experimental artifact really does transmit group objects
-/// and really can lose the state they produce (ADR-036, ADR-044).
-class GroupMaturityBanner extends ConsumerWidget {
-  const GroupMaturityBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final label = switch (ref.watch(groupFeatureAvailabilityProvider)) {
-      GroupFeatureAvailability.developmentPreview =>
-        l10n.groupDevelopmentPreviewBanner,
-      GroupFeatureAvailability.privateExperimental =>
-        l10n.groupExperimentalBanner,
-      // Unreachable: every screen renders the closed gate before this point.
-      GroupFeatureAvailability.privateExperimentalWithheld ||
-      GroupFeatureAvailability.productionUnavailable => null,
-    };
-    if (label == null) return const SizedBox.shrink();
-    // The badge comes from the shared maturity vocabulary so a group screen and
-    // a not-built screen cannot end up naming their maturity in two different
-    // words; the sentence below it states this surface's specific consequence,
-    // which no shared badge can carry (ADR-045).
-    final maturity = switch (ref.watch(groupFeatureAvailabilityProvider)) {
-      GroupFeatureAvailability.privateExperimental =>
-        SurfaceMaturity.experimental,
-      _ => null,
-    };
-    final badge = maturity?.label(l10n);
-    return Semantics(
-      liveRegion: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.tokens.colors.warning.withValues(alpha: 0.14),
-          borderRadius: AppRadii.compact,
-          border: Border.all(color: context.tokens.colors.warning),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x3),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (badge != null) ...[
-                AppStatusBadge(kind: AppStatusKind.warning, label: badge),
-                const SizedBox(height: AppSpacing.x2),
-              ],
-              Row(
-                children: [
-                  AppIcon(
-                    AppIcons.warning,
-                    color: context.tokens.colors.warning,
-                  ),
-                  const SizedBox(width: AppSpacing.x2),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: context.tokens.typography.compact,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

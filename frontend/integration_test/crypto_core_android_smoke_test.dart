@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
@@ -19,32 +18,6 @@ void main() {
     () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-
-      // ADR-056 decides whether the closed-beta group surface is offered by
-      // asking which packaged library this process loaded. That resolution is
-      // the linchpin of the whole gate and it cannot be checked on a host,
-      // whose ABI the artifact packages nothing for — so it is checked here,
-      // on the device, against what the device itself reports.
-      final abi = container.read(runtimeAbiProvider);
-      expect(
-        abi,
-        isNotNull,
-        reason:
-            'the artifact packages a library for this device, so the gate must '
-            'be able to name which one',
-      );
-      final expectedTarget = switch (abi!) {
-        GroupMlsFieldCell.arm64V8a => 'android_arm64',
-        GroupMlsFieldCell.armeabiV7a => 'android_arm',
-        GroupMlsFieldCell.x8664 => 'android_x64',
-      };
-      expect(
-        Platform.version,
-        contains('"$expectedTarget"'),
-        reason:
-            'the gate resolved ${abi.abi}, so the VM must say it is running '
-            'that target and not another',
-      );
 
       final cryptoCore = container.read(cryptoCoreProvider);
       addTearDown(cryptoCore.close);

@@ -10,7 +10,6 @@ import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
 import 'package:communication_platform/features/groups/presentation/group_member_picker.dart';
-import 'package:communication_platform/features/groups/presentation/group_production_gate_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,20 +33,13 @@ class CreateGroupPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The availability gate comes first, before the injected-collaborator path
-    // and before anything else. It used to come second, so a caller supplying
-    // its own collaborators stepped around it; nothing in the router does that,
-    // but a gate a constructor argument can bypass is not a gate (ADR-055).
-    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
-      return const GroupProductionGatePage();
-    }
     if (injectedContacts != null && onCreate != null) {
       return _CreateGroupFlow(contacts: injectedContacts!, onCreate: onCreate!);
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
     if (userId == null) {
-      return const GroupProductionGatePage();
+      return groupErrorPage(context);
     }
     final contacts = ref.watch(contactListProvider(userId));
     final device = ref.watch(currentMessagingDeviceIdProvider);
@@ -134,8 +126,6 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.x4),
           children: [
-            const GroupMaturityBanner(),
-            const SizedBox(height: AppSpacing.x4),
             Text(
               _details
                   ? strings.groupDetailsTitle

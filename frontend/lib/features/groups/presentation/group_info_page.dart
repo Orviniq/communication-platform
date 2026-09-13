@@ -11,7 +11,6 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
-import 'package:communication_platform/features/groups/presentation/group_production_gate_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,10 +32,6 @@ class GroupInfoPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Gate first; see `CreateGroupPage`.
-    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
-      return const GroupProductionGatePage();
-    }
     if (injectedState != null && onMutate != null) {
       return GroupInfoView(
         state: injectedState!,
@@ -46,7 +41,7 @@ class GroupInfoPage extends ConsumerWidget {
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
-    if (userId == null) return const GroupProductionGatePage();
+    if (userId == null) return groupErrorPage(context);
     final state = ref.watch(groupProvider(groupId));
     final device = ref.watch(currentMessagingDeviceIdProvider);
     final useCases = ref.watch(groupUseCasesProvider);
@@ -113,7 +108,6 @@ class _GroupInfoViewState extends State<GroupInfoView> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.x4),
         children: [
-          const GroupMaturityBanner(),
           if (state.lifecycle != GroupLifecycle.active) ...[
             const SizedBox(height: AppSpacing.x3),
             GroupLifecycleNotice(lifecycle: state.lifecycle),

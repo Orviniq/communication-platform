@@ -10,7 +10,6 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
-import 'package:communication_platform/features/groups/presentation/group_production_gate_page.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
@@ -38,10 +37,6 @@ class GroupChatPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Gate first; see `CreateGroupPage`.
-    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
-      return const GroupProductionGatePage();
-    }
     if (injectedState != null && injectedMessages != null && onSend != null) {
       return GroupChatView(
         state: injectedState!,
@@ -52,7 +47,7 @@ class GroupChatPage extends ConsumerWidget {
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
-    if (userId == null) return const GroupProductionGatePage();
+    if (userId == null) return groupErrorPage(context);
     final group = ref.watch(groupProvider(groupId));
     final messages = ref.watch(groupMessagesProvider(groupId));
     final device = ref.watch(currentMessagingDeviceIdProvider);
@@ -140,7 +135,6 @@ class _GroupChatViewState extends State<GroupChatView> {
     );
     final chat = Column(
       children: [
-        const GroupMaturityBanner(),
         if (state.lifecycle != GroupLifecycle.active)
           GroupLifecycleNotice(lifecycle: state.lifecycle),
         if (_sendFailed) GroupInlineError(message: strings.groupSendFailed),

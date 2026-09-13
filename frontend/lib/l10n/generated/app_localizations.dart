@@ -986,12 +986,6 @@ abstract class AppLocalizations {
   /// **'New Group'**
   String get contactsNewGroup;
 
-  /// Subtitle on the disabled New Group row when this build has no reachable group stack (ADR-055).
-  ///
-  /// In en, this message translates to:
-  /// **'Not available on this device'**
-  String get contactsNewGroupClosed;
-
   /// No description provided for @contactsNewVoiceRoom.
   ///
   /// In en, this message translates to:
@@ -2023,42 +2017,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'received'**
   String get chatStateReceived;
-
-  /// No description provided for @groupProductionUnavailableTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Production groups are not available'**
-  String get groupProductionUnavailableTitle;
-
-  /// No description provided for @groupProductionUnavailableMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.'**
-  String get groupProductionUnavailableMessage;
-
-  /// Title of the closed gate in the private experimental build, where the group stack exists but is withheld for want of on-device evidence (ADR-055).
-  ///
-  /// In en, this message translates to:
-  /// **'Group messaging is not available on this device'**
-  String get groupExperimentalWithheldTitle;
-
-  /// Explains that the group surface is withheld pending measurement, that it is off in substance rather than hidden, and that direct messages still work.
-  ///
-  /// In en, this message translates to:
-  /// **'The experimental group encryption has been tested on 64-bit ARM phones, and this device uses a different processor. Rather than run it untested, group chats are switched off here: no keys are published for you and no group message can reach this device. Direct messages are unaffected.'**
-  String get groupExperimentalWithheldMessage;
-
-  /// Shown on group screens in a development build, where the in-memory fake never transmits anything.
-  ///
-  /// In en, this message translates to:
-  /// **'Development preview only — no production group ciphertext is sent'**
-  String get groupDevelopmentPreviewBanner;
-
-  /// Shown on group screens in the private experimental build. Group objects really are transmitted here, and the state they produce is disposable by decision, so the wording must not reuse the development preview's promise that nothing is sent.
-  ///
-  /// In en, this message translates to:
-  /// **'Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.'**
-  String get groupExperimentalBanner;
 
   /// No description provided for @groupCreateTitle.
   ///

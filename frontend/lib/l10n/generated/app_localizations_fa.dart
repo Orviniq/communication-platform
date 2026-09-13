@@ -520,9 +520,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get contactsNewGroup => 'گروه جدید';
 
   @override
-  String get contactsNewGroupClosed => 'روی این دستگاه در دسترس نیست';
-
-  @override
   String get contactsNewVoiceRoom => 'اتاق صوتی جدید';
 
   @override
@@ -1093,30 +1090,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatStateReceived => 'دریافت‌شده';
-
-  @override
-  String get groupProductionUnavailableTitle =>
-      'گروه‌های عملیاتی در دسترس نیستند';
-
-  @override
-  String get groupProductionUnavailableMessage =>
-      'پروفایل MLS پساکوانتومی هنوز پشت دروازهٔ امنیتی است. این ساخت نمی‌تواند گروه بسازد، KeyPackage تولید کند یا متن رمز گروهی بفرستد.';
-
-  @override
-  String get groupExperimentalWithheldTitle =>
-      'پیام‌رسانی گروهی روی این دستگاه در دسترس نیست';
-
-  @override
-  String get groupExperimentalWithheldMessage =>
-      'رمزنگاری گروهی آزمایشی روی گوشی‌های ARM ۶۴بیتی آزمایش شده است و این دستگاه از پردازندهٔ دیگری استفاده می‌کند. به‌جای اجرای آزمایش‌نشده، گفت‌وگوهای گروهی اینجا خاموش است: هیچ کلیدی برای شما منتشر نمی‌شود و هیچ پیام گروهی به این دستگاه نمی‌رسد. پیام‌های مستقیم بی‌تأثیر می‌مانند.';
-
-  @override
-  String get groupDevelopmentPreviewBanner =>
-      'فقط پیش‌نمایش توسعه — هیچ متن رمز گروهی عملیاتی ارسال نمی‌شود';
-
-  @override
-  String get groupExperimentalBanner =>
-      'رمزنگاری گروهی آزمایشی — بازبینی‌نشده و غیراستاندارد. یک به‌روزرسانی ممکن است این گروه‌ها را بازنشانی کند و پیام‌هایشان را حذف کند.';
 
   @override
   String get groupCreateTitle => 'ساخت گروه';

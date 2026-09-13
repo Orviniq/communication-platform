@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/app_environment.dart';
-import 'package:communication_platform/app/config/group_production_gate.dart';
-import 'package:communication_platform/app/config/runtime_abi_native.dart';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
@@ -33,23 +31,6 @@ final timeSourceProvider = Provider<TimeSource>(
 
 final appEnvironmentProvider = Provider<AppEnvironment>(
   (ref) => AppEnvironment.development,
-);
-
-/// Which packaged native library this process actually loaded, or null when
-/// the artifact packages none for this target.
-///
-/// One APK carries `arm64-v8a`, `armeabi-v7a` and `x86_64`, and the installer
-/// chooses; this is how the application finds out which one it got. It is a
-/// fact about the running artifact, not a setting — the answer is fixed by the
-/// AOT snapshot the platform selected and there is nothing to select at
-/// runtime.
-///
-/// It is a provider so the platform read stays behind one seam rather than
-/// being called from a config class or a screen, and so a test can pin an ABI
-/// it is not running on. ADR-056 uses it to decide whether the closed-beta group
-/// surface has been measured on *this* processor.
-final runtimeAbiProvider = Provider<GroupMlsFieldCell?>(
-  (ref) => currentGroupMlsAbiCell(),
 );
 
 /// The one place request outcomes are counted, for the whole process.

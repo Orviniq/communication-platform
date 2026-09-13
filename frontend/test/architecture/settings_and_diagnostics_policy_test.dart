@@ -83,8 +83,8 @@ void main() {
       // A reader of an old paste has to be able to tell what they have. The
       // count is pinned so that adding, removing or redefining a field is a
       // deliberate edit here as well as there.
-      expect(DiagnosticsReport.formatVersion, 1);
-      expect(DiagnosticField.values, hasLength(31));
+      expect(DiagnosticsReport.formatVersion, 2);
+      expect(DiagnosticField.values, hasLength(29));
     });
   });
 

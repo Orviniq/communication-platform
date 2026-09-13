@@ -522,9 +522,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactsNewGroup => 'New Group';
 
   @override
-  String get contactsNewGroupClosed => 'Not available on this device';
-
-  @override
   String get contactsNewVoiceRoom => 'New Voice Room';
 
   @override
@@ -1093,30 +1090,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatStateReceived => 'received';
-
-  @override
-  String get groupProductionUnavailableTitle =>
-      'Production groups are not available';
-
-  @override
-  String get groupProductionUnavailableMessage =>
-      'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.';
-
-  @override
-  String get groupExperimentalWithheldTitle =>
-      'Group messaging is not available on this device';
-
-  @override
-  String get groupExperimentalWithheldMessage =>
-      'The experimental group encryption has been tested on 64-bit ARM phones, and this device uses a different processor. Rather than run it untested, group chats are switched off here: no keys are published for you and no group message can reach this device. Direct messages are unaffected.';
-
-  @override
-  String get groupDevelopmentPreviewBanner =>
-      'Development preview only — no production group ciphertext is sent';
-
-  @override
-  String get groupExperimentalBanner =>
-      'Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.';
 
   @override
   String get groupCreateTitle => 'Create Group';
