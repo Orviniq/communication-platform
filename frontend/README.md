@@ -4,10 +4,10 @@ Flutter client for Android. There is no browser target: the server serves no bro
 surface, so a web build cannot connect. The product name and all brand assets remain
 provisional. Registration, login, device enrollment and cross-signing, contacts, direct
 messaging, Saved Messages, local search, linked devices, history transfer,
-notifications, background delivery, the settings surfaces, the user-initiated
-diagnostics export and the closed-beta group stack are implemented; voice rooms, file
-attachments, shared media and profile publishing are not, and every surface that is
-routed without an implementation behind it says so ([ADR-045](docs/decisions.md)).
+notifications, background delivery, the settings surfaces and the user-initiated
+diagnostics export are implemented; voice rooms, file attachments, shared media and
+profile publishing are not, and every surface that is routed without an implementation
+behind it says so ([ADR-045](docs/decisions.md)).
 `docs/implementation-checklist.md` is the live status.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
@@ -35,30 +35,15 @@ mirror; the application has no foreign runtime dependency.
 | Environment | Dart entry point | Android application ID |
 |---|---|---|
 | Development | `lib/main_development.dart` | `com.orviniq.chat.development` |
-| Private Experimental | `lib/main_beta.dart` | `com.orviniq.chat.beta` |
 | Production | `lib/main_production.dart` | `com.orviniq.chat` |
 
-The beta flavor ships the **Private Experimental** deployment defined by
-[ADR-044](docs/decisions.md): one privately distributed artifact for roughly 20-30
-trusted people, carrying declared maturity tiers rather than one uniform claim. It is
-deliberately not called a beta in anything a user reads - nothing in it has been
-independently reviewed - even though the frozen application ID, the Gradle flavor, and
-the `AppEnvironment` value all keep the `beta` name they can no longer change.
-
-What that build *says* about itself is decided by [ADR-045](docs/decisions.md): one
-application-level word, two feature labels that only ever read down from it
-(**Experimental**, **Not built yet**), and one mandatory disclosure shown once, as part
-of the enrollment security notice a device must already pass. There is deliberately no
-label meaning supported, stable, verified or audited - nothing here has been assessed by
-anyone outside the project - and the notice is never re-shown on a timer. The written
-disclosure delivered with the artifact stays release-blocking alongside it.
-
-The three are separate, coexisting applications; none upgrades into another. The
-closed-beta ID is **frozen** and lives in `android/beta-release-identity.properties`,
-which the build reads and the release verification checks against. Changing it after
-the first external install would force every beta user through an uninstall that
-permanently destroys their local state — see
-[Beta release signing and key continuity](docs/release-signing.md).
+The two are separate, coexisting applications; neither upgrades into the other. The
+`beta` flavor that shipped the Private Experimental deployment
+([ADR-044](docs/decisions.md)) under the frozen application ID `com.orviniq.chat.beta`
+was deleted with the closed-beta MLS core, along with its signing and release tooling.
+No flavor builds that application ID now, so an existing install of it cannot be updated
+from this tree; [Beta release signing and key continuity](docs/release-signing.md)
+records what its retained signing key still controls.
 
 The Android `namespace` is still `com.example.communication_platform`. That is only
 the build-time Kotlin/resource package and is not part of the installed identity.
@@ -85,30 +70,19 @@ credentials or private keys):
   and WebSocket traffic cannot reach the provisioned server (ADR-043). Absent or
   malformed material fails configuration closed rather than falling back to public roots.
 
-`<ENVIRONMENT>` is `DEVELOPMENT`, `BETA`, or `PRODUCTION`; one artifact reads only its own prefix.
-The beta artifact uses a distinct backend origin and a distinct Android application ID,
-which is also what separates its local state: the encrypted database and the KeyStore
-alias holding its key live in the per-application sandbox, so a different application ID
-is a different store. Its closed-beta PQ MLS state is disposable and is never migrated into
-production state. That beta suite is hybrid ML-KEM-768/X25519 on a Private Use
-identifier; it is not the IETF draft suite the production profile selects, and
-`docs/mls-profile.md` records exactly how the two differ.
-Closed-beta MLS transport v3 authenticates later Welcome/re-add with
-the complete bounded signed control transcript. V2 beta groups and queued group objects
-lack that evidence and must be recreated/rejoined rather than silently migrated.
-Android also requires the build-local resource generation described in
+`<ENVIRONMENT>` is `DEVELOPMENT` or `PRODUCTION`; one artifact reads only its own prefix.
+Each flavor has a distinct Android application ID, which is also what separates its
+local state: the encrypted database and the KeyStore alias holding its key live in the
+per-application sandbox, so a different application ID is a different store. Android
+also requires the build-local resource generation described in
 `android/provisioning/README.md`.
 
 ```sh
 flutter run --flavor development --target lib/main_development.dart
-flutter build apk --release --flavor beta --target lib/main_beta.dart
 flutter build apk --release --flavor production --target lib/main_production.dart
 ```
 
-The beta flavor signs with the frozen persistent release identity described in
-[Beta release signing and key continuity](docs/release-signing.md) (ADR-042), and
-`tool/build_beta_release.sh` is the only supported way to produce an artifact for
-users. The production release build has no signing config at all, so it packages
+No flavor has a release signing config. The production release build therefore packages
 unsigned: it keeps building and stays verifiable in CI, but the OS cannot install it,
 which is fail-closed by construction. Production gains its own identity only through an
 explicit, separate release decision.

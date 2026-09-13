@@ -148,12 +148,10 @@ The authority reaches the app as `<ENVIRONMENT>_PRIVATE_CA_PEM_BASE64`, because
 configuration carries. Absent or malformed authority material blocks at
 configuration rather than falling back to public roots.
 
-The closed-beta flavor still renders the Android resources from its `BETA_*`
-values — `tool/render_beta_trust.sh` refuses to run unless the supplied CA file
-matches `BETA_PRIVATE_CA_SHA256`, and `tool/verify_release_apk.sh --beta` reads
-the pin-set back out of the artifact — but that configuration is retained as
-defence in depth for any future WebView or Java-side traffic. It is not what
-protects the API traffic, and must not be described as though it were.
+The Android network security resources that
+[`android/provisioning/README.md`](../android/provisioning/README.md) describes are
+retained as defence in depth for any future WebView or Java-side traffic. They are not
+what protects the API traffic, and must not be described as though they were.
 
 Leaf SPKI pinning is deliberately not reimplemented in Dart: `X509Certificate`
 exposes no SPKI accessor and no SHA-256, so it would take hand-written ASN.1
@@ -622,12 +620,11 @@ of TLS. A store channel may be added later but cannot become a runtime dependenc
 
 Because distribution is a direct APK rather than an App Bundle through a store,
 Play App Signing does not apply: the application signing key is the distribution
-identity permanently, and there is no upload-key reset if it is lost. The Private
-Experimental Beta therefore has a frozen application ID and a single persistent
-signing key, with `minSdk` 24 fixing the available signature schemes at v2 and
-v3. Key custody, backup and recovery, the release procedure, artifact
-verification, and the upgrade-continuity proof are specified in
-[Beta release signing and key continuity](release-signing.md) under ADR-042.
+identity permanently, and there is no upload-key reset if it is lost. The deleted
+`beta` flavor carried a frozen application ID and a single persistent signing key for
+that reason; [Beta release signing and key continuity](release-signing.md) (ADR-042)
+records its custody and what the retained key still controls. No flavor is signed now,
+and production gains an identity only through an explicit release decision.
 
 ## Primary references
 

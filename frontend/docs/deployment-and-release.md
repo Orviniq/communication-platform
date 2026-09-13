@@ -4,38 +4,31 @@ What the initial deployment *is* - its audience, its maturity tiers, what may be
 claimed about it, and what must be disclosed - is decided by
 [ADR-044](decisions.md), and what it *says* to the people who receive it - the
 maturity vocabulary, the disclosure, and the one acknowledgement - is decided by
-[ADR-045](decisions.md). Release signing, key custody, and upgrade-continuity
-verification are specified separately in
-[Beta release signing and key continuity](release-signing.md) and decided by
-ADR-042. Those two are authoritative for the deployment definition and for
-anything concerning signing keys, release artifacts, and their verification; this
-document covers the surrounding release process.
+[ADR-045](decisions.md), and those two are authoritative for the deployment
+definition. The release signing, key custody, and upgrade-continuity verification that
+[Beta release signing and key continuity](release-signing.md) specified under ADR-042
+belonged to the `beta` flavor, which was deleted with the closed-beta MLS core; no
+flavor is signed now. This document covers the surrounding release process.
 
 ## Environments
 
 Use compile-time flavors with separate visible identity and trust configuration.
-There are exactly three; each has one Dart entry point and reads one provisioning
+There are exactly two; each has one Dart entry point and reads one provisioning
 prefix:
 
 | Flavor | Entry point | Purpose | Trust |
 |---|---|---|---|
 | development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner |
-| beta | `lib/main_beta.dart` | The Private Experimental deployment (ADR-044) | beta origin/CA/pins; persistent Beta signing identity |
 | production | `lib/main_production.dart` | Future public release | production origin/private CA/primary+backup pins only |
 
-There is deliberately no staging flavor. A fourth environment would need a fourth
-application ID, a fourth provisioning prefix, and its own trust material, and
-nothing in the current release process needs one: production-like integration is
-rehearsed against the beta origin. Adding one is an ADR decision, not a build
-edit.
+There is deliberately no staging flavor. A third environment would need a third
+application ID, a third provisioning prefix, and its own trust material, and
+nothing in the current release process needs one. Adding one is an ADR decision,
+not a build edit.
 
 Every non-production flavor carries a persistent configuration banner, on the
 blocking Connection screen and inside the application shell, that names its own
-build: development reads "Development configuration" and beta reads "Private
-experimental build". Under ADR-044 that banner deliberately does not say "beta" -
-the word overstates an unreviewed stack - even though the frozen application ID
-keeps its `.beta` suffix. A beta build is installed by external testers and must
-never present itself as development. Production shows no banner at all.
+build: development reads "Development configuration". Production shows no banner at all.
 
 The banner, the Android launcher label, and the window title Android shows in the
 task switcher name the same build. Before ADR-045 the title branched on production
@@ -44,10 +37,10 @@ alone, so the Private Experimental artifact called itself "Communication Platfor
 `AppEnvironmentBanner` now owns both strings, and the Gradle flavor owns the
 launcher label they must match.
 
-The beta and production flavors are separate, coexisting Android applications
-with different application IDs and different signing identities. Neither
-upgrades into the other. The production release build is deliberately unsigned
-so it keeps building and stays verifiable without being installable.
+The development and production flavors are separate, coexisting Android
+applications with different application IDs. Neither upgrades into the other. No
+flavor has a release signing identity: the production release build is deliberately
+unsigned so it keeps building and stays verifiable without being installable.
 
 No runtime text field changes the production server. Secrets are never compiled into the
 client; only public origins, CA certificates, SPKI hashes, and protocol capabilities are
@@ -102,15 +95,15 @@ by contract tests and conservative client behavior, not runtime version guessing
    rehearsal.
 3. Produce deterministic release APK artifacts where the toolchain permits.
 4. Sign with an offline-controlled application signing key; keep backup/recovery process
-   separate from source control. The Private Experimental Beta already does this
-   through `tool/build_beta_release.sh`; production keeps a distinct key that is
-   not created until an explicit production release decision.
+   separate from source control. No flavor is signed today: the Beta signing path was
+   deleted with the `beta` flavor, and production's key is not created until an
+   explicit production release decision.
 5. Generate SHA-256 artifact hashes and signed update metadata.
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
-   private-CA connectivity on representative devices. Upgrade continuity is proved
-   by `tool/verify_upgrade_continuity.sh` plus the manual product-state tier in
-   [release-signing.md](release-signing.md); a successful build is never
-   sufficient evidence on its own.
+   private-CA connectivity on representative devices. Upgrade continuity has to be
+   proved on a device; a successful build is never sufficient evidence on its own.
+   [release-signing.md](release-signing.md) records how the deleted Beta channel
+   proved it.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
 8. For the Private Experimental deployment, deliver the written disclosure with the

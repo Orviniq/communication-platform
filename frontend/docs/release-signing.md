@@ -1,5 +1,14 @@
 # Beta release signing and key continuity
 
+> **Status (2026-09-13).** The `beta` flavor, its frozen application ID
+> `com.orviniq.chat.beta`, `android/beta-release-identity.properties`, the beta
+> scripts this manual names, and the `--beta` mode of `tool/verify_release_apk.sh`
+> were deleted with the closed-beta MLS core. No flavor is signed now, so none of the
+> procedures below can run from this tree. The manual is kept because the Beta
+> keystore and its encrypted backups still exist outside the repository and remain
+> the only key that can update an existing install of `com.orviniq.chat.beta`: do
+> not destroy them.
+
 This is the operating manual for shipping the Private Experimental Beta to its
 20–30 trusted users. It is written for whoever performs a release, including the
 person who inherits this project later. The governing decision is
