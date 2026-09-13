@@ -153,8 +153,6 @@ void main() {
       // rename would silently switch locking off for it. Naming them here is
       // what makes that a failing test rather than a quiet loss of enforcement.
       expect(_lockedConfigurations(gradleLock), <String>{
-        'betaReleaseCompileClasspath',
-        'betaReleaseRuntimeClasspath',
         'developmentDebugCompileClasspath',
         'developmentDebugRuntimeClasspath',
         'productionReleaseCompileClasspath',
@@ -171,13 +169,10 @@ void main() {
 
     test('a released artifact links exactly the reviewed modules', () {
       // This is the answer to "what does the packaged artifact contain that
-      // this project did not write", on the Android side, in full. Both
-      // distributed flavors resolve the same set; a difference between them
-      // would mean the thing that was reviewed is not the thing that ships.
-      final release = _modulesIn(gradleLock, 'betaReleaseRuntimeClasspath');
-      expect(
-        _modulesIn(gradleLock, 'productionReleaseRuntimeClasspath'),
-        release,
+      // this project did not write", on the Android side, in full.
+      final release = _modulesIn(
+        gradleLock,
+        'productionReleaseRuntimeClasspath',
       );
       expect(_withoutEngineRevision(release), _reviewedReleaseModules);
     });
@@ -194,14 +189,18 @@ void main() {
         r'^- `([\w.\-]+:[\w.\-]+:[^`]+)`$',
         multiLine: true,
       ).allMatches(notices).map((match) => match.group(1)!).toSet();
-      expect(listed, _modulesIn(gradleLock, 'betaReleaseRuntimeClasspath'));
+      expect(
+        listed,
+        _modulesIn(gradleLock, 'productionReleaseRuntimeClasspath'),
+      );
     });
 
     test('the Flutter engine is one revision everywhere', () {
-      final engines = _modulesIn(gradleLock, 'betaReleaseRuntimeClasspath')
-          .where((module) => module.startsWith('io.flutter:'))
-          .map((module) => module.split(':').last)
-          .toSet();
+      final engines =
+          _modulesIn(gradleLock, 'productionReleaseRuntimeClasspath')
+              .where((module) => module.startsWith('io.flutter:'))
+              .map((module) => module.split(':').last)
+              .toSet();
       expect(engines, hasLength(1));
       expect(
         RegExp(r'^1\.0\.0-[0-9a-f]{40}$').hasMatch(engines.single),

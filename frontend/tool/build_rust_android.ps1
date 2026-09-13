@@ -1,7 +1,7 @@
 param(
     [ValidateSet('all', 'arm64-v8a', 'armeabi-v7a', 'x86_64')]
     [string]$Abi = 'all',
-    [ValidateSet('foundation', 'beta')]
+    [ValidateSet('foundation')]
     [string]$CryptoProfile = 'foundation'
 )
 
