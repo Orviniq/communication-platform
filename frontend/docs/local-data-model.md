@@ -39,7 +39,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `device_log` | Verified signed hash-chain records, last head/hash, fork state, gossip state |
 | `pairwise_sessions` | Opaque crypto-core Double Ratchet state per device pair |
 | `prekeys` | Local private prekey handles and upload/use state |
-| `mls_groups` | Opaque crypto-core MLS state, accepted epoch, control revision/hash, lifecycle/quarantine state, and pending mutation CAS marker |
+| `mls_groups` | Accepted epoch, control revision/hash, lifecycle/quarantine state, and pending mutation CAS marker |
 | `group_control_events` | Deterministic accepted control projection, exact signed-control payload, and signer Authentication Service proof |
 | `group_outbound_objects` | Exact prepared opaque group object and send-readiness state; piece 18 never marks development preview data production-ready |
 | `conversations` | DM/group/saved identity and list projection |
@@ -258,6 +258,13 @@ cross-check authorization rather than trusting a server-supplied projection.
   the table was created empty and stayed empty. The step issues `DROP TABLE IF EXISTS`, so a
   database that never had the table upgrades as well, and schema 9 no longer creates it on
   the way.
+
+- Schema version 21 drops `mls_groups.opaque_crypto_state_handle`. The column held each
+  group's sealed MLS state, which only the closed-beta core could open, and its one reader
+  went with the MLS port. Production never wrote a group row; the closed-beta build and the
+  development preview did, and no build can use that state now. The step reads
+  `PRAGMA table_info` before it drops, so a database that never had the column upgrades as
+  well. The rest of the group row stays.
 
 ## Retention and deletion
 
