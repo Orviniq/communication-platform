@@ -1,4 +1,3 @@
-import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
@@ -8,7 +7,6 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
-import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
 import 'package:communication_platform/features/groups/application/group_mls_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
 import 'package:communication_platform/features/groups/application/group_pending_eviction_service.dart';
@@ -74,19 +72,6 @@ final durableSyncEngineProvider =
         database,
         config: ref.watch(serverConfigSnapshotProvider),
       );
-      final groupKeyPackageMaintenance =
-          GroupProductionGate.privateExperimentalPermit(
-                ref.watch(appEnvironmentProvider),
-                ref.watch(runtimeAbiProvider),
-              ) !=
-              null
-          ? await ref.watch(
-              groupKeyPackageMaintenanceServiceProvider((
-                userId: scope.userId,
-                deviceId: scope.deviceId,
-              )).future,
-            )
-          : null;
       final sender = await ref.watch(
         sendConversationEventsProvider((
           userId: scope.userId,
@@ -167,12 +152,6 @@ final durableSyncEngineProvider =
           onPreparedForPeer: owedGossip.owe,
         ),
         postInboxCommitWork: _CompositePostInboxWork([
-          if (groupKeyPackageMaintenance != null)
-            _GroupKeyPackagePostInboxWork(
-              groupKeyPackageMaintenance,
-              currentUserId: scope.userId,
-              currentDeviceId: scope.deviceId,
-            ),
           _GroupPendingEvictionPostInboxWork(
             GroupPendingEvictionService(
               repository: DriftGroupRepository(database),
@@ -209,26 +188,6 @@ final durableSyncEngineProvider =
         ]),
       );
     });
-
-final class _GroupKeyPackagePostInboxWork implements PostInboxCommitWorkPort {
-  const _GroupKeyPackagePostInboxWork(
-    this.maintenance, {
-    required this.currentUserId,
-    required this.currentDeviceId,
-  });
-
-  final GroupKeyPackageMaintenanceService maintenance;
-  final String currentUserId;
-  final String currentDeviceId;
-
-  @override
-  Future<void> run() async {
-    await maintenance.maintain(
-      userId: currentUserId,
-      deviceId: currentDeviceId,
-    );
-  }
-}
 
 final class _GroupPendingEvictionPostInboxWork
     implements PostInboxCommitWorkPort {

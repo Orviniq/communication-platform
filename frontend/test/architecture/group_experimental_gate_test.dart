@@ -379,21 +379,6 @@ void main() {
       );
     });
 
-    test('no KeyPackage is generated or uploaded', () {
-      // The half that separates withheld from hidden. A build that closes its
-      // screens while still publishing KeyPackages advertises a capability it
-      // will not honour, and its peers pay for that rather than it.
-      expect(
-        withheldBeta().read(
-          groupKeyPackageMaintenanceServiceProvider((
-            userId: '11111111-1111-4111-8111-111111111111',
-            deviceId: '22222222-2222-4222-8222-222222222222',
-          )).future,
-        ),
-        throwsStateError,
-      );
-    });
-
     test('no screen can be reached around the gate', () {
       // One gate, pinned to the screen it belongs to. This used to count five
       // occurrences of `gate` in one concatenated source string and reason
@@ -448,7 +433,7 @@ void main() {
   });
 
   group('a measured ABI gets the stack it was measured for', () {
-    test('the permit is granted and the maintenance path opens', () {
+    test('the permit is granted and not withheld', () {
       expect(
         GroupProductionGate.privateExperimentalPermit(
           AppEnvironment.beta,
@@ -463,51 +448,6 @@ void main() {
         ),
         isFalse,
       );
-    });
-
-    test('the KeyPackage path is no longer what refuses', () async {
-      // On a withheld ABI this provider throws the gate's own `StateError`. On
-      // a measured one it must get past the gate and fail further down, on a
-      // platform binding this host test has no adapters for. Asserting the
-      // *absence* of the gate's refusal is what proves the surface opened;
-      // asserting a plain throw would pass either way.
-      Object? thrown;
-      try {
-        await containerFor(
-          AppEnvironment.beta,
-          abi: GroupMlsFieldCell.arm64V8a,
-        ).read(
-          groupKeyPackageMaintenanceServiceProvider((
-            userId: '11111111-1111-4111-8111-111111111111',
-            deviceId: '22222222-2222-4222-8222-222222222222',
-          )).future,
-        );
-      } catch (error) {
-        thrown = error;
-      }
-      expect(thrown, isNot(isA<StateError>()));
-      expect(
-        thrown.toString(),
-        isNot(contains('private experimental permit')),
-        reason: 'a measured ABI must not be refused by the gate',
-      );
-
-      Object? withheld;
-      try {
-        await containerFor(
-          AppEnvironment.beta,
-          abi: GroupMlsFieldCell.armeabiV7a,
-        ).read(
-          groupKeyPackageMaintenanceServiceProvider((
-            userId: '11111111-1111-4111-8111-111111111111',
-            deviceId: '22222222-2222-4222-8222-222222222222',
-          )).future,
-        );
-      } catch (error) {
-        withheld = error;
-      }
-      expect(withheld, isA<StateError>());
-      expect(withheld.toString(), contains('private experimental permit'));
     });
   });
 

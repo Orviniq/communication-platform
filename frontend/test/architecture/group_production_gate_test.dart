@@ -242,25 +242,6 @@ void main() {
     },
   );
 
-  test('production has no KeyPackage maintenance path', () {
-    final container = ProviderContainer(
-      overrides: [
-        appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    expect(
-      container.read(
-        groupKeyPackageMaintenanceServiceProvider((
-          userId: '11111111-1111-4111-8111-111111111111',
-          deviceId: '22222222-2222-4222-8222-222222222222',
-        )).future,
-      ),
-      throwsStateError,
-    );
-  });
-
   test('the unsupported adapter fails closed on every port method', () async {
     const crypto = UnsupportedGroupMlsCrypto();
     const ownerId = '11111111-1111-4111-8111-111111111111';
