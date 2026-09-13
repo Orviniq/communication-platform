@@ -13,8 +13,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
     implements GroupRepositoryPort, GroupControlTranscriptPort {
   const DriftGroupRepository(super.database);
 
-  static const _keyPackageStateSecretId = 'beta-pq-mls-key-packages-v1';
-
   @override
   Stream<GroupState?> watchGroup(String groupId) {
     final query = database.select(database.mlsGroups)
@@ -179,10 +177,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
     _validateControlTranscript(expectedPrevious, prepared);
 
     if (expectedPrevious == null) {
-      final consumption = prepared.consumedKeyPackageState;
-      if (consumption != null) {
-        await _consumeKeyPackageState(consumption);
-      }
       final existing = await (database.select(
         database.mlsGroups,
       )..where((row) => row.groupId.equals(next.groupId))).getSingleOrNull();
@@ -225,8 +219,7 @@ final class DriftGroupRepository extends DriftRepositoryBase
               ))
               .getSingleOrNull();
       // A queue-gapped group has no usable parent epoch, so no control may
-      // extend it. Recovery runs through [rejoinInsideTransaction] instead.
-      // The application-message path enforces the same rule.
+      // extend it. The application-message path enforces the same rule.
       if (current == null ||
           current.queueGapRecoveryState != 0 ||
           !_bytesEqual(current.controlStateHash, previousHash)) {
@@ -294,100 +287,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
     }
   }
 
-  /// Replaces a group this device can no longer follow with an authenticated
-  /// re-admission, in the caller's transaction.
-  ///
-  /// This is deliberately not a control transition. The stale local revision is
-  /// not the parent of the new one — peers removed this device and added it
-  /// again, so the intervening Commits were never seen and never will be. The
-  /// Welcome therefore carries its own complete transcript, is replayed from no
-  /// state, and replaces the retained projection, roster, and transcript rather
-  /// than extending them. Locally held message history survives; it is already
-  /// decrypted and durable, and no future epoch depends on it.
-  ///
-  /// [supersededLocal] is the compare-and-swap witness: the rejoin aborts if
-  /// the retained group changed after it was prepared.
-  Future<void> rejoinInsideTransaction({
-    required GroupState supersededLocal,
-    required GroupState next,
-    required PreparedGroupTransition prepared,
-  }) async {
-    final event = prepared.signedControl.event;
-    final consumption = prepared.consumedKeyPackageState;
-    if (event.groupId != next.groupId ||
-        next.groupId != supersededLocal.groupId ||
-        prepared.signedControl.controlStateHash != next.controlStateHash ||
-        event.revision != next.controlRevision ||
-        next.controlRevision <= supersededLocal.controlRevision ||
-        next.acceptedEpoch <= supersededLocal.acceptedEpoch ||
-        next.lifecycle != GroupLifecycle.active ||
-        prepared.outbound ||
-        consumption == null) {
-      throw const _GroupIntegrityFailure();
-    }
-    _validateControlTranscript(null, prepared);
-    await _consumeKeyPackageState(consumption);
-
-    final current = await (database.select(
-      database.mlsGroups,
-    )..where((row) => row.groupId.equals(next.groupId))).getSingleOrNull();
-    if (current == null ||
-        current.controlProjectionCiphertext == null ||
-        current.controlRevision != supersededLocal.controlRevision ||
-        !_bytesEqual(
-          current.controlStateHash,
-          _hexBytes(supersededLocal.controlStateHash),
-        )) {
-      throw const _GroupConflict();
-    }
-    final updated =
-        await (database.update(database.mlsGroups)..where(
-              (row) =>
-                  row.groupId.equals(next.groupId) &
-                  row.controlRevision.equals(supersededLocal.controlRevision),
-            ))
-            .write(
-              MlsGroupsCompanion(
-                acceptedEpoch: Value(next.acceptedEpoch),
-                stateVersion: Value(current.stateVersion + 1),
-                queueGapRecoveryState: const Value(0),
-                controlProjectionCiphertext: Value(_encodeState(next)),
-                controlRevision: Value(next.controlRevision),
-                controlStateHash: Value(_hexBytes(next.controlStateHash)),
-                lifecycle: Value(next.lifecycle.index),
-                pendingMutationId: const Value(null),
-              ),
-            );
-    if (updated != 1) throw const _GroupConflict();
-    await (database.delete(
-      database.memberships,
-    )..where((row) => row.conversationId.equals(next.groupId))).go();
-    await (database.delete(
-      database.groupControlEvents,
-    )..where((row) => row.groupId.equals(next.groupId))).go();
-    await (database.delete(
-      database.groupOutboundObjects,
-    )..where((row) => row.groupId.equals(next.groupId))).go();
-    await (database.update(
-      database.conversations,
-    )..where((row) => row.conversationId.equals(next.groupId))).write(
-      ConversationsCompanion(
-        displayTitleCiphertext: Value(
-          Uint8List.fromList(utf8.encode(next.metadata.name)),
-        ),
-        sortKey: Value(event.createdMs),
-      ),
-    );
-    await _insertMemberships(next);
-    for (final entry in prepared.precedingControlTranscript) {
-      await _insertControlEvent(entry.signedControl, entry);
-    }
-    await _insertControlEvent(
-      prepared.signedControl,
-      prepared.controlTranscriptEntry,
-    );
-  }
-
   Future<void> _insertMemberships(GroupState next) async {
     for (final member in next.members) {
       await database
@@ -400,34 +299,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
             ),
           );
     }
-  }
-
-  Future<void> _consumeKeyPackageState(
-    ConsumedGroupKeyPackageState consumption,
-  ) async {
-    final currentDevice =
-        await (database.select(database.devices)..where(
-              (row) =>
-                  row.deviceId.equals(consumption.deviceId) &
-                  row.isCurrentDevice.equals(true),
-            ))
-            .getSingleOrNull();
-    if (currentDevice == null) throw const _GroupConflict();
-    final updatedSecret =
-        await (database.update(database.secureSecrets)..where(
-              (row) =>
-                  row.secretId.equals(_keyPackageStateSecretId) &
-                  row.stateRevision.equals(consumption.expectedStateRevision),
-            ))
-            .write(
-              SecureSecretsCompanion(
-                wrappedCiphertextOrOpaqueHandle: Value(
-                  consumption.nextSealedState,
-                ),
-                stateRevision: Value(consumption.expectedStateRevision + 1),
-              ),
-            );
-    if (updatedSecret != 1) throw const _GroupConflict();
   }
 
   Future<void> _insertControlEvent(

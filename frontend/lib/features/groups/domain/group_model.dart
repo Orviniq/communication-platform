@@ -173,14 +173,12 @@ final class GroupState {
     required Iterable<GroupMember> members,
     required this.controlRevision,
     required this.controlStateHash,
-    required this.acceptedEpoch,
     this.lifecycle = GroupLifecycle.active,
     this.quarantineReason,
   }) : members = List.unmodifiable(_sortedMembers(members)) {
     if (!_isHex(groupId, 32) ||
         controlRevision < 1 ||
         !_isHex(controlStateHash, 32) ||
-        acceptedEpoch < 0 ||
         !metadata.isValid ||
         this.members.length > maximumMembers ||
         this.members
@@ -212,7 +210,6 @@ final class GroupState {
   final List<GroupMember> members;
   final int controlRevision;
   final String controlStateHash;
-  final int acceptedEpoch;
   final GroupLifecycle lifecycle;
   final GroupQuarantineReason? quarantineReason;
 
@@ -234,7 +231,6 @@ final class GroupState {
     Iterable<GroupMember>? members,
     int? controlRevision,
     String? controlStateHash,
-    int? acceptedEpoch,
     GroupLifecycle? lifecycle,
     GroupQuarantineReason? quarantineReason,
     bool clearQuarantineReason = false,
@@ -246,7 +242,6 @@ final class GroupState {
     members: members ?? this.members,
     controlRevision: controlRevision ?? this.controlRevision,
     controlStateHash: controlStateHash ?? this.controlStateHash,
-    acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
     lifecycle: lifecycle ?? this.lifecycle,
     quarantineReason: clearQuarantineReason
         ? null
@@ -390,40 +385,11 @@ abstract final class GroupAuthorization {
       };
 }
 
-/// How a control operation ranks when two branches are accepted at the same
-/// revision. Declaration order is the precedence order: the earlier value wins.
-///
-/// The classes exist so that a protective operation can never be displaced by a
-/// convenience one. The class of a branch is fixed by the operation its author
-/// was authorized to perform, so reaching a stronger class means holding the
-/// permission for it, which is the same check the branch already passed.
-enum GroupControlPrecedence {
-  /// Withdraws a member's access to future epochs. This is the only answer the
-  /// group has to a hostile or compromised member, so it must outrank anything
-  /// its own target could author.
-  eviction,
-
-  /// Changes who holds authority: roles, ownership, and the invitation policy
-  /// that decides who may add members.
-  authority,
-
-  /// Adds members or announces a departure without withdrawing anyone.
-  membership,
-
-  /// Descriptive only; changes no one's rights.
-  descriptive,
-}
-
 sealed class GroupControlOperation {
   const GroupControlOperation();
 
   int get code;
-  bool get changesMembership;
   GroupPermission? get requiredPermission;
-
-  /// Ordering class used when this operation forks against a sibling at the
-  /// same revision. See [GroupForkCanonicalOrder].
-  GroupControlPrecedence get precedence;
   List<Object?> get canonicalFields;
 }
 
@@ -443,15 +409,7 @@ final class CreateGroupOperation extends GroupControlOperation {
   @override
   int get code => 1;
   @override
-  bool get changesMembership => true;
-  @override
   GroupPermission? get requiredPermission => null;
-
-  /// A create establishes the roster and its owner. It can only ever fork
-  /// against another create, because revision 1 is the only revision without a
-  /// parent.
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -471,11 +429,7 @@ final class UpdateGroupMetadataOperation extends GroupControlOperation {
   @override
   int get code => 2;
   @override
-  bool get changesMembership => false;
-  @override
   GroupPermission get requiredPermission => GroupPermission.editMetadata;
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.descriptive;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -496,15 +450,8 @@ final class UpdateGroupPoliciesOperation extends GroupControlOperation {
   @override
   int get code => 3;
   @override
-  bool get changesMembership => false;
-  @override
   GroupPermission get requiredPermission =>
       GroupPermission.editInvitationPolicy;
-
-  /// The invitation policy decides who may add members, so a policy change is an
-  /// authority change rather than a descriptive one.
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -521,11 +468,7 @@ final class InviteGroupMembersOperation extends GroupControlOperation {
   @override
   int get code => 4;
   @override
-  bool get changesMembership => true;
-  @override
   GroupPermission get requiredPermission => GroupPermission.inviteMembers;
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.membership;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -540,16 +483,7 @@ final class RemoveGroupMemberOperation extends GroupControlOperation {
   @override
   int get code => 5;
   @override
-  bool get changesMembership => true;
-  @override
   GroupPermission get requiredPermission => GroupPermission.removeMembers;
-
-  /// Eviction is the highest precedence class. A member that is about to lose
-  /// its access must not be able to author a branch that displaces the removal,
-  /// and [GroupAuthorization.canRemove] never lets a target counter-remove its
-  /// own evictor.
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.eviction;
   @override
   List<Object?> get canonicalFields => [code, targetUserId.toLowerCase()];
 }
@@ -559,23 +493,8 @@ final class LeaveGroupOperation extends GroupControlOperation {
 
   @override
   int get code => 6;
-
-  /// A leave carries no Commit of its own.
-  ///
-  /// RFC 9420 section 12.4 forbids a Commit that removes its own committer, so
-  /// a departing member cannot evict itself. The leave is an authenticated
-  /// announcement at the current epoch that moves the member to
-  /// [GroupMembershipState.left]; a remaining member then commits the `Remove`
-  /// that evicts the leaf and moves it to [GroupMembershipState.removed].
-  @override
-  bool get changesMembership => false;
   @override
   GroupPermission get requiredPermission => GroupPermission.leave;
-
-  /// A leave announces a departure; the `Remove` that actually evicts the leaf
-  /// is the protective half, so a leave never outranks one.
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.membership;
   @override
   List<Object?> get canonicalFields => [code];
 }
@@ -591,11 +510,7 @@ final class ChangeGroupRoleOperation extends GroupControlOperation {
   @override
   int get code => 7;
   @override
-  bool get changesMembership => false;
-  @override
   GroupPermission get requiredPermission => GroupPermission.changeRoles;
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -611,11 +526,7 @@ final class TransferGroupOwnershipOperation extends GroupControlOperation {
   @override
   int get code => 8;
   @override
-  bool get changesMembership => false;
-  @override
   GroupPermission get requiredPermission => GroupPermission.transferOwnership;
-  @override
-  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [code, targetUserId.toLowerCase()];
 }
@@ -627,8 +538,6 @@ final class GroupControlEvent {
     required this.groupId,
     required this.revision,
     required this.previousControlStateHash,
-    required this.mlsEpoch,
-    required this.mlsCommitHash,
     required this.signerUserId,
     required this.signerDeviceId,
     required this.createdMs,
@@ -640,29 +549,23 @@ final class GroupControlEvent {
         revision < 1 ||
         (previousControlStateHash != null &&
             !_isHex(previousControlStateHash!, 32)) ||
-        mlsEpoch < 0 ||
-        (mlsCommitHash != null && !_isHex(mlsCommitHash!, 32)) ||
-        createdMs < 0 ||
-        (operation.changesMembership && mlsCommitHash == null) ||
-        (!operation.changesMembership && mlsCommitHash != null)) {
+        createdMs < 0) {
       throw const FormatException('invalid group control event');
     }
   }
 
   factory GroupControlEvent.fromDeterministicProjection(String projection) {
-    final fields = _projectionList(jsonDecode(projection), 11);
+    final fields = _projectionList(jsonDecode(projection), 9);
     return GroupControlEvent(
       protocolVersion: _projectionInteger(fields[0]),
       eventId: _projectionString(fields[1]),
       groupId: _projectionString(fields[2]),
       revision: _projectionInteger(fields[3]),
       previousControlStateHash: _projectionOptionalString(fields[4]),
-      mlsEpoch: _projectionInteger(fields[5]),
-      mlsCommitHash: _projectionOptionalString(fields[6]),
-      signerUserId: _projectionString(fields[7]),
-      signerDeviceId: _projectionString(fields[8]),
-      createdMs: _projectionInteger(fields[9]),
-      operation: _projectionOperation(fields[10]),
+      signerUserId: _projectionString(fields[5]),
+      signerDeviceId: _projectionString(fields[6]),
+      createdMs: _projectionInteger(fields[7]),
+      operation: _projectionOperation(fields[8]),
     );
   }
 
@@ -671,14 +574,12 @@ final class GroupControlEvent {
   final String groupId;
   final int revision;
   final String? previousControlStateHash;
-  final int mlsEpoch;
-  final String? mlsCommitHash;
   final String signerUserId;
   final String signerDeviceId;
   final int createdMs;
   final GroupControlOperation operation;
 
-  /// A fixed-order projection consumed by the real crypto-core port in piece 19.
+  /// A fixed-order projection of the event.
   ///
   /// It deliberately is not a Dart wire encoder. Production deterministic-CBOR and
   /// signatures remain owned by the reviewed shared Rust core.
@@ -688,8 +589,6 @@ final class GroupControlEvent {
     groupId,
     revision,
     previousControlStateHash,
-    mlsEpoch,
-    mlsCommitHash,
     signerUserId.toLowerCase(),
     signerDeviceId.toLowerCase(),
     createdMs,
@@ -799,14 +698,6 @@ final class GroupControlStateMachine {
         GroupQuarantineReason.brokenControlChain,
       );
     }
-    final expectedEpoch =
-        previous.acceptedEpoch + (event.operation.changesMembership ? 1 : 0);
-    if (event.mlsEpoch != expectedEpoch) {
-      return GroupControlQuarantined(
-        previous,
-        GroupQuarantineReason.invalidMembership,
-      );
-    }
     final actor = previous.member(event.signerUserId);
     final permission = event.operation.requiredPermission;
     if (actor == null ||
@@ -840,7 +731,6 @@ final class GroupControlStateMachine {
           members: next.members,
           controlRevision: event.revision,
           controlStateHash: signedControl.controlStateHash,
-          acceptedEpoch: event.mlsEpoch,
           lifecycle: next.lifecycle,
         ),
       );
@@ -861,7 +751,6 @@ final class GroupControlStateMachine {
     if (operation is! CreateGroupOperation ||
         event.revision != 1 ||
         event.previousControlStateHash != null ||
-        event.mlsEpoch != 1 ||
         !operation.metadata.isValid ||
         operation.initialMembers.isEmpty ||
         operation.initialMembers.length > GroupState.maximumMembers) {
@@ -890,7 +779,6 @@ final class GroupControlStateMachine {
           members: operation.initialMembers,
           controlRevision: 1,
           controlStateHash: controlStateHash,
-          acceptedEpoch: 1,
           lifecycle:
               operation.initialMembers.any(
                 (member) =>
@@ -1055,25 +943,18 @@ final class GroupCreationIntent {
 final class PreparedGroupTransition {
   PreparedGroupTransition({
     required this.signedControl,
-    required Uint8List newOpaqueMlsState,
-    required Uint8List mlsObject,
     required this.mutationId,
     required Iterable<String> recipientUserIds,
     this.outbound = true,
-    this.consumedKeyPackageState,
     this.controlTranscriptEntry,
     Iterable<GroupControlTranscriptEntry> precedingControlTranscript = const [],
-  }) : newOpaqueMlsState = Uint8List.fromList(newOpaqueMlsState),
-       mlsObject = Uint8List.fromList(mlsObject),
-       precedingControlTranscript = List.unmodifiable(
+  }) : precedingControlTranscript = List.unmodifiable(
          precedingControlTranscript,
        ),
        recipientUserIds = List.unmodifiable(
          recipientUserIds.map((value) => value.toLowerCase()).toSet(),
        ) {
-    if (this.newOpaqueMlsState.isEmpty ||
-        this.mlsObject.isEmpty ||
-        mutationId.isEmpty ||
+    if (mutationId.isEmpty ||
         this.precedingControlTranscript.length > 512 ||
         (this.precedingControlTranscript.isNotEmpty && outbound) ||
         (controlTranscriptEntry != null &&
@@ -1081,42 +962,17 @@ final class PreparedGroupTransition {
               controlTranscriptEntry!.signedControl,
               signedControl,
             )) ||
-        (consumedKeyPackageState != null &&
-            (outbound || !signedControl.event.operation.changesMembership)) ||
         (outbound && this.recipientUserIds.isEmpty)) {
       throw const FormatException('invalid prepared group transition');
     }
   }
 
   final SignedGroupControlEvent signedControl;
-  final Uint8List newOpaqueMlsState;
-  final Uint8List mlsObject;
   final String mutationId;
   final List<String> recipientUserIds;
   final bool outbound;
-  final ConsumedGroupKeyPackageState? consumedKeyPackageState;
   final GroupControlTranscriptEntry? controlTranscriptEntry;
   final List<GroupControlTranscriptEntry> precedingControlTranscript;
-}
-
-final class ConsumedGroupKeyPackageState {
-  ConsumedGroupKeyPackageState({
-    required this.deviceId,
-    required this.expectedStateRevision,
-    required Uint8List nextSealedState,
-  }) : nextSealedState = Uint8List.fromList(nextSealedState) {
-    if (!_groupUuid.hasMatch(deviceId) ||
-        deviceId != deviceId.toLowerCase() ||
-        expectedStateRevision <= 0 ||
-        this.nextSealedState.isEmpty ||
-        this.nextSealedState.length > 1024 * 1024) {
-      throw const FormatException('invalid consumed KeyPackage state');
-    }
-  }
-
-  final String deviceId;
-  final int expectedStateRevision;
-  final Uint8List nextSealedState;
 }
 
 final RegExp _groupUuid = RegExp(
@@ -1131,15 +987,10 @@ final class PreparedGroupMessage {
     required this.senderDeviceId,
     required this.text,
     required this.createdMs,
-    required this.epoch,
-    required Uint8List newOpaqueMlsState,
-    required Uint8List mlsObject,
     required this.operationId,
     required Iterable<String> recipientUserIds,
     this.outbound = true,
-  }) : newOpaqueMlsState = Uint8List.fromList(newOpaqueMlsState),
-       mlsObject = Uint8List.fromList(mlsObject),
-       recipientUserIds = List.unmodifiable(
+  }) : recipientUserIds = List.unmodifiable(
          recipientUserIds.map((value) => value.toLowerCase()).toSet(),
        ) {
     if ((outbound && this.recipientUserIds.isEmpty) ||
@@ -1154,30 +1005,9 @@ final class PreparedGroupMessage {
   final String senderDeviceId;
   final String text;
   final int createdMs;
-  final int epoch;
-  final Uint8List newOpaqueMlsState;
-  final Uint8List mlsObject;
   final String operationId;
   final List<String> recipientUserIds;
   final bool outbound;
-}
-
-enum GroupMlsTransportKind { welcome, control, application }
-
-final class GroupMlsTransportProbe {
-  GroupMlsTransportProbe({
-    required this.kind,
-    required this.groupId,
-    this.joinCapable = false,
-  }) {
-    if (!_isHex(groupId, 32)) {
-      throw const FormatException('invalid group transport probe');
-    }
-  }
-
-  final GroupMlsTransportKind kind;
-  final String groupId;
-  final bool joinCapable;
 }
 
 sealed class PreparedGroupInboxCommit implements GroupSyncReceiveCommit {
@@ -1211,68 +1041,6 @@ final class PreparedGroupInboxTransition extends PreparedGroupInboxCommit {
   String get senderDeviceId => prepared.signedControl.event.signerDeviceId;
 }
 
-/// An authenticated re-admission that supersedes a locally retained group.
-///
-/// A device that lost envelopes to the seven-day queue cap cannot be repaired
-/// by any local action: the missing objects may have been Commits, and their
-/// epoch secrets are gone by construction. The only recovery is for peers to
-/// remove the device and add it again, which produces a Welcome sealed to a
-/// freshly claimed KeyPackage. That Welcome carries its own complete control
-/// transcript, so it is authenticated from no state rather than chained onto
-/// the stale local revision, and it replaces the retained group instead of
-/// advancing it.
-final class PreparedGroupInboxRejoin extends PreparedGroupInboxCommit {
-  const PreparedGroupInboxRejoin({
-    required this.supersededLocal,
-    required this.next,
-    required this.prepared,
-  });
-
-  /// The stale local state this re-admission replaces. The repository uses it
-  /// as the compare-and-swap witness so a concurrent change aborts the rejoin.
-  final GroupState supersededLocal;
-  final GroupState next;
-  final PreparedGroupTransition prepared;
-
-  @override
-  String get opaqueEventId =>
-      'group-rejoin:${prepared.signedControl.event.eventId}';
-  @override
-  String get senderUserId => prepared.signedControl.event.signerUserId;
-  @override
-  String get senderDeviceId => prepared.signedControl.event.signerDeviceId;
-}
-
-/// A same-revision sibling control was authenticated and ordered.
-///
-/// When the local branch is canonical the sibling is recorded and dropped and
-/// the group keeps running. When it is superseded the group is fork-quarantined
-/// and waits for remove/re-add, because an applied MLS commit cannot be rewound.
-final class PreparedGroupInboxForkResolution extends PreparedGroupInboxCommit {
-  const PreparedGroupInboxForkResolution({
-    required this.resolution,
-    required this.record,
-    required this.siblingEventId,
-    required this.siblingSignerUserId,
-    required this.siblingSignerDeviceId,
-  });
-
-  final GroupForkResolution resolution;
-  final GroupQuarantineRecord record;
-  final String siblingEventId;
-  final String siblingSignerUserId;
-  final String siblingSignerDeviceId;
-
-  bool get localBranchRetained => resolution is GroupForkLocalBranchCanonical;
-
-  @override
-  String get opaqueEventId => 'group-fork:$siblingEventId';
-  @override
-  String get senderUserId => siblingSignerUserId;
-  @override
-  String get senderDeviceId => siblingSignerDeviceId;
-}
-
 final class PreparedGroupInboxMessage extends PreparedGroupInboxCommit {
   const PreparedGroupInboxMessage({
     required this.expectedGroup,
@@ -1295,7 +1063,6 @@ final class GroupOutboundWork {
     required this.operationId,
     required this.groupId,
     required this.eventId,
-    required this.epoch,
     required Uint8List openedMlsPayload,
     required Iterable<String> recipientUserIds,
   }) : openedMlsPayload = Uint8List.fromList(openedMlsPayload),
@@ -1303,7 +1070,6 @@ final class GroupOutboundWork {
     if (operationId.isEmpty ||
         groupId.isEmpty ||
         eventId.isEmpty ||
-        epoch < 0 ||
         this.openedMlsPayload.isEmpty ||
         this.recipientUserIds.isEmpty ||
         this.recipientUserIds.toSet().length != this.recipientUserIds.length) {
@@ -1314,7 +1080,6 @@ final class GroupOutboundWork {
   final String operationId;
   final String groupId;
   final String eventId;
-  final int epoch;
   final Uint8List openedMlsPayload;
   final List<String> recipientUserIds;
 }
@@ -1335,198 +1100,6 @@ final class GroupMessage {
   final String text;
   final int createdMs;
   final bool localPreviewOnly;
-}
-
-/// One authenticated branch reduced to the values that order it.
-///
-/// Every ordering field is either fixed by the shared parent state or bound to
-/// the signer's authenticated device, so the branch author cannot vary any of
-/// them to move itself up the order. [controlStateHash] identifies the branch
-/// and is the last resort only; see [GroupForkCanonicalOrder].
-final class GroupForkBranch {
-  GroupForkBranch({
-    required this.eventId,
-    required String controlStateHash,
-    required this.precedence,
-    required this.signerRole,
-    required String signerUserId,
-    required String signerDeviceId,
-  }) : controlStateHash = controlStateHash.toLowerCase(),
-       signerUserId = signerUserId.toLowerCase(),
-       signerDeviceId = signerDeviceId.toLowerCase() {
-    if (!_isHex(eventId, 16) || !_isHex(this.controlStateHash, 32)) {
-      throw const FormatException('invalid fork branch');
-    }
-  }
-
-  final String eventId;
-  final String controlStateHash;
-  final GroupControlPrecedence precedence;
-
-  /// The signer's role **in the shared parent**, never in its own branch: an
-  /// operation may change roles, and a branch does not get to promote itself.
-  final GroupRole signerRole;
-  final String signerUserId;
-  final String signerDeviceId;
-}
-
-/// Canonical ordering for two control branches accepted at the same revision.
-///
-/// The backend is an untrusted relay and group objects ride per-recipient
-/// pairwise envelopes, so there is no delivery-service commit order to break the
-/// tie. Every device therefore derives the same winner from the branches
-/// themselves, with no extra round trip and no server-supplied order.
-///
-/// The deciding inputs are compared in this order, smallest first:
-///
-/// 1. [GroupControlPrecedence] of the operation. A protective operation must
-///    never lose to a convenience one; in particular an eviction must never
-///    lose to a metadata edit, an invite, or a leave.
-/// 2. The signer's role in the shared parent: owner, then admin, then member.
-/// 3. The signer's authenticated user id, then device id.
-/// 4. The control state hash.
-///
-/// Keys 1-3 are the whole rule in practice, and none of them can be varied by
-/// the branch author: the class follows from the permission the author actually
-/// holds, and the role and identity come from the parent roster and the
-/// authenticated device credential. Key 4 is reached only when two branches
-/// share a class, a role, a user and a device — that is, when one device signed
-/// two different controls at one revision. Grinding there only reorders the
-/// equivocating author's own branches, which it could have done by choosing
-/// which one to send, so it wins nothing.
-///
-/// ADR-041 (2026-08-17) supersedes ADR-038, which ordered on the control state
-/// hash alone. That hash is a SHA-256 over the signed descriptor, and the
-/// descriptor's 16-byte event id and `created_ms` are free author-chosen fields,
-/// so re-signing under a fresh event id was one Ed25519 signature plus one
-/// SHA-256 (measured: about 24,500 candidate branches per second per core) and
-/// yielded an independent uniform ordering value. An author who had already seen
-/// a competing branch could undercut it in a handful of trials.
-abstract final class GroupForkCanonicalOrder {
-  /// Negative when [left] outranks [right]; zero only for the same branch.
-  static int compare(GroupForkBranch left, GroupForkBranch right) {
-    final byClass = _precedenceRank(
-      left.precedence,
-    ).compareTo(_precedenceRank(right.precedence));
-    if (byClass != 0) return byClass;
-    final byAuthority = _authorityRank(
-      left.signerRole,
-    ).compareTo(_authorityRank(right.signerRole));
-    if (byAuthority != 0) return byAuthority;
-    final bySigner = left.signerUserId.compareTo(right.signerUserId);
-    if (bySigner != 0) return bySigner;
-    final byDevice = left.signerDeviceId.compareTo(right.signerDeviceId);
-    if (byDevice != 0) return byDevice;
-    return left.controlStateHash.compareTo(right.controlStateHash);
-  }
-
-  /// True when [candidate] outranks every branch in [rivals].
-  ///
-  /// An equal comparison means the same branch, which is not a fork.
-  static bool outranks(
-    GroupForkBranch candidate,
-    Iterable<GroupForkBranch> rivals,
-  ) => rivals.every((rival) => compare(candidate, rival) < 0);
-
-  static GroupForkBranch canonical(Iterable<GroupForkBranch> branches) {
-    final sorted = branches.toList(growable: false)..sort(compare);
-    if (sorted.isEmpty) {
-      throw const FormatException('no control branch to order');
-    }
-    return sorted.first;
-  }
-
-  /// Reduces one authenticated branch to its ordering key.
-  ///
-  /// [parent] is the reconstructed state both branches descend from, which is
-  /// the only place the signer's authority may be read from. Returns null when
-  /// the signer is not an active member there, so a caller that cannot place a
-  /// branch fails closed instead of ordering it on its own claims. At revision 1
-  /// there is no parent and the roster is the create's own, which is exactly the
-  /// roster [GroupControlStateMachine] authorized the branch against.
-  static GroupForkBranch? branchOf({
-    required GroupState? parent,
-    required SignedGroupControlEvent signedControl,
-  }) {
-    final event = signedControl.event;
-    final operation = event.operation;
-    final GroupMember? signer;
-    if (parent != null) {
-      signer = parent.member(event.signerUserId);
-    } else if (operation is CreateGroupOperation) {
-      final normalized = event.signerUserId.toLowerCase();
-      final matches = operation.initialMembers
-          .where((member) => member.userId.toLowerCase() == normalized)
-          .toList(growable: false);
-      signer = matches.length == 1 ? matches.single : null;
-    } else {
-      signer = null;
-    }
-    if (signer == null || !signer.isActive) return null;
-    try {
-      return GroupForkBranch(
-        eventId: event.eventId,
-        controlStateHash: signedControl.controlStateHash,
-        precedence: operation.precedence,
-        signerRole: signer.role,
-        signerUserId: event.signerUserId,
-        signerDeviceId: event.signerDeviceId,
-      );
-    } on FormatException {
-      return null;
-    }
-  }
-
-  /// Stated explicitly so that reordering [GroupControlPrecedence] for any other
-  /// reason cannot silently change which branch a group converges on.
-  static int _precedenceRank(GroupControlPrecedence precedence) =>
-      switch (precedence) {
-        GroupControlPrecedence.eviction => 0,
-        GroupControlPrecedence.authority => 1,
-        GroupControlPrecedence.membership => 2,
-        GroupControlPrecedence.descriptive => 3,
-      };
-
-  /// Likewise stated explicitly rather than read from [GroupRole.index].
-  static int _authorityRank(GroupRole role) => switch (role) {
-    GroupRole.owner => 0,
-    GroupRole.admin => 1,
-    GroupRole.member => 2,
-  };
-}
-
-/// Outcome of comparing the locally accepted control branch against sibling
-/// controls another device accepted at the same revision.
-///
-/// An applied MLS commit cannot be rewound: the previous epoch secrets are gone
-/// by construction. A superseded local branch is therefore recovered by
-/// quarantine plus remove/re-add, never by rollback.
-sealed class GroupForkResolution {
-  const GroupForkResolution();
-}
-
-/// The local branch wins. Every sibling is stale and is dropped.
-final class GroupForkLocalBranchCanonical extends GroupForkResolution {
-  GroupForkLocalBranchCanonical({required Iterable<String> supersededEventIds})
-    : supersededEventIds = List.unmodifiable(
-        supersededEventIds.map((value) => value.toLowerCase()).toSet().toList()
-          ..sort(),
-      );
-
-  final List<String> supersededEventIds;
-}
-
-/// A sibling branch wins. The local group must stop and be re-admitted.
-final class GroupForkLocalBranchSuperseded extends GroupForkResolution {
-  const GroupForkLocalBranchSuperseded({
-    required this.canonicalEventId,
-    required this.canonicalControlStateHash,
-    required this.canonicalSignerUserId,
-  });
-
-  final String canonicalEventId;
-  final String canonicalControlStateHash;
-  final String canonicalSignerUserId;
 }
 
 final class GroupQuarantineRecord {

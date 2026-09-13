@@ -726,34 +726,6 @@ WHERE c.singleton_id = 1
               prepared: prepared,
               developmentPreviewOnly: false,
             ),
-          PreparedGroupInboxForkResolution(
-            :final record,
-            :final localBranchRetained,
-          ) =>
-            groupRepository.quarantineInsideTransaction(
-              record,
-              retainLifecycle: localBranchRetained,
-            ),
-          // The re-admission and the end of that group's queue-gap obligation
-          // are one fact. Committing them separately would leave a window in
-          // which a rejoined group still reads as unrecoverable, or worse, a
-          // cleared obligation with no group behind it.
-          PreparedGroupInboxRejoin(
-            :final supersededLocal,
-            :final next,
-            :final prepared,
-          ) =>
-            () async {
-              await groupRepository.rejoinInsideTransaction(
-                supersededLocal: supersededLocal,
-                next: next,
-                prepared: prepared,
-              );
-              await _completeGroupRecoveryInsideTransaction(
-                next.groupId,
-                left: false,
-              );
-            }(),
         },
       );
     }

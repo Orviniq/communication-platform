@@ -469,66 +469,16 @@ final class ApplyIncomingGroupMessage {
   }
 }
 
-final class AcceptGroupWelcome {
-  const AcceptGroupWelcome({
-    required this.repository,
-    this.stateMachine = const GroupControlStateMachine(),
-  });
-
-  final GroupRepositoryPort repository;
-  final GroupControlStateMachine stateMachine;
-
-  Future<Result<GroupState>> call({
-    required Uint8List mlsObject,
-    required String localUserId,
-    required String localDeviceId,
-  }) async {
-    final inspected = await crypto.inspectIncomingWelcome(
-      mlsObject: mlsObject,
-      localUserId: localUserId.toLowerCase(),
-      localDeviceId: localDeviceId.toLowerCase(),
-    );
-    if (inspected case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-    final prepared = (inspected as Success<PreparedGroupTransition>).value;
-    final applied = stateMachine.apply(
-      previous: null,
-      signedControl: prepared.signedControl,
-      localUserId: localUserId,
-    );
-    if (applied is! GroupControlAccepted ||
-        prepared.consumedKeyPackageState == null ||
-        prepared.outbound) {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
-      );
-    }
-    final committed = await repository.commitTransition(
-      expectedPrevious: null,
-      next: applied.state,
-      prepared: prepared,
-      developmentPreviewOnly: false,
-    );
-    return committed.fold(
-      onSuccess: (_) => Result.success(applied.state),
-      onFailure: Result.failure,
-    );
-  }
-}
-
 final class GroupUseCases {
   const GroupUseCases({
     required this.create,
     required this.mutate,
     required this.sendMessage,
-    required this.acceptWelcome,
     required this.applyIncomingMessage,
   });
 
   final CreateGroup create;
   final MutateGroup mutate;
   final SendGroupMessage sendMessage;
-  final AcceptGroupWelcome acceptWelcome;
   final ApplyIncomingGroupMessage applyIncomingMessage;
 }

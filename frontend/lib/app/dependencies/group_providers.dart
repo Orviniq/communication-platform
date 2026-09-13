@@ -55,7 +55,6 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
       clock: clock,
       developmentPreviewOnly: false,
     ),
-    acceptWelcome: AcceptGroupWelcome(repository: repository),
     applyIncomingMessage: ApplyIncomingGroupMessage(repository: repository),
   );
 });
