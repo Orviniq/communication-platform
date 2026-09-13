@@ -7,7 +7,6 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
-import 'package:communication_platform/features/groups/application/group_mls_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
 import 'package:communication_platform/features/groups/application/group_pending_eviction_service.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
@@ -111,12 +110,6 @@ final durableSyncEngineProvider =
         ),
         currentUserId: scope.userId,
         clock: ref.watch(timeSourceProvider),
-        groupInbound: GroupMlsInboundCoordinator(
-          repository: DriftGroupRepository(database),
-          crypto: await ref.watch(fullyComposedGroupMlsCryptoProvider.future),
-          localUserId: scope.userId,
-          localDeviceId: scope.deviceId,
-        ),
       );
       final gossip = await ref.watch(
         deviceLogGossipCoordinatorProvider((

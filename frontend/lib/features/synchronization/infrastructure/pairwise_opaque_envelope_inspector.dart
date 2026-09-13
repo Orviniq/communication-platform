@@ -12,7 +12,6 @@ import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
-import 'package:communication_platform/features/groups/application/group_mls_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -35,7 +34,6 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required this.conversationResolver,
     required this.currentUserId,
     required this.clock,
-    this.groupInbound,
   });
 
   final String localDeviceId;
@@ -47,7 +45,6 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   final ApplicationConversationResolverPort conversationResolver;
   final String currentUserId;
   final TimeSource clock;
-  final GroupMlsInboundCoordinator? groupInbound;
 
   @override
   Future<Result<OpaqueEnvelopeInspection>> inspect({
@@ -437,28 +434,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     }
     if (!allowPotentiallyMls) {
       // A queue gap blocks everything that could depend on MLS state this
-      // device no longer has. A re-admission is the one exception, and not by
-      // relaxation: peers removed this device and added it again, so the
-      // Welcome is sealed to a freshly claimed KeyPackage and carries its own
-      // transcript. It depends on nothing that was lost. Withholding it would
-      // block the only exit from the gap; anything else stays deferred.
-      final rejoinCoordinator = groupInbound;
-      if (rejoinCoordinator != null) {
-        final rejoin = await rejoinCoordinator.inspectQueueGapRejoin(
-          openedPayload,
-        );
-        if (rejoin case FailureResult(failure: final failure)) {
-          return Result.failure(failure);
-        }
-        final commit = (rejoin as Success<PreparedGroupInboxCommit?>).value;
-        if (commit != null) {
-          return _boundGroupCommit(
-            commit: commit,
-            senderUserId: senderUserId,
-            senderDeviceId: senderDeviceId,
-          );
-        }
-      }
+      // device no longer has, so the object stays deferred.
       return Result.success(
         _PreparedApplication(
           opaqueEventId: 'group-deferred:$envelopeId',
@@ -466,42 +442,8 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
         ),
       );
     }
-    final coordinator = groupInbound;
-    if (coordinator == null) {
-      return const Result.failure(
-        UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
-      );
-    }
-    final inspected = await coordinator.inspect(openedPayload);
-    if (inspected case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-    return _boundGroupCommit(
-      commit: (inspected as Success<PreparedGroupInboxCommit>).value,
-      senderUserId: senderUserId,
-      senderDeviceId: senderDeviceId,
-    );
-  }
-
-  /// The group object's authenticated signer must be the pairwise sender that
-  /// actually delivered it; a relay cannot reattribute one to another session.
-  Result<_PreparedApplication> _boundGroupCommit({
-    required PreparedGroupInboxCommit commit,
-    required String senderUserId,
-    required String senderDeviceId,
-  }) {
-    if (commit.senderUserId.toLowerCase() != senderUserId.toLowerCase() ||
-        commit.senderDeviceId.toLowerCase() != senderDeviceId.toLowerCase()) {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
-      );
-    }
-    return Result.success(
-      _PreparedApplication(
-        opaqueEventId: commit.opaqueEventId,
-        dependency: EnvelopeDependency.potentiallyMls,
-        groupCommit: commit,
-      ),
+    return const Result.failure(
+      UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
     );
   }
 
