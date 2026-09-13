@@ -7,6 +7,7 @@ mod cbor;
 pub mod device_signatures;
 pub mod enrollment;
 mod error;
+mod group_control;
 #[cfg(test)]
 mod mlkem_vectors;
 mod pairwise;
