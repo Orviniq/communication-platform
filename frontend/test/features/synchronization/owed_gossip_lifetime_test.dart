@@ -317,7 +317,6 @@ final class _NeverInspects implements OpaqueEnvelopeInspector {
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   }) async =>
       const Result.failure(SecurityFailure(SecurityFailureKind.policyBlocked));
 }

@@ -12,7 +12,9 @@ import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/groups/application/group_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/groups/domain/group_sync_payload.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
@@ -34,6 +36,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required this.conversationResolver,
     required this.currentUserId,
     required this.clock,
+    required this.groupInbound,
   });
 
   final String localDeviceId;
@@ -45,12 +48,12 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   final ApplicationConversationResolverPort conversationResolver;
   final String currentUserId;
   final TimeSource clock;
+  final GroupInboundCoordinator groupInbound;
 
   @override
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   }) async {
     if (!_isUuid(envelopeId) || !_isUuid(localDeviceId)) {
       return const Result.failure(
@@ -70,12 +73,10 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
         envelopeId: envelopeId,
         envelope: exactCiphertext,
         sessionId: header.sessionId,
-        allowPotentiallyMls: allowPotentiallyMls,
       ),
       native.PairwisePublicEnvelopeKind.initial => _inspectInitial(
         envelopeId: envelopeId,
         envelope: exactCiphertext,
-        allowPotentiallyMls: allowPotentiallyMls,
       ),
     };
   }
@@ -84,7 +85,6 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required String envelopeId,
     required Uint8List envelope,
     required Uint8List sessionId,
-    required bool allowPotentiallyMls,
   }) async {
     final contextResult = await store.readInboundContext(
       localDeviceId: localDeviceId,
@@ -175,7 +175,6 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
             senderUserId: session.remoteUserId,
             senderDeviceId: session.remoteDeviceId,
             openedPayload: opened.openedPayload,
-            allowPotentiallyMls: allowPotentiallyMls,
           );
     if (preparedResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -212,7 +211,6 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   Future<Result<OpaqueEnvelopeInspection>> _inspectInitial({
     required String envelopeId,
     required Uint8List envelope,
-    required bool allowPotentiallyMls,
   }) async {
     var inboundResult = await store.readInboundContext(
       localDeviceId: localDeviceId,
@@ -368,7 +366,6 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
             senderUserId: senderUserId,
             senderDeviceId: senderDeviceId,
             openedPayload: accepted.openedPayload,
-            allowPotentiallyMls: allowPotentiallyMls,
           );
     if (preparedResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -422,9 +419,8 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required String senderUserId,
     required String senderDeviceId,
     required Uint8List openedPayload,
-    required bool allowPotentiallyMls,
   }) async {
-    if (!_isGroupTransport(openedPayload)) {
+    if (!GroupSyncPayloadCodec.matches(openedPayload)) {
       return _prepareApplication(
         envelopeId: envelopeId,
         senderUserId: senderUserId,
@@ -432,18 +428,29 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
         openedPayload: openedPayload,
       );
     }
-    if (!allowPotentiallyMls) {
-      // A queue gap blocks everything that could depend on MLS state this
-      // device no longer has, so the object stays deferred.
-      return Result.success(
-        _PreparedApplication(
-          opaqueEventId: 'group-deferred:$envelopeId',
-          dependency: EnvelopeDependency.potentiallyMls,
-        ),
-      );
+    // A group payload is an ordinary pairwise envelope whose plaintext names
+    // its group. The group feature decides what it means; this layer commits
+    // that decision in the same transaction as the receive that carried it.
+    final preparedResult = await groupInbound.prepare(
+      envelopeId: envelopeId,
+      senderUserId: senderUserId,
+      senderDeviceId: senderDeviceId,
+      payload: openedPayload,
+    );
+    if (preparedResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
     }
-    return const Result.failure(
-      UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+    return Result.success(
+      switch ((preparedResult as Success<GroupInboundPreparation>).value) {
+        GroupInboundChange(:final commit) => _PreparedApplication(
+          opaqueEventId: commit.opaqueEventId,
+          dependency: EnvelopeDependency.groupState,
+          groupCommit: commit,
+        ),
+        GroupInboundNoChange(:final opaqueEventId) => _PreparedApplication(
+          opaqueEventId: opaqueEventId,
+        ),
+      },
     );
   }
 
@@ -789,17 +796,6 @@ final class _PreparedApplication {
   final DeviceControlEvent? deviceControlEvent;
   final List<ApplicationEventCommit> historyApplicationEvents;
 }
-
-bool _isGroupTransport(List<int> bytes) =>
-    bytes.length >= 8 &&
-    bytes[0] == 0x43 &&
-    bytes[1] == 0x50 &&
-    bytes[2] == 0x47 &&
-    bytes[3] == 0x54 &&
-    bytes[4] == 0x4f &&
-    bytes[5] == 0x30 &&
-    bytes[6] == 0x30 &&
-    bytes[7] == 0x31;
 
 bool _isDeviceControl(List<int> bytes) =>
     bytes.length >= 8 &&

@@ -474,7 +474,7 @@ void main() {
           stateMarker: 2,
           replayMarker: bytes(32, 55),
         ),
-        dependency: EnvelopeDependency.potentiallyMls,
+        dependency: EnvelopeDependency.groupState,
         additionalCommit: () async {
           await database
               .into(database.conversations)

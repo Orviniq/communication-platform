@@ -261,29 +261,18 @@ void main() {
     },
   );
 
-  test(
-    'the queue-gap state is read once per inbox pass, not once per envelope',
-    () async {
-      await seedInbox([1, 2, 3, 4, 5, 6]);
+  test('the inbox loop reads no projection per envelope', () async {
+    await seedInbox([1, 2, 3, 4, 5, 6]);
 
-      await engineWith().synchronize();
+    await engineWith().synchronize();
 
-      expect(inspector.calls, 6);
-      expect(
-        countingStore.gapStateReads,
-        2,
-        reason:
-            'one read per inbox pass — the pass before the drain and the pass '
-            'over the single drained page — and not one per envelope',
-      );
-      expect(
-        countingStore.projectionReads,
-        0,
-        reason:
-            'the loop needs one column, and the projection is three aggregates',
-      );
-    },
-  );
+    expect(inspector.calls, 6);
+    expect(
+      countingStore.projectionReads,
+      0,
+      reason: 'nothing in the loop needs the three projection aggregates',
+    );
+  });
 }
 
 Future<int> pendingInbound(LocalDatabase database) async {
@@ -309,15 +298,8 @@ final class CountingStore implements DurableSyncStore {
   CountingStore(this._inner);
 
   final DurableSyncStore _inner;
-  int gapStateReads = 0;
   int projectionReads = 0;
   bool failInspectionRetry = false;
-
-  @override
-  Future<Result<QueueGapState>> readQueueGapState() {
-    gapStateReads += 1;
-    return _inner.readQueueGapState();
-  }
 
   @override
   Future<Result<SyncProjection>> readProjection() {
@@ -378,10 +360,6 @@ final class CountingStore implements DurableSyncStore {
     envelopeId: envelopeId,
     inspection: inspection,
   );
-
-  @override
-  Future<Result<void>> blockEnvelopeForQueueGap(String envelopeId) =>
-      _inner.blockEnvelopeForQueueGap(envelopeId);
 
   @override
   Future<Result<void>> recordEnvelopeRejection({
@@ -493,14 +471,6 @@ final class CountingStore implements DurableSyncStore {
   @override
   Future<Result<void>> recordSuccessfulSync(DateTime syncedAt) =>
       _inner.recordSuccessfulSync(syncedAt);
-
-  @override
-  Future<Result<void>> markGroupRecovered(String groupId) =>
-      _inner.markGroupRecovered(groupId);
-
-  @override
-  Future<Result<void>> markGroupLeft(String groupId) =>
-      _inner.markGroupLeft(groupId);
 }
 
 /// An inspector that opens everything except the envelopes named in [poison].
@@ -513,7 +483,6 @@ final class ScriptedInspector implements OpaqueEnvelopeInspector {
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   }) async {
     calls += 1;
     if (poison.contains(envelopeId)) {

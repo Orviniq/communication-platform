@@ -202,22 +202,6 @@ WHERE c.singleton_id = 1
   }
 
   @override
-  Future<Result<QueueGapState>> readQueueGapState() async {
-    try {
-      final checkpoint = await _checkpoint();
-      return Result.success(
-        checkpoint.queueGapState == QueueGapState.clear.index
-            ? QueueGapState.clear
-            : QueueGapState.recoveryRequired,
-      );
-    } on Object {
-      return const Result.failure(
-        StorageFailure(StorageFailureKind.unavailable),
-      );
-    }
-  }
-
-  @override
   Future<Result<SyncProjection>> readProjection() async {
     try {
       await _ensureCheckpoint();
@@ -464,18 +448,12 @@ WHERE c.singleton_id = 1
           ),
         );
         if (gapDetected) {
-          // Every group this device still follows is potentially affected: a
-          // lost envelope may have carried any group's Commit. A group this
-          // device was already removed from or has left is not, and must not
-          // be flagged — it can never produce a re-admission, so flagging it
-          // would leave the device permanently blocked with no way out.
-          await (database.update(database.mlsGroups)..where(
-                (row) => row.lifecycle.isNotIn([
-                  GroupLifecycle.removed.index,
-                  GroupLifecycle.left.index,
-                ]),
-              ))
-              .write(const MlsGroupsCompanion(queueGapRecoveryState: Value(1)));
+          // A lost envelope may have carried any group's control event, so
+          // every group this device follows asks a member for its state. The
+          // gap closes when the last of those requests is answered.
+          await DriftGroupRepository(
+            database,
+          ).recordQueueGapInsideTransaction();
         }
       });
       return const Result.success(null);
@@ -586,7 +564,7 @@ WHERE c.singleton_id = 1
     final group = rawGroup as PreparedGroupInboxCommit?;
     if ((group != null) !=
         (pairwise != null &&
-            inspection.dependency == EnvelopeDependency.potentiallyMls)) {
+            inspection.dependency == EnvelopeDependency.groupState)) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.malformedServerResponse),
       );
@@ -594,7 +572,7 @@ WHERE c.singleton_id = 1
     if (pairwise != null) {
       final expectedDependency = group == null
           ? EnvelopeDependency.directOrLocal
-          : EnvelopeDependency.potentiallyMls;
+          : EnvelopeDependency.groupState;
       if (inspection.dependency != expectedDependency ||
           pairwise.envelopeId != envelopeId ||
           pairwise.opaqueEventId != inspection.opaqueEventId ||
@@ -707,7 +685,7 @@ WHERE c.singleton_id = 1
       final groupRepository = DriftGroupRepository(database);
       return pairwiseStore.commitPreparedReceiveWithAdditionalTransaction(
         commit: receiveCommit,
-        dependency: EnvelopeDependency.potentiallyMls,
+        dependency: EnvelopeDependency.groupState,
         additionalCommit: () => switch (group) {
           PreparedGroupInboxTransition(
             :final expectedPrevious,
@@ -718,13 +696,33 @@ WHERE c.singleton_id = 1
               expectedPrevious: expectedPrevious,
               next: next,
               prepared: prepared,
-              developmentPreviewOnly: false,
             ),
-          PreparedGroupInboxMessage(:final expectedGroup, :final prepared) =>
-            groupRepository.commitMessageInsideTransaction(
-              expectedGroup: expectedGroup,
-              prepared: prepared,
-              developmentPreviewOnly: false,
+          PreparedGroupInboxQuarantine(
+            :final record,
+            :final retainLifecycle,
+            :final completesStateRequest,
+          ) =>
+            groupRepository.quarantineInsideTransaction(
+              record,
+              retainLifecycle: retainLifecycle,
+              completesStateRequest: completesStateRequest,
+            ),
+          PreparedGroupInboxStateRequest(:final groupId, :final peerUserId) =>
+            groupRepository.recordStateRequestInsideTransaction(
+              groupId: groupId,
+              peerUserId: peerUserId,
+            ),
+          PreparedGroupInboxOutbound(:final work) =>
+            groupRepository.queueOutboundInsideTransaction(work),
+          PreparedGroupInboxStateCurrent(
+            :final groupId,
+            :final controlRevision,
+            :final controlStateHash,
+          ) =>
+            groupRepository.confirmStateCurrentInsideTransaction(
+              groupId: groupId,
+              controlRevision: controlRevision,
+              controlStateHash: controlStateHash,
             ),
         },
       );
@@ -774,20 +772,6 @@ WHERE c.singleton_id = 1
       );
     }
   }
-
-  @override
-  Future<Result<void>> blockEnvelopeForQueueGap(String envelopeId) => _write(
-    () async {
-      await (database.update(
-        database.inboxEnvelopes,
-      )..where((row) => row.envelopeId.equals(envelopeId))).write(
-        InboxEnvelopesCompanion(
-          processingState: Value(InboxProcessingState.blockedByQueueGap.index),
-          nextAttemptAt: const Value(null),
-        ),
-      );
-    },
-  );
 
   @override
   Future<Result<void>> recordEnvelopeInspectionRetry({
@@ -1455,106 +1439,6 @@ WHERE c.singleton_id = 1
           SyncCheckpointsCompanion(lastSuccessfulSyncAt: Value(syncedAt)),
         );
       });
-
-  @override
-  Future<Result<void>> markGroupRecovered(String groupId) =>
-      _completeGroupRecovery(groupId, left: false);
-
-  /// Abandons a group whose queue-gap obligation the user chose not to wait
-  /// out.
-  ///
-  /// This is deliberately local. A desynced device cannot sign a leave
-  /// announcement at an epoch it no longer holds, so the remaining members
-  /// must still evict the stale leaf themselves; nothing here claims otherwise.
-  /// It is refused for any group that is not actually blocked, so it can never
-  /// become a path that deletes a live group or retires an obligation this
-  /// device has not discharged.
-  @override
-  Future<Result<void>> markGroupLeft(String groupId) =>
-      _completeGroupRecovery(groupId, left: true);
-
-  Future<Result<void>> _completeGroupRecovery(
-    String groupId, {
-    required bool left,
-  }) async {
-    try {
-      await database.writeTransaction(
-        () => _completeGroupRecoveryInsideTransaction(groupId, left: left),
-      );
-      return const Result.success(null);
-    } on _SyncConflict {
-      return const Result.failure(
-        ValidationFailure(ValidationFailureKind.conflict),
-      );
-    } on Object {
-      return const Result.failure(
-        StorageFailure(StorageFailureKind.unavailable),
-      );
-    }
-  }
-
-  /// Retires one group's queue-gap obligation inside the caller's transaction.
-  ///
-  /// The device stays blocked until the last affected group is either rejoined
-  /// through an authenticated re-admission or explicitly abandoned. Only then
-  /// is the permanent loss acknowledged: the baseline advances through the
-  /// observed `pruned_through`, so the same gap cannot reopen on every drain,
-  /// and the envelopes retained because they might have depended on the lost
-  /// MLS state are released for ordinary processing.
-  Future<void> _completeGroupRecoveryInsideTransaction(
-    String groupId, {
-    required bool left,
-  }) async {
-    if (left) {
-      final blocked =
-          await (database.select(database.mlsGroups)..where(
-                (row) =>
-                    row.groupId.equals(groupId) &
-                    row.queueGapRecoveryState.equals(1),
-              ))
-              .getSingleOrNull();
-      if (blocked == null) throw const _SyncConflict();
-      await (database.delete(
-        database.mlsGroups,
-      )..where((row) => row.groupId.equals(groupId))).go();
-    } else {
-      await (database.update(database.mlsGroups)
-            ..where((row) => row.groupId.equals(groupId)))
-          .write(const MlsGroupsCompanion(queueGapRecoveryState: Value(0)));
-    }
-    final remaining =
-        await (database.selectOnly(database.mlsGroups)
-              ..addColumns([database.mlsGroups.groupId.count()])
-              ..where(database.mlsGroups.queueGapRecoveryState.equals(1)))
-            .getSingle();
-    final count = remaining.read(database.mlsGroups.groupId.count()) ?? 0;
-    if (count == 0) {
-      final checkpoint = await _checkpointInTransaction();
-      await (database.update(
-        database.syncCheckpoints,
-      )..where((row) => row.singletonId.equals(1))).write(
-        SyncCheckpointsCompanion(
-          highestContiguousAckedSequence: Value(
-            checkpoint.prunedThrough > checkpoint.highestContiguousAckedSequence
-                ? checkpoint.prunedThrough
-                : checkpoint.highestContiguousAckedSequence,
-          ),
-          queueGapState: Value(QueueGapState.clear.index),
-          drainRequested: const Value(true),
-        ),
-      );
-      await (database.update(database.inboxEnvelopes)..where(
-            (row) => row.processingState.equals(
-              InboxProcessingState.blockedByQueueGap.index,
-            ),
-          ))
-          .write(
-            InboxEnvelopesCompanion(
-              processingState: Value(InboxProcessingState.received.index),
-            ),
-          );
-    }
-  }
 
   Future<Result<void>> _updateOutboxBatch(
     OutboxBatch batch,

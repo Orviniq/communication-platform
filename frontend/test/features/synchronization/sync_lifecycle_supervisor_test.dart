@@ -562,7 +562,6 @@ final class RefusingInspector implements OpaqueEnvelopeInspector {
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   }) async {
     calls += 1;
     return const Result.failure(
@@ -740,7 +739,6 @@ final class RetainingInspector implements OpaqueEnvelopeInspector {
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   }) async => const Result.success(
     OpaqueEnvelopeInspection(
       opaqueEventId: 'fixture',

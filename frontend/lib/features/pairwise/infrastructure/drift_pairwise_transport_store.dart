@@ -550,7 +550,7 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
     required EnvelopeDependency dependency,
     required Future<void> Function() additionalCommit,
   }) {
-    if (dependency != EnvelopeDependency.potentiallyMls) {
+    if (dependency != EnvelopeDependency.groupState) {
       return Future.value(
         const Result.failure(
           ValidationFailure(ValidationFailureKind.invalidInput),
