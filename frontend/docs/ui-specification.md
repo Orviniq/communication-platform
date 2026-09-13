@@ -63,8 +63,8 @@ These recur across screens. They are stated here so the individual screens can s
   best-effort — never Google/Apple push.** By default that is deferred polling; a user may
   additionally turn on keeping the app connected while it is closed (§15), which is faster
   and still not a guarantee. Do not offer FCM/APNs-style options.
-  Uncollected envelopes expire after seven days; a detected queue gap becomes a visible
-  group-rejoin state.
+  Uncollected envelopes expire after seven days; a detected queue gap shows each affected
+  group as waiting for its state.
 - **Honesty over false comfort.** Several actions are **best-effort, not guarantees**, and
   the UI must say so plainly (detailed at each spot): *Delete for everyone*, voice-room
   *ephemeral* text, and history recovery. Never word a dialog to imply a stronger promise
@@ -574,9 +574,12 @@ banner.
 **Role-gated actions** (owner/admins only): appear on member rows within Group Info
 (§12.2), not on individual messages.
 
-**States.** As §8, plus: *membership updating*; *removed* (read-only/exited, with no access
-to future epochs); and *queue gap — rejoin required*. The queue-gap state disables the
-composer until peers remove and re-add this device with a fresh Welcome.
+**States.** As §8, plus: *removed* (read-only/exited; nothing sent after the removal
+reaches this device); *waiting for group state*; and *forked* (members hold conflicting
+histories, so the group is quarantined). Waiting for group state follows a queue gap, or
+an event this device cannot yet place. It disables the composer and group changes until a
+member confirms the group's current control state, and it never asks members to remove and
+re-add this device.
 
 ---
 
