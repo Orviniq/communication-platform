@@ -1220,18 +1220,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupRemovedState =>
-      'You were removed. Past content on this device stays readable, but future group epochs are unavailable.';
+      'You were removed. Past content on this device stays readable, but new messages in this group no longer reach you.';
 
   @override
   String get groupLeftState => 'You left this group. This copy is read-only.';
 
   @override
   String get groupQueueGapState =>
-      'A mailbox gap may have hidden an MLS commit. This device must be removed and re-added with a fresh Welcome before sending.';
+      'Messages may have been lost while this device was away. A member has been asked for the group\'s current state, and sending resumes when it arrives.';
 
   @override
   String get groupForkState =>
-      'Concurrent MLS commits were quarantined. The client will not choose a branch.';
+      'Two conflicting group changes arrived. The group is paused, and the app will not choose between them.';
 
   @override
   String get groupControlQuarantineState =>
@@ -1269,14 +1269,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupConfirmRemoveBody =>
-      'Removing this member advances the group epoch and cuts off access to future messages. It cannot erase content already received.';
+      'This member stops receiving new messages from the group. Content they already received cannot be erased.';
 
   @override
   String get groupConfirmLeaveTitle => 'Leave group?';
 
   @override
   String get groupConfirmLeaveBody =>
-      'You will lose access to future group epochs. Content already stored on this device remains readable.';
+      'You will stop receiving new messages from this group. Content already stored on this device remains readable.';
 
   @override
   String get groupOwnerMustTransfer =>
@@ -1299,7 +1299,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupWithheldQueueGap =>
-      'Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.';
+      'Messaging withheld until a member confirms this group\'s current state.';
 
   @override
   String get groupWithheldConflict =>

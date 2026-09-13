@@ -72,8 +72,6 @@ class GroupEditView extends StatefulWidget {
 class _GroupEditViewState extends State<GroupEditView> {
   late final TextEditingController _name;
   late final TextEditingController _description;
-  late GroupInvitationPolicy _invitationPolicy;
-  late bool _shareHistory;
   var _busy = false;
   var _failed = false;
 
@@ -84,10 +82,6 @@ class _GroupEditViewState extends State<GroupEditView> {
     _description = TextEditingController(
       text: widget.state.metadata.description,
     );
-    _invitationPolicy = widget.state.invitationPolicy;
-    _shareHistory =
-        widget.state.historySharingPolicy ==
-        GroupHistorySharingPolicy.reshareAvailable;
   }
 
   @override
@@ -104,11 +98,6 @@ class _GroupEditViewState extends State<GroupEditView> {
       widget.state,
       widget.currentUserId,
       GroupPermission.editMetadata,
-    );
-    final isOwner = GroupAuthorization.allows(
-      widget.state,
-      widget.currentUserId,
-      GroupPermission.editHistorySharingPolicy,
     );
     return Scaffold(
       key: const ValueKey('group-edit-screen'),
@@ -133,13 +122,15 @@ class _GroupEditViewState extends State<GroupEditView> {
               maxLength: GroupMetadata.maximumDescriptionScalars,
             ),
             const SizedBox(height: AppSpacing.x6),
+            // A group's policies are fixed by the event that created it: no
+            // control event changes them, so they are shown and not offered.
             Text(
               strings.groupInvitePolicyLabel,
               style: context.tokens.typography.compact,
             ),
             DropdownButtonFormField<GroupInvitationPolicy>(
               key: const ValueKey('group-invite-policy'),
-              initialValue: _invitationPolicy,
+              initialValue: widget.state.invitationPolicy,
               items: [
                 for (final policy in GroupInvitationPolicy.values)
                   DropdownMenuItem(
@@ -147,17 +138,15 @@ class _GroupEditViewState extends State<GroupEditView> {
                     child: Text(_invitationLabel(strings, policy)),
                   ),
               ],
-              onChanged: isOwner && !_busy
-                  ? (value) => setState(() => _invitationPolicy = value!)
-                  : null,
+              onChanged: null,
             ),
             const SizedBox(height: AppSpacing.x4),
             AppCheckboxRow(
-              value: _shareHistory,
+              value:
+                  widget.state.historySharingPolicy ==
+                  GroupHistorySharingPolicy.reshareAvailable,
               label: strings.groupHistorySharingLabel,
-              onChanged: isOwner && !_busy
-                  ? (value) => setState(() => _shareHistory = value)
-                  : null,
+              onChanged: null,
             ),
             Text(
               strings.groupHistorySharingNote,
@@ -204,26 +193,8 @@ class _GroupEditViewState extends State<GroupEditView> {
     final metadata = GroupMetadata(
       name: _name.text,
       description: _description.text,
-      photoCapability: widget.state.metadata.photoCapability,
     ).normalized();
-    Result<GroupState> result = await widget.onMutate(
-      UpdateGroupMetadataOperation(metadata),
-    );
-    if (result is Success<GroupState> &&
-        GroupAuthorization.allows(
-          widget.state,
-          widget.currentUserId,
-          GroupPermission.editHistorySharingPolicy,
-        )) {
-      result = await widget.onMutate(
-        UpdateGroupPoliciesOperation(
-          invitationPolicy: _invitationPolicy,
-          historySharingPolicy: _shareHistory
-              ? GroupHistorySharingPolicy.reshareAvailable
-              : GroupHistorySharingPolicy.newMessagesOnly,
-        ),
-      );
-    }
+    final result = await widget.onMutate(RenameGroupOperation(metadata));
     if (!mounted) return;
     if (result is Success<GroupState>) {
       context.pop();

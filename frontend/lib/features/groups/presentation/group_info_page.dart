@@ -282,8 +282,15 @@ class _GroupInfoViewState extends State<GroupInfoView> {
             label: AppLocalizations.of(context).groupTransferOwnerAction,
             onPressed: () {
               popAppModal(context);
+              // Handing the group over is one role change: the member
+              // becomes the owner and this owner becomes an admin.
               unawaited(
-                _mutate(TransferGroupOwnershipOperation(member.userId)),
+                _mutate(
+                  ChangeGroupRoleOperation(
+                    targetUserId: member.userId,
+                    role: GroupRole.owner,
+                  ),
+                ),
               );
             },
             kind: AppButtonKind.outline,
@@ -334,7 +341,10 @@ class _GroupInfoViewState extends State<GroupInfoView> {
           kind: AppButtonKind.danger,
           onPressed: () {
             popAppModal(context);
-            unawaited(_mutate(const LeaveGroupOperation()));
+            // Leaving is removing yourself, signed like any other removal.
+            unawaited(
+              _mutate(RemoveGroupMemberOperation(widget.currentUserId)),
+            );
           },
         ),
       ],

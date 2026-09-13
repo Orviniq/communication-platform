@@ -73,10 +73,9 @@ class GroupLifecycleNotice extends StatelessWidget {
     final strings = AppLocalizations.of(context);
     final message = switch (lifecycle) {
       GroupLifecycle.active => '',
-      GroupLifecycle.membershipUpdating => strings.groupMembershipUpdatingState,
       GroupLifecycle.removed => strings.groupRemovedState,
       GroupLifecycle.left => strings.groupLeftState,
-      GroupLifecycle.queueGapRejoinRequired => strings.groupQueueGapState,
+      GroupLifecycle.stateRecoveryRequired => strings.groupQueueGapState,
       GroupLifecycle.forkQuarantined => strings.groupForkState,
       GroupLifecycle.controlQuarantined => strings.groupControlQuarantineState,
     };

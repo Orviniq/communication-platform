@@ -125,16 +125,7 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => Result.success(
-          const GroupMessage(
-            messageId: '22222222222222222222222222222222',
-            groupId: _groupId,
-            senderUserId: _owner,
-            text: 'hello',
-            createdMs: 100,
-            localPreviewOnly: true,
-          ),
-        ),
+        onSend: (_) async => const Result.success(null),
       ),
     );
 
@@ -179,7 +170,6 @@ GroupState _state({GroupLifecycle lifecycle = GroupLifecycle.active}) =>
       controlRevision: 1,
       controlStateHash:
           '1010101010101010101010101010101010101010101010101010101010101010',
-      acceptedEpoch: 1,
       lifecycle: lifecycle,
     );
 

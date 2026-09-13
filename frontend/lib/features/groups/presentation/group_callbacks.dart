@@ -9,8 +9,7 @@ typedef CreateGroupCallback =
     );
 typedef MutateGroupCallback =
     Future<Result<GroupState>> Function(GroupControlOperation operation);
-typedef SendGroupMessageCallback =
-    Future<Result<GroupMessage>> Function(String text);
+typedef SendGroupMessageCallback = Future<Result<void>> Function(String text);
 
 final class GroupPickerContact {
   const GroupPickerContact({

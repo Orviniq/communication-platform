@@ -1218,7 +1218,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupRemovedState =>
-      'شما حذف شده‌اید. محتوای قبلی این دستگاه خواندنی می‌ماند، اما دوره‌های آیندهٔ گروه در دسترس نیست.';
+      'شما حذف شده‌اید. محتوای قبلی این دستگاه خواندنی می‌ماند، اما پیام‌های تازهٔ این گروه دیگر به شما نمی‌رسد.';
 
   @override
   String get groupLeftState =>
@@ -1226,11 +1226,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupQueueGapState =>
-      'ممکن است شکاف صندوق پستی یک Commit از MLS را پنهان کرده باشد. پیش از ارسال، این دستگاه باید حذف و با Welcome تازه دوباره افزوده شود.';
+      'ممکن است هنگام دور بودن این دستگاه پیام‌هایی از دست رفته باشد. وضعیت فعلی گروه از یکی از اعضا خواسته شده است و ارسال پس از رسیدن آن ادامه می‌یابد.';
 
   @override
   String get groupForkState =>
-      'Commitهای هم‌زمان MLS قرنطینه شدند. برنامه هیچ شاخه‌ای را خودسرانه انتخاب نمی‌کند.';
+      'دو تغییر ناسازگار در گروه رسید. گروه متوقف شده است و برنامه میان آن‌ها انتخاب نمی‌کند.';
 
   @override
   String get groupControlQuarantineState =>
@@ -1268,14 +1268,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupConfirmRemoveBody =>
-      'حذف عضو دورهٔ گروه را جلو می‌برد و دسترسی او به پیام‌های آینده را قطع می‌کند؛ محتوای از قبل دریافت‌شده پاک نمی‌شود.';
+      'این عضو دیگر پیام‌های تازهٔ گروه را دریافت نمی‌کند. محتوایی که پیش‌تر دریافت کرده پاک نمی‌شود.';
 
   @override
   String get groupConfirmLeaveTitle => 'گروه ترک شود؟';
 
   @override
   String get groupConfirmLeaveBody =>
-      'دسترسی به دوره‌های آیندهٔ گروه را از دست می‌دهید. محتوای ذخیره‌شده روی این دستگاه خواندنی می‌ماند.';
+      'دیگر پیام‌های تازهٔ این گروه را دریافت نمی‌کنید. محتوای ذخیره‌شده روی این دستگاه خواندنی می‌ماند.';
 
   @override
   String get groupOwnerMustTransfer => 'پیش از ترک گروه، مالکیت را منتقل کنید.';
@@ -1297,7 +1297,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupWithheldQueueGap =>
-      'ارسال پیام متوقف است: پس از شکاف صندوق پستی باید با Welcome تازه دوباره بپیوندید.';
+      'ارسال پیام متوقف است تا یکی از اعضا وضعیت فعلی این گروه را تأیید کند.';
 
   @override
   String get groupWithheldConflict =>

@@ -2255,7 +2255,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupRemovedState.
   ///
   /// In en, this message translates to:
-  /// **'You were removed. Past content on this device stays readable, but future group epochs are unavailable.'**
+  /// **'You were removed. Past content on this device stays readable, but new messages in this group no longer reach you.'**
   String get groupRemovedState;
 
   /// No description provided for @groupLeftState.
@@ -2267,13 +2267,13 @@ abstract class AppLocalizations {
   /// No description provided for @groupQueueGapState.
   ///
   /// In en, this message translates to:
-  /// **'A mailbox gap may have hidden an MLS commit. This device must be removed and re-added with a fresh Welcome before sending.'**
+  /// **'Messages may have been lost while this device was away. A member has been asked for the group\'s current state, and sending resumes when it arrives.'**
   String get groupQueueGapState;
 
   /// No description provided for @groupForkState.
   ///
   /// In en, this message translates to:
-  /// **'Concurrent MLS commits were quarantined. The client will not choose a branch.'**
+  /// **'Two conflicting group changes arrived. The group is paused, and the app will not choose between them.'**
   String get groupForkState;
 
   /// No description provided for @groupControlQuarantineState.
@@ -2345,7 +2345,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupConfirmRemoveBody.
   ///
   /// In en, this message translates to:
-  /// **'Removing this member advances the group epoch and cuts off access to future messages. It cannot erase content already received.'**
+  /// **'This member stops receiving new messages from the group. Content they already received cannot be erased.'**
   String get groupConfirmRemoveBody;
 
   /// No description provided for @groupConfirmLeaveTitle.
@@ -2357,7 +2357,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupConfirmLeaveBody.
   ///
   /// In en, this message translates to:
-  /// **'You will lose access to future group epochs. Content already stored on this device remains readable.'**
+  /// **'You will stop receiving new messages from this group. Content already stored on this device remains readable.'**
   String get groupConfirmLeaveBody;
 
   /// No description provided for @groupOwnerMustTransfer.
@@ -2393,7 +2393,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupWithheldQueueGap.
   ///
   /// In en, this message translates to:
-  /// **'Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.'**
+  /// **'Messaging withheld until a member confirms this group\'s current state.'**
   String get groupWithheldQueueGap;
 
   /// No description provided for @groupWithheldConflict.

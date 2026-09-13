@@ -87,7 +87,7 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
                                 groupId: widget.groupId,
                                 actorUserId: userId,
                                 actorDeviceId: deviceId,
-                                operation: InviteGroupMembersOperation(members),
+                                operation: AddGroupMembersOperation(members),
                               );
                               if (mounted && result is Success<GroupState>) {
                                 this.context.pop();

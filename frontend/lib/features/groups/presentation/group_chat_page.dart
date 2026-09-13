@@ -277,17 +277,16 @@ class _GroupChatViewState extends State<GroupChatView> {
     if (!mounted) return;
     setState(() {
       _sending = false;
-      _sendFailed = result is FailureResult<GroupMessage>;
+      _sendFailed = result is FailureResult<void>;
     });
   }
 }
 
 ChatSecurityGate _chatGate(GroupLifecycle lifecycle) => switch (lifecycle) {
   GroupLifecycle.active => ChatSecurityGate.ready,
-  GroupLifecycle.membershipUpdating => ChatSecurityGate.groupUpdating,
   GroupLifecycle.removed ||
   GroupLifecycle.left => ChatSecurityGate.groupRemoved,
-  GroupLifecycle.queueGapRejoinRequired => ChatSecurityGate.groupQueueGap,
+  GroupLifecycle.stateRecoveryRequired => ChatSecurityGate.groupQueueGap,
   GroupLifecycle.forkQuarantined ||
   GroupLifecycle.controlQuarantined => ChatSecurityGate.groupConflict,
 };

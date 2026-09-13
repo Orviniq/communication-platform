@@ -86,7 +86,6 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
   final _name = TextEditingController();
   final _description = TextEditingController();
   var _details = false;
-  var _photoSelected = false;
   var _busy = false;
   String? _error;
 
@@ -150,17 +149,6 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
                 maxLength: GroupMetadata.maximumDescriptionScalars,
                 enabled: !_busy,
               ),
-              const SizedBox(height: AppSpacing.x4),
-              AppButton(
-                label: _photoSelected
-                    ? strings.groupPhotoSelected
-                    : strings.groupPhotoAction,
-                leading: AppIcons.attach,
-                kind: AppButtonKind.outline,
-                onPressed: _busy
-                    ? null
-                    : () => setState(() => _photoSelected = !_photoSelected),
-              ),
             ] else
               GroupMemberPicker(
                 contacts: widget.contacts,
@@ -223,7 +211,6 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
     final metadata = GroupMetadata(
       name: _name.text,
       description: _description.text,
-      photoCapability: _photoSelected ? 'development-preview-photo' : null,
     ).normalized();
     if (!metadata.isValid) {
       setState(() => _error = strings.groupNameLabel);
