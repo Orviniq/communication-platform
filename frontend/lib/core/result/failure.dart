@@ -181,8 +181,8 @@ enum CancellationFailureKind { requestedByUser, lifecycleInterrupted }
 /// One value per `code` the surface answers, named after it. The wire
 /// vocabulary is fixed and small, so a name that is not the code's own is a
 /// second spelling of the same fact and drifts from it — which is what
-/// `bad_request`, `token_not_valid`, `device_scope_required` and
-/// `keypackage_limit` did before they were deleted from here.
+/// `bad_request`, `token_not_valid` and `device_scope_required` did before
+/// they were deleted from here.
 enum BackendFailureCode {
   invalidRequest,
   usernameTaken,
