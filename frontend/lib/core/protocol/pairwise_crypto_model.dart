@@ -18,7 +18,9 @@ enum PairwiseCryptoOperation {
   ratchetDecrypt(14),
   createAuthenticatedRepairRequest(15),
   consumeAuthenticatedRepairRequest(16),
-  inspectPublicHeader(17);
+  inspectPublicHeader(17),
+  sealGroupControl(18),
+  openGroupControl(19);
 
   const PairwiseCryptoOperation(this.wireValue);
 

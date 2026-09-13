@@ -1,5 +1,4 @@
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/group_sync_model.dart';
@@ -12,18 +11,22 @@ enum GroupInvitationPolicy { ownerOnly, ownerAndAdmins, allMembers }
 
 enum GroupHistorySharingPolicy { reshareAvailable, newMessagesOnly }
 
+/// Where this device stands in a group.
+///
+/// [stateRecoveryRequired] is never stored. It is laid over the stored value
+/// while a lost envelope may have carried a control event this device has not
+/// seen, until a member answers with the group's current control state.
 enum GroupLifecycle {
   active,
-  membershipUpdating,
   removed,
   left,
-  queueGapRejoinRequired,
+  stateRecoveryRequired,
   forkQuarantined,
   controlQuarantined,
 }
 
 enum GroupQuarantineReason {
-  siblingCommit,
+  siblingControl,
   staleRevision,
   brokenControlChain,
   malformedControl,
@@ -38,8 +41,6 @@ enum GroupPermission {
   inviteMembers,
   removeMembers,
   editMetadata,
-  editInvitationPolicy,
-  editHistorySharingPolicy,
   changeRoles,
   transferOwnership,
   pinMessages,
@@ -47,60 +48,59 @@ enum GroupPermission {
 }
 
 final class GroupMetadata {
-  const GroupMetadata({
-    required this.name,
-    this.description = '',
-    this.photoCapability,
-  });
+  const GroupMetadata({required this.name, this.description = ''});
 
   static const maximumNameScalars = 100;
   static const maximumDescriptionScalars = 1000;
 
   final String name;
   final String description;
-  final String? photoCapability;
 
   bool get isValid {
     final normalizedName = name.trim();
     return normalizedName.isNotEmpty &&
         normalizedName.runes.length <= maximumNameScalars &&
-        description.runes.length <= maximumDescriptionScalars &&
-        (photoCapability == null || photoCapability!.trim().isNotEmpty);
+        description.runes.length <= maximumDescriptionScalars;
   }
 
-  GroupMetadata normalized() => GroupMetadata(
-    name: name.trim(),
-    description: description.trim(),
-    photoCapability: photoCapability?.trim(),
-  );
+  GroupMetadata normalized() =>
+      GroupMetadata(name: name.trim(), description: description.trim());
 
   @override
   bool operator ==(Object other) =>
       other is GroupMetadata &&
       other.name == name &&
-      other.description == description &&
-      other.photoCapability == photoCapability;
+      other.description == description;
 
   @override
-  int get hashCode => Object.hash(name, description, photoCapability);
+  int get hashCode => Object.hash(name, description);
 }
 
+/// One member of a group, as this device holds it.
+///
+/// [userId], [role] and [membership] are the roster every member agrees on,
+/// because each is derived from signed control events. [displayName] and
+/// [verified] are this device's own presentation of the member: neither is
+/// signed, neither leaves the device, and another member's device may hold
+/// different values for both.
 final class GroupMember {
   GroupMember({
-    required this.userId,
+    required String userId,
     required this.displayName,
     required this.role,
     this.membership = GroupMembershipState.active,
     this.verified = false,
-    Iterable<String> deviceIds = const [],
-  }) : deviceIds = List.unmodifiable(_sortedUnique(deviceIds));
+  }) : userId = userId.toLowerCase() {
+    if (!_groupUuid.hasMatch(this.userId)) {
+      throw const FormatException('invalid group member');
+    }
+  }
 
   final String userId;
   final String displayName;
   final GroupRole role;
   final GroupMembershipState membership;
   final bool verified;
-  final List<String> deviceIds;
 
   bool get isActive => membership == GroupMembershipState.active;
 
@@ -109,24 +109,13 @@ final class GroupMember {
     GroupRole? role,
     GroupMembershipState? membership,
     bool? verified,
-    Iterable<String>? deviceIds,
   }) => GroupMember(
     userId: userId,
     displayName: displayName ?? this.displayName,
     role: role ?? this.role,
     membership: membership ?? this.membership,
     verified: verified ?? this.verified,
-    deviceIds: deviceIds ?? this.deviceIds,
   );
-
-  List<Object?> get canonicalFields => [
-    userId.toLowerCase(),
-    displayName,
-    role.index,
-    membership.index,
-    verified,
-    deviceIds,
-  ];
 
   @override
   bool operator ==(Object other) =>
@@ -135,33 +124,37 @@ final class GroupMember {
       other.displayName == displayName &&
       other.role == role &&
       other.membership == membership &&
-      other.verified == verified &&
-      _listEquals(other.deviceIds, deviceIds);
+      other.verified == verified;
 
   @override
-  int get hashCode => Object.hash(
-    userId,
-    displayName,
-    role,
-    membership,
-    verified,
-    Object.hashAll(deviceIds),
-  );
+  int get hashCode =>
+      Object.hash(userId, displayName, role, membership, verified);
 }
 
 /// Minimal group-owned projection of one account-authenticated live device.
-/// Pairwise public keys remain owned by the pairwise feature and never cross
-/// into group application policy.
+///
+/// [signingPublic] is the Ed25519 half of the device's `ik_pub`, taken from the
+/// device list the contacts feature verified against the account identity and
+/// the signed device log. It is the only key a group control event from this
+/// device is checked against.
 final class GroupAuthenticatedLiveDevice {
-  GroupAuthenticatedLiveDevice({required this.userId, required this.deviceId}) {
-    if (!_groupUuid.hasMatch(userId.toLowerCase()) ||
-        !_groupUuid.hasMatch(deviceId.toLowerCase())) {
+  GroupAuthenticatedLiveDevice({
+    required String userId,
+    required String deviceId,
+    required Uint8List signingPublic,
+  }) : userId = userId.toLowerCase(),
+       deviceId = deviceId.toLowerCase(),
+       signingPublic = Uint8List.fromList(signingPublic) {
+    if (!_groupUuid.hasMatch(this.userId) ||
+        !_groupUuid.hasMatch(this.deviceId) ||
+        this.signingPublic.length != 32) {
       throw const FormatException('invalid authenticated live device');
     }
   }
 
   final String userId;
   final String deviceId;
+  final Uint8List signingPublic;
 }
 
 final class GroupState {
@@ -176,15 +169,12 @@ final class GroupState {
     this.lifecycle = GroupLifecycle.active,
     this.quarantineReason,
   }) : members = List.unmodifiable(_sortedMembers(members)) {
-    if (!_isHex(groupId, 32) ||
+    if (!_isHex(groupId, groupIdBytes) ||
         controlRevision < 1 ||
-        !_isHex(controlStateHash, 32) ||
+        !_isHex(controlStateHash, stateHashBytes) ||
         !metadata.isValid ||
         this.members.length > maximumMembers ||
-        this.members
-                .map((member) => member.userId.toLowerCase())
-                .toSet()
-                .length !=
+        this.members.map((member) => member.userId).toSet().length !=
             this.members.length) {
       throw const FormatException('invalid group state');
     }
@@ -202,6 +192,8 @@ final class GroupState {
   }
 
   static const maximumMembers = 50;
+  static const groupIdBytes = 32;
+  static const stateHashBytes = 32;
 
   final String groupId;
   final GroupMetadata metadata;
@@ -219,15 +211,13 @@ final class GroupState {
   GroupMember? member(String userId) {
     final normalized = userId.toLowerCase();
     for (final member in members) {
-      if (member.userId.toLowerCase() == normalized) return member;
+      if (member.userId == normalized) return member;
     }
     return null;
   }
 
   GroupState copyWith({
     GroupMetadata? metadata,
-    GroupInvitationPolicy? invitationPolicy,
-    GroupHistorySharingPolicy? historySharingPolicy,
     Iterable<GroupMember>? members,
     int? controlRevision,
     String? controlStateHash,
@@ -237,8 +227,8 @@ final class GroupState {
   }) => GroupState(
     groupId: groupId,
     metadata: metadata ?? this.metadata,
-    invitationPolicy: invitationPolicy ?? this.invitationPolicy,
-    historySharingPolicy: historySharingPolicy ?? this.historySharingPolicy,
+    invitationPolicy: invitationPolicy,
+    historySharingPolicy: historySharingPolicy,
     members: members ?? this.members,
     controlRevision: controlRevision ?? this.controlRevision,
     controlStateHash: controlStateHash ?? this.controlStateHash,
@@ -256,13 +246,9 @@ abstract final class GroupAuthorization {
   ) {
     final member = state.member(actorUserId);
     if (member == null) return const {};
-    if (!member.isActive) {
+    if (!member.isActive || state.lifecycle != GroupLifecycle.active) {
       return const {GroupPermission.viewHistory};
     }
-    if (state.lifecycle != GroupLifecycle.active) {
-      return const {GroupPermission.viewHistory};
-    }
-
     return _activeMemberPermissions(state, member);
   }
 
@@ -286,8 +272,6 @@ abstract final class GroupAuthorization {
     }
     if (member.role == GroupRole.owner) {
       permissions
-        ..add(GroupPermission.editInvitationPolicy)
-        ..add(GroupPermission.editHistorySharingPolicy)
         ..add(GroupPermission.changeRoles)
         ..add(GroupPermission.transferOwnership);
     }
@@ -300,8 +284,10 @@ abstract final class GroupAuthorization {
     GroupPermission permission,
   ) => permissionsFor(state, actorUserId).contains(permission);
 
-  /// Evaluates a signed control actor against the historical global roster.
-  /// Local lifecycle is intentionally irrelevant during transcript replay.
+  /// Evaluates a signed control's signer against the roster the control was
+  /// built on. This device's own lifecycle is deliberately irrelevant: a
+  /// removed device still decides correctly whether somebody else's event was
+  /// authorized.
   static bool allowsControl(
     GroupState state,
     String actorUserId,
@@ -311,6 +297,29 @@ abstract final class GroupAuthorization {
     return member != null &&
         member.isActive &&
         _activeMemberPermissions(state, member).contains(permission);
+  }
+
+  static bool canAdd(
+    GroupState state, {
+    required String actorUserId,
+    required Iterable<String> targetUserIds,
+    bool forControl = false,
+  }) {
+    final targets = targetUserIds
+        .map((value) => value.toLowerCase())
+        .toList(growable: false);
+    if (targets.isEmpty ||
+        targets.toSet().length != targets.length ||
+        !(forControl ? allowsControl : allows)(
+          state,
+          actorUserId,
+          GroupPermission.inviteMembers,
+        ) ||
+        state.activeMembers.length + targets.length >
+            GroupState.maximumMembers) {
+      return false;
+    }
+    return targets.every((target) => state.member(target)?.isActive != true);
   }
 
   static bool canRemove(
@@ -329,11 +338,17 @@ abstract final class GroupAuthorization {
     }
     final actor = state.member(actorUserId);
     final target = state.member(targetUserId);
-    if (actor == null || target == null || !isEvictable(target)) return false;
-    if (target.role == GroupRole.owner) return false;
+    if (actor == null ||
+        target == null ||
+        !target.isActive ||
+        target.role == GroupRole.owner) {
+      return false;
+    }
     return actor.role == GroupRole.owner || target.role == GroupRole.member;
   }
 
+  /// Promotes or demotes a member. Handing the group to another owner is
+  /// [canTransferOwnership], because it changes two roles at once.
   static bool canChangeRole(
     GroupState state, {
     required String actorUserId,
@@ -351,16 +366,32 @@ abstract final class GroupAuthorization {
       return false;
     }
     final target = state.member(targetUserId);
+    return target != null &&
+        target.isActive &&
+        target.role != GroupRole.owner &&
+        target.role != role;
+  }
+
+  static bool canTransferOwnership(
+    GroupState state, {
+    required String actorUserId,
+    required String targetUserId,
+    bool forControl = false,
+  }) {
+    if (actorUserId.toLowerCase() == targetUserId.toLowerCase() ||
+        !(forControl ? allowsControl : allows)(
+          state,
+          actorUserId,
+          GroupPermission.transferOwnership,
+        )) {
+      return false;
+    }
+    final target = state.member(targetUserId);
     return target != null && target.isActive && target.role != GroupRole.owner;
   }
 
-  /// A member who announced a leave is still in the MLS tree and still holds
-  /// the current epoch secret until a remaining member commits its `Remove`.
-  /// Eviction must therefore stay authorized for [GroupMembershipState.left],
-  /// while an already-evicted member is not a valid target again.
-  static bool isEvictable(GroupMember member) =>
-      member.membership != GroupMembershipState.removed;
-
+  /// A leave is a member removing itself. An owner may only leave a group it
+  /// is the last active member of, so a live group never loses its owner.
   static bool canLeave(
     GroupState state,
     String actorUserId, {
@@ -385,152 +416,101 @@ abstract final class GroupAuthorization {
       };
 }
 
+/// The five control event kinds, by the value each carries on the wire.
+enum GroupControlKind {
+  create(1),
+  addMember(2),
+  removeMember(3),
+  changeRole(4),
+  rename(5);
+
+  const GroupControlKind(this.wireValue);
+
+  final int wireValue;
+
+  static GroupControlKind? fromWireValue(int value) {
+    for (final kind in values) {
+      if (kind.wireValue == value) return kind;
+    }
+    return null;
+  }
+}
+
 sealed class GroupControlOperation {
   const GroupControlOperation();
 
-  int get code;
-  GroupPermission? get requiredPermission;
-  List<Object?> get canonicalFields;
+  GroupControlKind get kind;
 }
 
+/// Starts a group. Its policies are fixed here: no later event changes them.
 final class CreateGroupOperation extends GroupControlOperation {
   CreateGroupOperation({
     required this.metadata,
     required this.invitationPolicy,
     required this.historySharingPolicy,
-    required Iterable<GroupMember> initialMembers,
-  }) : initialMembers = List.unmodifiable(_sortedMembers(initialMembers));
+    required Iterable<GroupMember> members,
+  }) : members = List.unmodifiable(_sortedMembers(members));
 
   final GroupMetadata metadata;
   final GroupInvitationPolicy invitationPolicy;
   final GroupHistorySharingPolicy historySharingPolicy;
-  final List<GroupMember> initialMembers;
+  final List<GroupMember> members;
 
   @override
-  int get code => 1;
-  @override
-  GroupPermission? get requiredPermission => null;
-  @override
-  List<Object?> get canonicalFields => [
-    code,
-    metadata.name,
-    metadata.description,
-    metadata.photoCapability,
-    invitationPolicy.index,
-    historySharingPolicy.index,
-    [for (final member in initialMembers) member.canonicalFields],
-  ];
+  GroupControlKind get kind => GroupControlKind.create;
 }
 
-final class UpdateGroupMetadataOperation extends GroupControlOperation {
-  const UpdateGroupMetadataOperation(this.metadata);
-
-  final GroupMetadata metadata;
-  @override
-  int get code => 2;
-  @override
-  GroupPermission get requiredPermission => GroupPermission.editMetadata;
-  @override
-  List<Object?> get canonicalFields => [
-    code,
-    metadata.name,
-    metadata.description,
-    metadata.photoCapability,
-  ];
-}
-
-final class UpdateGroupPoliciesOperation extends GroupControlOperation {
-  const UpdateGroupPoliciesOperation({
-    required this.invitationPolicy,
-    required this.historySharingPolicy,
-  });
-
-  final GroupInvitationPolicy invitationPolicy;
-  final GroupHistorySharingPolicy historySharingPolicy;
-  @override
-  int get code => 3;
-  @override
-  GroupPermission get requiredPermission =>
-      GroupPermission.editInvitationPolicy;
-  @override
-  List<Object?> get canonicalFields => [
-    code,
-    invitationPolicy.index,
-    historySharingPolicy.index,
-  ];
-}
-
-final class InviteGroupMembersOperation extends GroupControlOperation {
-  InviteGroupMembersOperation(Iterable<GroupMember> members)
+/// Adds members, each with the member role. A member who was removed or left
+/// may be added again.
+final class AddGroupMembersOperation extends GroupControlOperation {
+  AddGroupMembersOperation(Iterable<GroupMember> members)
     : members = List.unmodifiable(_sortedMembers(members));
 
   final List<GroupMember> members;
+
   @override
-  int get code => 4;
-  @override
-  GroupPermission get requiredPermission => GroupPermission.inviteMembers;
-  @override
-  List<Object?> get canonicalFields => [
-    code,
-    [for (final member in members) member.canonicalFields],
-  ];
+  GroupControlKind get kind => GroupControlKind.addMember;
 }
 
+/// Removes a member. A member removing itself is leaving.
 final class RemoveGroupMemberOperation extends GroupControlOperation {
-  const RemoveGroupMemberOperation(this.targetUserId);
+  RemoveGroupMemberOperation(String targetUserId)
+    : targetUserId = targetUserId.toLowerCase();
 
   final String targetUserId;
+
   @override
-  int get code => 5;
-  @override
-  GroupPermission get requiredPermission => GroupPermission.removeMembers;
-  @override
-  List<Object?> get canonicalFields => [code, targetUserId.toLowerCase()];
+  GroupControlKind get kind => GroupControlKind.removeMember;
 }
 
-final class LeaveGroupOperation extends GroupControlOperation {
-  const LeaveGroupOperation();
-
-  @override
-  int get code => 6;
-  @override
-  GroupPermission get requiredPermission => GroupPermission.leave;
-  @override
-  List<Object?> get canonicalFields => [code];
-}
-
+/// Changes one member's role. [GroupRole.owner] hands the group over: the
+/// target becomes the owner and the owner who signed becomes an admin.
 final class ChangeGroupRoleOperation extends GroupControlOperation {
-  const ChangeGroupRoleOperation({
-    required this.targetUserId,
-    required this.role,
-  });
+  ChangeGroupRoleOperation({required String targetUserId, required this.role})
+    : targetUserId = targetUserId.toLowerCase();
 
   final String targetUserId;
   final GroupRole role;
+
   @override
-  int get code => 7;
-  @override
-  GroupPermission get requiredPermission => GroupPermission.changeRoles;
-  @override
-  List<Object?> get canonicalFields => [
-    code,
-    targetUserId.toLowerCase(),
-    role.index,
-  ];
+  GroupControlKind get kind => GroupControlKind.changeRole;
 }
 
-final class TransferGroupOwnershipOperation extends GroupControlOperation {
-  const TransferGroupOwnershipOperation(this.targetUserId);
+/// Renames the group and replaces its description.
+final class RenameGroupOperation extends GroupControlOperation {
+  const RenameGroupOperation(this.metadata);
 
-  final String targetUserId;
+  final GroupMetadata metadata;
+
   @override
-  int get code => 8;
-  @override
-  GroupPermission get requiredPermission => GroupPermission.transferOwnership;
-  @override
-  List<Object?> get canonicalFields => [code, targetUserId.toLowerCase()];
+  GroupControlKind get kind => GroupControlKind.rename;
 }
 
+/// One group control event.
+///
+/// Its wire form is deterministic CBOR built by the shared native core, which
+/// also signs it with the device identity. This is the typed view of the same
+/// event; nothing here is an encoder, and nothing here is signed.
 final class GroupControlEvent {
   GroupControlEvent({
     this.protocolVersion = 1,
@@ -538,36 +518,30 @@ final class GroupControlEvent {
     required this.groupId,
     required this.revision,
     required this.previousControlStateHash,
-    required this.signerUserId,
-    required this.signerDeviceId,
+    required String signerUserId,
+    required String signerDeviceId,
     required this.createdMs,
     required this.operation,
-  }) {
+  }) : signerUserId = signerUserId.toLowerCase(),
+       signerDeviceId = signerDeviceId.toLowerCase() {
     if (protocolVersion != 1 ||
-        !_isHex(eventId, 16) ||
-        !_isHex(groupId, 32) ||
+        !_isHex(eventId, eventIdBytes) ||
+        !_isHex(groupId, GroupState.groupIdBytes) ||
         revision < 1 ||
+        revision > maximumRevision ||
+        (revision == 1) != (previousControlStateHash == null) ||
+        (revision == 1) != (operation is CreateGroupOperation) ||
         (previousControlStateHash != null &&
-            !_isHex(previousControlStateHash!, 32)) ||
+            !_isHex(previousControlStateHash!, GroupState.stateHashBytes)) ||
+        !_groupUuid.hasMatch(this.signerUserId) ||
+        !_groupUuid.hasMatch(this.signerDeviceId) ||
         createdMs < 0) {
       throw const FormatException('invalid group control event');
     }
   }
 
-  factory GroupControlEvent.fromDeterministicProjection(String projection) {
-    final fields = _projectionList(jsonDecode(projection), 9);
-    return GroupControlEvent(
-      protocolVersion: _projectionInteger(fields[0]),
-      eventId: _projectionString(fields[1]),
-      groupId: _projectionString(fields[2]),
-      revision: _projectionInteger(fields[3]),
-      previousControlStateHash: _projectionOptionalString(fields[4]),
-      signerUserId: _projectionString(fields[5]),
-      signerDeviceId: _projectionString(fields[6]),
-      createdMs: _projectionInteger(fields[7]),
-      operation: _projectionOperation(fields[8]),
-    );
-  }
+  static const eventIdBytes = 16;
+  static const maximumRevision = 0xffffffff;
 
   final int protocolVersion;
   final String eventId;
@@ -578,26 +552,9 @@ final class GroupControlEvent {
   final String signerDeviceId;
   final int createdMs;
   final GroupControlOperation operation;
-
-  /// A fixed-order projection of the event.
-  ///
-  /// It deliberately is not a Dart wire encoder. Production deterministic-CBOR and
-  /// signatures remain owned by the reviewed shared Rust core.
-  List<Object?> get canonicalFields => [
-    protocolVersion,
-    eventId,
-    groupId,
-    revision,
-    previousControlStateHash,
-    signerUserId.toLowerCase(),
-    signerDeviceId.toLowerCase(),
-    createdMs,
-    operation.canonicalFields,
-  ];
-
-  String get deterministicProjection => jsonEncode(canonicalFields);
 }
 
+/// A control event together with the exact bytes its signer signed.
 final class SignedGroupControlEvent {
   SignedGroupControlEvent({
     required this.event,
@@ -606,39 +563,77 @@ final class SignedGroupControlEvent {
     required Uint8List signature,
   }) : canonicalBytes = Uint8List.fromList(canonicalBytes),
        signature = Uint8List.fromList(signature) {
-    if (!_isHex(controlStateHash, 32) ||
+    if (!_isHex(controlStateHash, GroupState.stateHashBytes) ||
         this.canonicalBytes.isEmpty ||
-        this.signature.isEmpty) {
+        this.canonicalBytes.length > maximumCanonicalBytes ||
+        this.signature.length != signatureBytes) {
       throw const FormatException('invalid signed group control');
     }
   }
 
+  static const maximumCanonicalBytes = 16384;
+  static const signatureBytes = 64;
+
   final GroupControlEvent event;
+
+  /// The hash this event commits the group to. The next event names it.
   final String controlStateHash;
   final Uint8List canonicalBytes;
   final Uint8List signature;
+
+  StoredGroupControl get stored => StoredGroupControl(
+    eventId: event.eventId,
+    revision: event.revision,
+    previousControlStateHash: event.previousControlStateHash,
+    controlStateHash: controlStateHash,
+    signerUserId: event.signerUserId,
+    signerDeviceId: event.signerDeviceId,
+    canonicalBytes: canonicalBytes,
+    signature: signature,
+  );
 }
 
-final class GroupControlTranscriptEntry {
-  GroupControlTranscriptEntry({
-    required this.signedControl,
-    required Uint8List signedPayload,
-    required Uint8List signerAuthenticationProof,
-  }) : signedPayload = Uint8List.fromList(signedPayload),
-       signerAuthenticationProof = Uint8List.fromList(
-         signerAuthenticationProof,
-       ) {
-    if (this.signedPayload.length < 8 ||
-        this.signedPayload.length > 64 * 1024 ||
-        this.signerAuthenticationProof.length < 8 ||
-        this.signerAuthenticationProof.length > 16 * 1024) {
-      throw const FormatException('invalid group control transcript entry');
+/// One accepted transcript entry as storage holds it: enough to hand the
+/// signed bytes to another device and to check the chain, and nothing that
+/// would need the native core to read back.
+final class StoredGroupControl {
+  StoredGroupControl({
+    required this.eventId,
+    required this.revision,
+    required this.previousControlStateHash,
+    required this.controlStateHash,
+    required String signerUserId,
+    required String signerDeviceId,
+    required Uint8List canonicalBytes,
+    required Uint8List signature,
+  }) : signerUserId = signerUserId.toLowerCase(),
+       signerDeviceId = signerDeviceId.toLowerCase(),
+       canonicalBytes = Uint8List.fromList(canonicalBytes),
+       signature = Uint8List.fromList(signature) {
+    if (!_isHex(eventId, GroupControlEvent.eventIdBytes) ||
+        revision < 1 ||
+        (revision == 1) != (previousControlStateHash == null) ||
+        (previousControlStateHash != null &&
+            !_isHex(previousControlStateHash!, GroupState.stateHashBytes)) ||
+        !_isHex(controlStateHash, GroupState.stateHashBytes) ||
+        !_groupUuid.hasMatch(this.signerUserId) ||
+        !_groupUuid.hasMatch(this.signerDeviceId) ||
+        this.canonicalBytes.isEmpty ||
+        this.canonicalBytes.length >
+            SignedGroupControlEvent.maximumCanonicalBytes ||
+        this.signature.length != SignedGroupControlEvent.signatureBytes) {
+      throw const FormatException('invalid stored group control');
     }
   }
 
-  final SignedGroupControlEvent signedControl;
-  final Uint8List signedPayload;
-  final Uint8List signerAuthenticationProof;
+  final String eventId;
+  final int revision;
+  final String? previousControlStateHash;
+  final String controlStateHash;
+  final String signerUserId;
+  final String signerDeviceId;
+  final Uint8List canonicalBytes;
+  final Uint8List signature;
 }
 
 sealed class GroupControlApplyResult {
@@ -650,9 +645,26 @@ final class GroupControlAccepted extends GroupControlApplyResult {
   final GroupState state;
 }
 
+/// The event is this device's current head, already applied.
 final class GroupControlDuplicate extends GroupControlApplyResult {
   const GroupControlDuplicate(this.state);
   final GroupState state;
+}
+
+/// The event is older than this device's head. Whether it is one this device
+/// accepted or a branch it never saw is a question for the stored transcript,
+/// which the state machine does not hold.
+final class GroupControlStale extends GroupControlApplyResult {
+  const GroupControlStale(this.state);
+  final GroupState state;
+}
+
+/// The event builds on a revision this device has not reached, or on a group
+/// it does not know. Nothing about it is wrong; something before it is
+/// missing, and a member is asked for it.
+final class GroupControlAhead extends GroupControlApplyResult {
+  const GroupControlAhead(this.state);
+  final GroupState? state;
 }
 
 final class GroupControlQuarantined extends GroupControlApplyResult {
@@ -661,6 +673,12 @@ final class GroupControlQuarantined extends GroupControlApplyResult {
   final GroupQuarantineReason reason;
 }
 
+/// Applies authenticated control events to a group's roster.
+///
+/// Its input is an event whose signature the native core already verified
+/// under the signer device's authenticated key. What it decides is everything
+/// the signature cannot: whether the event extends this device's chain, and
+/// whether its signer was allowed to make it by the roster it was built on.
 final class GroupControlStateMachine {
   const GroupControlStateMachine();
 
@@ -670,8 +688,11 @@ final class GroupControlStateMachine {
     required String localUserId,
   }) {
     final event = signedControl.event;
+    final local = localUserId.toLowerCase();
     if (previous == null) {
-      return _create(event, signedControl.controlStateHash, localUserId);
+      return event.revision == 1
+          ? _create(event, signedControl.controlStateHash, local)
+          : const GroupControlAhead(null);
     }
     if (event.groupId != previous.groupId) {
       return GroupControlQuarantined(
@@ -679,42 +700,27 @@ final class GroupControlStateMachine {
         GroupQuarantineReason.brokenControlChain,
       );
     }
-    if (event.revision == previous.controlRevision &&
-        signedControl.controlStateHash == previous.controlStateHash) {
-      return GroupControlDuplicate(previous);
+    if (event.revision == previous.controlRevision) {
+      return signedControl.controlStateHash == previous.controlStateHash
+          ? GroupControlDuplicate(previous)
+          : GroupControlQuarantined(
+              previous,
+              GroupQuarantineReason.siblingControl,
+            );
     }
-    if (event.revision <= previous.controlRevision) {
+    if (event.revision < previous.controlRevision) {
+      return GroupControlStale(previous);
+    }
+    if (event.revision > previous.controlRevision + 1) {
+      return GroupControlAhead(previous);
+    }
+    if (event.previousControlStateHash != previous.controlStateHash) {
       return GroupControlQuarantined(
         previous,
-        event.revision == previous.controlRevision
-            ? GroupQuarantineReason.siblingCommit
-            : GroupQuarantineReason.staleRevision,
+        GroupQuarantineReason.siblingControl,
       );
     }
-    if (event.revision != previous.controlRevision + 1 ||
-        event.previousControlStateHash != previous.controlStateHash) {
-      return GroupControlQuarantined(
-        previous,
-        GroupQuarantineReason.brokenControlChain,
-      );
-    }
-    final actor = previous.member(event.signerUserId);
-    final permission = event.operation.requiredPermission;
-    if (actor == null ||
-        !actor.isActive ||
-        permission == null ||
-        !GroupAuthorization.allowsControl(
-          previous,
-          event.signerUserId,
-          permission,
-        )) {
-      return GroupControlQuarantined(
-        previous,
-        GroupQuarantineReason.unauthorizedControl,
-      );
-    }
-
-    final next = _applyOperation(previous, event, localUserId);
+    final next = _applyOperation(previous, event, local);
     if (next == null) {
       return GroupControlQuarantined(
         previous,
@@ -726,8 +732,8 @@ final class GroupControlStateMachine {
         GroupState(
           groupId: previous.groupId,
           metadata: next.metadata,
-          invitationPolicy: next.invitationPolicy,
-          historySharingPolicy: next.historySharingPolicy,
+          invitationPolicy: previous.invitationPolicy,
+          historySharingPolicy: previous.historySharingPolicy,
           members: next.members,
           controlRevision: event.revision,
           controlStateHash: signedControl.controlStateHash,
@@ -749,21 +755,19 @@ final class GroupControlStateMachine {
   ) {
     final operation = event.operation;
     if (operation is! CreateGroupOperation ||
-        event.revision != 1 ||
-        event.previousControlStateHash != null ||
         !operation.metadata.isValid ||
-        operation.initialMembers.isEmpty ||
-        operation.initialMembers.length > GroupState.maximumMembers) {
+        operation.members.isEmpty ||
+        operation.members.length > GroupState.maximumMembers ||
+        operation.members.any((member) => !member.isActive)) {
       return const GroupControlQuarantined(
         null,
         GroupQuarantineReason.invalidMembership,
       );
     }
-    final owner = operation.initialMembers
-        .where((member) => member.isActive && member.role == GroupRole.owner)
+    final owners = operation.members
+        .where((member) => member.role == GroupRole.owner)
         .toList(growable: false);
-    if (owner.length != 1 ||
-        owner.single.userId.toLowerCase() != event.signerUserId.toLowerCase()) {
+    if (owners.length != 1 || owners.single.userId != event.signerUserId) {
       return const GroupControlQuarantined(
         null,
         GroupQuarantineReason.unauthorizedControl,
@@ -776,15 +780,14 @@ final class GroupControlStateMachine {
           metadata: operation.metadata.normalized(),
           invitationPolicy: operation.invitationPolicy,
           historySharingPolicy: operation.historySharingPolicy,
-          members: operation.initialMembers,
+          members: operation.members,
           controlRevision: 1,
           controlStateHash: controlStateHash,
+          // A member added later replays the group from this event, before the
+          // event that adds it. Until then it is outside the group, which is
+          // the removed lifecycle; the add makes it active.
           lifecycle:
-              operation.initialMembers.any(
-                (member) =>
-                    member.userId.toLowerCase() == localUserId.toLowerCase() &&
-                    member.isActive,
-              )
+              operation.members.any((member) => member.userId == localUserId)
               ? GroupLifecycle.active
               : GroupLifecycle.removed,
         ),
@@ -803,60 +806,57 @@ final class GroupControlStateMachine {
     String localUserId,
   ) {
     final mutable = _MutableGroupState.from(previous);
-    final actorId = event.signerUserId.toLowerCase();
+    final actor = event.signerUserId;
     switch (event.operation) {
       case CreateGroupOperation():
         return null;
-      case UpdateGroupMetadataOperation(:final metadata):
-        if (!metadata.isValid) return null;
-        mutable.metadata = metadata.normalized();
-      case UpdateGroupPoliciesOperation(
-        :final invitationPolicy,
-        :final historySharingPolicy,
-      ):
-        if (!GroupAuthorization.allowsControl(
-          previous,
-          actorId,
-          GroupPermission.editHistorySharingPolicy,
-        )) {
-          return null;
-        }
-        mutable
-          ..invitationPolicy = invitationPolicy
-          ..historySharingPolicy = historySharingPolicy;
-      case InviteGroupMembersOperation(:final members):
-        if (members.isEmpty ||
-            members.any(
+      case AddGroupMembersOperation(:final members):
+        if (members.any(
               (member) => !member.isActive || member.role != GroupRole.member,
             ) ||
-            previous.activeMembers.length + members.length >
-                GroupState.maximumMembers) {
+            !GroupAuthorization.canAdd(
+              previous,
+              actorUserId: actor,
+              targetUserIds: members.map((member) => member.userId),
+              forControl: true,
+            )) {
           return null;
         }
-        final invited = <String>{};
         for (final member in members) {
-          final userId = member.userId.toLowerCase();
-          if (!invited.add(userId)) return null;
-          final existing = previous.member(userId);
+          final existing = previous.member(member.userId);
           if (existing == null) {
             mutable.members.add(member);
-            continue;
+          } else {
+            mutable.replaceMember(
+              member.userId,
+              (current) => member.copyWith(
+                displayName: current.displayName.isEmpty
+                    ? member.displayName
+                    : current.displayName,
+                verified: current.verified || member.verified,
+              ),
+            );
           }
-          // An evicted member is re-admitted by a fresh Add against a freshly
-          // claimed KeyPackage, so the stale row is replaced outright rather
-          // than merged. A member that only announced a leave still occupies
-          // its MLS leaf until the owner commits the eviction, so it is not a
-          // re-admission target yet; a live member is never a target at all.
-          if (existing.membership != GroupMembershipState.removed) return null;
-          mutable.replaceMember(userId, (_) => member);
+          if (member.userId == localUserId) {
+            mutable.lifecycle = GroupLifecycle.active;
+          }
         }
-        if (invited.contains(localUserId.toLowerCase())) {
-          mutable.lifecycle = GroupLifecycle.active;
+      case RemoveGroupMemberOperation(:final targetUserId)
+          when targetUserId == actor:
+        if (!GroupAuthorization.canLeave(previous, actor, forControl: true)) {
+          return null;
+        }
+        mutable.replaceMember(
+          actor,
+          (member) => member.copyWith(membership: GroupMembershipState.left),
+        );
+        if (actor == localUserId) {
+          mutable.lifecycle = GroupLifecycle.left;
         }
       case RemoveGroupMemberOperation(:final targetUserId):
         if (!GroupAuthorization.canRemove(
           previous,
-          actorUserId: actorId,
+          actorUserId: actor,
           targetUserId: targetUserId,
           forControl: true,
         )) {
@@ -866,24 +866,32 @@ final class GroupControlStateMachine {
           targetUserId,
           (member) => member.copyWith(membership: GroupMembershipState.removed),
         );
-        if (targetUserId.toLowerCase() == localUserId.toLowerCase()) {
+        if (targetUserId == localUserId) {
           mutable.lifecycle = GroupLifecycle.removed;
         }
-      case LeaveGroupOperation():
-        if (!GroupAuthorization.canLeave(previous, actorId, forControl: true)) {
+      case ChangeGroupRoleOperation(:final targetUserId, :final role)
+          when role == GroupRole.owner:
+        if (!GroupAuthorization.canTransferOwnership(
+          previous,
+          actorUserId: actor,
+          targetUserId: targetUserId,
+          forControl: true,
+        )) {
           return null;
         }
-        mutable.replaceMember(
-          actorId,
-          (member) => member.copyWith(membership: GroupMembershipState.left),
-        );
-        if (actorId == localUserId.toLowerCase()) {
-          mutable.lifecycle = GroupLifecycle.left;
-        }
+        mutable
+          ..replaceMember(
+            actor,
+            (member) => member.copyWith(role: GroupRole.admin),
+          )
+          ..replaceMember(
+            targetUserId,
+            (member) => member.copyWith(role: GroupRole.owner),
+          );
       case ChangeGroupRoleOperation(:final targetUserId, :final role):
         if (!GroupAuthorization.canChangeRole(
           previous,
-          actorUserId: actorId,
+          actorUserId: actor,
           targetUserId: targetUserId,
           role: role,
           forControl: true,
@@ -894,135 +902,158 @@ final class GroupControlStateMachine {
           targetUserId,
           (member) => member.copyWith(role: role),
         );
-      case TransferGroupOwnershipOperation(:final targetUserId):
-        final target = previous.member(targetUserId);
-        if (target == null ||
-            !target.isActive ||
-            target.role == GroupRole.owner ||
+      case RenameGroupOperation(:final metadata):
+        if (!metadata.isValid ||
             !GroupAuthorization.allowsControl(
               previous,
-              actorId,
-              GroupPermission.transferOwnership,
+              actor,
+              GroupPermission.editMetadata,
             )) {
           return null;
         }
-        mutable
-          ..replaceMember(
-            actorId,
-            (member) => member.copyWith(role: GroupRole.admin),
-          )
-          ..replaceMember(
-            targetUserId,
-            (member) => member.copyWith(role: GroupRole.owner),
-          );
+        mutable.metadata = metadata.normalized();
     }
     return mutable;
   }
 }
 
-final class GroupCreationIntent {
-  GroupCreationIntent({
-    required this.creatorUserId,
-    required this.creatorDeviceId,
-    required this.metadata,
-    required Iterable<GroupMember> members,
-    this.invitationPolicy = GroupInvitationPolicy.ownerAndAdmins,
-    this.historySharingPolicy = GroupHistorySharingPolicy.reshareAvailable,
-    required this.createdMs,
-  }) : members = List.unmodifiable(_sortedMembers(members));
-
-  final String creatorUserId;
-  final String creatorDeviceId;
-  final GroupMetadata metadata;
-  final List<GroupMember> members;
-  final GroupInvitationPolicy invitationPolicy;
-  final GroupHistorySharingPolicy historySharingPolicy;
-  final int createdMs;
-}
-
-final class PreparedGroupTransition {
-  PreparedGroupTransition({
-    required this.signedControl,
-    required this.mutationId,
+/// Exact bytes owed to other devices, committed in the same transaction as
+/// the state change that produced them and fanned out afterwards.
+final class GroupOutboundWork {
+  GroupOutboundWork({
+    required this.operationId,
+    required this.groupId,
+    required this.eventId,
+    required Uint8List payload,
     required Iterable<String> recipientUserIds,
-    this.outbound = true,
-    this.controlTranscriptEntry,
-    Iterable<GroupControlTranscriptEntry> precedingControlTranscript = const [],
-  }) : precedingControlTranscript = List.unmodifiable(
-         precedingControlTranscript,
-       ),
+    this.recipientDeviceId,
+    this.includeOwnDevices = false,
+  }) : payload = Uint8List.fromList(payload),
        recipientUserIds = List.unmodifiable(
-         recipientUserIds.map((value) => value.toLowerCase()).toSet(),
+         recipientUserIds.map((value) => value.toLowerCase()),
        ) {
-    if (mutationId.isEmpty ||
-        this.precedingControlTranscript.length > 512 ||
-        (this.precedingControlTranscript.isNotEmpty && outbound) ||
-        (controlTranscriptEntry != null &&
-            !_sameSignedControl(
-              controlTranscriptEntry!.signedControl,
-              signedControl,
-            )) ||
-        (outbound && this.recipientUserIds.isEmpty)) {
-      throw const FormatException('invalid prepared group transition');
+    if (operationId.isEmpty ||
+        !_isHex(groupId, GroupState.groupIdBytes) ||
+        eventId.isEmpty ||
+        this.payload.isEmpty ||
+        this.recipientUserIds.toSet().length != this.recipientUserIds.length ||
+        this.recipientUserIds.any((value) => !_groupUuid.hasMatch(value)) ||
+        (this.recipientUserIds.isEmpty && !includeOwnDevices) ||
+        (recipientDeviceId != null &&
+            (this.recipientUserIds.length != 1 ||
+                includeOwnDevices ||
+                !_groupUuid.hasMatch(recipientDeviceId!)))) {
+      throw const FormatException('invalid group outbound work');
     }
   }
 
-  final SignedGroupControlEvent signedControl;
-  final String mutationId;
+  final String operationId;
+  final String groupId;
+  final String eventId;
+  final Uint8List payload;
   final List<String> recipientUserIds;
-  final bool outbound;
-  final GroupControlTranscriptEntry? controlTranscriptEntry;
-  final List<GroupControlTranscriptEntry> precedingControlTranscript;
+
+  /// Restricts a single-recipient send to one device: the one that asked.
+  final String? recipientDeviceId;
+
+  /// Whether this device's other devices receive a copy too.
+  final bool includeOwnDevices;
 }
 
-final RegExp _groupUuid = RegExp(
-  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-);
+enum GroupStateRequestReason {
+  /// The mailbox lost envelopes, one of which may have been a control event.
+  queueGap,
 
-final class PreparedGroupMessage {
-  PreparedGroupMessage({
+  /// A control event arrived that builds on state this device does not hold.
+  behind,
+}
+
+/// That this device still needs a group's control state from a member.
+final class GroupStateRequest {
+  GroupStateRequest({
     required this.groupId,
-    required this.messageId,
-    required this.senderUserId,
-    required this.senderDeviceId,
-    required this.text,
-    required this.createdMs,
-    required this.operationId,
-    required Iterable<String> recipientUserIds,
-    this.outbound = true,
-  }) : recipientUserIds = List.unmodifiable(
-         recipientUserIds.map((value) => value.toLowerCase()).toSet(),
-       ) {
-    if ((outbound && this.recipientUserIds.isEmpty) ||
-        (!outbound && this.recipientUserIds.isNotEmpty)) {
-      throw const FormatException('group message requires recipients');
+    required this.reason,
+    required this.peerUserId,
+    required this.attempts,
+    required this.requestedAt,
+  }) {
+    if (!_isHex(groupId, GroupState.groupIdBytes) ||
+        (peerUserId != null && !_groupUuid.hasMatch(peerUserId!)) ||
+        attempts < 0) {
+      throw const FormatException('invalid group state request');
     }
   }
 
   final String groupId;
-  final String messageId;
-  final String senderUserId;
-  final String senderDeviceId;
-  final String text;
-  final int createdMs;
-  final String operationId;
-  final List<String> recipientUserIds;
-  final bool outbound;
+  final GroupStateRequestReason reason;
+
+  /// Who to ask. Null until a member is chosen for a queue gap.
+  final String? peerUserId;
+  final int attempts;
+  final DateTime? requestedAt;
 }
 
+/// One authenticated state change and the bytes it owes other devices.
+///
+/// [controls] is a contiguous run of the group's chain: one locally signed
+/// event, one received event, or the suffix of a transcript a member sent.
+final class PreparedGroupTransition {
+  PreparedGroupTransition({
+    required Iterable<SignedGroupControlEvent> controls,
+    Iterable<GroupOutboundWork> outbound = const [],
+    this.completesStateRequest = false,
+  }) : controls = List.unmodifiable(controls),
+       outbound = List.unmodifiable(outbound) {
+    if (this.controls.isEmpty) {
+      throw const FormatException('a transition requires a control event');
+    }
+    for (var index = 1; index < this.controls.length; index += 1) {
+      final previous = this.controls[index - 1];
+      final current = this.controls[index].event;
+      if (current.groupId != previous.event.groupId ||
+          current.revision != previous.event.revision + 1 ||
+          current.previousControlStateHash != previous.controlStateHash) {
+        throw const FormatException('a transition must be one chain');
+      }
+    }
+    if (this.outbound.any((work) => work.groupId != last.event.groupId)) {
+      throw const FormatException('outbound work for another group');
+    }
+  }
+
+  final List<SignedGroupControlEvent> controls;
+  final List<GroupOutboundWork> outbound;
+
+  /// Whether committing this answers an outstanding state request for the
+  /// group, so the request is retired in the same transaction.
+  final bool completesStateRequest;
+
+  SignedGroupControlEvent get first => controls.first;
+  SignedGroupControlEvent get last => controls.last;
+}
+
+/// An inbound group outcome that must commit in the same transaction as the
+/// pairwise receive that carried it.
 sealed class PreparedGroupInboxCommit implements GroupSyncReceiveCommit {
-  const PreparedGroupInboxCommit();
+  const PreparedGroupInboxCommit({
+    required this.opaqueEventId,
+    required this.senderUserId,
+    required this.senderDeviceId,
+  });
 
   @override
-  String get opaqueEventId;
+  final String opaqueEventId;
   @override
-  String get senderUserId;
+  final String senderUserId;
   @override
-  String get senderDeviceId;
+  final String senderDeviceId;
 }
 
 final class PreparedGroupInboxTransition extends PreparedGroupInboxCommit {
   const PreparedGroupInboxTransition({
+    required super.opaqueEventId,
+    required super.senderUserId,
+    required super.senderDeviceId,
     required this.expectedPrevious,
     required this.next,
     required this.prepared,
@@ -1031,57 +1062,69 @@ final class PreparedGroupInboxTransition extends PreparedGroupInboxCommit {
   final GroupState? expectedPrevious;
   final GroupState next;
   final PreparedGroupTransition prepared;
-
-  @override
-  String get opaqueEventId =>
-      'group-control:${prepared.signedControl.event.eventId}';
-  @override
-  String get senderUserId => prepared.signedControl.event.signerUserId;
-  @override
-  String get senderDeviceId => prepared.signedControl.event.signerDeviceId;
 }
 
-final class PreparedGroupInboxMessage extends PreparedGroupInboxCommit {
-  const PreparedGroupInboxMessage({
-    required this.expectedGroup,
-    required this.prepared,
+final class PreparedGroupInboxQuarantine extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxQuarantine({
+    required super.opaqueEventId,
+    required super.senderUserId,
+    required super.senderDeviceId,
+    required this.record,
+    required this.retainLifecycle,
+    this.completesStateRequest = false,
   });
 
-  final GroupState expectedGroup;
-  final PreparedGroupMessage prepared;
+  final GroupQuarantineRecord record;
 
-  @override
-  String get opaqueEventId => 'group-application:${prepared.messageId}';
-  @override
-  String get senderUserId => prepared.senderUserId;
-  @override
-  String get senderDeviceId => prepared.senderDeviceId;
+  /// A fork moves the group into quarantine. An event its signer was not
+  /// allowed to make is recorded and dropped, so that one member cannot stop
+  /// a group for everybody by signing something invalid.
+  final bool retainLifecycle;
+
+  /// Whether the answer that revealed the rejection also retires the group's
+  /// open state request, because no other answer could change the outcome.
+  final bool completesStateRequest;
 }
 
-final class GroupOutboundWork {
-  GroupOutboundWork({
-    required this.operationId,
+final class PreparedGroupInboxStateRequest extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxStateRequest({
+    required super.opaqueEventId,
+    required super.senderUserId,
+    required super.senderDeviceId,
     required this.groupId,
-    required this.eventId,
-    required Uint8List openedMlsPayload,
-    required Iterable<String> recipientUserIds,
-  }) : openedMlsPayload = Uint8List.fromList(openedMlsPayload),
-       recipientUserIds = List.unmodifiable(recipientUserIds) {
-    if (operationId.isEmpty ||
-        groupId.isEmpty ||
-        eventId.isEmpty ||
-        this.openedMlsPayload.isEmpty ||
-        this.recipientUserIds.isEmpty ||
-        this.recipientUserIds.toSet().length != this.recipientUserIds.length) {
-      throw const FormatException('invalid group outbound work');
-    }
-  }
+    required this.peerUserId,
+  });
 
-  final String operationId;
   final String groupId;
-  final String eventId;
-  final Uint8List openedMlsPayload;
-  final List<String> recipientUserIds;
+  final String peerUserId;
+}
+
+/// Bytes a member owes the device that asked it for a group's state.
+final class PreparedGroupInboxOutbound extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxOutbound({
+    required super.opaqueEventId,
+    required super.senderUserId,
+    required super.senderDeviceId,
+    required this.work,
+  });
+
+  final GroupOutboundWork work;
+}
+
+/// A member confirmed this device already holds the group's current state.
+final class PreparedGroupInboxStateCurrent extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxStateCurrent({
+    required super.opaqueEventId,
+    required super.senderUserId,
+    required super.senderDeviceId,
+    required this.groupId,
+    required this.controlRevision,
+    required this.controlStateHash,
+  });
+
+  final String groupId;
+  final int controlRevision;
+  final String controlStateHash;
 }
 
 final class GroupMessage {
@@ -1119,23 +1162,17 @@ final class GroupQuarantineRecord {
 final class _MutableGroupState {
   _MutableGroupState({
     required this.metadata,
-    required this.invitationPolicy,
-    required this.historySharingPolicy,
     required this.members,
     required this.lifecycle,
   });
 
   factory _MutableGroupState.from(GroupState state) => _MutableGroupState(
     metadata: state.metadata,
-    invitationPolicy: state.invitationPolicy,
-    historySharingPolicy: state.historySharingPolicy,
     members: state.members.toList(),
     lifecycle: state.lifecycle,
   );
 
   GroupMetadata metadata;
-  GroupInvitationPolicy invitationPolicy;
-  GroupHistorySharingPolicy historySharingPolicy;
   final List<GroupMember> members;
   GroupLifecycle lifecycle;
 
@@ -1144,149 +1181,19 @@ final class _MutableGroupState {
     GroupMember Function(GroupMember member) replace,
   ) {
     final normalized = userId.toLowerCase();
-    final index = members.indexWhere(
-      (member) => member.userId.toLowerCase() == normalized,
-    );
+    final index = members.indexWhere((member) => member.userId == normalized);
     if (index < 0) throw const FormatException('missing member');
     members[index] = replace(members[index]);
   }
 }
 
-List<GroupMember> _sortedMembers(Iterable<GroupMember> values) {
-  final result = values.toList(growable: false)
-    ..sort(
-      (left, right) =>
-          left.userId.toLowerCase().compareTo(right.userId.toLowerCase()),
-    );
-  return result;
-}
+final RegExp _groupUuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+);
 
-List<String> _sortedUnique(Iterable<String> values) {
-  final result = values.map((value) => value.toLowerCase()).toSet().toList()
-    ..sort();
-  return result;
-}
+List<GroupMember> _sortedMembers(Iterable<GroupMember> values) =>
+    values.toList(growable: false)
+      ..sort((left, right) => left.userId.compareTo(right.userId));
 
 bool _isHex(String value, int byteLength) =>
     value.length == byteLength * 2 && RegExp(r'^[0-9a-f]+$').hasMatch(value);
-
-bool _listEquals<T>(List<T> left, List<T> right) {
-  if (left.length != right.length) return false;
-  for (var index = 0; index < left.length; index++) {
-    if (left[index] != right[index]) return false;
-  }
-  return true;
-}
-
-bool _sameSignedControl(
-  SignedGroupControlEvent left,
-  SignedGroupControlEvent right,
-) =>
-    left.event.deterministicProjection == right.event.deterministicProjection &&
-    left.controlStateHash == right.controlStateHash &&
-    _byteListEquals(left.canonicalBytes, right.canonicalBytes) &&
-    _byteListEquals(left.signature, right.signature);
-
-bool _byteListEquals(List<int> left, List<int> right) {
-  if (left.length != right.length) return false;
-  for (var index = 0; index < left.length; index += 1) {
-    if (left[index] != right[index]) return false;
-  }
-  return true;
-}
-
-GroupControlOperation _projectionOperation(Object? value) {
-  final fields = _projectionList(value);
-  if (fields.isEmpty) throw const FormatException('missing group operation');
-  return switch (_projectionInteger(fields[0])) {
-    1 => CreateGroupOperation(
-      metadata: _projectionMetadata(fields, 1),
-      invitationPolicy: _projectionEnum(
-        GroupInvitationPolicy.values,
-        fields[4],
-      ),
-      historySharingPolicy: _projectionEnum(
-        GroupHistorySharingPolicy.values,
-        fields[5],
-      ),
-      initialMembers: _projectionMembers(fields[6]),
-    ),
-    2 => UpdateGroupMetadataOperation(_projectionMetadata(fields, 1)),
-    3 => UpdateGroupPoliciesOperation(
-      invitationPolicy: _projectionEnum(
-        GroupInvitationPolicy.values,
-        fields[1],
-      ),
-      historySharingPolicy: _projectionEnum(
-        GroupHistorySharingPolicy.values,
-        fields[2],
-      ),
-    ),
-    4 => InviteGroupMembersOperation(_projectionMembers(fields[1])),
-    5 => RemoveGroupMemberOperation(_projectionString(fields[1])),
-    6 => const LeaveGroupOperation(),
-    7 => ChangeGroupRoleOperation(
-      targetUserId: _projectionString(fields[1]),
-      role: _projectionEnum(GroupRole.values, fields[2]),
-    ),
-    8 => TransferGroupOwnershipOperation(_projectionString(fields[1])),
-    _ => throw const FormatException('unsupported group operation'),
-  };
-}
-
-GroupMetadata _projectionMetadata(List<Object?> fields, int offset) =>
-    GroupMetadata(
-      name: _projectionString(fields[offset]),
-      description: _projectionString(fields[offset + 1]),
-      photoCapability: _projectionOptionalString(fields[offset + 2]),
-    );
-
-List<GroupMember> _projectionMembers(Object? value) => [
-  for (final member in _projectionList(value)) _projectionMember(member),
-];
-
-GroupMember _projectionMember(Object? value) {
-  final fields = _projectionList(value, 6);
-  return GroupMember(
-    userId: _projectionString(fields[0]),
-    displayName: _projectionString(fields[1]),
-    role: _projectionEnum(GroupRole.values, fields[2]),
-    membership: _projectionEnum(GroupMembershipState.values, fields[3]),
-    verified: fields[4] is bool
-        ? fields[4]! as bool
-        : throw const FormatException('invalid verified member flag'),
-    deviceIds: [
-      for (final deviceId in _projectionList(fields[5]))
-        _projectionString(deviceId),
-    ],
-  );
-}
-
-List<Object?> _projectionList(Object? value, [int? exactLength]) {
-  if (value is! List<Object?> ||
-      (exactLength != null && value.length != exactLength)) {
-    throw const FormatException('invalid group control projection');
-  }
-  return value;
-}
-
-int _projectionInteger(Object? value) {
-  if (value is! int) throw const FormatException('invalid integer');
-  return value;
-}
-
-String _projectionString(Object? value) {
-  if (value is! String) throw const FormatException('invalid string');
-  return value;
-}
-
-String? _projectionOptionalString(Object? value) =>
-    value == null ? null : _projectionString(value);
-
-T _projectionEnum<T>(List<T> values, Object? value) {
-  final index = _projectionInteger(value);
-  if (index < 0 || index >= values.length) {
-    throw const FormatException('invalid enum');
-  }
-  return values[index];
-}
