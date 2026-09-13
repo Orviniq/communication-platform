@@ -252,6 +252,13 @@ cross-check authorization rather than trusting a server-supplied projection.
   or re-keyed, and no existing row is rewritten. A projection rebuild also rewrites the index
   rows for every fact it folds, so the recovery path repairs an interrupted back-fill.
 
+- Schema version 20 drops `mls_key_package_maintenance_states`. The server deleted MLS and
+  its KeyPackage routes, so nothing uploads a KeyPackage and the table's upload bookkeeping
+  has no writer and no reader. Only a closed-beta database ever held a row; on every other
+  the table was created empty and stayed empty. The step issues `DROP TABLE IF EXISTS`, so a
+  database that never had the table upgrades as well, and schema 9 no longer creates it on
+  the way.
+
 ## Retention and deletion
 
 - Acked raw envelopes are removed after their logical event and local projection are safe.
