@@ -1,5 +1,6 @@
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -18,10 +19,15 @@ import 'package:communication_platform/features/synchronization/domain/sync_mode
 final class PairwiseSendPreparationAdapter implements SendPreparationPort {
   const PairwiseSendPreparationAdapter(
     this.coordinator, {
+    this.audience,
     this.onPreparedForPeer,
   });
 
   final PairwiseFanoutCoordinator coordinator;
+
+  /// Names the members of a group the event was written into. A direct or
+  /// saved conversation resolves to nobody beyond its own peer.
+  final PairwiseSendAudiencePort? audience;
 
   /// Records that this peer is now owed device-log gossip.
   ///
@@ -40,6 +46,18 @@ final class PairwiseSendPreparationAdapter implements SendPreparationPort {
 
   @override
   Future<Result<void>> prepare(PendingSendPreparation preparation) async {
+    Set<String>? audienceUserIds;
+    final resolver = audience;
+    if (resolver != null) {
+      final resolved = await resolver.resolveAudience(
+        eventId: preparation.eventId,
+        currentUserId: preparation.localUserId,
+      );
+      if (resolved case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      audienceUserIds = (resolved as Success<Set<String>?>).value;
+    }
     final prepared = await coordinator.prepareOwedSend(
       OwedSendPreparation(
         operationId: preparation.operationId,
@@ -47,12 +65,15 @@ final class PairwiseSendPreparationAdapter implements SendPreparationPort {
         currentUserId: preparation.localUserId,
         currentDeviceId: preparation.localDeviceId,
         peerUserId: preparation.peerUserId,
+        audienceUserIds: audienceUserIds,
       ),
     );
     if (prepared case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    onPreparedForPeer?.call(preparation.peerUserId);
+    if (audienceUserIds == null) {
+      onPreparedForPeer?.call(preparation.peerUserId);
+    }
     return const Result.success(null);
   }
 }

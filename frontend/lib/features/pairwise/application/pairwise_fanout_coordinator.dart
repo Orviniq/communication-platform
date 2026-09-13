@@ -68,10 +68,17 @@ final class PairwiseFanoutCoordinator {
   /// The echo writes that record, so its mere presence no longer means the work
   /// was done; sealed ciphertext does, and finding some means a previous
   /// attempt committed and died before its caller heard about it.
+  ///
+  /// A group message is one operation, however many members it has: every
+  /// live device of every member in [OwedSendPreparation.audienceUserIds]
+  /// gets one copy, in the same commit, under the one event id the message's
+  /// transport state is read from.
   Future<Result<void>> prepareOwedSend(OwedSendPreparation owed) async {
+    final audience = owed.audienceUserIds ?? {owed.peerUserId};
     if (!_isUuid(owed.currentUserId) ||
         !_isUuid(owed.currentDeviceId) ||
-        !_isUuid(owed.peerUserId)) {
+        !_isUuid(owed.peerUserId) ||
+        audience.any((userId) => !_isUuid(userId))) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
@@ -94,7 +101,9 @@ final class PairwiseFanoutCoordinator {
       eventId: owed.eventId,
       currentUserId: owed.currentUserId,
       currentDeviceId: owed.currentDeviceId,
-      peerUserId: owed.peerUserId,
+      // A group nobody else is an active member of is a note to this
+      // account's own devices.
+      peerUserIds: audience.isEmpty ? {owed.currentUserId} : audience,
       openedOpaquePayload: record.openedLocalPayload,
       // A conversation whose only participant is this device resolves to no
       // recipient at all, which is a settled send and not a failed one.
@@ -155,7 +164,7 @@ final class PairwiseFanoutCoordinator {
       eventId: eventId,
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
-      peerUserId: peerUserId,
+      peerUserIds: {peerUserId},
       openedOpaquePayload: openedOpaquePayload,
       onlyRecipientDeviceId: onlyRecipientDeviceId,
       includeOwnDevices: includeOwnDevices,
@@ -167,17 +176,25 @@ final class PairwiseFanoutCoordinator {
     required String eventId,
     required String currentUserId,
     required String currentDeviceId,
-    required String peerUserId,
+    required Set<String> peerUserIds,
     required Uint8List openedOpaquePayload,
     String? onlyRecipientDeviceId,
     bool includeOwnDevices = true,
     bool settleWithoutTargets = false,
   }) async {
-    final peerDevicesResult = await liveDevices.resolveVerifiedLiveDevices(
-      peerUserId,
-    );
-    if (peerDevicesResult case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
+    final singlePeer = peerUserIds.length == 1;
+    final peerOrder = peerUserIds.toList(growable: false)..sort();
+    final peerDevices = <String, List<VerifiedPairwiseLiveDevice>>{};
+    for (final peerUserId in peerOrder) {
+      final peerDevicesResult = await liveDevices.resolveVerifiedLiveDevices(
+        peerUserId,
+      );
+      if (peerDevicesResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      peerDevices[peerUserId] =
+          (peerDevicesResult as Success<List<VerifiedPairwiseLiveDevice>>)
+              .value;
     }
     final ownDevicesResult = await liveDevices.resolveVerifiedLiveDevices(
       currentUserId,
@@ -185,17 +202,15 @@ final class PairwiseFanoutCoordinator {
     if (ownDevicesResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    final peerDevices =
-        (peerDevicesResult as Success<List<VerifiedPairwiseLiveDevice>>).value;
     final ownDevices =
         (ownDevicesResult as Success<List<VerifiedPairwiseLiveDevice>>).value;
     final targetResult = _canonicalTargets(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
-      peerUserId: peerUserId,
       peerDevices: peerDevices,
       ownDevices: ownDevices,
       includeOwnDevices: includeOwnDevices,
+      requirePeerDevices: singlePeer,
     );
     if (targetResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -207,18 +222,24 @@ final class PairwiseFanoutCoordinator {
       targets = targets
           .where((target) => target.deviceId.toLowerCase() == requested)
           .toList(growable: false);
-      if (targets.length != 1 || targets.single.userId != peerUserId) {
+      if (!singlePeer ||
+          targets.length != 1 ||
+          targets.single.userId != peerOrder.single) {
         return const Result.failure(
           SecurityFailure(SecurityFailureKind.unauthenticatedInput),
         );
       }
     }
-    final peerReconciled = await store.reconcileRemoteLiveDevices(
-      remoteUserId: peerUserId,
-      liveDeviceIds: peerDevices.map((device) => device.deviceId).toSet(),
-    );
-    if (peerReconciled case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
+    for (final peerUserId in peerOrder) {
+      final peerReconciled = await store.reconcileRemoteLiveDevices(
+        remoteUserId: peerUserId,
+        liveDeviceIds: peerDevices[peerUserId]!
+            .map((device) => device.deviceId)
+            .toSet(),
+      );
+      if (peerReconciled case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
     }
     final ownReconciled = await store.reconcileRemoteLiveDevices(
       remoteUserId: currentUserId,
@@ -253,7 +274,7 @@ final class PairwiseFanoutCoordinator {
         .map((context) => context.deviceState.stateVersion)
         .toSet();
     if (targets.isEmpty) {
-      if (currentUserId != peerUserId) {
+      if (singlePeer && peerOrder.single != currentUserId) {
         return const Result.failure(
           ValidationFailure(ValidationFailureKind.invalidInput),
         );
@@ -285,7 +306,8 @@ final class PairwiseFanoutCoordinator {
 
     final claimedTargets = <String, VerifiedPairwiseClaim>{};
     final expectedLiveByUser = <String, Set<String>>{
-      peerUserId: peerDevices.map((device) => device.deviceId).toSet(),
+      for (final entry in peerDevices.entries)
+        entry.key: entry.value.map((device) => device.deviceId).toSet(),
       currentUserId: ownDevices.map((device) => device.deviceId).toSet(),
     };
     for (final entry in claimsByUser.entries) {
@@ -407,18 +429,26 @@ final class PairwiseFanoutCoordinator {
         (operation.targets.isEmpty && peerUserId == currentUserId);
   }
 
+  /// Every recipient device, once, in UUID byte order.
+  ///
+  /// A direct message to a peer with no live device is refused, because it
+  /// would reach nobody it was written for. A member of a group with no live
+  /// device is simply not a recipient of this copy: [requirePeerDevices] is
+  /// only set for a single peer.
   Result<List<VerifiedPairwiseLiveDevice>> _canonicalTargets({
     required String currentUserId,
     required String currentDeviceId,
-    required String peerUserId,
-    required List<VerifiedPairwiseLiveDevice> peerDevices,
+    required Map<String, List<VerifiedPairwiseLiveDevice>> peerDevices,
     required List<VerifiedPairwiseLiveDevice> ownDevices,
     required bool includeOwnDevices,
+    required bool requirePeerDevices,
   }) {
     if (!_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
-        !_isUuid(peerUserId) ||
-        peerDevices.isEmpty) {
+        peerDevices.isEmpty ||
+        peerDevices.keys.any((userId) => !_isUuid(userId)) ||
+        (requirePeerDevices &&
+            peerDevices.values.any((list) => list.isEmpty))) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
@@ -444,12 +474,14 @@ final class PairwiseFanoutCoordinator {
       return true;
     }
 
-    for (final device in peerDevices) {
-      if (device.userId != peerUserId ||
-          !add(peerUserId, device, allowCurrent: peerUserId == currentUserId)) {
-        return const Result.failure(
-          SecurityFailure(SecurityFailureKind.unauthenticatedInput),
-        );
+    for (final entry in peerDevices.entries) {
+      for (final device in entry.value) {
+        if (device.userId != entry.key ||
+            !add(entry.key, device, allowCurrent: entry.key == currentUserId)) {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+          );
+        }
       }
     }
     var foundCurrentDevice = false;
