@@ -9,14 +9,12 @@ import 'package:communication_platform/features/groups/domain/group_model.dart';
 final class CreateGroup {
   const CreateGroup({
     required this.repository,
-    required this.crypto,
     required this.clock,
     required this.developmentPreviewOnly,
     this.stateMachine = const GroupControlStateMachine(),
   });
 
   final GroupRepositoryPort repository;
-  final GroupMlsCryptoPort crypto;
   final TimeSource clock;
   final bool developmentPreviewOnly;
   final GroupControlStateMachine stateMachine;
@@ -103,14 +101,12 @@ final class CreateGroup {
 final class MutateGroup {
   const MutateGroup({
     required this.repository,
-    required this.crypto,
     required this.clock,
     required this.developmentPreviewOnly,
     this.stateMachine = const GroupControlStateMachine(),
   });
 
   final GroupRepositoryPort repository;
-  final GroupMlsCryptoPort crypto;
   final TimeSource clock;
   final bool developmentPreviewOnly;
   final GroupControlStateMachine stateMachine;
@@ -216,13 +212,11 @@ final class MutateGroup {
 final class SendGroupMessage {
   const SendGroupMessage({
     required this.repository,
-    required this.crypto,
     required this.clock,
     required this.developmentPreviewOnly,
   });
 
   final GroupRepositoryPort repository;
-  final GroupMlsCryptoPort crypto;
   final TimeSource clock;
   final bool developmentPreviewOnly;
 
@@ -306,7 +300,6 @@ final class SendGroupMessage {
 final class ApplyIncomingGroupControl {
   const ApplyIncomingGroupControl({
     required this.repository,
-    required this.crypto,
     required this.clock,
     required this.localUserId,
     required this.localDeviceId,
@@ -314,7 +307,6 @@ final class ApplyIncomingGroupControl {
   });
 
   final GroupRepositoryPort repository;
-  final GroupMlsCryptoPort crypto;
   final TimeSource clock;
   final String localUserId;
   final String localDeviceId;
@@ -410,13 +402,9 @@ final class ApplyIncomingGroupControl {
 }
 
 final class ApplyIncomingGroupMessage {
-  const ApplyIncomingGroupMessage({
-    required this.repository,
-    required this.crypto,
-  });
+  const ApplyIncomingGroupMessage({required this.repository});
 
   final GroupRepositoryPort repository;
-  final GroupMlsCryptoPort crypto;
 
   Future<Result<GroupMessage>> call({
     required String groupId,
@@ -484,12 +472,10 @@ final class ApplyIncomingGroupMessage {
 final class AcceptGroupWelcome {
   const AcceptGroupWelcome({
     required this.repository,
-    required this.crypto,
     this.stateMachine = const GroupControlStateMachine(),
   });
 
   final GroupRepositoryPort repository;
-  final GroupMlsCryptoPort crypto;
   final GroupControlStateMachine stateMachine;
 
   Future<Result<GroupState>> call({
