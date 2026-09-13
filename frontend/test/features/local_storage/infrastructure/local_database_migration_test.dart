@@ -110,7 +110,6 @@ void main() {
         );
       _dropPieceFourteenSchema(versionOne);
       _dropPieceEighteenSchema(versionOne);
-      _dropPieceNineteenSchema(versionOne);
       versionOne.execute('PRAGMA user_version = 1');
       versionOne.close();
 
@@ -193,7 +192,6 @@ void main() {
         );
       _dropPieceFourteenSchema(versionThree);
       _dropPieceEighteenSchema(versionThree);
-      _dropPieceNineteenSchema(versionThree);
       versionThree.execute('PRAGMA user_version = 3');
       versionThree.close();
 
@@ -290,7 +288,6 @@ void main() {
       ..execute('ALTER TABLE conversations DROP COLUMN pinned')
       ..execute('ALTER TABLE messages DROP COLUMN starred');
     _dropPieceEighteenSchema(versionFive);
-    _dropPieceNineteenSchema(versionFive);
     versionFive.execute('PRAGMA user_version = 5');
     versionFive.close();
 
@@ -312,7 +309,7 @@ void main() {
   });
 
   test(
-    'version-eight upgrade preserves data and adds MLS maintenance state',
+    'version-eight upgrade preserves data and adds no KeyPackage table',
     () async {
       final current = LocalDatabase(NativeDatabase(databaseFile));
       await current.customSelect('SELECT 1').getSingle();
@@ -323,9 +320,11 @@ void main() {
       );
       await current.close();
 
-      final versionEight = sqlite3.open(databaseFile.path);
-      _dropPieceNineteenSchema(versionEight);
-      versionEight.execute('PRAGMA user_version = 8');
+      // Schema 9 added only the KeyPackage maintenance table, and this build no
+      // longer creates it, so nothing has to be taken away before the database
+      // is stamped back to 8.
+      final versionEight = sqlite3.open(databaseFile.path)
+        ..execute('PRAGMA user_version = 8');
       versionEight.close();
 
       final upgraded = LocalDatabase(NativeDatabase(databaseFile));
@@ -346,8 +345,8 @@ void main() {
               "SELECT name FROM sqlite_master WHERE type = 'table' "
               "AND name = 'mls_key_package_maintenance_states'",
             )
-            .getSingle(),
-        isNotNull,
+            .get(),
+        isEmpty,
       );
       expect(
         await upgraded
@@ -1169,10 +1168,124 @@ void main() {
     );
     await upgraded.close();
   });
+
+  test(
+    'version-nineteen upgrade drops the KeyPackage maintenance table',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.customStatement(
+        "INSERT INTO local_preferences "
+        "(preference_key, value_ciphertext, value_version) "
+        "VALUES ('schema-20-preserved', X'14', 1)",
+      );
+      await current.close();
+
+      // A closed-beta device at 19 has the table and may hold a row in it.
+      // This build no longer creates it, so it is put back the way schema 9
+      // made it before the step has anything to drop.
+      final versionNineteen = sqlite3.open(databaseFile.path)
+        ..execute(_keyPackageMaintenanceTableV19)
+        ..execute(
+          'INSERT INTO mls_key_package_maintenance_states '
+          '(device_id, stage, planned_kind, exact_upload_projection) '
+          'VALUES (?, ?, ?, ?)',
+          <Object?>[
+            _deviceV19,
+            1,
+            0,
+            Uint8List.fromList(const [4]),
+          ],
+        )
+        ..execute('PRAGMA user_version = 19');
+      versionNineteen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+      // The table and its primary-key index both go.
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT name FROM sqlite_master "
+              "WHERE tbl_name = 'mls_key_package_maintenance_states'",
+            )
+            .get(),
+        isEmpty,
+      );
+      // One table, not a rewrite of what sat beside it.
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT preference_key FROM local_preferences "
+              "WHERE preference_key = 'schema-20-preserved'",
+            )
+            .get(),
+        hasLength(1),
+      );
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
+
+  test('the table drop tolerates a database that never had it', () async {
+    // A database this build created and something stamped back to 19 has no
+    // table, because `createAll` no longer makes one. An upgrade that failed
+    // here would leave the application unable to open its storage.
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final stampedBack = sqlite3.open(databaseFile.path)
+      ..execute('PRAGMA user_version = 19');
+    stampedBack.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    expect(
+      await upgraded
+          .customSelect(
+            "SELECT name FROM sqlite_master "
+            "WHERE tbl_name = 'mls_key_package_maintenance_states'",
+          )
+          .get(),
+      isEmpty,
+    );
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
 }
 
 const _userV19 = '00000000-0000-0000-0000-0000000000a1';
 const _deviceV19 = '00000000-0000-0000-0000-0000000000d1';
+
+/// `mls_key_package_maintenance_states` as schema 9 created it, copied from
+/// `sqlite_master` before its declaration was deleted.
+const _keyPackageMaintenanceTableV19 =
+    'CREATE TABLE "mls_key_package_maintenance_states" ('
+    '"device_id" TEXT NOT NULL, '
+    '"stage" INTEGER NOT NULL CHECK("stage" BETWEEN 0 AND 3), '
+    '"expected_state_revision" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("expected_state_revision" >= 0), '
+    '"planned_kind" INTEGER NULL '
+    'CHECK("planned_kind" IS NULL OR "planned_kind" BETWEEN 0 AND 1), '
+    '"exact_upload_projection" BLOB NULL, '
+    '"last_resort_uploaded" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK ("last_resort_uploaded" IN (0, 1)), '
+    '"updated_at" INTEGER NOT NULL '
+    "DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)), "
+    'PRIMARY KEY ("device_id"))';
 
 const _conversationV17 =
     '0909090909090909090909090909090909090909090909090909090909090909';
@@ -1264,10 +1377,6 @@ void _dropPieceEighteenSchema(Database database) {
     ..execute('ALTER TABLE mls_groups DROP COLUMN lifecycle')
     ..execute('ALTER TABLE mls_groups DROP COLUMN pending_mutation_id')
     ..execute('ALTER TABLE conversations DROP COLUMN display_title_ciphertext');
-}
-
-void _dropPieceNineteenSchema(Database database) {
-  database.execute('DROP TABLE mls_key_package_maintenance_states');
 }
 
 final class _FailAfterSchemaCreation extends StorageMigrationHooks {

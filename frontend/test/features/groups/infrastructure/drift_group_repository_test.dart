@@ -165,14 +165,6 @@ void main() {
               formatVersion: 1,
             ),
           );
-      await database
-          .into(database.mlsKeyPackageMaintenanceStates)
-          .insert(
-            MlsKeyPackageMaintenanceStatesCompanion.insert(
-              deviceId: _device,
-              stage: 0,
-            ),
-          );
       final intent = GroupCreationIntent(
         creatorUserId: _owner,
         creatorDeviceId: _device,

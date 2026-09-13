@@ -689,14 +689,6 @@ Future<void> _seedKeyPackageState(LocalDatabase database) async {
           formatVersion: 1,
         ),
       );
-  await database
-      .into(database.mlsKeyPackageMaintenanceStates)
-      .insert(
-        MlsKeyPackageMaintenanceStatesCompanion.insert(
-          deviceId: _localDevice,
-          stage: 0,
-        ),
-      );
 }
 
 final class _Clock implements TimeSource {

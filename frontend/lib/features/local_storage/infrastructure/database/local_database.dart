@@ -310,29 +310,6 @@ class PrekeyMaintenancePlans extends Table {
   Set<Column<Object>> get primaryKey => {deviceId};
 }
 
-@DataClassName('StoredMlsKeyPackageMaintenanceState')
-class MlsKeyPackageMaintenanceStates extends Table {
-  @override
-  String get tableName => 'mls_key_package_maintenance_states';
-
-  TextColumn get deviceId => text()();
-  // 0 idle, 1 prepared, 2 consumable attempt started, 3 ambiguous.
-  IntColumn get stage => integer().check(stage.isBetweenValues(0, 3))();
-  IntColumn get expectedStateRevision => integer()
-      .withDefault(const Constant(0))
-      .check(expectedStateRevision.isBiggerOrEqualValue(0))();
-  IntColumn get plannedKind => integer().nullable().check(
-    plannedKind.isNull() | plannedKind.isBetweenValues(0, 1),
-  )();
-  BlobColumn get exactUploadProjection => blob().nullable()();
-  BoolColumn get lastResortUploaded =>
-      boolean().withDefault(const Constant(false))();
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column<Object>> get primaryKey => {deviceId};
-}
-
 class MlsGroups extends Table {
   @override
   String get tableName => 'mls_groups';
@@ -1157,7 +1134,6 @@ class StorageMigrationHooks {
     PairwiseSessionAlternates,
     Prekeys,
     PrekeyMaintenancePlans,
-    MlsKeyPackageMaintenanceStates,
     MlsGroups,
     GroupControlEvents,
     GroupOutboundObjects,
@@ -1194,7 +1170,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 19;
+  static const currentSchemaVersion = 20;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1478,9 +1454,10 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createTable(groupControlEvents);
           await migrator.createTable(groupOutboundObjects);
         }
-        if (from < 9) {
-          await migrator.createTable(mlsKeyPackageMaintenanceStates);
-        }
+        // Schema 9 created `mls_key_package_maintenance_states` and nothing
+        // else, and the schema-20 step below drops it again. No step between
+        // reads the table and the drop tolerates its absence, so a database
+        // older than 9 is not handed a table only to lose it.
         if (from < 10) {
           final columns = await customSelect(
             'PRAGMA table_info(group_outbound_objects)',
@@ -1820,6 +1797,23 @@ final class LocalDatabase extends _$LocalDatabase {
           if (present) {
             await migrator.dropColumn(devices, 'last_active_date');
           }
+        }
+        if (from < 20) {
+          // The server deleted MLS. The three KeyPackage routes answer 404 and
+          // no endpoint stores or serves a KeyPackage, so nothing uploads one.
+          // This table was the bookkeeping for those uploads: nothing writes
+          // it any more and nothing reads it.
+          //
+          // Only a closed-beta database ever held a row. Everywhere else the
+          // table was created empty and stayed that way, so the drop takes no
+          // state any build can still use.
+          //
+          // `deleteTable` issues `DROP TABLE IF EXISTS`. The declaration is
+          // gone, so `createAll` no longer makes the table, and a database
+          // created by this build and stamped back — which is what the
+          // migration tests do, and what a development build does — reaches
+          // this step with nothing to drop.
+          await migrator.deleteTable('mls_key_package_maintenance_states');
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

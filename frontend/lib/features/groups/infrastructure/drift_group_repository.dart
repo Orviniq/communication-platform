@@ -429,15 +429,7 @@ final class DriftGroupRepository extends DriftRepositoryBase
                   row.isCurrentDevice.equals(true),
             ))
             .getSingleOrNull();
-    final maintenance =
-        await (database.select(database.mlsKeyPackageMaintenanceStates)
-              ..where((row) => row.deviceId.equals(consumption.deviceId)))
-            .getSingleOrNull();
-    if (currentDevice == null ||
-        maintenance == null ||
-        maintenance.stage != 0) {
-      throw const _GroupConflict();
-    }
+    if (currentDevice == null) throw const _GroupConflict();
     final updatedSecret =
         await (database.update(database.secureSecrets)..where(
               (row) =>
