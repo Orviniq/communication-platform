@@ -4,7 +4,6 @@ import 'package:communication_platform/core/application/ports/application_protoc
 import 'package:communication_platform/core/application/ports/device_control_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_session_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
     as native;
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
@@ -1273,13 +1272,6 @@ final class _ScriptedGroupMls implements GroupMlsCryptoPort {
     required String text,
     required int createdMs,
   }) async => const Result.failure(
-    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
-  );
-
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
 

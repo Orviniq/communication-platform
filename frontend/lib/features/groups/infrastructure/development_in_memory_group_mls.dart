@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/group_production_gate.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
@@ -205,13 +204,6 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
     required String localUserId,
     required String localDeviceId,
   }) async => const Result.failure(
-    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
-  );
-
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
 

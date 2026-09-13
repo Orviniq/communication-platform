@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
@@ -538,10 +537,6 @@ final class _InboundShapedCrypto implements GroupMlsCryptoPort {
     );
   }
 
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) => _delegate.generateKeyPackages(request);
   @override
   Future<Result<PreparedGroupTransition>> inspectIncomingControl({
     required GroupState current,

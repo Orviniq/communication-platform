@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
@@ -67,11 +66,6 @@ final class UnsupportedGroupMlsCrypto implements GroupMlsCryptoPort {
     required String localUserId,
     required String localDeviceId,
   }) => _closed();
-
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) => _closed();
 
   @override
   Future<Result<GroupForkResolution>> reconcileFork({

@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/port.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 
@@ -58,10 +57,6 @@ abstract interface class GroupMlsCryptoPort {
     required String localUserId,
     required String localDeviceId,
   });
-
-  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  );
 
   /// Decides which control branch is canonical after a same-revision fork.
   ///

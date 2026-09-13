@@ -5,7 +5,6 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -310,15 +309,6 @@ void main() {
         localUserId: ownerId,
         localDeviceId: ownerDeviceId,
       ),
-      await crypto.generateKeyPackages(
-        MlsKeyPackageGenerationRequest(
-          opaqueDeviceState: Uint8List(64),
-          migrationUnixDay: 0,
-          localVerifiedBundleRequest: Uint8List(64),
-          count: 1,
-          kind: MlsKeyPackageKind.lastResort,
-        ),
-      ),
       await crypto.reconcileFork(
         current: state,
         currentOpaqueMlsState: empty,
@@ -328,7 +318,7 @@ void main() {
       ),
     ];
 
-    expect(results, hasLength(9));
+    expect(results, hasLength(8));
     for (final result in results) {
       expect(
         result,

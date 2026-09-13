@@ -65,11 +65,6 @@ final class NativeBetaGroupMls implements GroupMlsCryptoPort {
     }
   }
 
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) => crypto.generateBetaMlsKeyPackages(request);
-
   Future<Result<T>> _notIntegrated<T>() async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
