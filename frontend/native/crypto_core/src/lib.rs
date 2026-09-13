@@ -2,12 +2,6 @@
 
 mod application;
 mod attachment;
-#[cfg(all(test, feature = "beta-pq-mls"))]
-mod beta_kem_vectors;
-#[cfg(all(test, feature = "beta-pq-mls"))]
-mod beta_mls_vectors;
-#[cfg(all(test, feature = "beta-pq-mls"))]
-mod beta_suite_vectors;
 mod bounds;
 mod cbor;
 pub mod device_signatures;
@@ -15,8 +9,6 @@ pub mod enrollment;
 mod error;
 #[cfg(test)]
 mod mlkem_vectors;
-#[cfg(feature = "beta-pq-mls")]
-mod mls_beta;
 mod pairwise;
 mod prekey_state;
 mod protocol;
@@ -58,12 +50,6 @@ pub const CAP_PANIC_CONTAINMENT: u64 = 1 << 11;
 pub const CAP_HYBRID_PQXDH_V1: u64 = 1 << 12;
 pub const CAP_DOUBLE_RATCHET_V1: u64 = 1 << 13;
 pub const CAP_APPLICATION_MESSAGES_V1: u64 = 1 << 14;
-#[cfg(feature = "beta-pq-mls")]
-pub const CAP_BETA_PQ_MLS: u64 = 1 << 15;
-#[cfg(feature = "beta-pq-mls")]
-const BETA_FEATURE_BITS: u64 = CAP_BETA_PQ_MLS;
-#[cfg(not(feature = "beta-pq-mls"))]
-const BETA_FEATURE_BITS: u64 = 0;
 
 #[repr(C)]
 pub struct CpCryptoCapabilitiesV1 {
@@ -94,8 +80,7 @@ const CAPABILITIES: CpCryptoCapabilitiesV1 = CpCryptoCapabilitiesV1 {
         | CAP_PANIC_CONTAINMENT
         | CAP_HYBRID_PQXDH_V1
         | CAP_DOUBLE_RATCHET_V1
-        | CAP_APPLICATION_MESSAGES_V1
-        | BETA_FEATURE_BITS,
+        | CAP_APPLICATION_MESSAGES_V1,
     max_input_bytes: MAX_INPUT_BYTES,
     max_cbor_depth: bounds::MAX_CBOR_DEPTH,
     max_cbor_items: bounds::MAX_CBOR_ITEMS,
@@ -562,34 +547,6 @@ pub unsafe extern "C" fn cp_crypto_v1_attachment_operation(
     })
 }
 
-#[cfg(feature = "beta-pq-mls")]
-#[unsafe(no_mangle)]
-/// Runs one bounded closed-beta PQ MLS operation.
-///
-/// The production composition root never resolves this capability. Requests
-/// contain opaque native device/KeyPackage state and authenticated public
-/// bundle claims; responses keep all MLS state opaque to Dart.
-///
-/// # Safety
-///
-/// Pointer requirements are identical to [`cp_crypto_v1_prepare_device`].
-pub unsafe extern "C" fn cp_crypto_v1_beta_mls_operation(
-    operation: u32,
-    input: *const u8,
-    input_len: usize,
-    output: *mut u8,
-    output_len: usize,
-    written: *mut usize,
-) -> i32 {
-    guard(|| {
-        // SAFETY: upheld by this function's caller contract.
-        let input = unsafe { ffi_input_bounded(input, input_len, mls_beta::MLS_MAX_IO_BYTES)? };
-        let value = mls_beta::operation(operation, input)?;
-        // SAFETY: upheld by this function's caller contract.
-        unsafe { ffi_output(&value, output, output_len, written) }
-    })
-}
-
 #[unsafe(no_mangle)]
 /// Signs the exact peer master-key attestation with the local user-signing key.
 ///
@@ -686,12 +643,11 @@ mod tests {
     use std::{mem, ptr};
 
     use super::{
-        ABI_VERSION, BETA_FEATURE_BITS, CAP_APPLICATION_MESSAGES_V1, CAP_ARGON2ID,
-        CAP_DETERMINISTIC_CBOR, CAP_DOUBLE_RATCHET_V1, CAP_ED25519, CAP_HKDF, CAP_HYBRID_PQXDH_V1,
-        CAP_MLKEM768, CAP_PANIC_CONTAINMENT, CAP_SECRETSTREAM, CAP_SECURE_RANDOM, CAP_SHA2,
-        CAP_X25519, CAP_XCHACHA20POLY1305, CAP_ZEROIZING_SECRETS, CAPABILITIES_SIZE,
-        CpCryptoCapabilitiesV1, cp_crypto_v1_abi_version, cp_crypto_v1_capabilities,
-        cp_crypto_v1_self_test, guard,
+        ABI_VERSION, CAP_APPLICATION_MESSAGES_V1, CAP_ARGON2ID, CAP_DETERMINISTIC_CBOR,
+        CAP_DOUBLE_RATCHET_V1, CAP_ED25519, CAP_HKDF, CAP_HYBRID_PQXDH_V1, CAP_MLKEM768,
+        CAP_PANIC_CONTAINMENT, CAP_SECRETSTREAM, CAP_SECURE_RANDOM, CAP_SHA2, CAP_X25519,
+        CAP_XCHACHA20POLY1305, CAP_ZEROIZING_SECRETS, CAPABILITIES_SIZE, CpCryptoCapabilitiesV1,
+        cp_crypto_v1_abi_version, cp_crypto_v1_capabilities, cp_crypto_v1_self_test, guard,
     };
     use crate::error::CryptoError;
 
@@ -744,7 +700,6 @@ mod tests {
                 | CAP_HYBRID_PQXDH_V1
                 | CAP_DOUBLE_RATCHET_V1
                 | CAP_APPLICATION_MESSAGES_V1
-                | BETA_FEATURE_BITS
         );
 
         let mut unaligned_storage =

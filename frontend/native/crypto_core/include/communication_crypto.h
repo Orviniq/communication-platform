@@ -16,7 +16,6 @@ extern "C" {
 
 #define CP_CRYPTO_V1_ABI_VERSION UINT32_C(1)
 #define CP_CRYPTO_V1_CAPABILITIES_SIZE UINT32_C(32)
-#define CP_CRYPTO_V1_CAP_BETA_PQ_MLS (UINT64_C(1) << 15)
 
 typedef enum cp_crypto_status_v1 {
   CP_CRYPTO_OK = 0,
@@ -144,14 +143,6 @@ int32_t cp_crypto_v1_application_operation(
     uintptr_t output_len,
     uintptr_t* written);
 int32_t cp_crypto_v1_attachment_operation(
-    uint32_t operation,
-    const uint8_t* input,
-    uintptr_t input_len,
-    uint8_t* output,
-    uintptr_t output_len,
-    uintptr_t* written);
-/* Exported only by the isolated beta-pq-mls native profile. */
-int32_t cp_crypto_v1_beta_mls_operation(
     uint32_t operation,
     const uint8_t* input,
     uintptr_t input_len,
