@@ -350,7 +350,7 @@ final class SendConversationEvents {
         currentUserId,
         currentDeviceId,
       );
-      return sent.fold(
+      return sent.fold<Result<void>>(
         onSuccess: (_) => const Result.success(null),
         onFailure: Result.failure,
       );

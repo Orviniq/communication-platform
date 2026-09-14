@@ -1192,7 +1192,7 @@ Future<List<Object?>> _attachmentInWorker(
           bucketSize: message[4]! as int,
           metadata: _bytesArgument(message, 5),
         );
-        return result.fold(
+        return result.fold<List<Object?>>(
           onSuccess: (value) => <Object?>[
             _replySuccess,
             value.handle,
@@ -1219,7 +1219,7 @@ Future<List<Object?>> _attachmentInWorker(
           secretstreamHeader: _bytesArgument(message, 5),
           metadata: _bytesArgument(message, 6),
         );
-        return result.fold(
+        return result.fold<List<Object?>>(
           onSuccess: (value) => <Object?>[_replySuccess, value.handle],
           onFailure: _encodeFailureReply,
         );
@@ -1228,7 +1228,7 @@ Future<List<Object?>> _attachmentInWorker(
           session: AttachmentCryptoPullSession(message[3]! as int),
           ciphertext: _bytesArgument(message, 4),
         );
-        return result.fold(
+        return result.fold<List<Object?>>(
           onSuccess: (value) => <Object?>[
             _replySuccess,
             Uint8List.fromList([value.finalChunk ? 1 : 0, ...value.plaintext]),
