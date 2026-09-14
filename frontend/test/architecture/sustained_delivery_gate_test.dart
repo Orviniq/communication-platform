@@ -51,13 +51,9 @@ void main() {
 
     test('what reaches a user is withheld; only development may measure', () {
       expect(
-        SustainedDeliveryGate.availabilityIn(AppEnvironment.beta),
-        SustainedDeliveryAvailability.withheld,
-        reason: 'the beta artifact is the one handed to the people in ADR-044',
-      );
-      expect(
         SustainedDeliveryGate.availabilityIn(AppEnvironment.production),
         SustainedDeliveryAvailability.withheld,
+        reason: 'production is the build handed to the people in ADR-076',
       );
       expect(
         SustainedDeliveryGate.availabilityIn(AppEnvironment.development),
@@ -227,7 +223,7 @@ void main() {
       final platform = _RecordingPlatform();
       final container = ProviderContainer(
         overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.beta),
+          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
           sustainedDeliveryPlatformProvider.overrideWithValue(platform),
         ],
       );
@@ -266,7 +262,7 @@ void main() {
       final platform = _RecordingPlatform(running: true);
       final container = ProviderContainer(
         overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.beta),
+          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
           sustainedDeliveryPlatformProvider.overrideWithValue(platform),
         ],
       );
@@ -294,7 +290,7 @@ void main() {
       final platform = _RecordingPlatform(running: true);
       final container = ProviderContainer(
         overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.beta),
+          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
           sustainedDeliveryPlatformProvider.overrideWithValue(platform),
         ],
       );

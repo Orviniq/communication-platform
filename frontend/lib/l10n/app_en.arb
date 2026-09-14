@@ -8,17 +8,9 @@
   "@developmentAppTitle": {
     "description": "The application title for visibly non-production builds."
   },
-  "experimentalAppTitle": "Communication Platform (Experimental)",
-  "@experimentalAppTitle": {
-    "description": "The application title for the Private Experimental build. It must match the Android launcher label set by the beta product flavor, and it must never read \"Development\": a build installed by other people may not present itself as a developer build (ADR-044)."
-  },
   "developmentConfiguration": "Development configuration",
   "@developmentConfiguration": {
     "description": "A persistent warning that the running app is not production."
-  },
-  "betaConfiguration": "Private experimental build",
-  "@betaConfiguration": {
-    "description": "A persistent warning that the running app is the private experimental build. It deliberately does not say 'beta': ADR-044 holds that 'beta' implies a feature-complete, reviewed pre-release, which this is not. The key still names the flavor, because the .beta application ID is frozen and cannot follow the wording."
   },
   "foundationReady": "Flutter foundation is ready",
   "@foundationReady": {

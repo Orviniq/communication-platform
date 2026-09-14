@@ -15,13 +15,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get developmentAppTitle => 'Communication Platform (Development)';
 
   @override
-  String get experimentalAppTitle => 'Communication Platform (Experimental)';
-
-  @override
   String get developmentConfiguration => 'Development configuration';
-
-  @override
-  String get betaConfiguration => 'Private experimental build';
 
   @override
   String get foundationReady => 'Flutter foundation is ready';

@@ -19,14 +19,12 @@ import 'package:go_router/go_router.dart';
 /// be reading it in order to explain a problem to whoever runs their server.
 ///
 /// The build is named once, in the reviewed application title, and the flavor
-/// identifier is deliberately **not** shown. `AppEnvironment.beta` prints as
-/// `BETA`, which ADR-044 permits only where it names the application ID, the
-/// Gradle flavor or the enum value — none of which a user reads. A row saying
-/// `Build: BETA` beneath a heading saying "(Experimental)" would be a fifth
-/// maturity vocabulary reaching users, which is the defect ADR-045 exists to
-/// have removed. The technical value still travels, in the diagnostics export,
-/// which is a document for an operator rather than a claim made to the person
-/// holding the phone.
+/// identifier is deliberately **not** shown. A row saying `Build: PRODUCTION`
+/// beneath that title would give one artifact a second name, and a vocabulary
+/// about builds of its own reaching users, which is the defect ADR-045 exists
+/// to have removed. The technical value still travels, in the diagnostics
+/// export, which is a document for an operator rather than a claim made to the
+/// person holding the phone.
 final class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 

@@ -24,6 +24,12 @@ void main() {
       same(DeploymentDisclosure.distributed),
     );
     expect(AppEnvironment.development.deploymentDisclosure, isNull);
+    // And there is no third build for the statement to reach: the beta
+    // environment went with the flavor that carried it (ADR-075, ADR-076).
+    expect(AppEnvironment.values, const [
+      AppEnvironment.development,
+      AppEnvironment.production,
+    ]);
   });
 
   test('the disclosure states every fact ADR-052 requires, in order', () {
@@ -593,35 +599,39 @@ void main() {
     );
   });
 
-  test('no user-facing string calls this build a beta or claims assessment', () {
-    // ADR-044 permits "beta" only where it names the frozen application ID, the
-    // Gradle flavor or the AppEnvironment value, none of which are localized.
-    // ADR-045 adds the assessment words: no surface may label itself audited,
-    // reviewed, verified, supported, stable or production-ready.
-    const forbidden = [
-      'beta',
-      'audited',
-      'stable release',
-      'production ready',
-      'production-ready',
-    ];
-    for (final path in ['lib/l10n/app_en.arb', 'lib/l10n/app_fa.arb']) {
-      final strings = _catalogue(path);
-      for (final entry in strings.entries) {
-        if (entry.key.startsWith('@') || entry.value is! String) {
-          continue;
-        }
-        final value = (entry.value as String).toLowerCase();
-        for (final word in forbidden) {
-          expect(
-            value.contains(word),
-            isFalse,
-            reason: '$path/${entry.key} says "$word" to a user',
-          );
+  test(
+    'no user-facing string calls this build a beta or claims assessment',
+    () {
+      // ADR-044 held that "beta" promises a feature-complete, reviewed
+      // pre-release, and no build here is one; the flavor and the environment
+      // value that carried the word are deleted. ADR-045 adds the assessment
+      // words: no surface may label itself audited, reviewed, verified,
+      // supported, stable or production-ready.
+      const forbidden = [
+        'beta',
+        'audited',
+        'stable release',
+        'production ready',
+        'production-ready',
+      ];
+      for (final path in ['lib/l10n/app_en.arb', 'lib/l10n/app_fa.arb']) {
+        final strings = _catalogue(path);
+        for (final entry in strings.entries) {
+          if (entry.key.startsWith('@') || entry.value is! String) {
+            continue;
+          }
+          final value = (entry.value as String).toLowerCase();
+          for (final word in forbidden) {
+            expect(
+              value.contains(word),
+              isFalse,
+              reason: '$path/${entry.key} says "$word" to a user',
+            );
+          }
         }
       }
-    }
-  });
+    },
+  );
 
   test('the composed environment cannot disagree with the rendered one', () {
     // The disclosure is chosen by `appEnvironmentProvider`, while the shell

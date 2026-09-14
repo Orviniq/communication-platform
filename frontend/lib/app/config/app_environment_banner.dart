@@ -5,15 +5,16 @@ import 'package:communication_platform/l10n/generated/app_localizations.dart';
 /// it: the window title Android shows in the task switcher, and the persistent
 /// configuration banner.
 ///
-/// Beta builds are installed by external testers, so they must never be
-/// labelled as development — in either surface. The launcher label lives in the
-/// Android product flavor and reads "Communication Platform (Experimental)";
-/// [userFacingTitle] has to agree with it, or one build presents two identities.
+/// A build installed by other people may never be labelled as development, in
+/// either surface. The launcher label lives in the Android product flavor —
+/// "Communication Platform" for production, "Communication Platform
+/// (Development)" for development — and [userFacingTitle] has to agree with it,
+/// or one build presents two identities. Production carries no maturity
+/// designation in either surface, by the owner's answer recorded in ADR-076.
 extension AppEnvironmentBanner on AppEnvironment {
   /// The application title shown to the user, per build.
   String userFacingTitle(AppLocalizations l10n) => switch (this) {
     AppEnvironment.development => l10n.developmentAppTitle,
-    AppEnvironment.beta => l10n.experimentalAppTitle,
     AppEnvironment.production => l10n.appTitle,
   };
 
@@ -21,7 +22,6 @@ extension AppEnvironmentBanner on AppEnvironment {
   /// is production and must show no banner at all.
   String? configurationBanner(AppLocalizations l10n) => switch (this) {
     AppEnvironment.development => l10n.developmentConfiguration,
-    AppEnvironment.beta => l10n.betaConfiguration,
     AppEnvironment.production => null,
   };
 }

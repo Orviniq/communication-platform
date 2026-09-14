@@ -15,13 +15,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get developmentAppTitle => 'پلتفرم ارتباطی (توسعه)';
 
   @override
-  String get experimentalAppTitle => 'پلتفرم ارتباطی (آزمایشی)';
-
-  @override
   String get developmentConfiguration => 'پیکربندی توسعه';
-
-  @override
-  String get betaConfiguration => 'نسخهٔ آزمایشی خصوصی';
 
   @override
   String get foundationReady => 'پایهٔ فلاتر آماده است';

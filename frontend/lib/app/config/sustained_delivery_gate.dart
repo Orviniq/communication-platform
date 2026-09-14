@@ -98,13 +98,13 @@ final class SustainedDeliveryGate {
 
   /// What this build may do with the capability.
   ///
-  /// Beta and production are what reach a user, so both are withheld until the
-  /// gate opens. Development is the flavour the measurement itself runs on: it
-  /// carries its own application ID, is never handed to anybody, and has to be
-  /// able to run the capability or the matrix could never be run at all. That
-  /// deliberately includes a development *release* build, because whether a
-  /// headless engine starts an entry point in an AOT snapshot is one of the
-  /// things the matrix has to answer and a debug build cannot.
+  /// Production is what reaches a user, so it is withheld until the gate opens.
+  /// Development is the flavour the measurement itself runs on: it carries its
+  /// own application ID, is never handed to anybody, and has to be able to run
+  /// the capability or the matrix could never be run at all. That deliberately
+  /// includes a development *release* build, because whether a headless engine
+  /// starts an entry point in an AOT snapshot is one of the things the matrix
+  /// has to answer and a debug build cannot.
   static SustainedDeliveryAvailability availabilityIn(
     AppEnvironment environment,
   ) {
@@ -114,7 +114,6 @@ final class SustainedDeliveryGate {
     return switch (environment) {
       AppEnvironment.development =>
         SustainedDeliveryAvailability.measurementOnly,
-      AppEnvironment.beta ||
       AppEnvironment.production => SustainedDeliveryAvailability.withheld,
     };
   }

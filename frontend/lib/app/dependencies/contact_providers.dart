@@ -66,8 +66,8 @@ enum ProfilePublishing {
 /// claiming a capability the composition root did not install - which is the
 /// defect ADR-044 found in the group boundary and which ADR-045 keeps out of
 /// this one. Today every flavor but development resolves the unsupported
-/// adapters, so the Private Experimental build cannot publish a profile and
-/// says so instead of failing with a generic error.
+/// adapters, so a production build cannot publish a profile and says so
+/// instead of failing with a generic error.
 final profilePublishingProvider = Provider<ProfilePublishing>((ref) {
   final protection = ref.watch(profileProtectionProvider);
   final distribution = ref.watch(profileKeyDistributionProvider);

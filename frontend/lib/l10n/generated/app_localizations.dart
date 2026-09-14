@@ -110,23 +110,11 @@ abstract class AppLocalizations {
   /// **'Communication Platform (Development)'**
   String get developmentAppTitle;
 
-  /// The application title for the Private Experimental build. It must match the Android launcher label set by the beta product flavor, and it must never read "Development": a build installed by other people may not present itself as a developer build (ADR-044).
-  ///
-  /// In en, this message translates to:
-  /// **'Communication Platform (Experimental)'**
-  String get experimentalAppTitle;
-
   /// A persistent warning that the running app is not production.
   ///
   /// In en, this message translates to:
   /// **'Development configuration'**
   String get developmentConfiguration;
-
-  /// A persistent warning that the running app is the private experimental build. It deliberately does not say 'beta': ADR-044 holds that 'beta' implies a feature-complete, reviewed pre-release, which this is not. The key still names the flavor, because the .beta application ID is frozen and cannot follow the wording.
-  ///
-  /// In en, this message translates to:
-  /// **'Private experimental build'**
-  String get betaConfiguration;
 
   /// Bootstrap text shown before product screens are implemented.
   ///

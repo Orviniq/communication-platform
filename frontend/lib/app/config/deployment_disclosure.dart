@@ -229,7 +229,6 @@ final class DeploymentDisclosure {
 /// nobody is handed.
 extension AppDeploymentDisclosure on AppEnvironment {
   DeploymentDisclosure? get deploymentDisclosure => switch (this) {
-    AppEnvironment.beta ||
     AppEnvironment.production => DeploymentDisclosure.distributed,
     AppEnvironment.development => null,
   };
