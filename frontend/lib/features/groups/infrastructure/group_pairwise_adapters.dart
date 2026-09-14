@@ -43,6 +43,21 @@ final class ConversationGroupMessageSender implements GroupMessageSenderPort {
       onFailure: Result.failure,
     );
   }
+
+  @override
+  Future<Result<void>> retryText({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required String text,
+  }) => conversations.retrySend(
+    currentUserId: currentUserId,
+    currentDeviceId: currentDeviceId,
+    target: GroupConversationTarget(groupId),
+    messageId: messageId,
+    text: text,
+  );
 }
 
 final class PairwiseGroupSessionRepairAdapter

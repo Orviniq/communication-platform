@@ -10,6 +10,8 @@ typedef CreateGroupCallback =
 typedef MutateGroupCallback =
     Future<Result<GroupState>> Function(GroupControlOperation operation);
 typedef SendGroupMessageCallback = Future<Result<void>> Function(String text);
+typedef RetryGroupMessageCallback =
+    Future<Result<void>> Function(GroupMessage message);
 
 final class GroupPickerContact {
   const GroupPickerContact({

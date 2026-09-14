@@ -148,6 +148,9 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
   final crypto = await ref.watch(groupControlCryptoProvider(scope).future);
   final clock = ref.watch(timeSourceProvider);
   final identity = NativeGroupIdentity(ref.watch(applicationProtocolProvider));
+  final sender = ConversationGroupMessageSender(
+    await ref.watch(sendConversationEventsProvider(scope).future),
+  );
   return GroupUseCases(
     create: CreateGroup(
       repository: repository,
@@ -161,12 +164,8 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
       identity: identity,
       clock: clock,
     ),
-    sendMessage: SendGroupMessage(
-      repository: repository,
-      sender: ConversationGroupMessageSender(
-        await ref.watch(sendConversationEventsProvider(scope).future),
-      ),
-    ),
+    sendMessage: SendGroupMessage(repository: repository, sender: sender),
+    retryMessage: RetryGroupMessage(repository: repository, sender: sender),
   );
 });
 

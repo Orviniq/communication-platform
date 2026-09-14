@@ -115,6 +115,16 @@ abstract interface class GroupMessageSenderPort implements Port {
     required String groupId,
     required String text,
   });
+
+  /// Puts a message the user was told had failed back on its way, as the same
+  /// message rather than a second one beside it.
+  Future<Result<void>> retryText({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required String text,
+  });
 }
 
 /// Starts the authenticated repair of this device's pairwise sessions with one

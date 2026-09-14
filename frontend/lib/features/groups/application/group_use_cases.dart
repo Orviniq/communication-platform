@@ -289,16 +289,60 @@ final class SendGroupMessage {
   }
 }
 
+/// Retries a group message the user was told had failed.
+///
+/// Held to the rule a send is held to: a group this device may no longer send
+/// into is sent nothing, whether the message is new or retried.
+final class RetryGroupMessage {
+  const RetryGroupMessage({required this.repository, required this.sender});
+
+  final GroupRepositoryPort repository;
+  final GroupMessageSenderPort sender;
+
+  Future<Result<void>> call({
+    required String groupId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required String messageId,
+    required String text,
+  }) async {
+    final groupResult = await repository.readGroup(groupId);
+    if (groupResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final group = (groupResult as Success<GroupState?>).value;
+    if (group == null ||
+        !GroupAuthorization.allows(
+          group,
+          senderUserId,
+          GroupPermission.sendMessages,
+        )) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+    }
+    return sender.retryText(
+      currentUserId: senderUserId.toLowerCase(),
+      currentDeviceId: senderDeviceId.toLowerCase(),
+      groupId: group.groupId,
+      messageId: messageId,
+      text: text,
+    );
+  }
+}
+
 final class GroupUseCases {
   const GroupUseCases({
     required this.create,
     required this.mutate,
     required this.sendMessage,
+    required this.retryMessage,
   });
 
   final CreateGroup create;
   final MutateGroup mutate;
   final SendGroupMessage sendMessage;
+  final RetryGroupMessage retryMessage;
 }
 
 /// Who a locally signed control event is owed to, and in which payloads.

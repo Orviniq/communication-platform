@@ -356,6 +356,45 @@ void main() {
       );
       expect(sender.sent, isEmpty);
     });
+
+    test('retries the same message rather than sending another', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      final result =
+          await RetryGroupMessage(repository: repository, sender: sender)(
+            groupId: group.groupId,
+            senderUserId: _local,
+            senderDeviceId: _localDevice,
+            messageId: 'ab' * 16,
+            text: 'hello',
+          );
+
+      expect(result, isA<Success<void>>());
+      expect(sender.retried, [(group.groupId, 'ab' * 16)]);
+      expect(sender.sent, isEmpty);
+    });
+
+    test('is not retried while the roster may be stale', () async {
+      final group = await create([_alice]);
+      repository.overlay = GroupLifecycle.stateRecoveryRequired;
+      final sender = _Sender();
+
+      final result =
+          await RetryGroupMessage(repository: repository, sender: sender)(
+            groupId: group.groupId,
+            senderUserId: _local,
+            senderDeviceId: _localDevice,
+            messageId: 'ab' * 16,
+            text: 'hello',
+          );
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.retried, isEmpty);
+    });
   });
 }
 
@@ -479,6 +518,20 @@ final class _Sender implements GroupMessageSenderPort {
     required String text,
   }) async {
     sent.add((groupId, text));
+    return const Result.success(null);
+  }
+
+  final retried = <(String, String)>[];
+
+  @override
+  Future<Result<void>> retryText({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required String text,
+  }) async {
+    retried.add((groupId, messageId));
     return const Result.success(null);
   }
 }
