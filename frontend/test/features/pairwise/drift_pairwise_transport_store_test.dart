@@ -463,7 +463,7 @@ void main() {
   );
 
   test(
-    'additional MLS write failure rolls back the pairwise receive transaction',
+    'a failed group write rolls back the pairwise receive transaction',
     () async {
       final sync = DriftSyncStore(database);
       await inspectEnvelope(sync, 55);
@@ -486,7 +486,7 @@ void main() {
                   sortKey: 1,
                 ),
               );
-          throw StateError('injected MLS transaction failure');
+          throw StateError('injected group transaction failure');
         },
       );
 
