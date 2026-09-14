@@ -5,7 +5,8 @@ claimed about it, and what must be disclosed - was decided by
 [ADR-044](decisions.md), which [ADR-075](decisions.md) closed: the `beta` flavor that
 carried the deployment was deleted with the closed-beta MLS core, so no flavor builds its
 artifact now. What a build *says* to the people who receive it - the maturity vocabulary,
-the disclosure, and the one acknowledgement - is decided by [ADR-045](decisions.md). The
+the disclosure, and the one acknowledgement - is decided by [ADR-045](decisions.md), and
+since [ADR-076](decisions.md) the production flavor is the build that says it. The
 release signing, key custody, and upgrade-continuity verification that
 [Beta release signing and key continuity](release-signing.md) specified under ADR-042
 belonged to the same `beta` flavor; no flavor is signed now. This document covers the
@@ -14,13 +15,13 @@ surrounding release process.
 ## Environments
 
 Use compile-time flavors with separate visible identity and trust configuration.
-There are exactly two; each has one Dart entry point and reads one provisioning
-prefix:
+There are exactly two, and `AppEnvironment` has one value for each; each has one Dart
+entry point and reads one provisioning prefix:
 
-| Flavor | Entry point | Purpose | Trust |
-|---|---|---|---|
-| development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner |
-| production | `lib/main_production.dart` | Future public release | production origin/private CA/primary+backup pins only |
+| Flavor | Entry point | Purpose | Trust | Disclosure |
+|---|---|---|---|---|
+| development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner | None: never handed to anyone |
+| production | `lib/main_production.dart` | Builds handed to named people for testing ([ADR-076](decisions.md)), and the future public release | production origin/private CA/primary+backup pins only | `DeploymentDisclosure.distributed`, acknowledged once at the end of enrollment |
 
 There is deliberately no staging flavor. A third environment would need a third
 application ID, a third provisioning prefix, and its own trust material, and
@@ -36,7 +37,9 @@ task switcher name the same build. Before ADR-045 the title branched on producti
 alone, so the Private Experimental artifact called itself "Communication Platform
 (Development)" beside a launcher icon reading "(Experimental)".
 `AppEnvironmentBanner` now owns both strings, and the Gradle flavor owns the
-launcher label they must match.
+launcher label they must match. Production carries no maturity designation in any of the
+three, although it is now handed to people: its launcher label and title read
+"Communication Platform", by the owner's answer recorded in [ADR-076](decisions.md) D8.
 
 The development and production flavors are separate, coexisting Android
 applications with different application IDs. Neither upgrades into the other. No
@@ -107,25 +110,19 @@ by contract tests and conservative client behavior, not runtime version guessing
    proved it.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
-8. For the Private Experimental deployment, deliver the written disclosure with the
-   artifact. This is release-blocking, not a courtesy.
+8. Deliver the written disclosure with every artifact handed to someone. This is
+   release-blocking, not a courtesy. Since [ADR-076](decisions.md) that artifact is a
+   production build: `DeploymentDisclosure.distributed` is rendered for
+   `AppEnvironment.production`, and development carries none.
 
-   No flavor builds that artifact now: `DeploymentDisclosure.privateExperimental` is
-   rendered only for `AppEnvironment.beta`, which no entry point has used since the
-   `beta` flavor was deleted, so this step and step 9 have no artifact to travel with.
-   Point 6 below, and the `disclosureExperimentalGroups` string it is written from, still
-   describe the deleted closed-beta MLS track; groups now run on the same pairwise
-   sessions as direct messages, and no build switches them off on any phone
-   ([ADR-075](decisions.md)).
-
-   It carries **the same points, in the same order, as `DeploymentDisclosure.privateExperimental`**,
+   It carries **the same points, in the same order, as `DeploymentDisclosure.distributed`**,
    and it is written from that list rather than from this paragraph, so the two cannot
    drift apart the way they had by revision 4 — this step previously claimed "the same
    seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
-   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 7
-   ([ADR-055](decisions.md) switched the group point from a caution about experimental
-   groups to a statement that they are off; [ADR-056](decisions.md) reopened them on the
-   one measured ABI and the point now carries both halves) that is eight points:
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 9
+   ([ADR-076](decisions.md) rewrote the delivery point, which offered a Settings switch
+   that ADR-053's gate withholds, and the group point, which still described the deleted
+   closed-beta MLS track) that is eight points:
 
    1. no part of the cryptography has been independently reviewed, and one person wrote
       and tested all of it;
@@ -133,18 +130,18 @@ by contract tests and conservative client behavior, not runtime version guessing
       the phone gets round to checking — fifteen minutes apart at best, usually far less
       often, and not at all while the phone is saving battery, while Data Saver is on over
       mobile data, once the app has gone unopened for several days, or after a force-stop;
-      that Settings carries an opt-in that does better on most phones at the cost of
-      battery and a permanent notice; and that none of it is guaranteed;
+      and that none of it is guaranteed;
    3. a message waits on the server only until the phone collects it, after which the
       operator's retention timer deletes it unread and it never arrives, with no
       indication of which messages were lost;
    4. history exists only on the device and uninstalling destroys it permanently;
    5. a recovery secret restores identity on a new device and never restores messages;
-   6. group messaging uses experimental encryption that is unfinished, non-standard
-      and unreviewed, and an update can reset a group and delete everything in it; on a
-      phone whose processor it has not been tested on it is switched off instead, and
-      direct messages are unaffected either way (ADR-055 and ADR-056, both closed by
-      ADR-075);
+   6. group messages use the same encryption as direct messages; the signed membership
+      changes built on top of it have not been reviewed by anyone outside the project;
+      each group message is one encrypted copy for each device of each member; and a
+      group whose current state the phone loses comes back only when another member's
+      app sends it, with sending in that group withheld until then
+      ([ADR-075](decisions.md), [ui-specification.md](ui-specification.md) §9);
    7. voice rooms and file attachments do nothing, and the display name and photo are not
       published — contacts see the registered username;
    8. the build is for evaluation among people who already trust each other, and is not
@@ -155,12 +152,16 @@ by contract tests and conservative client behavior, not runtime version guessing
    release-blocking: it reaches a recipient before they install, and it is the only copy
    a person who declines to install ever sees.
 
-9. If `DeploymentDisclosure.revision` in
+9. If `DeploymentDisclosure.distributed.revision` in
    `lib/app/config/deployment_disclosure.dart` differs from the revision carried by the
    previously distributed artifact, re-deliver the written disclosure to **every**
    existing recipient, not only to new ones. The revision moves when and only when what
    the build promises moves, so a changed revision is exactly the case where a person who
-   already enrolled has been told something that is no longer true.
+   already enrolled has been told something that is no longer true. The first production
+   artifact carries revision 9, and no production artifact was handed to anyone before
+   it, so no production recipient is owed a re-delivery yet; a holder of the deleted
+   `beta` flavor's application who is handed a production build receives the revision 9
+   statement under step 8.
 
    Since [ADR-052](decisions.md) their install also re-presents the statement once, on the
    first launch after the update, marking the points that moved — the accepted revision is
