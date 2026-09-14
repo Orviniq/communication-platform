@@ -6,8 +6,8 @@
 this project intends to build, not a description of the artifact. `/voice-rooms` renders
 `StructuralPlaceholderPage`, `pubspec.yaml` declares no media dependency, the shared Rust
 core exports no media-key operation, and no run record exists under
-`docs/validation/voice-media/`. ADR-044 places voice in the **absent** tier, where absent
-means visibly missing rather than half-present.
+`docs/validation/voice-media/`. ADR-044, closed by [ADR-075](decisions.md), placed voice in
+the **absent** tier, where absent means visibly missing rather than half-present.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames today, and nothing else. The four room
@@ -33,6 +33,14 @@ judgement, and that fail closed when unanswered:
 Absence of evidence is refusal, never permission. A partially satisfied list authorizes
 nothing.
 
+**Updated 2026-09-14.** P1, P2 and P3 name things that no longer exist. There is no MLS
+exporter, production or closed-beta, and no per-ABI group permit: groups are pairwise
+sessions, and the closed-beta MLS core and the permit were deleted ([ADR-075](decisions.md)).
+Server ADR-0021 also keys each voice connection by DTLS-SRTP between its two endpoints, so
+there is no application-level media key for an exporter to supply
+([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §N). As written those three
+conditions can never be met, and no decision restating them has been recorded.
+
 ## Realtime gateway
 
 One application-owned gateway wraps `/ws`. It validates frame type and bounds before
@@ -57,8 +65,10 @@ Create flow:
 
 1. Generate room metadata key and encrypted name bucket.
 2. POST `/api/v1/rooms`.
-3. Establish the room's client-side MLS membership state.
-4. Send encrypted `room.invite` events containing the capability and Welcome/material.
+3. Establish the room's client-side membership state: client-signed control events over
+   ordinary envelopes, as a group's is (server ADR-0021).
+4. Send encrypted `room.invite` events containing the capability and the room's membership
+   state.
 5. Persist room capability only in protected storage.
 
 Rename and invite actions require valid current room membership even though the backend
@@ -66,13 +76,13 @@ capability endpoint cannot enforce it. A malicious capability holder can still c
 backend rename API; clients authenticate accepted metadata updates and surface conflicts
 rather than trusting server ciphertext alone.
 
-Room MLS credentials obey the same verified account-master/device-cross-signature as group
-chat. Voice is never available on a device where groups are withheld, and it may not
-introduce a second availability rule ([ADR-058](decisions.md) P3). An unsigned,
+Room membership obeys the same verified account-master/device-cross-signature as group
+chat. Groups are withheld on no device: the per-ABI permit [ADR-058](decisions.md) P3 would
+have had voice share was deleted with the MLS core ([ADR-075](decisions.md)). An unsigned,
 unverified, forked, or classical-only peer cannot receive room membership/media keys.
 
 Leaving is a client-protocol action, not a backend deletion. The client sends an
-authenticated `room.control` leave/removal event, commits the MLS membership change,
+authenticated `room.control` leave/removal event, applies that signed membership change,
 disconnects from LiveKit/realtime presence, and deletes its local capability, room keys,
 and ephemeral text after the durable transition succeeds. The backend room row persists
 and the capability itself cannot be revoked by the current API. Peers ignore future
@@ -84,11 +94,10 @@ the server room or erases copies held by others.
 
 1. Fetch/decrypt room state and subscribe to room realtime presence.
 2. POST `/api/v1/rooms/{room_id}/token` with a device-bound full token.
-3. Derive the current media-key context from authenticated room MLS state using a
-   domain-separated exporter label containing room ID and media epoch. That label MUST
-   differ from the group stack's `chat:v1:beta-group-export`, and the derivation MUST
-   happen inside the shared Rust core: no MLS secret enters Dart. No such operation
-   exists today — see [ADR-058](decisions.md) P2.
+3. Derive the current media-key context inside the shared Rust core; no key secret enters
+   Dart. Nothing can supply it: this step named an exporter over the room's MLS state, and
+   no MLS state exists (see *Status*). No such operation exists either — see
+   [ADR-058](decisions.md) P2.
 4. Connect to the returned self-hosted LiveKit URL before token expiry.
 5. Enable E2EE before publishing the microphone.
 6. Publish audio only; do not enable video or unencrypted data channels.
@@ -139,8 +148,8 @@ encryption, no media cipher is invented here, and no foreign service is substitu
 
 ## Media-key lifecycle
 
-- Each media epoch has fresh exporter context.
-- A participant removal causes an MLS commit and media-key rotation before further audio.
+- Each media epoch has fresh key context.
+- A participant removal causes media-key rotation before further audio.
 - Per-sender key IDs/counters are unique and replay-checked.
 - Old media keys are retained only for a short jitter/reordering window then erased.
 - Reconnect never silently falls back to unencrypted media.
