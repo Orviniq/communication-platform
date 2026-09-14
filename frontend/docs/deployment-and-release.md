@@ -7,11 +7,12 @@ carried the deployment was deleted with the closed-beta MLS core, so no flavor b
 artifact now. What a build *says* to the people who receive it - the maturity vocabulary,
 the disclosure, and the one acknowledgement - is decided by [ADR-045](decisions.md), and
 since [ADR-076](decisions.md) the production flavor is the build that says it. The
-release signing, key custody, and upgrade-continuity verification that
-[Beta release signing and key continuity](release-signing.md) specified under ADR-042
-belonged to the same `beta` flavor. Since ADR-076 the production flavor signs its release
-build with a persistent key of its own, which is not the beta key. This document covers
-the surrounding release process.
+release signing, key custody, and upgrade-continuity verification that `release-signing.md`
+specified under ADR-042 belonged to the same `beta` flavor. Since ADR-076 the production
+flavor signs its release build with a persistent key of its own, which is not the beta key,
+and [Production release signing and key continuity](release-signing.md) is the manual for
+that key, for the one script that makes a production artifact for a phone, and for how
+such an artifact is installed. This document covers the surrounding release process.
 
 ## Environments
 
@@ -22,7 +23,7 @@ entry point and reads one provisioning prefix:
 | Flavor | Entry point | Purpose | Trust | Disclosure |
 |---|---|---|---|---|
 | development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner | None: never handed to anyone |
-| production | `lib/main_production.dart` | Builds handed to named people for testing ([ADR-076](decisions.md)), and the future public release | production origin/private CA/primary+backup pins only | `DeploymentDisclosure.distributed`, acknowledged once at the end of enrollment |
+| production | `lib/main_production.dart` | Builds handed to named people for testing ([ADR-076](decisions.md)), and the future public release | production origin/private CA/primary+backup pins only, supplied afresh for every build as the five `PRODUCTION_*` defines by `tool/build_production_release.sh`, and never committed | `DeploymentDisclosure.distributed`, acknowledged once at the end of enrollment |
 
 There is deliberately no staging flavor. A third environment would need a third
 application ID, a third provisioning prefix, and its own trust material, and
@@ -105,7 +106,15 @@ by contract tests and conservative client behavior, not runtime version guessing
    separate from source control. Production's release build is signed with its own
    persistent key, which Gradle takes only from outside the repository
    ([ADR-076](decisions.md) D5). That key is kept on the maintainer workstation for now,
-   a deviation from this step that ADR-076 D3 records.
+   a deviation from this step that ADR-076 D3 records. A production artifact for a phone
+   is made only by `tool/build_production_release.sh --build-number N` (ADR-076 D7). It
+   refuses to start without the recorded certificate, the signing material, all five
+   provisioning values in the form the app accepts, and a build number above every one
+   recorded in `build/production-release/`, and it stops when the live host does not
+   serve the provisioned primary pin. It then renders the Android trust resources,
+   builds with the five `PRODUCTION_*` defines, and publishes the APK, its SHA-256 and a
+   metadata file only after `tool/verify_release_apk.sh --production` has passed them.
+   [Production release signing and key continuity](release-signing.md) is the manual.
 5. Generate SHA-256 artifact hashes and signed update metadata.
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
    private-CA connectivity on representative devices. Upgrade continuity has to be
