@@ -149,6 +149,8 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
                 maxLength: GroupMetadata.maximumDescriptionScalars,
                 enabled: !_busy,
               ),
+              const SizedBox(height: AppSpacing.x4),
+              const GroupFanoutNotice(),
             ] else
               GroupMemberPicker(
                 contacts: widget.contacts,

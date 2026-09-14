@@ -1092,6 +1092,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatStateReceived => 'دریافت‌شده';
 
   @override
+  String chatFanoutProgress(int sent, int total) {
+    return 'نسخه‌های ارسال‌شده: $sent از $total';
+  }
+
+  @override
   String get groupCreateTitle => 'ساخت گروه';
 
   @override
@@ -1121,6 +1126,10 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get groupMemberLimitMessage =>
       'گروه با احتساب شما حداکثر ۵۰ عضو دارد.';
+
+  @override
+  String get groupFanoutCostNote =>
+      'هر پیام گروهی برای هر دستگاه هر عضو جداگانه رمزنگاری می‌شود. در گروهی با ۵۰ نفر که هر کدام سه دستگاه دارند، هر پیام حدود ۱۵۰ نسخه است؛ برای همین ارسال در گروه بزرگ طول می‌کشد و هر پیام نشان می‌دهد چند نسخه‌اش ارسال شده است.';
 
   @override
   String get groupNameLabel => 'نام گروه';

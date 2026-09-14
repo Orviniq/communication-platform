@@ -1127,6 +1127,49 @@ final class PreparedGroupInboxStateCurrent extends PreparedGroupInboxCommit {
   final String controlStateHash;
 }
 
+/// Where one group message stands on its way to the other members.
+///
+/// A group message is one encrypted copy for each device of each member
+/// (`backend/CLIENT_CONTRACT.md` §F), so a send has ended only when every copy
+/// has. [sending] covers that whole interval, including the part in which the
+/// server has accepted some copies and not yet others, and [sent] is never
+/// reached before it ends.
+enum GroupMessageDelivery {
+  received,
+  localOnly,
+  preparing,
+  queued,
+  sending,
+  sent,
+  failed,
+}
+
+/// How far the copies of one message have got.
+///
+/// [total] counts the copies owed to devices still in the group's set: a
+/// device the server reports as gone leaves the count rather than holding the
+/// send open for good, and a device whose mailbox is full stays in it until
+/// its copy is accepted.
+final class GroupFanoutProgress {
+  GroupFanoutProgress({required this.sent, required this.total}) {
+    if (sent < 0 || sent > total) {
+      throw const FormatException('invalid group fan-out progress');
+    }
+  }
+
+  final int sent;
+  final int total;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GroupFanoutProgress &&
+      other.sent == sent &&
+      other.total == total;
+
+  @override
+  int get hashCode => Object.hash(sent, total);
+}
+
 final class GroupMessage {
   const GroupMessage({
     required this.messageId,
@@ -1134,7 +1177,7 @@ final class GroupMessage {
     required this.senderUserId,
     required this.text,
     required this.createdMs,
-    required this.localPreviewOnly,
+    required this.delivery,
   });
 
   final String messageId;
@@ -1142,7 +1185,7 @@ final class GroupMessage {
   final String senderUserId;
   final String text;
   final int createdMs;
-  final bool localPreviewOnly;
+  final GroupMessageDelivery delivery;
 }
 
 final class GroupQuarantineRecord {

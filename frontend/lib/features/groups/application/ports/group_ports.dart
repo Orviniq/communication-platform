@@ -13,6 +13,11 @@ abstract interface class GroupRepositoryPort {
 
   Stream<List<GroupMessage>> watchMessages(String groupId);
 
+  /// The copies still owed for this device's own messages in a group, by
+  /// message id. A message is absent before its copies exist and after the
+  /// last of them has settled.
+  Stream<Map<String, GroupFanoutProgress>> watchFanoutProgress(String groupId);
+
   /// The group as the screens see it: while a member has not yet confirmed
   /// its state, an active group reads as
   /// [GroupLifecycle.stateRecoveryRequired].

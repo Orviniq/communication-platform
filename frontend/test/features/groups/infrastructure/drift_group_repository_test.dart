@@ -518,6 +518,89 @@ void main() {
       const SecurityFailure(SecurityFailureKind.integrityCheckFailed),
     );
   });
+
+  group("a group message's delivery", () {
+    Future<void> message(
+      String messageId,
+      MessageTransportState status, {
+      String sender = _owner,
+    }) => database
+        .into(database.messages)
+        .insert(
+          MessagesCompanion.insert(
+            messageId: messageId,
+            conversationId: _groupA,
+            currentEventId: messageId,
+            projectionCiphertext: Uint8List.fromList(utf8.encode(messageId)),
+            status: status.index,
+            revision: 0,
+            createdAt: DateTime.utc(2026, 9, 13),
+            senderUserId: Value(sender),
+            orderingEventId: Value(messageId),
+          ),
+        );
+
+    Future<void> copy(
+      String messageId,
+      String deviceId,
+      OutboxAttemptState state,
+    ) => database
+        .into(database.outboxOperations)
+        .insert(
+          OutboxOperationsCompanion.insert(
+            operationId: 'application:$messageId',
+            eventId: messageId,
+            recipientDeviceId: deviceId,
+            recipientUserId: const Value(_member),
+            batchIndex: 0,
+            exactRecipientCiphertext: Uint8List(1024),
+            attemptState: state.index,
+          ),
+        );
+
+    test('reads as sending until none of its copies is owed', () async {
+      await commitCreate(_groupA);
+      await message('m1', MessageTransportState.preparing);
+      await message('m2', MessageTransportState.queued);
+      await message('m3', MessageTransportState.partiallyAccepted);
+      await message('m4', MessageTransportState.relayAccepted);
+      await message('m5', MessageTransportState.permanentlyFailed);
+      await message('m6', MessageTransportState.received, sender: _member);
+
+      final read = await repository.watchMessages(_groupA).first;
+
+      expect(
+        {for (final item in read) item.messageId: item.delivery},
+        {
+          'm1': GroupMessageDelivery.preparing,
+          'm2': GroupMessageDelivery.queued,
+          // The server holds some copies and not others: the send has not ended.
+          'm3': GroupMessageDelivery.sending,
+          'm4': GroupMessageDelivery.sent,
+          'm5': GroupMessageDelivery.failed,
+          'm6': GroupMessageDelivery.received,
+        },
+      );
+    });
+
+    test('counts accepted copies of the devices still in the set', () async {
+      await commitCreate(_groupA);
+      await message('m1', MessageTransportState.partiallyAccepted);
+      await copy('m1', 'd1', OutboxAttemptState.accepted);
+      await copy('m1', 'd2', OutboxAttemptState.accepted);
+      await copy('m1', 'd3', OutboxAttemptState.queued);
+      // A full mailbox waits for its retry and is still owed its copy.
+      await copy('m1', 'd4', OutboxAttemptState.retryWait);
+      // A device the server reported as gone is owed nothing.
+      await copy('m1', 'd5', OutboxAttemptState.stale);
+      await message('m2', MessageTransportState.relayAccepted);
+      await copy('m2', 'd1', OutboxAttemptState.accepted);
+
+      final progress = await repository.watchFanoutProgress(_groupA).first;
+
+      expect(progress, {'m1': GroupFanoutProgress(sent: 2, total: 4)});
+    });
+  });
 }
 
 SignedGroupControlEvent _signed(

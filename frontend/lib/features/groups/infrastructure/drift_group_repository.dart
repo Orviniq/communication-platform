@@ -70,13 +70,56 @@ final class DriftGroupRepository extends DriftRepositoryBase
                         allowMalformed: false,
                       ),
                 createdMs: row.createdAt.millisecondsSinceEpoch,
-                localPreviewOnly:
-                    row.status == MessageTransportState.localOnly.index,
+                delivery: _messageDelivery(row.status),
               ),
             ),
       ),
     );
   }
+
+  /// The copies of a local message create carry its event id, which is also
+  /// the message's id. Only messages whose fan-out has not ended are counted,
+  /// so the work follows the sends in flight however long the history is.
+  static const _fanoutProgressQuery =
+      'SELECT o.event_id AS message_id, '
+      'SUM(CASE WHEN o.attempt_state = ? THEN 1 ELSE 0 END) AS sent, '
+      'SUM(CASE WHEN o.attempt_state IN (?, ?) THEN 0 ELSE 1 END) AS total '
+      'FROM messages m '
+      'JOIN outbox_operations o ON o.event_id = m.message_id '
+      'WHERE m.conversation_id = ? '
+      'AND m.ordering_event_id = m.message_id '
+      'AND m.status IN (?, ?, ?) '
+      'GROUP BY o.event_id';
+
+  @override
+  Stream<Map<String, GroupFanoutProgress>> watchFanoutProgress(
+    String groupId,
+  ) => database
+      .customSelect(
+        _fanoutProgressQuery,
+        variables: [
+          Variable<int>(OutboxAttemptState.accepted.index),
+          // A device the server reported as gone, or one dropped from the set
+          // here, is owed no copy any more.
+          Variable<int>(OutboxAttemptState.stale.index),
+          Variable<int>(OutboxAttemptState.removed.index),
+          Variable<String>(groupId),
+          Variable<int>(MessageTransportState.queued.index),
+          Variable<int>(MessageTransportState.sending.index),
+          Variable<int>(MessageTransportState.partiallyAccepted.index),
+        ],
+        readsFrom: {database.messages, database.outboxOperations},
+      )
+      .watch()
+      .map(
+        (rows) => Map<String, GroupFanoutProgress>.unmodifiable({
+          for (final row in rows)
+            row.read<String>('message_id'): GroupFanoutProgress(
+              sent: row.read<int>('sent'),
+              total: row.read<int>('total'),
+            ),
+        }),
+      );
 
   @override
   Future<Result<GroupState?>> readGroup(String groupId) async {
@@ -850,6 +893,27 @@ Uint8List _hexBytes(String value) {
     for (var index = 0; index < value.length; index += 2)
       int.parse(value.substring(index, index + 2), radix: 16),
   ]);
+}
+
+/// How a group message reads, from the transport state its row carries.
+///
+/// A fan-out the server has accepted part of has not ended, so it reads as
+/// sending: a message reads as sent only once none of its copies is still
+/// owed. An ordinal this build does not know reads as the projector reads it.
+GroupMessageDelivery _messageDelivery(int status) {
+  if (status < 0 || status >= MessageTransportState.values.length) {
+    return GroupMessageDelivery.localOnly;
+  }
+  return switch (MessageTransportState.values[status]) {
+    MessageTransportState.received => GroupMessageDelivery.received,
+    MessageTransportState.localOnly => GroupMessageDelivery.localOnly,
+    MessageTransportState.preparing => GroupMessageDelivery.preparing,
+    MessageTransportState.queued => GroupMessageDelivery.queued,
+    MessageTransportState.sending ||
+    MessageTransportState.partiallyAccepted => GroupMessageDelivery.sending,
+    MessageTransportState.relayAccepted => GroupMessageDelivery.sent,
+    MessageTransportState.permanentlyFailed => GroupMessageDelivery.failed,
+  };
 }
 
 final class _GroupConflict implements Exception {

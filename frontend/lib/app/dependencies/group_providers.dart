@@ -182,3 +182,11 @@ final groupMessagesProvider = StreamProvider.autoDispose
       final repository = await ref.watch(groupRepositoryProvider.future);
       yield* repository.watchMessages(groupId);
     });
+
+/// How far each of this device's messages in a group has got, for the
+/// messages whose fan-out has not ended.
+final groupFanoutProgressProvider = StreamProvider.autoDispose
+    .family<Map<String, GroupFanoutProgress>, String>((ref, groupId) async* {
+      final repository = await ref.watch(groupRepositoryProvider.future);
+      yield* repository.watchFanoutProgress(groupId);
+    });

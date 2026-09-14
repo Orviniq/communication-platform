@@ -1,4 +1,5 @@
 import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -88,6 +89,45 @@ class GroupLifecycleNotice extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.x3),
           child: Text(message, style: context.tokens.typography.compact),
+        ),
+      ),
+    );
+  }
+}
+
+/// What every message in a group costs, said where a group is made and where
+/// its members are listed.
+///
+/// A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F), so
+/// one message is one encrypted copy for each device of each member. Saying so
+/// keeps a slow send in a large group from looking like a broken one.
+class GroupFanoutNotice extends StatelessWidget {
+  const GroupFanoutNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.tokens.colors;
+    return DecoratedBox(
+      key: const ValueKey('group-fanout-notice'),
+      decoration: BoxDecoration(
+        color: colors.surfaceRaised,
+        borderRadius: AppRadii.card,
+        border: Border.all(color: colors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.x3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppIcon(AppIcons.info, color: colors.textMuted, size: 18),
+            const SizedBox(width: AppSpacing.x2),
+            Expanded(
+              child: Text(
+                AppLocalizations.of(context).groupFanoutCostNote,
+                style: context.tokens.typography.compact,
+              ),
+            ),
+          ],
         ),
       ),
     );

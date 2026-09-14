@@ -2018,6 +2018,12 @@ abstract class AppLocalizations {
   /// **'received'**
   String get chatStateReceived;
 
+  /// No description provided for @chatFanoutProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Copies sent: {sent} of {total}'**
+  String chatFanoutProgress(int sent, int total);
+
   /// No description provided for @groupCreateTitle.
   ///
   /// In en, this message translates to:
@@ -2077,6 +2083,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'A group can have at most 50 members, including you.'**
   String get groupMemberLimitMessage;
+
+  /// No description provided for @groupFanoutCostNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Every group message is encrypted separately for each device of each member. A group of 50 people with three devices each makes about 150 copies of one message, so a message in a large group takes longer to send and shows how many copies have gone out.'**
+  String get groupFanoutCostNote;
 
   /// No description provided for @groupNameLabel.
   ///

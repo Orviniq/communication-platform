@@ -1092,6 +1092,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatStateReceived => 'received';
 
   @override
+  String chatFanoutProgress(int sent, int total) {
+    return 'Copies sent: $sent of $total';
+  }
+
+  @override
   String get groupCreateTitle => 'Create Group';
 
   @override
@@ -1122,6 +1127,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get groupMemberLimitMessage =>
       'A group can have at most 50 members, including you.';
+
+  @override
+  String get groupFanoutCostNote =>
+      'Every group message is encrypted separately for each device of each member. A group of 50 people with three devices each makes about 150 copies of one message, so a message in a large group takes longer to send and shows how many copies have gone out.';
 
   @override
   String get groupNameLabel => 'Group name';

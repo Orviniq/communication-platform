@@ -55,6 +55,14 @@ void main() {
 
     expect(find.text('مشخصات گروه'), findsOneWidget);
     expect(find.byKey(const ValueKey('group-name-field')), findsOneWidget);
+    // At this width and text size the cost notice pushes Create below the
+    // fold; usable means it is still reachable.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('group-create')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const ValueKey('group-fanout-notice')), findsOneWidget);
     expect(find.byKey(const ValueKey('group-create')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -98,7 +106,7 @@ void main() {
             senderUserId: _owner,
             text: 'Past message remains readable',
             createdMs: 100,
-            localPreviewOnly: true,
+            delivery: GroupMessageDelivery.received,
           ),
         ],
         currentUserId: _member,
@@ -133,6 +141,106 @@ void main() {
     expect(find.text('Private Team'), findsWidgets);
     expect(find.byType(VerticalDivider), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a group send counts its copies and is not sent before the last',
+    (tester) async {
+      const messageId = '22222222222222222222222222222222';
+      Future<void> show(
+        GroupMessageDelivery delivery, [
+        Map<String, GroupFanoutProgress> progress = const {},
+      ]) => _pump(
+        tester,
+        GroupChatPage(
+          groupId: _groupId,
+          injectedState: _state(),
+          injectedMessages: [
+            GroupMessage(
+              messageId: messageId,
+              groupId: _groupId,
+              senderUserId: _owner,
+              text: 'To everyone',
+              createdMs: 100,
+              delivery: delivery,
+            ),
+          ],
+          injectedProgress: progress,
+          currentUserId: _owner,
+          onSend: (_) async => const Result.success(null),
+        ),
+      );
+
+      await show(GroupMessageDelivery.sending, {
+        messageId: GroupFanoutProgress(sent: 45, total: 150),
+      });
+
+      expect(find.text('Copies sent: 45 of 150'), findsOneWidget);
+      expect(find.byTooltip('sending to server'), findsOneWidget);
+      expect(find.byTooltip('accepted by server relay'), findsNothing);
+
+      await show(GroupMessageDelivery.sent);
+
+      expect(find.textContaining('Copies sent'), findsNothing);
+      expect(find.byTooltip('accepted by server relay'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a failed group send retries that same message', (tester) async {
+    const messageId = '33333333333333333333333333333333';
+    final retried = <String>[];
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [
+          GroupMessage(
+            messageId: messageId,
+            groupId: _groupId,
+            senderUserId: _owner,
+            text: 'Not everyone has this yet',
+            createdMs: 100,
+            delivery: GroupMessageDelivery.failed,
+          ),
+        ],
+        currentUserId: _owner,
+        onSend: (_) async => const Result.success(null),
+        onRetry: (message) async {
+          retried.add(message.messageId);
+          return const Result.success(null);
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Retry as a new encrypted send'));
+    // The bubble's double-tap recognizer holds the arena before a tap wins.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    expect(retried, [messageId]);
+  });
+
+  testWidgets('group details say what one message costs', (tester) async {
+    await _pump(
+      tester,
+      CreateGroupPage(
+        injectedContacts: const [
+          GroupPickerContact(userId: _member, name: 'Member', verified: true),
+        ],
+        onCreate: (_, _) async => Result.success(_state()),
+      ),
+    );
+    final memberPicker = find.byKey(const ValueKey('group-picker-$_member'));
+    await tester.ensureVisible(memberPicker);
+    await tester.tap(memberPicker);
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const ValueKey('group-next')));
+    await tester.tap(find.byKey(const ValueKey('group-next')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('group-fanout-notice')), findsOneWidget);
+    expect(find.textContaining('about 150 copies'), findsOneWidget);
   });
 }
 

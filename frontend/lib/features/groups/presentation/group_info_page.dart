@@ -168,6 +168,8 @@ class _GroupInfoViewState extends State<GroupInfoView> {
                 kind: AppButtonKind.outline,
               ),
             ),
+          const SizedBox(height: AppSpacing.x4),
+          const GroupFanoutNotice(),
           if (_busy) ...[
             const SizedBox(height: AppSpacing.x4),
             const LinearProgressIndicator(),
