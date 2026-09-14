@@ -9,10 +9,10 @@
 > the only key that can update an existing install of `com.orviniq.chat.beta`: do
 > not destroy them.
 
-This is the operating manual for shipping the Private Experimental Beta to its
-20–30 trusted users. It is written for whoever performs a release, including the
-person who inherits this project later. The governing decision is
-[ADR-042](decisions.md).
+This was the operating manual for shipping the Private Experimental Beta to its
+20–30 trusted users, written for whoever performed a release, including the
+person who inherits this project later. The governing decision was
+[ADR-042](decisions.md), superseded by ADR-067 on 2026-09-07.
 
 Read [What is actually at stake](#what-is-actually-at-stake) before you touch
 anything in here. The rest of the document only makes sense once that is clear.
@@ -39,8 +39,9 @@ For this client, "erases all app data" is not an inconvenience:
 
 A user with a recovery secret and a second enrolled device can restore their
 identity and pull history device-to-device (pieces 10 and 17). A single-device
-user cannot. Ratchets and MLS epochs are never transferred, so every pairwise
-session and every group needs re-establishing regardless.
+user cannot. Ratchets and group control state are never transferred, so every
+pairwise session needs re-establishing regardless, and a group returns only when
+one of its members sends the group's current control state.
 
 So: **the signing key and the application ID are user-data-preservation
 mechanisms, not build configuration.** Treat them accordingly.
@@ -57,10 +58,12 @@ mechanisms, not build configuration.** Treat them accordingly.
 | Signature schemes | v2 + v3; **not** v1, **not** v4 |
 | Certificate SHA-256 | recorded in `android/beta-release-identity.properties` |
 
-`android/beta-release-identity.properties` is committed and contains no secret.
-Gradle reads the application ID from it and `tool/verify_release_apk.sh` verifies
-artifacts against it, so the built identity and the verified identity cannot
-drift apart.
+`android/beta-release-identity.properties` was committed and contains no secret.
+Gradle read the application ID from it and `tool/verify_release_apk.sh` verified
+artifacts against it, so the built identity and the verified identity could not
+drift apart. It was deleted with the `beta` flavor; the recorded fingerprint is
+still readable with
+`git show 8267429:frontend/android/beta-release-identity.properties`.
 
 The Android `namespace` is still `com.example.communication_platform`. That is a
 build-time Kotlin/resource package only; it is not part of the installed
@@ -82,7 +85,7 @@ They are **separate applications** that coexist on a device:
 - Beta is `com.orviniq.chat.beta`, Production is `com.orviniq.chat`.
 - Neither can ever upgrade into the other — different application IDs — so a
   shared key would buy exactly zero upgrade continuity.
-- The Beta key has to be reachable for frequent releases, and eventually by CI.
+- The Beta key had to be reachable for frequent releases, and eventually by CI.
   The Production key is meant to stay offline (`docs/deployment-and-release.md`).
   One key cannot be both.
 - If the Beta key leaks, an attacker can sign something that updates *beta*
@@ -90,8 +93,9 @@ They are **separate applications** that coexist on a device:
   Production-identity forgery.
 
 **Production release is deliberately unsigned.** `buildTypes.release` sets no
-signing config; the identity is attached at flavor level to Beta only. So the
-Production release APK still builds and is still verified on every CI run, but
+signing config; the identity was attached at flavor level to Beta only, and no
+flavor carries one since Beta was deleted. So the Production release APK still
+builds and is still verified on every CI run, but
 the OS cannot install it, which means it cannot reach a user by accident. CI
 asserts this in `tool/ci.sh` — note that Flutter copies the artifact to
 `app-production-release.apk`, dropping the `-unsigned` suffix the Android build
@@ -139,9 +143,9 @@ See [Key custody](#key-custody).
 
 ## Key custody
 
-Scale: one private beta, 20–30 users, currently one active release maintainer.
-This is deliberately not an enterprise ceremony, but it is not "keep it
-somewhere safe" either.
+Scale while the channel ran: one private beta, 20–30 users, one active release
+maintainer. This is deliberately not an enterprise ceremony, but it is not "keep
+it somewhere safe" either.
 
 | Question | Answer |
 |---|---|
@@ -155,8 +159,9 @@ somewhere safe" either.
 
 ### Detecting exposure
 
-The signing certificate fingerprint is public and pinned in
-`beta-release-identity.properties`. Exposure of the *private* key is not
+The signing certificate fingerprint is public and was pinned in
+`beta-release-identity.properties`, which git still holds at `8267429`.
+Exposure of the *private* key is not
 directly detectable, so treat these as exposure until proven otherwise:
 
 - the keystore or properties file appearing in `git status`, a diff, or a
@@ -235,32 +240,32 @@ channel. Recipients can check the signer themselves with
 ./tool/verify_release_apk.sh --production build/app/outputs/flutter-apk/app-production-release.apk
 ```
 
-Beta mode checks the application ID, that apksigner verifies the signature, that
-there is exactly one signer, that v2 and v3 are present and v1 is not, that the
-signer is not the Android debug certificate, that the certificate SHA-256 equals
-the recorded identity, and that the packaged native core really does export
-`cp_crypto_v1_beta_mls_operation`.
+Beta mode, deleted with the flavor, checked the application ID, that apksigner
+verified the signature, that there was exactly one signer, that v2 and v3 were
+present and v1 was not, that the signer was not the Android debug certificate,
+that the certificate SHA-256 equalled the recorded identity, and that the packaged
+native core really did export `cp_crypto_v1_beta_mls_operation`.
 
-It also reads the **compiled network security config back out of the artifact**
-and checks that it pins the provisioned host, carries both SPKI pins, disables
-cleartext, and packages the private CA as a trust anchor. Resource names are
-obfuscated in a release build, so the check resolves them through the resource
+It also read the **compiled network security config back out of the artifact**
+and checked that it pinned the provisioned host, carried both SPKI pins, disabled
+cleartext, and packaged the private CA as a trust anchor. Resource names are
+obfuscated in a release build, so the check resolved them through the resource
 table rather than by filename.
 
-Note what that check does and does not prove. Android applies this configuration
+Note what that check did and did not prove. Android applies this configuration
 to the platform's Java HTTP stacks and WebView; the app's own REST and WebSocket
 traffic runs on `dart:io`, which does not consult it (ADR-043). Trust for the
-app's traffic comes from `BETA_PRIVATE_CA_PEM`, which `build_beta_release.sh`
-also passes to the client as `BETA_PRIVATE_CA_PEM_BASE64`, and is covered by
+Beta app's traffic came from `BETA_PRIVATE_CA_PEM`, which `build_beta_release.sh`
+also passed to the client as `BETA_PRIVATE_CA_PEM_BASE64`, and is covered by
 `test/features/networking/transport_security_test.dart` against a real TLS
-handshake. The artifact check confirms the declarative Android configuration is
-correct and consistent with provisioning; it is defence in depth, not the
+handshake. The artifact check confirmed the declarative Android configuration was
+correct and consistent with provisioning; it was defence in depth, not the
 mechanism protecting API traffic.
 
 Production mode checks the application ID, that the artifact is **not** signed,
-and that the packaged native core does **not** export the beta MLS symbol — the
-Beta/Production native separation asserted at the artifact level, not just in
-the build tree.
+and that the packaged native core does **not** export the beta MLS symbol. That
+was the Beta/Production native separation asserted at the artifact level; since
+the beta MLS core was deleted, it asserts that the core stays deleted.
 
 Every check fails closed. A check that cannot run is an error, never a pass.
 
@@ -273,8 +278,9 @@ as an update to what users already have.
 ./tool/verify_upgrade_continuity.sh --old <previous release apk> --new <candidate apk>
 ```
 
-This uninstalls the app under test on the target device. **Never point it at a
-device holding real beta data.**
+This uninstalled the app under test on the target device, and it was deleted with
+the `beta` flavor. **Never point anything that uninstalls at a device holding real
+beta data.**
 
 ### Tier 1 — always runs
 
@@ -397,11 +403,11 @@ Never work around this with `adb install -d` or an uninstall.
 
 ## CI secret contract
 
-There is no CI in this repository today, and the release path deliberately does
-not require one. `tool/build_beta_release.sh` runs the same way on a workstation
-and on a runner.
+This contract belonged to the deleted Beta pipeline, which deliberately did not
+require CI: `tool/build_beta_release.sh`, deleted with the flavor, ran the same way
+on a workstation and on a runner.
 
-If CI is introduced later, it needs these injected as secrets — and nothing
+A CI release of it would have needed these injected as secrets — and nothing
 else:
 
 | Secret | Purpose |
@@ -413,14 +419,14 @@ else:
 | `BETA_SERVER_ORIGIN`, `BETA_PRIVATE_CA_SHA256`, `BETA_PRIMARY_SPKI_SHA256`, `BETA_BACKUP_SPKI_SHA256` | Provisioning. Public values, but keep them out of the repository. |
 | `BETA_PRIVATE_CA_PEM` | Path to the private CA certificate on the runner. Public material, but the build fails closed without it, and the app cannot reach the server without it. |
 
-Supplying only *some* of the `CP_BETA_*` variables is a hard failure, never a
+Supplying only *some* of the `CP_BETA_*` variables was a hard failure, never a
 silent fallback to the file.
 
-Before adopting a hosted CI, weigh what it means: the beta signing key would
-live on someone else's infrastructure. For 20–30 users, a maintainer-run
-release is the smaller risk, and it is what this pipeline is built for. The
-Android NDK, Rust toolchain, and AWS-LC build also have to be reproduced on the
-runner, which is not free.
+Against a hosted CI: the beta signing key would have lived on someone else's
+infrastructure. For 20–30 users, a maintainer-run release was the smaller risk,
+and it was what this pipeline was built for. The Android NDK, Rust toolchain,
+and AWS-LC build would also have had to be reproduced on the runner, which is
+not free.
 
 ## Primary references
 

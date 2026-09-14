@@ -1,14 +1,15 @@
 # Deployment and release
 
-What the initial deployment *is* - its audience, its maturity tiers, what may be
-claimed about it, and what must be disclosed - is decided by
-[ADR-044](decisions.md), and what it *says* to the people who receive it - the
-maturity vocabulary, the disclosure, and the one acknowledgement - is decided by
-[ADR-045](decisions.md), and those two are authoritative for the deployment
-definition. The release signing, key custody, and upgrade-continuity verification that
+What the initial deployment *was* - its audience, its maturity tiers, what may be
+claimed about it, and what must be disclosed - was decided by
+[ADR-044](decisions.md), which [ADR-075](decisions.md) closed: the `beta` flavor that
+carried the deployment was deleted with the closed-beta MLS core, so no flavor builds its
+artifact now. What a build *says* to the people who receive it - the maturity vocabulary,
+the disclosure, and the one acknowledgement - is decided by [ADR-045](decisions.md). The
+release signing, key custody, and upgrade-continuity verification that
 [Beta release signing and key continuity](release-signing.md) specified under ADR-042
-belonged to the `beta` flavor, which was deleted with the closed-beta MLS core; no
-flavor is signed now. This document covers the surrounding release process.
+belonged to the same `beta` flavor; no flavor is signed now. This document covers the
+surrounding release process.
 
 ## Environments
 
@@ -109,6 +110,14 @@ by contract tests and conservative client behavior, not runtime version guessing
 8. For the Private Experimental deployment, deliver the written disclosure with the
    artifact. This is release-blocking, not a courtesy.
 
+   No flavor builds that artifact now: `DeploymentDisclosure.privateExperimental` is
+   rendered only for `AppEnvironment.beta`, which no entry point has used since the
+   `beta` flavor was deleted, so this step and step 9 have no artifact to travel with.
+   Point 6 below, and the `disclosureExperimentalGroups` string it is written from, still
+   describe the deleted closed-beta MLS track; groups now run on the same pairwise
+   sessions as direct messages, and no build switches them off on any phone
+   ([ADR-075](decisions.md)).
+
    It carries **the same points, in the same order, as `DeploymentDisclosure.privateExperimental`**,
    and it is written from that list rather than from this paragraph, so the two cannot
    drift apart the way they had by revision 4 — this step previously claimed "the same
@@ -134,7 +143,8 @@ by contract tests and conservative client behavior, not runtime version guessing
    6. group messaging uses experimental encryption that is unfinished, non-standard
       and unreviewed, and an update can reset a group and delete everything in it; on a
       phone whose processor it has not been tested on it is switched off instead, and
-      direct messages are unaffected either way (ADR-055, ADR-056);
+      direct messages are unaffected either way (ADR-055 and ADR-056, both closed by
+      ADR-075);
    7. voice rooms and file attachments do nothing, and the display name and photo are not
       published — contacts see the registered username;
    8. the build is for evaluation among people who already trust each other, and is not
@@ -215,7 +225,7 @@ self-hosted configuration or compile-time decisions and cannot weaken cryptograp
   DB and crypto formats.
 - Android downgrades are not assumed safe. Roll forward with a fixed build unless a tested
   compatibility path exists.
-- Never restore old ratchet/MLS state over newer state.
+- Never restore old ratchet or group control state over newer state.
 - Preserve encrypted user data during application/schema failures; do not "repair" by
   deletion without explicit informed user action.
 - Backend rollback must preserve API behavior required by deployed clients and avoid
@@ -229,11 +239,10 @@ Before every production release, isolate the environment from foreign networks a
 - version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx,
   LiveKit, and TURN are local/self-hosted;
 - Android installation/update works. Web loading is post-v1.
-- two-phase enrollment, cross-signing/SAS, PQXDH and the production-approved PQ MLS
-  profile, device-log gossip,
-  register/login/message/attachment/voice/identity-recovery flows work;
-- seven-day queue gaps trigger fresh-Welcome recovery and history transfers succeed only
-  device-to-device with no server-history dependency;
+- two-phase enrollment, cross-signing/SAS, PQXDH and pairwise group fan-out, device-log
+  gossip, register/login/message/attachment/voice/identity-recovery flows work;
+- seven-day queue gaps trigger group state recovery from a member, and history transfers
+  succeed only device-to-device with no server-history dependency;
 - DNS and connectivity checks do not contact foreign services.
 
 ## Incident response
