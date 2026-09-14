@@ -203,7 +203,7 @@ void main() {
         'fifteen minutes apart at best',
         'stored only on this phone',
         'never restores messages',
-        'experimental encryption that is not finished',
+        'the same encryption as direct messages',
         'not built yet',
         'already trust each other',
       ]) {

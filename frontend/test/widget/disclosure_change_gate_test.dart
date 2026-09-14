@@ -14,7 +14,7 @@ void main() {
   testWidgets('it re-presents the statement and marks what moved', (
     tester,
   ) async {
-    await _pump(tester, acknowledged: 4);
+    await _pump(tester, acknowledged: 8);
 
     expect(find.byKey(const ValueKey('disclosure-change-screen')), findsOne);
     expect(find.text('What this app tells you has changed'), findsOne);
@@ -22,16 +22,20 @@ void main() {
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOne);
     expect(find.text('What this build is'), findsOne);
 
-    // Five points have moved since revision 4 - the four of revision 5 and the
-    // group point at revision 6 (ADR-055) - and five badges say so. The mark is
-    // a labelled badge rather than a colour, so a screen reader reaches it too.
-    expect(find.text('New or changed'), findsNWidgets(5));
+    // Two points have moved since revision 8 - the delivery and group points
+    // revision 9 rewrote (ADR-076) - and two badges say so. The mark is a
+    // labelled badge rather than a colour, so a screen reader reaches it too.
+    expect(find.text('New or changed'), findsNWidgets(2));
+    expect(
+      find.textContaining('the same encryption as direct messages'),
+      findsOne,
+    );
+    // And the six that did not move carry no badge, which is what makes the
+    // badge mean anything.
     expect(
       find.textContaining('A message waits on the server only until'),
       findsOne,
     );
-    // And the four that did not move carry no badge, which is what makes the
-    // badge mean anything.
     expect(
       find.textContaining('Nobody outside the project has reviewed'),
       findsOne,
@@ -63,13 +67,13 @@ void main() {
   });
 
   testWidgets('it is translated, not left in English', (tester) async {
-    await _pump(tester, acknowledged: 4, locale: const Locale('fa'));
+    await _pump(tester, acknowledged: 8, locale: const Locale('fa'));
 
     expect(
       find.text('آنچه این برنامه دربارهٔ خودش می‌گوید تغییر کرده است'),
       findsOne,
     );
-    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(5));
+    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(2));
     expect(find.textContaining('What this app tells you'), findsNothing);
   });
 

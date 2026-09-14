@@ -474,7 +474,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureBestEffortDelivery =>
-      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
+      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
 
   @override
   String get disclosureMessagesExpireUnread =>
@@ -494,8 +494,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.';
 
   @override
-  String get disclosureExperimentalGroups =>
-      'Group chats use experimental encryption that is not finished, not standardised, and has not been independently reviewed. An update can reset a group and delete everything in it. On a phone whose processor it has not been tested on, group chats are switched off instead.';
+  String get disclosurePairwiseGroups =>
+      'Group messages use the same encryption as direct messages. The signed changes that add and remove members are built on top of it, and nobody outside the project has reviewed them. Each group message is sent as one encrypted copy for each device of each member. If this phone loses a group\'s current state, only another member\'s app can send it again, and until then you cannot send messages in that group.';
 
   @override
   String get disclosureUnbuiltSurfaces =>

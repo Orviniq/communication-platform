@@ -58,7 +58,12 @@ enum DisclosurePoint {
   /// network on exactly the connection most of these users pay for, and every
   /// earlier revision left it out of the application while stating it in the
   /// written handover (ADR-052).
-  bestEffortDelivery(since: 5),
+  ///
+  /// Revised at revision 9 (ADR-076): the sentence offering receiving while
+  /// closed from Settings is gone. ADR-053's gate withholds that capability
+  /// from every build that reaches a user, and the Settings row says so, so the
+  /// sentence promised a switch its reader could not find.
+  bestEffortDelivery(since: 9),
 
   /// The server's mailbox is a queue, not a store: an envelope the device never
   /// drains is pruned on the operator's retention timer and is then
@@ -93,17 +98,24 @@ enum DisclosurePoint {
   /// (ADR-030); history transfers device-to-device or not at all (ADR-028).
   recoveryExcludesHistory(since: 1),
 
-  /// Revised at revision 6, when the group surface was withheld (ADR-055), and
-  /// again at revision 7 when it reopened on one measured ABI (ADR-056).
+  /// What a group costs the person in it. Rewritten at revision 9 and renamed
+  /// from `experimentalGroups`, because every clause of revisions 6 and 7
+  /// described the closed-beta MLS track ADR-075 deleted: experimental
+  /// encryption that was neither finished nor standardised, a group an update
+  /// could reset under ADR-036's disposable-state rule, and a group surface
+  /// withheld from a phone whose processor had not been measured (ADR-055,
+  /// ADR-056). None of that is true of a group now. A group is a set of the
+  /// pairwise sessions direct messages use (`backend/CLIENT_CONTRACT.md` §F),
+  /// no build withholds it, and with ADR-036 closed no decision makes its state
+  /// disposable, so the reset claim went with the rest.
   ///
-  /// Revision 6 said group chats were switched off, which was true of every
-  /// device. It is now true of only some, so the point carries both halves:
-  /// ADR-036's disposable-state rule, which applies wherever the surface is
-  /// available, and the fact that a phone whose processor has not been measured
-  /// is withheld it instead. Neither half may be dropped — a reader whose
-  /// groups work needs the first, and a reader whose groups are missing needs
-  /// the second or will conclude the application is broken.
-  experimentalGroups(since: 7),
+  /// What stays true is what the design costs: the signed membership changes
+  /// on top of those sessions are this project's own construction and nobody
+  /// outside it has reviewed them (ADR-017); a message is one encrypted copy
+  /// for each device of each member (ADR-075); and a group whose control state
+  /// this phone loses waits, with its composer withheld, until another member
+  /// sends that state again (`docs/ui-specification.md` §9).
+  pairwiseGroups(since: 9),
 
   /// Surfaces that are routed and visible but not implemented. Revised at
   /// revision 5: it named search among them, and search is built — the chat
@@ -132,7 +144,7 @@ enum DisclosurePoint {
     DisclosurePoint.deviceOnlyHistory => l10n.disclosureDeviceOnlyHistory,
     DisclosurePoint.recoveryExcludesHistory =>
       l10n.disclosureRecoveryExcludesHistory,
-    DisclosurePoint.experimentalGroups => l10n.disclosureExperimentalGroups,
+    DisclosurePoint.pairwiseGroups => l10n.disclosurePairwiseGroups,
     DisclosurePoint.unbuiltSurfaces => l10n.disclosureUnbuiltSurfaces,
     DisclosurePoint.intendedUse => l10n.disclosureIntendedUse,
   };
@@ -162,14 +174,14 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 8,
+    revision: 9,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,
       DisclosurePoint.messagesExpireUnread,
       DisclosurePoint.deviceOnlyHistory,
       DisclosurePoint.recoveryExcludesHistory,
-      DisclosurePoint.experimentalGroups,
+      DisclosurePoint.pairwiseGroups,
       DisclosurePoint.unbuiltSurfaces,
       DisclosurePoint.intendedUse,
     ],
