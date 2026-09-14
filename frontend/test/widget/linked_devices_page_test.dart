@@ -193,7 +193,7 @@ void main() {
       HistoryTransferState.transferring: 'directly between your devices',
       HistoryTransferState.partialTransfer: 'only held part of your history',
       HistoryTransferState.noSource: 'The server has no history copy',
-      HistoryTransferState.groupReinviteRequired: 'fresh group epoch',
+      HistoryTransferState.groupReinviteRequired: "the group's current state",
       HistoryTransferState.queueGapRecovery: 'recover before setup is complete',
       HistoryTransferState.done: 'Available local history has been stored',
     };

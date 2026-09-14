@@ -39,9 +39,10 @@ final class HistoryTransferStatusView extends StatelessWidget {
         AppStatusKind.warning,
       ),
       HistoryTransferState.groupReinviteRequired => (
-        'Group re-invitation required',
-        'A group member must invite this device into a fresh group epoch.',
-        AppStatusKind.warning,
+        'Groups arrive from their members',
+        "A group appears on this device once a member sends it the group's "
+            'current state.',
+        AppStatusKind.information,
       ),
       HistoryTransferState.queueGapRecovery => (
         'Recovering a queue gap',
