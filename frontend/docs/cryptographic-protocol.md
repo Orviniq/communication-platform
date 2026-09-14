@@ -11,7 +11,7 @@ declared. Independent review is a production release gate.
 
 A shared memory-safe crypto core MUST expose a narrow native FFI API to the version-1
 Android Flutter client. Dart code may orchestrate operations but MUST NOT implement
-PQXDH, ML-KEM, ratchets, MLS, signatures, KDFs,
+PQXDH, ML-KEM, ratchets, signatures, KDFs,
 AEAD, secretstream, or secret zeroization.
 
 The selected foundation implementation is Rust:
@@ -23,15 +23,12 @@ The selected foundation implementation is Rust:
   XChaCha20-Poly1305, SHA-2, and HKDF; `minicbor` is used behind typed,
   strict deterministic-CBOR encoders/decoders;
 - libsodium 1.0.22, through `libsodium-sys-stable` 1.24.0, provides
-  `secretstream_xchacha20poly1305`;
-- OpenMLS remains the preferred future owner of RFC 9420 group state, subject to
-  the candidate and release gates frozen in
-  [Post-quantum MLS profile](mls-profile.md); and
+  `secretstream_xchacha20poly1305`; and
 - a future browser Wasm library must be produced from the same locked Rust source,
   provider choices, serialization, and test vectors as Android.
 
 Signal's official `libsignal` supports Android but does not present a supported browser
-runtime contract. OpenMLS and the selected providers require separate Web validation.
+runtime contract. The selected providers require separate Web validation.
 Therefore dependency selection remains a mandatory implementation spike for any future
 Web release; inability to produce one interoperable reviewed Android/Wasm core blocks
 that Web release rather than causing pure-Dart ML-KEM, classical-only messaging, or
@@ -55,9 +52,8 @@ Android-only completion is not a protocol downgrade or an alternate suite.
 | Random IDs | 128 random bits, encoded as UUIDv4 at UI/API boundaries |
 | Two-device setup | Hybrid X25519 + ML-KEM-768 PQXDH-style establishment; no silent downgrade |
 | Two-device messaging | Signal Double Ratchet, bounded skipped-key storage |
-| Group key agreement | MLS 1.0 (RFC 9420) |
-| MLS suite | Candidate `MLS_128_MLKEM768X25519_AES256GCM_SHA384_Ed25519`; no production numeric ID until IANA assignment; see [PQ MLS profile](mls-profile.md) |
-| Application signatures | Ed25519, only for authorization/control events that require durable attribution |
+| Group messaging | Pairwise fan-out: one Double Ratchet envelope for each recipient device. No group key agreement, group key, or epoch (server ADR-0001) |
+| Application signatures | Ed25519, only for authorization/control events that require durable attribution, group control events included |
 | Cross-signing | Ed25519 master, self-signing, and user-signing keys |
 | Backup AEAD | XChaCha20-Poly1305 with random 192-bit nonces |
 | Password/recovery KDF | Argon2id v1: 64 MiB, 3 iterations, parallelism 4, 16-byte salt, 32-byte output |
@@ -92,7 +88,6 @@ Each device owns independent key material:
 - an Ed25519 device signing key and an X25519 identity key;
 - a signed X25519 prekey and a bounded one-time-prekey pool;
 - an ML-KEM-768 signed prekey and bounded one-time-prekey pool;
-- MLS leaf secrets and key packages;
 - pairwise Double Ratchet sessions;
 - a random local storage key protected by the platform keystore.
 
@@ -226,37 +221,39 @@ only an additional contribution and can never replace the authenticated PQ layer
 
 ## Groups
 
-Each device is an MLS member with an authenticated credential bound to its device public
-bundle. `BasicCredential.identity` is the deterministic-CBOR tuple
-`[protocol_version, user_uuid, device_uuid, SHA-256(canonical_device_bundle)]`; its MLS
-signature key is the Ed25519 credential key from that bundle. The client-side MLS
-Authentication Service validates the KeyPackage/LeafNode signature, exact user/device
-reference identifiers, bundle hash, cross-signature chain to the verified master key,
-active backend device listing, and verified device-log extension whenever a credential
-is introduced or updated. A mismatch quarantines the operation and requires visible
-re-verification; the backend listing alone is never cryptographic proof. A user with several
-devices contributes several MLS leaves. Application group roles are validated by signed
-control events in addition to MLS membership.
+A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F; server ADR-0001,
+recorded for the client in [ADR-075](decisions.md)). There is no group key agreement, no
+group key, no epoch, and no key package, and the client uploads no group key material.
 
-After every gate in the [PQ MLS profile](mls-profile.md) passes, KeyPackages use only
-that finalized suite and are padded to 4,096 or 16,384 bytes. No production KeyPackage
-is uploaded before then. Each device maintains one separately uploaded last-resort
-KeyPackage. It is used only when consumable packages are exhausted, and the UI/security
-status records that its reuse weakens forward secrecy for those initial Welcomes. No
-classical MLS fallback is allowed.
+A group message is encrypted independently for every live device of every active member and
+for every other live device of the sender, over the same hybrid PQXDH sessions and Double
+Ratchet a direct message uses. Starting any of those sessions from a bundle without PQ
+material is refused exactly as it is for a direct message. Every copy is its own padded
+envelope, so the backend never receives identical ciphertext for two recipients and learns
+neither the group nor its members. The fan-out is specified in
+[Pairwise transport version 1](pairwise-transport-v1.md), Group fan-out.
 
-MLS `PrivateMessage` is used for application and handshake content wherever permitted.
-Welcome, Commit, Proposal, GroupInfo, and application messages follow RFC 9420 processing
-and state-persistence rules. A commit is persisted transactionally before dependent
-application messages are accepted.
+Membership, roles, policies, and metadata change only through signed control events. The
+shared crypto core encodes each event as deterministic CBOR and signs
+`"chat:v1:group-control" || u32be(length) || canonical_event` with the signing device's
+Ed25519 key; it also returns the event's state hash,
+`SHA-256("chat:v1:group-control-state" || u32be(length) || canonical_event)`. Every event
+after the first names its predecessor's state hash inside its signed bytes, so a group's
+accepted events form one hash chain. Opening an event verifies the signature before a byte
+of the CBOR is decoded, and a decoded event must re-encode to exactly the signed bytes, so
+one event has one encoding and one state hash on every device. Dart never builds or parses
+the CBOR and never holds the key.
 
-To preserve the backend's no-shared-ciphertext property, each MLS object is wrapped in a
-fresh per-recipient Double Ratchet transport envelope. Sending identical MLS bytes as
-identical backend blobs is forbidden because it would link the recipient set.
+A receiver verifies each event under the key its account's authenticated device list and
+signed device log vouch for, checks the chain link, and checks the signer's authority
+against the roster the event was built on. No server-supplied roster exists to consult.
+Two events at one revision are a fork, and the group is quarantined rather than resolved by
+arrival order. The events, their operations, and their acceptance rules are defined in
+[Application-message protocol](message-protocol.md), Groups.
 
-Member removal commits advance the epoch. A removed member cannot derive future epoch
-secrets, but previously received plaintext cannot be remotely erased. Forks are
-quarantined and resolved only by the specified MLS policy; the UI does not guess.
+A removed member is sealed no copy of any message sealed after its removal is accepted.
+Content it already received cannot be remotely erased, and nothing is re-keyed, because
+there is no shared key to rotate.
 
 ## Safety numbers and cross-signing
 
@@ -299,8 +296,7 @@ At account setup the client generates a random high-entropy recovery secret with
 checksum and human-safe encoding. The encrypted backup contains the master,
 self-signing, and user-signing private keys plus required account identity material,
 including user-signing-key signatures over already verified peer master keys. It
-contains no archive/history key, device ratchet state, MLS epoch state, or message
-history.
+contains no archive/history key, device ratchet state, group state, or message history.
 
 Argon2id derives a wrapping key from the recovery secret and a random salt. Version 1 uses
 a 16-byte salt and 32-byte output, with a floor of 64 MiB memory, three iterations, and
@@ -316,8 +312,8 @@ The server cannot validate the recovery secret. A wrong secret is detected only 
 failure. Recovery restores account cross-signing identity only. A new device receives
 message history through encrypted, cross-signing-authorized ordinary envelopes from an
 existing online device. If no existing device is online, no history is available; the
-server has no copy. Live pairwise sessions start fresh, and current group membership
-requires a fresh authenticated Welcome when state is missing.
+server has no copy. Live pairwise sessions start fresh, and a group reaches the new device
+when a member sends it the group's current control state.
 
 An unlocked device may rotate recovery by generating a new secret and salt, rewrapping
 the same cross-signing identity material, uploading a higher-version backup, showing the
@@ -336,8 +332,8 @@ authenticated profile key arrives. During that bootstrap state the UI shows the 
 and a local deterministic placeholder avatar derived from
 `"chat:v1:placeholder-avatar:" || lowercase(username)`. It does not show unverified
 cached display names. A pairwise session distributes
-`profile.publish` to a DM peer; an MLS-authenticated profile announcement distributes it
-to group peers. Only a successfully authenticated profile with a live-device signer may
+`profile.publish` to a DM peer, and the same pairwise fan-out distributes it to group
+peers. Only a successfully authenticated profile with a live-device signer may
 replace the fallback.
 
 Until pairwise transport is implemented, development builds may use the explicitly
@@ -369,15 +365,12 @@ accepted peer repairs a stale or replayed `name_blob` with the converged record.
 peer receives the current record and key in its authenticated invite.
 
 Device-label blobs use an account-local label key and are readable only by the account's
-devices. MLS key packages are placed in a versioned wrapper containing the exact MLS
-KeyPackage length and bytes, then randomly padded to an allowed 4,096- or 16,384-byte
-backend bucket. The signed KeyPackage remains unmodified inside the wrapper.
+devices.
 
 ## Key lifecycle
 
 - Secrets are generated with the platform CSPRNG through the shared crypto core.
-- Ratchet message keys and obsolete MLS epoch secrets are erased as soon as allowed by
-  their protocols.
+- Ratchet message keys are erased as soon as the Double Ratchet allows.
 - Logout, revocation, database-key loss, or integrity failure wipes local content keys
   and session credentials.
 - No key, plaintext, nonce-bearing capability, or secret buffer crosses a log boundary.
@@ -396,8 +389,7 @@ interoperability fixtures, and an ADR; silent algorithm substitution is forbidde
 - [Binding backend client contract](../../backend/CLIENT_CONTRACT.md)
 - [Signal PQXDH specification](https://signal.org/docs/specifications/pqxdh/)
 - [Signal Double Ratchet specification](https://signal.org/docs/specifications/doubleratchet/)
-- [RFC 9420: Messaging Layer Security](https://www.rfc-editor.org/info/rfc9420/)
-- [OpenMLS](https://github.com/openmls/openmls)
+- [Server ADR-0001: pairwise Double Ratchet group fan-out](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - [RFC 9605: SFrame](https://www.rfc-editor.org/info/rfc9605)
 - [RFC 8949: CBOR](https://www.rfc-editor.org/info/rfc8949/)
 - [RFC 9106: Argon2](https://www.rfc-editor.org/info/rfc9106/)
