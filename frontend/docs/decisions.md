@@ -86,6 +86,451 @@ is not silently edited out of history.
 | ADR-073 | Accepted | A direct conversation is marked read from visibility rather than from the chat route's first frame, a message arriving into the conversation on screen is read where it lands, and a repeat mark is a no-op instead of a write (2026-09-10) | `ChatConversationView.initState` scheduled a post-frame `MarkConversationReadIntent`, which made mounting the route the whole of the test. Mounting is not reading: a chat route stays in the navigator behind a backgrounded application, and it is built and laid out before the platform has reported the application in front of anybody — so opening the application marked everything that had arrived while it was away as read, and would have reported it read to the sender the moment ADR-048's follow-up 4 wires `MarkConversationVisiblyRead`. The trigger becomes `VisibleConversationRegistry.conversationId`, which is mounted-and-foregrounded by construction and is already the thing that stops the alert path announcing the conversation on screen, so one definition of "the user is looking at this" now serves both. It is re-evaluated rather than fired once: returning to the foreground is a read, and so is a message landing in the conversation being looked at — which closes ADR-048's known limitation that such a message stayed unread until the user left and came back. `VisibleConversationReadMarker` holds the subscription and collapses signals arriving mid-write into one further pass; `MarkConversationReadIntent` is deleted, because the view no longer decides this and nothing else emitted it. `markConversationRead` returns before writing anything when no message is unread and the aggregate is already zero, which is what makes re-evaluation affordable: it now runs on every visibility change and every arrival, and a `conversations` write that changed no value still re-derives every summary the chat list draws and still answers the observer that provoked it. **Not done here**: read receipts are still never sent, `MarkConversationVisiblyRead` is still unwired, and groups are untouched — the piece-18 projection sets no unread state for them, so there is nothing there to mark. **Not verified**: no device run; the evidence is unit tests over the marker's gating and over the repository's write count. |
 | ADR-074 | Accepted | Supersedes the "not done here" of ADR-073: the second tick is reserved for *seen* and `MarkConversationVisiblyRead` is wired to the visibility trigger, so reading is the only thing that draws two ticks and the only thing that reports one (2026-09-10) | ADR-073 fixed which device state counts as read and left the sender's copy alone, and on a device that was the whole of what the user could see. Two faults met there. `AppIcons.delivered` drew `checkCheck` — **two ticks for delivered**, which a recipient's own device sends by itself the moment the inbox transaction commits, with nobody having looked at anything; and `MarkConversationVisiblyRead` was still unwired, so `receiptRead` was never sent by any client and the accent-coloured `read` state was **unreachable**. The result is that the only two-tick state the application could reach meant "stored on their phone", and a sender was told their message had been seen while the other person was on the chat list. A reader who has used any other messenger arrives knowing two ticks means somebody read what they sent and will not re-learn it here, so the glyph moves rather than the meaning: `delivered` becomes `check`, a new `read` token takes `checkCheck`, and the two arrival states are told apart by colour and by the label each already carried — `chatStateAccepted`, `chatStateDelivered` and `chatStateRead` were already written and already translated. Reading is then made reachable on ADR-073's trigger and no other: `_markRead` becomes `MarkConversationVisiblyRead`, so the receipt names exactly the message ids the local mark cleared and the two readings of "the user saw this" cannot disagree. `allowReadReceipts` is `!savedMessages`; `sendReceipt` already refuses anything that is not a direct conversation. Receipts are bounded by the mark, not by a timer: the second visibility change finds nothing left to clear and therefore sends nothing, which is what makes a trigger that fires on every foreground return and every arrival affordable. The receipt is a durable local commit before it is a network call (ADR-061), so one made with no connection is delivered by the ordinary cycle rather than lost. **No backend change, and none needed**: `openapi.json` has no occurrence of the word receipt, the server relays padded opaque blobs through the same three envelope routes, and a `receiptRead` is byte-indistinguishable from the `receiptDelivered` that already flows. **Not done here**: no privacy setting behind `allowReadReceipts`, which is passed `true` for every direct conversation — the parameter's existence says a setting was intended, and the disclosure makes no statement either way; no per-message reading, the receipt covers the conversation the way the mark does; and groups still set no unread state. |
 | ADR-075 | Accepted | Client-side record of server ADR-0001: a group is a set of pairwise sessions, so piece 19 is cancelled rather than blocked, the group screens open on every build, and each group message states what it costs — one encrypted copy for each device of each member — and is shown as sent only when its fan-out has ended; closes ADR-026, ADR-036, ADR-037, ADR-039, ADR-040, ADR-041, ADR-044, ADR-055 and ADR-056 (2026-09-13) | The server deleted every MLS route: `PUT /api/v1/me/devices/{device_id}/keypackages`, `GET /api/v1/me/devices/{device_id}/keypackages/count` and `POST /api/v1/users/{user_id}/keypackages/claim` answer `404`, `backend/openapi.json` holds 28 paths of which none accepts, stores or serves a key package, a Welcome, a commit or any other MLS artefact, and `KEYPACKAGE_BUCKETS` is gone. The five external prerequisites piece 19 waited on therefore gate nothing — meeting all of them would leave no server to talk to — so the item is cancelled, not blocked, and the nine decisions that shaped the closed-beta MLS track close with it. The pairwise design pays for groups in ciphertext rather than server state, and the screens say so rather than let a slow send in a large group look broken |
+| ADR-076 | Proposed (2026-09-14), awaiting the owner's answers to four questions | The `production` flavor, `com.orviniq.chat`, gains one persistent signing identity so that the owner can install real builds and test groups on real phones: an RSA-4096 v2+v3 key whose public fingerprint is committed beside the application ID and which reaches Gradle only from outside the repository; a release build without it fails closed unless it asks to be unsigned; one script provisions, signs, verifies and records each artifact; a signed build carries the deployment disclosure; and an artifact reaches a device only through `adb install`. It is not a public release and opens no gate. Once accepted it amends the clause ADR-042 made and ADR-067 carried that production packages unsigned, and the production half of ADR-045's D1 and D6 (2026-09-14) | Production packages unsigned by design, so no phone can install it, and groups have never run on a phone against the live server (ADR-075). The identity, the build mechanism and the verifier are the beta pipeline ADR-042 reviewed, readable at `8267429`, under production's names and without its in-repository properties fallback, because the rule behind them has not moved: Android updates an install only when the application ID and the signing certificate both match, and this client cannot survive the uninstall a mismatch forces (ADR-067 D2). What moves is custody. `deployment-and-release.md` step 4, `release-signing.md` and ADR-044 keep production's key offline; the recommendation under review keeps it on a networked workstation that already holds the private CA's key; and with `minSdk` 24 the first key signs every later update, so the custody chosen for this test is the custody a public release under the same identity inherits. That is the owner's to decide, and so are the finality of the application ID, the disclosure, and whether an agent session may run a signed build. ADR-045 withheld the disclosure and the Experimental designation from production only because it could not be installed. The pinned `flutter_tools` uninstalls an installed app before `flutter install` installs and whenever `flutter run` is refused over it, and `flutter drive` uninstalls when it finishes, so none of the three is pointed at a device that holds the signed app. Found on the way and left open for a decision of its own: ADR-043 and the code enforce no SPKI pin on the app's own traffic, while ADR-067 D4, server ADR-0027 and `backend/SECURITY.md` state or rely on the opposite. ADR-017, every production completion gate and ADR-053's gate stay closed. |
+
+## ADR-076 in full — production gets a key, and the first install is the part that cannot be taken back (2026-09-14)
+
+**Status:** Proposed, 2026-09-14. Release-identity, key-custody and build decision for the
+`production` flavor, written before any file it governs changes, so that the owner reviews
+it first. It is written by the first of seven production-signing prompts of 2026-09-14,
+which live outside this repository and are called prompts 1 to 7 below. Four points wait
+on the owner, one question each: D2 (is the application ID final), D3 (where the key
+lives), D8 (does production carry the disclosure) and D9 (may an agent session run a
+signed build). Until they are answered this record is edited in place. The answers, and
+the status they give it, are written under "Owner questions" at the end of this section
+before prompt 2 changes any code, and from acceptance on it changes only by a dated record.
+Once accepted it **amends** the clause ADR-042 made and ADR-067 carried that production
+packages unsigned, and the production half of ADR-045's D1 and D6. It adds no dependency,
+no cryptographic construction and no server route, and it **opens no production gate**.
+
+### The question
+
+> The owner wants to test groups on real phones with the `production` flavor, and that
+> flavor cannot be installed: `signingConfig = null` on `release` is deliberate. What does
+> giving it a signing key decide, what does the key cost before anyone installs it, and
+> which of those decisions are the owner's to make?
+
+### What the repository says, read on 2026-09-14 at `488dff9`
+
+- `android/app/build.gradle.kts` sets `signingConfig = null` on `release` and signs no
+  flavor, `test/architecture/android_release_signing_test.dart` pins both,
+  `tool/verify_release_apk.sh --production` fails a signed artifact, and `tool/ci.sh` and
+  `tool/ci.ps1` build and verify production unsigned. Each gives ADR-042's reason: an APK
+  the OS will not install cannot reach anybody by accident.
+- `lib/main_production.dart` reads the five `PRODUCTION_*` defines in
+  `lib/app/config/app_configuration.dart`, and a build without them stops at "App not
+  provisioned".
+- `release-signing.md` and `deployment-and-release.md` both say production gains a signing
+  identity only through an explicit, separate release decision. This is that decision.
+- The beta pipeline ADR-042 reviewed was deleted by ADR-075 and is readable at `8267429`:
+  the identity file, `tool/release_env.sh`, the keystore, backup, trust and release
+  scripts, the signed modes of `tool/verify_release_apk.sh`, and their architecture test.
+  It built beta releases 2 to 33. Its key, in `~/.communication-platform/beta-signing/`,
+  is still the only key that can update `com.orviniq.chat.beta` on the owner's phone and
+  emulator. Production never uses it, and nothing here may destroy it.
+- `lib/app/config/deployment_disclosure.dart` gives production no disclosure because
+  "Production is unsigned and cannot be installed at all", and ADR-045 D1 gives production
+  no maturity designation for the same reason.
+- Groups open on every build (ADR-075) and have never run on a device against the live
+  server.
+
+### D1. What this is, and what it is not
+
+**Decision.** `com.orviniq.chat` gains one persistent signing identity, so that the owner
+can install real production builds on their own devices and hand one to a known person
+taking part in a group test. It is not a public release: no store, download page or update
+channel carries it, and it passes no release gate. An installable build is not a released
+one.
+
+**Why.** The group screens open on every build and have never been used on a phone against
+the live server, and the one thing between the owner and that test is that production
+cannot be installed. Every reason the repository gives for keeping it unsigned is about
+reaching somebody by accident; handing a signed build to named people with the written
+disclosure is deliberate reach of the kind ADR-044's private handover already modelled.
+ADR-054 bounds it: its licence discharge rests on hand delivery to known people, so any
+distribution that is not hand-delivered needs the in-app notices surface of its follow-up
+F2 first.
+
+### D2. The identity
+
+**Decision.**
+
+| Property | Value |
+|---|---|
+| Application ID | `com.orviniq.chat`, frozen at the first install on any device |
+| Key | RSA 4096, `SHA384withRSA`, valid for 10 000 days (a little over 27 years) |
+| Keystore | PKCS12, alias `communication-platform-production` |
+| Certificate subject | `CN=com.orviniq.chat, OU=Production, O=Communication Platform` |
+| Signature schemes | v2 and v3; not v1, not v4 |
+| Public identity | A committed `android/production-release-identity.properties` holding `application.id` and `signing.certificate.sha256`, which Gradle and the verifier both read |
+
+**Why.** Each value is ADR-042's beta identity under production's names, and each reason
+carries over. Android updates an install only when the application ID and the signing
+certificate both match, and anything else is an uninstall this client cannot survive
+(ADR-067 D2). Android asks for a key valid for 25 years or more. `minSdk` is 24, the pinned
+SDK's `flutter.minSdkVersion`, so every device that can install the APK verifies v2 and a
+v1 signature is dead weight; v3 records the signer that a later rotation lineage would
+attach to on API 28 and above; and v4 serves only incremental installs, from a separate
+`.idsig` file that would have to travel beside every APK. One committed file means the
+built identity and the verified identity cannot drift apart. The certificate SHA-256 is
+public by construction: it names the signer, and it is neither an SPKI pin nor a CA
+digest, both of which stay out of the tree (ADR-067 D4). A subject that matches the
+application ID is coherence rather than correctness, and nothing checks it (ADR-067 D5).
+
+**Owner question 1: is `com.orviniq.chat` final?** The sources support the value: ADR-044
+reserved it for production, and ADR-067 moved it onto the domain the project operates.
+They do not yet support its finality, because the production release checklist in
+`deployment-and-release.md` still leaves "Final application name, icon, Android ID, and
+production origin approved" unticked. Before the first install the ID can change at no
+cost, as it did on 2026-09-07 (ADR-067 D3). After it, a different ID is a different
+application, and every install made under this one keeps its data only by never updating
+again. Only the ID and the key freeze: the name, the icon and the provisioned origin can
+change in an update, though local state stays bound to the accounts of the deployment it
+enrolled with.
+
+### D3. Custody
+
+**The recommendation.** The keystore and an untracked properties file live in
+`~/.communication-platform/production-signing/`, outside the repository. The keystore
+passphrase is in the owner's password manager, and each backup archive's passphrase is
+recorded apart from that archive. Two encrypted backups, made with GnuPG symmetric AES-256
+as `backup_beta_keystore.sh` made them, sit on two separate media, one of them in another
+building, and both are made and test-decrypted before the first install. Only the owner
+creates the key and the backups, in a shell no session can read. Prompt 7 stops unless the
+owner confirms that both backups open, because nothing enforced the requirement last time:
+`implementation-checklist.md` still records the reissued beta key's off-site backups as
+not existing, although that key signed what is installed on the owner's devices.
+
+**What the sources say.** `deployment-and-release.md` step 4 signs with an
+offline-controlled key. `release-signing.md` keeps the production key offline and argues
+that one key cannot be both reachable and offline. ADR-044, closed by ADR-075, has
+production's identity "created offline, with its own custody procedure", and ADR-042 kept
+production out of the beta's "warmer custody". None of them supports a key on a networked
+workstation.
+
+**What that key would be.** The folder sits in the owner's Windows profile, whose access
+list gives full control to SYSTEM and the Administrators group as well as to the owner's
+account. Git Bash mounts NTFS with `noacl`, so the `chmod 700` and `chmod 600` the beta
+scripts ran set no Windows permission: the profile's access list is the protection, not
+`chmod`. The properties file holds the passphrase in plain text beside the keystore, so
+against anything that runs as the owner (an editor extension, a Gradle plugin during a
+signed build, a dependency's build script, an agent session) the passphrase protects
+nothing, and whoever can read the folder holds the key. The machine is networked from the
+key's first day. It also holds the private CA's key in `backend/ops/tls/out/`, a root that
+server ADR-0027 describes as kept offline and whose theft ADR-043 accepted as a residual
+exposure for the closed beta. One compromise of this account would yield both the key every
+install trusts for its updates and the authority every install trusts for its connection.
+
+**Owner question 2: is a key on this workstation acceptable?**
+
+- **A. This workstation (the recommendation).** Custody as above, with the deviation from
+  step 4 recorded rather than hidden. Prompts 3 to 7 run as written: Gradle signs, and one
+  script builds, signs, verifies and records. It costs everything the paragraph above
+  describes, from the first day, and because the first key signs every later update (D4),
+  a public release under `com.orviniq.chat` would inherit a key that was never offline.
+  Moving the key offline later limits future exposure and undoes none of the past.
+- **B. An offline machine (what the sources require).** The key is created and kept on a
+  machine that is never networked. This workstation builds production with
+  `CP_PRODUCTION_UNSIGNED_BUILD=1`; the APK is carried to that machine, signed there with
+  `apksigner` (v2 and v3), and carried back to pass the verifier's `--production` mode.
+  The key never meets the network or the build toolchain. It costs an offline machine with
+  a JDK and the Android build tools, a round trip for every build, and a rewrite of D5, D7
+  and D9 and of prompts 3, 5, 6 and 7: Gradle never sees the key, the release script
+  splits into build, sign and verify, and no agent session can produce a signed build.
+- **C. A separate, disposable test identity (what the repository did last time).**
+  Production stays unsigned, and the test runs under another application ID signed by a
+  workstation key, which is `release-signing.md`'s own argument for giving the beta a key
+  of its own. `com.orviniq.chat` stays unfrozen, its key waits for a release decision that
+  can create it offline, and a lost or leaked test key costs only the test installs. It
+  costs a third flavor, which `deployment-and-release.md` says needs its own decision,
+  application ID, provisioning prefix and trust material; it brings back, under another
+  name, the flavor ADR-075 deleted; and it rewrites prompts 2 to 7.
+
+Under A or B the custody chosen now is the custody a public release under this identity
+inherits (D4).
+
+### D4. Loss and compromise
+
+**Decision.** These are recorded as the permanent facts they are, and the manual keeps
+them.
+
+- **A lost key, or a lost keystore passphrase.** No installed copy is ever updated again.
+  Rotation cannot help, because a v3 lineage is made by the old key signing the new one.
+  New installs need a new key and a new application ID, which is a different application,
+  and moving to it is an uninstall.
+- **A leaked key.** Whoever holds it can sign an update that every install accepts.
+  Devices below API 28 ignore v3 and verify v2, and below `--rotation-min-sdk-version` the
+  original key still signs, so for as long as `minSdk` stays below 28 the first key keeps
+  signing the v2 block and rotation cannot retire it. The remedy is a new application ID,
+  with the data loss that brings, and telling every holder out of band.
+- **What a backup is for.** It survives a loss. Nothing survives a leak.
+
+**Why.** `release-signing.md`'s failure modes, ADR-042 and ADR-044's first irreversible
+decision record exactly this for the beta key, and the primary sources read again on
+2026-09-14 still say it (see Sources). Production changes none of it, only how far it
+reaches: under D3's A or B, to the identity a public release would use.
+
+### D5. How a build gets the key
+
+**Decision.** Gradle takes signing material from two places, both outside the repository,
+and from nowhere else: the untracked properties file that
+`CP_PRODUCTION_SIGNING_PROPERTIES` names (`storeFile`, `storePassword`, `keyAlias`,
+`keyPassword`), or all four of `CP_PRODUCTION_KEYSTORE_FILE` (an absolute path),
+`CP_PRODUCTION_KEYSTORE_PASSWORD`, `CP_PRODUCTION_KEY_ALIAS` and
+`CP_PRODUCTION_KEY_PASSWORD`. A partial set of the four fails the build and never falls
+back to the file. No default properties file exists inside the repository. A Git Bash
+`/c/...` path is read as `C:/...`. The signing config is attached inside
+`create("production")` only, and only when material is present; `buildTypes.release` keeps
+`signingConfig = null` and never takes the debug config. `release-signing.md`'s rules carry
+over: no password in a Gradle file, no configuration cache for a signed build without first
+checking that signing material is not serialised to disk, and no signed build run with
+`--debug`, `--info` or `--verbose` logging.
+
+**Why.** It is the reviewed beta mechanism at `8267429` with one change. The beta build
+fell back to a properties file inside `android/`, and key material inside the working tree
+is one `git add -A` away from a commit. Attaching at flavor level keeps the key to
+`productionRelease`, because a build type's own signing config wins over the flavor's, and
+both `debug` and Flutter's `profile` type, which the pinned SDK's `FlutterPlugin.kt`
+creates with `initWith(debug)`, carry the debug config. So `productionDebug` and
+`productionProfile` stay debug-signed while claiming `com.orviniq.chat`, which is one
+reason D9 decides how an artifact reaches a device.
+
+### D6. A build without the key
+
+**Decision.** `productionRelease` with no signing material fails, with a message that says
+how to supply the key and never suggests creating one, unless
+`CP_PRODUCTION_UNSIGNED_BUILD=1` asks for an unsigned package. Material and that request
+together fail. A configured keystore that does not exist fails, naming the configured and
+the resolved path and saying to restore it from a backup. CI builds with the unsigned
+request and with no signing variable in its environment. The verifier's `--production`
+mode becomes the gate for a distributable artifact: apksigner verifies it, it has exactly
+one signer, v2 and v3 are present and v1 is not, the signer is not a debug certificate,
+and the certificate SHA-256 equals the committed fingerprint, which may not be empty.
+`--production-unsigned` keeps today's checks for CI. Both modes read the application ID
+from the identity file and keep the permission, component, exported-component and
+beta-symbol checks, and a check that cannot run is an error.
+
+**Why.** Today an unsigned production APK is harmless because it is the only kind. Once a
+signed kind exists, an unsigned artifact that looks like a release is the accident, and
+the beta build failed closed for that reason. The explicit request keeps what
+`deployment-and-release.md` relies on, a production build that keeps building and stays
+verifiable on every CI run, without letting a missing key pass silently; both at once is
+refused because nobody can mean both. A file name is no evidence either way: Flutter
+copies the artifact to `app-production-release.apk` signed or not (`release-signing.md`).
+From then on a bare `flutter build apk --release --flavor production` fails, and so does
+every document or script that still runs one.
+
+### D7. Provisioning
+
+**Decision.** `tool/build_production_release.sh --build-number N` is the only supported way
+to make a production artifact for a phone. Every build takes its public values fresh from
+`backend/ops/tls/out/` (the origin `https://chat.orviniq.com`, the CA certificate and its
+SHA-256, and the primary and backup SPKI pins), never from an earlier build. Before it
+builds, the script checks that the CA certificate matches its digest and has not expired,
+that the pins differ, and that the primary pin equals the one the live host serves, and it
+fails when the host cannot be reached. It renders the Android trust resources into
+`android/app/src/production/res/xml/network_security_config.xml` and
+`android/app/src/production/res/raw/provisioned_private_ca.pem`, both already ignored by
+Git, compiles the five defines, runs the verifier, and publishes only what the verifier
+passed: the APK, its SHA-256 and a metadata file under `build/production-release/`. No pin,
+CA digest or CA certificate is committed anywhere.
+
+**Why.** A signed build without provisioning stops at "App not provisioned" and tests
+nothing. The values are derived afresh because `backend/ops/tls/make_ca.sh` mints a new
+`server.key` on every run, so the primary pin can move with nothing in this repository
+noticing (ADR-067 D4), and `android/provisioning/README.md` already requires the CA
+fingerprint and both pins to be checked before compilation. The app's own REST and
+WebSocket traffic trusts the provisioned CA and nothing else, through `dart:io` (ADR-043).
+
+**A conflict this record does not resolve.** The repository says two different things
+about what the SPKI pins protect.
+
+- ADR-043 says leaf SPKI pinning is deliberately not implemented in Dart, keeps the
+  rendered pins as defence in depth for non-Dart traffic, and says no document may claim
+  they protect the app's API traffic. The code agrees.
+  `lib/app/dependencies/provisioned_transport.dart` takes only `certificateAuthority` from
+  `AndroidTrustMaterial`;
+  `lib/features/networking/infrastructure/tls/transport_security_native.dart` builds
+  `SecurityContext(withTrustedRoots: false)` from it and reads no pin; nothing in `lib/`
+  uses either pin after `app_configuration.dart` checks its format; and no source under
+  `android/app/src/main` names a pin.
+- ADR-067 D4 and server ADR-0027 say that a client built against a stale primary pin fails
+  the handshake closed, and ADR-0027 records that this was read off the posture rather
+  than observed. `backend/SECURITY.md` lists client SPKI pinning as what mitigates a stolen
+  TLS private key.
+
+If the code is right, a stale primary pin changes nothing for the app's connection,
+reaching the Login screen proves the origin and the CA but not the pins, and the live
+check above keeps the rendered configuration true rather than keeping anybody connected.
+Which statement is corrected, and whether the client should pin at all, is a decision of
+its own. Prompts 6 and 7 rely on neither statement until that decision is taken.
+
+### D8. The disclosure
+
+**Decision.** A signed production build is handed to people, so it carries the deployment
+disclosure that ADR-045 and ADR-052 require of such a build: the one mandatory
+acknowledgement at the end of enrollment, shown once more whenever its revision rises.
+Production maps to it, and development still carries none. `AppEnvironment.beta`, which no
+entry point has used since ADR-075 and which that record left "to a decision of their
+own", is deleted with everything only it uses. Before anything is installed, the two
+points that are false for production are rewritten. The group point still describes the
+deleted MLS track: unfinished experimental encryption, a group reset by an update, groups
+switched off on an untested processor. The delivery point offers a Settings switch that
+`SustainedDeliveryGate.availabilityIn` withholds from production (ADR-053). Each changed
+point raises its `since`, which raises the revision (ADR-052). A person handed the APK
+receives the written disclosure before installing it, and `third-party-notices.md` in the
+same handover (`deployment-and-release.md` steps 8 to 10, ADR-054).
+
+**Why.** ADR-045 D6 gave the disclosure to "a build that is handed to someone else", and
+gave production none only because nobody could be handed it. Signing removes the premise
+and leaves the rule.
+
+**Not decided: the designation.** ADR-045 has a second half, which the recommendation
+leaves out. Its D1 gives a distributed build one application-level designation,
+Experimental, carried by the banner, the launcher label and the task-switcher title, and
+withholds it from production "because it has none to carry and cannot be installed". Its
+D2 makes that designation load-bearing: an unlabelled surface is governed by it and by
+nothing stronger, so a distributed build without it lets every unlabelled screen read as
+though something stronger stood behind it. The sources therefore support carrying it as
+well. It costs three things. `test/golden/app_shell_golden_test.dart` renders its shell
+from production. The launcher label is a `resValue` in `android/app/build.gradle.kts`, a
+file prompt 2 is told not to change, so a yes moves that one line into prompt 5 or lifts
+the rule for it. And the retained beta app on the owner's devices already reads
+"Communication Platform (Experimental)", so two launcher entries would carry one name.
+
+**Owner question 3: does production carry the disclosure, and the designation with it?**
+
+### D9. Who runs what
+
+**Decision.**
+
+- The owner alone creates the key and makes and test-decrypts the backups, in their own
+  shell, because the passphrase must never be typed where a session can see it.
+- The version code starts at 1 and only rises. The release script refuses a build number
+  that is not above every `Version code:` recorded in `build/production-release/`. That
+  directory belongs to one checkout and `flutter clean` deletes it, so the check is a
+  convenience: the last installed number is also written into `release-signing.md`, and
+  Android refuses a downgrade by itself.
+- **An artifact reaches a device only through `adb install`, never with `-d`, and nothing
+  is uninstalled.** `flutter install`, `flutter run` and `flutter drive` are never pointed
+  at a device that holds the signed app, because in the pinned `flutter_tools` each of them
+  can delete it. `flutter install` uninstalls an installed app before it installs, by
+  default. `flutter run` installs through `AndroidDevice.installApp`, which answers a
+  refused install over an installed app by uninstalling that app and trying again; a
+  `productionDebug` or `productionProfile` build is debug-signed under the same application
+  ID (D5), and an unsigned or lower-numbered one is refused just the same. `flutter drive`
+  uninstalls the app when it finishes, unless `--keep-app-running` or `--use-existing-app`
+  is passed. `adb install` refuses and changes nothing.
+
+**Owner question 4: may an agent session run the signed build?** The sources predate agent
+sessions and do not settle it: `release-signing.md` gives access to "only the maintainer",
+and keeps the production key offline.
+
+- **A. Yes, through the script only (the recommendation).** A session may run
+  `tool/build_production_release.sh`, passing the properties file by its path through
+  `CP_PRODUCTION_SIGNING_PROPERTIES`. It never reads, prints, lists or copies that file,
+  the keystore, or anything else under `~/.communication-platform/`; it never runs
+  `keytool` or `apksigner sign` against the real keystore; and it never creates a key.
+  This is an instruction the session follows, not a permission it lacks: its shell runs as
+  the owner and could read the folder (D3).
+- **B. No.** The owner runs the signed build in their own shell, and sessions do everything
+  else, including the unsigned proofs and verifying the finished APK. It costs the owner
+  one step for every build.
+
+Under D3's option B no build on this workstation is signed, and the question does not
+arise.
+
+### D10. What stays closed
+
+**Decision.** Nothing here opens, satisfies or narrows:
+
+- ADR-017: nobody outside the project has assessed any part of the cryptography, the
+  pairwise transport or the group control events;
+- any production completion gate in `implementation-checklist.md`, or any item of the
+  production release checklist in `deployment-and-release.md`: a signed test build ticks
+  neither "signatures" nor "Android ID approved";
+- ADR-053's gate, which still withholds sustained delivery from production;
+- ADR-054's follow-up F2, so the build reaches nobody except by hand;
+- any public release.
+
+**Why.** A build a phone can install is an instrument for this test and nothing more.
+`threat-model.md` says the same of the deleted Private Experimental deployment: private,
+named, disclosed distribution is not a release, and it clears no gate.
+
+### Sources, read on 2026-09-14
+
+| Claim | Source | State on 2026-09-14 |
+|---|---|---|
+| A signing key should be valid for 25 years or more; a lost key can publish no update and cannot be regenerated; a leaked key lets someone else sign malicious updates | [Sign your app](https://developer.android.com/studio/publish/app-signing) | Page last updated 2026-03-06 |
+| Key rotation arrives with v3 on Android 9 (API 28); older platforms ignore v3 and verify v2, then v1 | [APK Signature Scheme v3](https://source.android.com/docs/security/features/apksigning/v3) | Page last updated 2026-07-13 |
+| Below `--rotation-min-sdk-version` the original signing key applies | [apksigner](https://developer.android.com/tools/apksigner) | Page last updated 2026-03-05 |
+| v4 serves incremental installs, needs a v2 or v3 signature beside it, and lives in a separate `.idsig` file | [APK Signature Scheme v4](https://source.android.com/docs/security/features/apksigning/v4) | Page last updated 2026-01-15 |
+| `flutter.minSdkVersion` is 24, and the `profile` build type is created with `initWith(debug)` | `packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt` and `FlutterPlugin.kt` | Pinned Flutter 3.44.7 |
+| `flutter install` uninstalls an installed app first; `flutter run` uninstalls one when an install over it is refused; `flutter drive` uninstalls the app when it finishes | `packages/flutter_tools/lib/src/commands/install.dart`, `lib/src/android/android_device.dart` (`installApp`, `startApp`), `lib/src/commands/drive.dart` and `lib/src/drive/drive_service.dart` | Pinned Flutter 3.44.7 |
+| Git Bash mounts NTFS with `noacl`, so `chmod` sets no Windows permission | `mount` in Git Bash | This workstation |
+
+### Consequences
+
+Once the owner has answered, the later prompts of this phase change these documents and
+tests, with the code they pin. Option B or C under question 2, or option B under question
+4, changes this list before any of them runs.
+
+- **Prompt 2, the disclosure.** Documents: the environment table and steps 8 and 9 of
+  `deployment-and-release.md`; the passage in `ui-specification.md` that names
+  `DeploymentDisclosure.privateExperimental`; `sustained-delivery-validation.md`, whose
+  account of the gate still names beta as the build users receive; the paragraph under
+  "Security release gates" in `threat-model.md`, which says why a disclosed private
+  distribution is not a release; `test/fixtures/tls/README.md`, which still names
+  `BETA_PRIVATE_CA_PEM_BASE64`; and an as-built line in this record. Tests:
+  `test/architecture/deployment_disclosure_test.dart` and
+  `test/architecture/sustained_delivery_gate_test.dart`, and in `test/widget/`
+  `disclosure_change_gate_test.dart`, `security_notice_test.dart`,
+  `device_enrollment_page_test.dart`, `settings_surfaces_test.dart`,
+  `bootstrap_app_test.dart`, `bootstrap_connection_test.dart` and
+  `contact_pages_test.dart`; with the designation, also `test/widget/app_shell_test.dart`
+  and `test/golden/app_shell_golden_test.dart`. Code: `deployment_disclosure.dart`,
+  `app_environment.dart`, `app_configuration.dart`, `app_environment_banner.dart` and
+  `sustained_delivery_gate.dart` in `lib/app/config/`, a comment in
+  `lib/features/settings/presentation/about_page.dart`, and `lib/l10n/app_en.arb` and
+  `app_fa.arb`.
+- **Prompt 3, the key tooling.** New: `android/production-release-identity.properties` with
+  an empty fingerprint, `tool/create_production_keystore.sh` and
+  `tool/backup_production_keystore.sh`. Changed: `tool/release_env.sh` and
+  `android/.gitignore`. Tests: `test/architecture/android_release_signing_test.dart`, or a
+  new architecture test beside it.
+- **Prompt 4, the owner's.** The fingerprint line of
+  `android/production-release-identity.properties`, and nothing else.
+- **Prompt 5, Gradle signing.** Documents: the signing paragraph and the production build
+  command in `frontend/README.md`; `deployment-and-release.md`; the Distribution section
+  of `platform-android.md`; the status banner of `release-signing.md`. Tests:
+  `test/architecture/android_release_signing_test.dart`, and
+  `test/architecture/crypto_core_boundary_test.dart`, which pins two lines of the
+  verifier. Code: `android/app/build.gradle.kts`, `tool/verify_release_apk.sh`,
+  `tool/ci.sh` and `tool/ci.ps1`.
+- **Prompt 6, provisioning and the release script.** Documents: `release-signing.md`,
+  rewritten as the production manual with D4, D9's install rule and one section on the
+  retained beta key, and its entry in `docs/README.md`; `android/provisioning/README.md`;
+  step 4 and the environment table of `deployment-and-release.md`; `platform-android.md`.
+  Tests: architecture pins for the renderer, the release script and the verifier's trust
+  checks. Code: new `tool/render_production_trust.sh` and
+  `tool/build_production_release.sh`, and `tool/verify_release_apk.sh`.
+- **Prompt 7, the install.** A run record under `docs/validation/production-release/`, a
+  dated line in this record, the last installed build number in `release-signing.md`, and
+  the "Direct signed APK distribution" row of `implementation-checklist.md`, with no gate
+  ticked. Its check that each device reaches the Login screen proves the origin and the
+  CA; D7 says what it does not prove.
+
+### Owner questions
+
+| # | Question | Point | Recommendation | What the sources support |
+|---|---|---|---|---|
+| 1 | Is `com.orviniq.chat` the final application ID? The first install freezes it. | D2 | Yes | The value (ADR-044, ADR-067); its approval is still an unticked checklist item |
+| 2 | Is a key kept on this workstation acceptable, rather than an offline machine? | D3 | A, this workstation | B, an offline machine |
+| 3 | Should production carry the disclosure? | D8 | Yes; the designation is not part of the recommendation | The disclosure and the designation (ADR-045 D1, D2 and D6) |
+| 4 | May an agent session run the signed build? | D9 | A, through the script only | Nothing either way |
+
+The answers, and the status they give this record, are written here before prompt 2
+changes any code.
 
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
