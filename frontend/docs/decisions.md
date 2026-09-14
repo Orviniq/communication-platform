@@ -654,6 +654,62 @@ build with neither the key nor the unsigned request, and one with both, each fai
 `a06f9e8a250dc68bf95bdf3f9ffcf4c5dc81e6bd82a785011cd1a1e964cc8395`; and `--production`
 refused a copy of the unsigned APK, which apksigner does not verify.
 
+**2026-09-14, prompt 6 (provisioning and the release script).** The new
+`tool/render_production_trust.sh` renders
+`android/app/src/production/res/xml/network_security_config.xml` from the template and
+copies the CA certificate to
+`android/app/src/production/res/raw/provisioned_private_ca.pem`, both ignored by Git. The
+new `tool/build_production_release.sh --build-number N [--build-name X]` is the script D7
+decides: it refuses to start without the recorded certificate, complete provisioning, the
+signing material and a rising build number, checks the live primary pin, renders trust on
+every build, builds with the five defines, runs the verifier, and publishes to
+`build/production-release/` only what the verifier passed.
+`tool/verify_release_apk.sh --production` also reads the packaged trust config back: the
+resource through the resource table, a `domain-config`, the provisioned host when
+`PRODUCTION_SERVER_ORIGIN` is set, at least two pins and both provisioned pins when they are
+set, cleartext off, and `raw/provisioned_private_ca` packaged; `--production-unsigned`
+checks no trust. `release-signing.md` is rewritten as the production manual,
+`docs/README.md` and `frontend/README.md` carry its new title, and
+`android/provisioning/README.md`, step 4 and the environment table of
+`deployment-and-release.md` and the Distribution section of `platform-android.md` name the
+script. `test/architecture/production_release_packaging_test.dart` pins the renderer, the
+script and the trust checks, and reads the defines and the value forms out of
+`app_configuration.dart`. The scripts adapt `render_beta_trust.sh`, `build_beta_release.sh`
+and the beta trust checks at `8267429`, and differ from them as follows. A new
+`require_production_provisioning` in `tool/release_env.sh`, which both scripts call,
+requires every value in the form `app_configuration.dart` accepts (an https origin with no
+user info, path, query or fragment and a DNS host, a 64-character hexadecimal CA digest, and
+two different 44-character base64 pins) where the beta checked presence alone, because the
+app refuses anything else when it starts. The renderer refuses a CA file that holds anything
+but one PEM certificate, because the file is copied whole into the artifact, and it hands
+`openssl` a native path, so a `/f/...` path opens under `MSYS_NO_PATHCONV=1`, which the beta
+renderer could not open. The script checks the live primary pin before it builds, gives up
+on a silent host after 30 seconds where `timeout` exists, and fails when it reads no
+certificate; the beta had no live check. It refuses a build number with a leading zero or
+more than nine digits, one that is not above every recorded `Version code:`, and one that
+already names an artifact; it refuses `CP_PRODUCTION_UNSIGNED_BUILD` set to any value, and a
+signing properties file or keystore inside the repository; it requires the JDK before it
+builds and exports `JAVA_HOME` only before verification, where the beta exported it before
+the build; and after verification it requires the artifact's `versionCode` to equal the
+build number. The metadata records the dirty-tree flag on a line of its own and names no pin
+or CA digest, and the summary points at D9's install rule rather than at the deleted
+continuity script, which uninstalls. In the verifier a pin is matched as a whole quoted text
+node, as the host already was, and `cleartextTrafficPermitted=true` on any element fails.
+D7's pin conflict is unchanged: the manual and the scripts rely on neither statement. The
+proofs, in order: the values derived from `backend/ops/tls/out/` were well formed and the
+live host served the primary pin; with a wrong `PRODUCTION_PRIVATE_CA_SHA256` the renderer
+failed at the digest comparison, and with `PRODUCTION_BACKUP_SPKI_SHA256` unset the release
+script failed at the provisioning check, each before anything was written or built; the
+renderer also refused identical pins, a short pin, an origin with a path, an http origin and
+a CA file carrying a second PEM block, and rendered from a `/f/...` path; the script also
+refused an unsigned request, no signing material, a leading zero, a properties path inside
+the repository and a missing build number; `--production` refused the signed but
+unprovisioned APK of prompt 5 at its missing `domain-config`, after 10 checks had passed;
+the release script then built number 1 from the clean revision `e0fe4a2` in 298 seconds, the
+signed artifact passed all 15 checks of `--production`, and the script published
+`communication-platform-0.1.0-1.apk` with its SHA-256 and its metadata; and the script then
+refused build number 1 again. Build 1 is spent and was not installed.
+
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
 **Status:** Accepted. Client-side record of server ADR-0001,

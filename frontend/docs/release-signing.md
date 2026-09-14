@@ -309,6 +309,8 @@ convenience. Android refuses a downgrade by itself, and the numbers are recorded
 number is never reused, even for a build nobody installed.
 
 - **Last installed build:** none yet.
+- **Built and never installed:** 1, made on 2026-09-14 from `e0fe4a2` to prove
+  `tool/build_production_release.sh`. The next build is 2 or higher.
 
 ### 3. Hand the build over
 
