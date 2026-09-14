@@ -565,6 +565,28 @@ this record **Accepted**. Each one binds as follows.
 Prompts 3 to 7 therefore run as written, and prompt 2's rule against changing a Gradle
 file stands.
 
+### As built
+
+**2026-09-14, prompt 2 (the disclosure).** `AppEnvironment.beta` is deleted, with its
+`BETA_*` provisioning defines, its Experimental title and private-experimental banner in
+both catalogues, and its sustained-delivery case. `DeploymentDisclosure.privateExperimental`
+is renamed `distributed`, production maps to it, and development still carries none.
+Revision 9 rewrites the two points that were false for production. The delivery point no
+longer offers the Settings switch for receiving while closed, which ADR-053's gate
+withholds; a test now ties that offer to the gate in both directions and in both
+languages. The group point, renamed `pairwiseGroups`, drops every MLS claim, the
+processor switch-off, and the reset claim, which no decision supports once ADR-036 is
+closed. It now says that group messages use the same encryption as direct messages, that
+the signed membership changes on top of it have not been reviewed by anyone outside the
+project, that each message is one encrypted copy for each device of each member, and that
+a group whose current state the phone loses comes back only when another member's app
+sends it, with sending in that group withheld until then. The other six points were read
+against what production does and are unchanged: voice rooms still route to a placeholder,
+file attachments and profile publishing still fail closed, and the review, retention,
+history, recovery and intended-use points do not depend on the flavor. The launcher
+label, the task-switcher title and the banner are unchanged, and no Gradle file, script
+or signing behaviour changed.
+
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
 **Status:** Accepted. Client-side record of server ADR-0001,
