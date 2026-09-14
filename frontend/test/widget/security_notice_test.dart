@@ -33,7 +33,7 @@ void main() {
   testWidgets('re-reading the notice offers nothing to acknowledge', (
     tester,
   ) async {
-    await _pump(tester, AppEnvironment.beta);
+    await _pump(tester, AppEnvironment.production);
 
     // Acknowledgement belongs to the enrollment gate alone. A second "I
     // understand" here would be a consent the app does not record and does not
@@ -45,7 +45,7 @@ void main() {
   testWidgets('the re-viewable notice carries the same build disclosure', (
     tester,
   ) async {
-    await _pump(tester, AppEnvironment.beta);
+    await _pump(tester, AppEnvironment.production);
 
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOneWidget);
     expect(find.text('What this build is'), findsOneWidget);
@@ -62,7 +62,7 @@ void main() {
     // error teaches it. Until the route has answered, this build's default is
     // a guess, and a guess in a mandatory statement is exactly the claim this
     // disclosure exists to avoid.
-    await _pump(tester, AppEnvironment.beta);
+    await _pump(tester, AppEnvironment.production);
 
     expect(
       find.textContaining('a time set by whoever runs the server'),
@@ -74,7 +74,7 @@ void main() {
   testWidgets('the deployment window replaces the wording that lacks it', (
     tester,
   ) async {
-    await _pump(tester, AppEnvironment.beta, limits: _publishedThreeDays);
+    await _pump(tester, AppEnvironment.production, limits: _publishedThreeDays);
 
     expect(
       find.textContaining('still waiting after 3 days is deleted'),
@@ -86,17 +86,23 @@ void main() {
     );
   });
 
-  testWidgets('production re-reads the permanent boundary and nothing else', (
+  testWidgets('development re-reads the permanent boundary and nothing else', (
     tester,
   ) async {
-    await _pump(tester, AppEnvironment.production);
+    // Development is never handed to anyone, so its notice is the permanent
+    // boundary without a statement about the build.
+    await _pump(tester, AppEnvironment.development);
 
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsNothing);
     expect(find.textContaining('What this build is'), findsNothing);
   });
 
   testWidgets('Settings re-opens the notice', (tester) async {
-    await _pump(tester, AppEnvironment.beta, initialLocation: '/settings');
+    await _pump(
+      tester,
+      AppEnvironment.production,
+      initialLocation: '/settings',
+    );
 
     final entry = find.byKey(const ValueKey('settings-security-notice'));
     expect(entry, findsOneWidget);
@@ -112,7 +118,7 @@ void main() {
   });
 
   testWidgets('the notice is translated, not left in English', (tester) async {
-    await _pump(tester, AppEnvironment.beta, locale: const Locale('fa'));
+    await _pump(tester, AppEnvironment.production, locale: const Locale('fa'));
 
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOneWidget);
     expect(find.text('این نسخه چیست'), findsOneWidget);

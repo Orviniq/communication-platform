@@ -687,8 +687,7 @@ fixed by the entry point, unselectable at runtime — and answers:
 
 | Build | Answer | Effect |
 |---|---|---|
-| beta (the distributed artifact) | `withheld` | not offered |
-| production | `withheld` | not offered |
+| production (the build handed to people, [ADR-076](decisions.md)) | `withheld` | not offered |
 | development | `measurementOnly` | offered, so the matrix can be run |
 
 In a withheld build, `SustainedDeliveryController` publishes
@@ -707,7 +706,7 @@ before ADR-051.
 
 ### What a withheld artifact still declares
 
-The manifest is shared by all three flavours, so a withheld build still declares
+The manifest is shared by both flavours, so a withheld build still declares
 `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`,
 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` and the `SustainedDeliveryService` itself
 — verified with `aapt2 dump badging` on the production release artifact built on
@@ -743,33 +742,33 @@ by a single observation, or by a row somebody typed.
 - There is no environment define, no remote value, no runtime setter and no debug
   override; `test/architecture/sustained_delivery_gate_test.dart` fails if any
   appears.
-- The same test asserts the ledger is empty, that beta and production are
-  withheld, that a full ledger of admissible records **does** open the gate (so
+- The same test asserts the ledger is empty, that production is withheld, that
+  a full ledger of admissible records **does** open the gate (so
   the mechanism is demonstrably real, not decoration), and that an emulated,
   short, or under-repeated ledger opens nothing.
-- It applies to the artifact users receive, not to a developer build: beta is
-  withheld by the same constant.
+- It applies to the artifact users receive, not to a developer build: production
+  is withheld by the same constant.
 - It is discoverable: the constant, this document, the release checklist in
   `deployment-and-release.md`, `platform-android.md` and `docs/README.md` all
   name each other.
 
 ### What it costs that measurement needs a build users do not receive
 
-The development flavour differs from the beta flavour in its application ID, its
-launcher label, its signing identity, its provisioning prefix, and its packaged
-native crypto profile. It is **identical** in the `main` Android source set —
-the manifest, `SustainedDelivery.kt`, `BackgroundDelivery.kt`, `MainActivity.kt`
-— and in `minSdk`/`targetSdk`/`compileSdk`. So a result measured on a
-development *release* build transfers to the beta build **for the Android
-platform mechanics**: service type, notification properties, freezer behaviour,
-Doze survival, restart recovery, vendor deviation.
+The development flavour differs from the production flavour in its application ID,
+its launcher label, its signing identity and its provisioning prefix. It is
+**identical** in the `main` Android source set — the manifest,
+`SustainedDelivery.kt`, `BackgroundDelivery.kt`, `MainActivity.kt` — in the
+packaged native crypto profile, and in `minSdk`/`targetSdk`/`compileSdk`. So a
+result measured on a development *release* build transfers to the production build
+**for the Android platform mechanics**: service type, notification properties,
+freezer behaviour, Doze survival, restart recovery, vendor deviation.
 
-It does **not** transfer for: anything touching the beta MLS native core,
-anything touching the provisioned origin's TLS path or its certificate authority,
-and the behaviour of the frozen signing identity across an upgrade. And it can
-never measure the beta artifact's *gate*, only its mechanics — a build with the
-gate open is by construction not the build users get. Those limits are the price
-of being able to measure at all, and they are stated rather than papered over.
+It does **not** transfer for: anything touching the provisioned origin's TLS path
+or its certificate authority, and the behaviour of the frozen signing identity
+across an upgrade. And it can never measure the production artifact's *gate*, only
+its mechanics — a build with the gate open is by construction not the build users
+get. Those limits are the price of being able to measure at all, and they are
+stated rather than papered over.
 
 ---
 

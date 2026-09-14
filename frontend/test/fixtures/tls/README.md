@@ -17,5 +17,7 @@ used by any build or deployment, protects nothing, and must never be treated as
 a secret or reused anywhere. The signing keys for both authorities were
 discarded at generation time, so neither can issue anything further.
 
-None of this is release provisioning. The real Beta authority reaches the app
-through `BETA_PRIVATE_CA_PEM_BASE64`; see `docs/release-signing.md`.
+None of this is release provisioning. The real authority reaches a provisioned
+build through `PRODUCTION_PRIVATE_CA_PEM_BASE64`, or through
+`DEVELOPMENT_PRIVATE_CA_PEM_BASE64` in the development flavor; see
+`android/provisioning/README.md`.

@@ -14,7 +14,7 @@ void main() {
   testWidgets('it re-presents the statement and marks what moved', (
     tester,
   ) async {
-    await _pump(tester, acknowledged: 4);
+    await _pump(tester, acknowledged: 8);
 
     expect(find.byKey(const ValueKey('disclosure-change-screen')), findsOne);
     expect(find.text('What this app tells you has changed'), findsOne);
@@ -22,16 +22,20 @@ void main() {
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOne);
     expect(find.text('What this build is'), findsOne);
 
-    // Five points have moved since revision 4 - the four of revision 5 and the
-    // group point at revision 6 (ADR-055) - and five badges say so. The mark is
-    // a labelled badge rather than a colour, so a screen reader reaches it too.
-    expect(find.text('New or changed'), findsNWidgets(5));
+    // Two points have moved since revision 8 - the delivery and group points
+    // revision 9 rewrote (ADR-076) - and two badges say so. The mark is a
+    // labelled badge rather than a colour, so a screen reader reaches it too.
+    expect(find.text('New or changed'), findsNWidgets(2));
+    expect(
+      find.textContaining('the same encryption as direct messages'),
+      findsOne,
+    );
+    // And the six that did not move carry no badge, which is what makes the
+    // badge mean anything.
     expect(
       find.textContaining('A message waits on the server only until'),
       findsOne,
     );
-    // And the four that did not move carry no badge, which is what makes the
-    // badge mean anything.
     expect(
       find.textContaining('Nobody outside the project has reviewed'),
       findsOne,
@@ -63,13 +67,13 @@ void main() {
   });
 
   testWidgets('it is translated, not left in English', (tester) async {
-    await _pump(tester, acknowledged: 4, locale: const Locale('fa'));
+    await _pump(tester, acknowledged: 8, locale: const Locale('fa'));
 
     expect(
       find.text('آنچه این برنامه دربارهٔ خودش می‌گوید تغییر کرده است'),
       findsOne,
     );
-    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(5));
+    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(2));
     expect(find.textContaining('What this app tells you'), findsNothing);
   });
 
@@ -99,21 +103,21 @@ void main() {
     }
   });
 
-  testWidgets('a build that carries no disclosure renders no gate', (
+  testWidgets('only a build that carries the disclosure has a gate', (
     tester,
   ) async {
-    // Production is unsigned and uninstallable, and development is never handed
-    // to anyone; neither may render Private Experimental wording.
-    for (final environment in const [
-      AppEnvironment.production,
-      AppEnvironment.development,
-    ]) {
-      expect(
-        environment.deploymentDisclosure,
-        isNull,
-        reason: '$environment must have nothing to re-present',
-      );
-    }
+    // Development is never handed to anyone, so it has nothing to re-present.
+    // Production is handed to named people (ADR-076), so it carries the one
+    // statement this gate re-presents.
+    expect(
+      AppEnvironment.development.deploymentDisclosure,
+      isNull,
+      reason: 'development must have nothing to re-present',
+    );
+    expect(
+      AppEnvironment.production.deploymentDisclosure,
+      same(DeploymentDisclosure.distributed),
+    );
   });
 }
 
@@ -132,7 +136,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        appEnvironmentProvider.overrideWithValue(AppEnvironment.beta),
+        appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
       ],
       child: MaterialApp(
         locale: locale,
@@ -144,7 +148,7 @@ Future<void> _pump(
         home: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
           child: DisclosureChangePage(
-            disclosure: DeploymentDisclosure.privateExperimental,
+            disclosure: DeploymentDisclosure.distributed,
             acknowledgedRevision: acknowledged,
             onAcknowledged: () => onAcknowledged?.call(),
           ),

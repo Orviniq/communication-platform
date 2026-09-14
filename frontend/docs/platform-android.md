@@ -624,9 +624,23 @@ Because distribution is a direct APK rather than an App Bundle through a store,
 Play App Signing does not apply: the application signing key is the distribution
 identity permanently, and there is no upload-key reset if it is lost. The deleted
 `beta` flavor carried a frozen application ID and a single persistent signing key for
-that reason; [Beta release signing and key continuity](release-signing.md) (ADR-042)
-records its custody and what the retained key still controls. No flavor is signed now,
-and production gains an identity only through an explicit release decision.
+that reason (ADR-042), and its retained key still controls the beta installs. Production
+now carries the same pair under its own names ([ADR-076](decisions.md)): the application
+ID and the certificate fingerprint recorded in
+`android/production-release-identity.properties`, and one persistent key that signs
+`productionRelease` alone. Without that key the release build fails closed, unless it
+explicitly asks to package unsigned, as CI does.
+
+A production artifact for a phone is made only by `tool/build_production_release.sh`
+(ADR-076 D7). It takes the five provisioning values afresh for every build, checks the CA
+certificate against its digest and its expiry and the primary pin against the one the
+live host serves, renders the Android trust resources that
+[`android/provisioning/README.md`](../android/provisioning/README.md) describes, builds with
+the five defines, and publishes to `build/production-release/` only what
+`tool/verify_release_apk.sh --production` passed. An artifact reaches a device only through
+`adb install`, never with `-d`, and nothing is uninstalled.
+[Production release signing and key continuity](release-signing.md) is the manual for the
+key, the build, the install rule and the retained beta key.
 
 ## Primary references
 

@@ -46,7 +46,7 @@ The documents use three requirement words:
 - [Testing strategy](testing-strategy.md)
 - [Sustained delivery: field validation and its gate](sustained-delivery-validation.md)
 - [Deployment and release](deployment-and-release.md)
-- [Beta release signing and key continuity](release-signing.md)
+- [Production release signing and key continuity](release-signing.md)
 - [Third-party notices](third-party-notices.md)
 
 ## Derived exports

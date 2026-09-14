@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/deployment_disclosure.dart';
+import 'package:communication_platform/app/config/sustained_delivery_gate.dart';
 import 'package:communication_platform/features/devices/application/acknowledge_deployment_disclosure.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,32 +15,37 @@ Map<String, dynamic> _catalogue(String path) =>
 /// somebody who accepted an older one.
 void main() {
   test('only a build that is handed to someone else carries a disclosure', () {
-    // Production packages unsigned and cannot be installed (ADR-042), and the
-    // development flavor is never distributed. Neither may render Private
-    // Experimental wording, so temporary text cannot leak into a release that
-    // no longer deserves it.
-    expect(AppEnvironment.production.deploymentDisclosure, isNull);
-    expect(AppEnvironment.development.deploymentDisclosure, isNull);
+    // ADR-076 hands production builds to named people, so production states
+    // what it is. The development flavor is never distributed and names itself
+    // in its own banner, so it carries no statement that could reach a build
+    // nobody is handed.
     expect(
-      AppEnvironment.beta.deploymentDisclosure,
-      same(DeploymentDisclosure.privateExperimental),
+      AppEnvironment.production.deploymentDisclosure,
+      same(DeploymentDisclosure.distributed),
     );
+    expect(AppEnvironment.development.deploymentDisclosure, isNull);
+    // And there is no third build for the statement to reach: the beta
+    // environment went with the flavor that carried it (ADR-075, ADR-076).
+    expect(AppEnvironment.values, const [
+      AppEnvironment.development,
+      AppEnvironment.production,
+    ]);
   });
 
   test('the disclosure states every fact ADR-052 requires, in order', () {
-    expect(DeploymentDisclosure.privateExperimental.points, const [
+    expect(DeploymentDisclosure.distributed.points, const [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,
       DisclosurePoint.messagesExpireUnread,
       DisclosurePoint.deviceOnlyHistory,
       DisclosurePoint.recoveryExcludesHistory,
-      DisclosurePoint.experimentalGroups,
+      DisclosurePoint.pairwiseGroups,
       DisclosurePoint.unbuiltSurfaces,
       DisclosurePoint.intendedUse,
     ]);
     expect(
       DisclosurePoint.values.toSet(),
-      DeploymentDisclosure.privateExperimental.points.toSet(),
+      DeploymentDisclosure.distributed.points.toSet(),
       reason:
           'A point that exists but is never shown is a fact the decision '
           'recorded and the app withholds.',
@@ -53,7 +59,7 @@ void main() {
     // test; the only way to make that pass is to raise the point's `since`; and
     // raising `since` past the revision fails here. The bump is therefore
     // forced by the edit rather than remembered by a person.
-    final disclosure = DeploymentDisclosure.privateExperimental;
+    final disclosure = DeploymentDisclosure.distributed;
     final highest = disclosure.points
         .map((point) => point.since)
         .reduce((a, b) => a > b ? a : b);
@@ -79,7 +85,7 @@ void main() {
   test('the disclosure revision moves whenever the disclosure moves', () {
     // ADR-045 rejects periodic re-consent - repetition of an unchanged warning
     // measurably destroys it - and makes re-consent content-triggered instead.
-    expect(DeploymentDisclosure.privateExperimental.revision, 8);
+    expect(DeploymentDisclosure.distributed.revision, 9);
 
     final english = _catalogue('lib/l10n/app_en.arb');
 
@@ -95,10 +101,8 @@ void main() {
       'minutes apart at best, usually far less often, and not at all while it '
       'is saving battery, while Data Saver is on and you are using mobile '
       'data, if you have not opened the app for several days, or if you have '
-      'force-stopped it. In Settings you can turn on receiving while closed, '
-      'which does better on most phones but uses more battery and shows a '
-      'permanent notice while it is on. Nothing about any of this is '
-      'guaranteed, so do not rely on it for anything urgent.',
+      'force-stopped it. Nothing about any of this is guaranteed, so do not '
+      'rely on it for anything urgent.',
     );
     // Two wordings for one point, and both are pinned. The second states the
     // deployment's own retention window; the first is what a reader is shown
@@ -133,11 +137,13 @@ void main() {
       'yours that still works.',
     );
     expect(
-      english['disclosureExperimentalGroups'],
-      'Group chats use experimental encryption that is not finished, not '
-      'standardised, and has not been independently reviewed. An update can '
-      'reset a group and delete everything in it. On a phone whose processor '
-      'it has not been tested on, group chats are switched off instead.',
+      english['disclosurePairwiseGroups'],
+      'Group messages use the same encryption as direct messages. The signed '
+      'changes that add and remove members are built on top of it, and nobody '
+      'outside the project has reviewed them. Each group message is sent as '
+      'one encrypted copy for each device of each member. If this phone loses '
+      "a group's current state, only another member's app can send it again, "
+      'and until then you cannot send messages in that group.',
     );
     expect(
       english['disclosureUnbuiltSurfaces'],
@@ -150,6 +156,41 @@ void main() {
       'This build is for trying out among people who already trust each '
       'other. It is not suitable if your safety depends on your messages '
       'staying private.',
+    );
+  });
+
+  test('the group point makes no claim the deleted MLS track made', () {
+    // Revisions 6 and 7 described the closed-beta MLS track: experimental
+    // encryption, a group an update could reset, and groups switched off on an
+    // unmeasured processor. ADR-075 deleted that track and opened groups on
+    // every build, so none of it may return in either language (ADR-076).
+    const retracted = {
+      'lib/l10n/app_en.arb': [
+        'experimental',
+        'reset',
+        'switched off',
+        'processor',
+      ],
+      // "Experimental", "reset", "switched off" and "processor".
+      'lib/l10n/app_fa.arb': ['آزمایشی', 'بازنشانی', 'خاموش', 'پردازنده'],
+    };
+    for (final entry in retracted.entries) {
+      final strings = _catalogue(entry.key);
+      expect(strings.containsKey('disclosureExperimentalGroups'), isFalse);
+      final group = (strings['disclosurePairwiseGroups']! as String)
+          .toLowerCase();
+      for (final claim in entry.value) {
+        expect(
+          group.contains(claim),
+          isFalse,
+          reason: '${entry.key} still says "$claim" about groups',
+        );
+      }
+    }
+    // And the Persian text says what replaced it: "direct" messages.
+    expect(
+      _catalogue('lib/l10n/app_fa.arb')['disclosurePairwiseGroups'],
+      contains('مستقیم'),
     );
   });
 
@@ -202,22 +243,48 @@ void main() {
     ]) {
       expect(delivery, contains(promise));
     }
-    // Revision 4's addition, and the three things it may not omit: that the
-    // better tier exists, that it costs something the user can see, and that it
-    // is still not a guarantee. A build that ships the capability while the
-    // disclosure denies it, or that describes it without its cost, fails here.
+    // Revision 4 added the opt-in tier with the three things it may not omit:
+    // that the tier exists, that it costs something the user can see, and that
+    // it is still not a guarantee. Revision 9 took the offer out again, because
+    // ADR-053's gate withholds the tier from the build that carries this text,
+    // and a disclosure may not promise a switch its reader cannot find
+    // (ADR-076). So the offer follows the gate in both directions and in both
+    // languages: a build that withholds the tier may not offer it, and a build
+    // that offers it may not describe it without its cost.
     final sustained = File(
       'lib/features/synchronization/presentation/sustained_delivery_page.dart',
     );
     expect(sustained.existsSync(), isTrue);
-    for (final promise in const [
-      'In Settings you can turn on receiving while closed',
-      'uses more battery',
-      'permanent notice',
-      'Nothing about any of this is guaranteed',
-    ]) {
-      expect(delivery, contains(promise));
+    final persian =
+        _catalogue('lib/l10n/app_fa.arb')['disclosureBestEffortDelivery']!
+            as String;
+    final carriers = AppEnvironment.values.where(
+      (environment) => environment.deploymentDisclosure != null,
+    );
+    expect(carriers, isNotEmpty);
+    for (final environment in carriers) {
+      final offered = SustainedDeliveryGate.availabilityIn(
+        environment,
+      ).mayOffer;
+      for (final promise in const [
+        'In Settings you can turn on receiving while closed',
+        'uses more battery',
+        'permanent notice',
+      ]) {
+        expect(
+          delivery.contains(promise),
+          offered,
+          reason: '$environment ${offered ? 'offers' : 'withholds'} the tier',
+        );
+      }
+      // "In Settings", in Persian.
+      expect(
+        persian.contains('در تنظیمات'),
+        offered,
+        reason: '$environment: the Persian text follows the same gate',
+      );
     }
+    expect(delivery, contains('Nothing about any of this is guaranteed'));
   });
 
   test('an alert surface may not deny a delivery path the build composes', () {
@@ -352,42 +419,42 @@ void main() {
   });
 
   group('what a changed statement owes an earlier reader', () {
-    const disclosure = DeploymentDisclosure.privateExperimental;
+    const disclosure = DeploymentDisclosure.distributed;
 
     test('a current reader is asked nothing', () {
-      expect(disclosure.requiresReacknowledgement(8), isFalse);
-      expect(disclosure.changedSince(8), isEmpty);
+      expect(disclosure.requiresReacknowledgement(9), isFalse);
+      expect(disclosure.changedSince(9), isEmpty);
     });
 
-    test('a reader from revision 7 sees only the retention point', () {
-      // The client can state the deployment's retention window for the first
-      // time. Nothing else moved, so nothing else is re-shown - repeating an
+    test('a reader from revision 8 sees the delivery and group points', () {
+      // Revision 9 rewrote the two points that were false for the build that
+      // carries the statement: the delivery point offered a switch ADR-053
+      // withholds, and the group point described the deleted MLS track.
+      // Nothing else moved, so nothing else is re-shown - repeating an
       // unchanged warning is what ADR-045 rejects.
-      expect(disclosure.requiresReacknowledgement(7), isTrue);
-      expect(disclosure.changedSince(7), {
-        DisclosurePoint.messagesExpireUnread,
+      expect(disclosure.requiresReacknowledgement(8), isTrue);
+      expect(disclosure.changedSince(8), {
+        DisclosurePoint.bestEffortDelivery,
+        DisclosurePoint.pairwiseGroups,
       });
     });
 
-    test(
-      'a reader from revision 5 or 6 sees the group and retention points',
-      () {
-        // ADR-055 withheld the group surface and ADR-056 reopened it on the one
-        // ABI that was measured; revision 8 moved the retention point. Nothing
-        // else they accepted has changed.
-        for (final accepted in const [5, 6]) {
-          expect(disclosure.requiresReacknowledgement(accepted), isTrue);
-          expect(
-            disclosure.changedSince(accepted),
-            {
-              DisclosurePoint.messagesExpireUnread,
-              DisclosurePoint.experimentalGroups,
-            },
-            reason: 'a reader from revision $accepted',
-          );
-        }
-      },
-    );
+    test('a reader from revision 5, 6 or 7 also sees the retention point', () {
+      // Revision 8 let the retention point state the deployment's own window.
+      // Nothing else they accepted has changed.
+      for (final accepted in const [5, 6, 7]) {
+        expect(disclosure.requiresReacknowledgement(accepted), isTrue);
+        expect(
+          disclosure.changedSince(accepted),
+          {
+            DisclosurePoint.bestEffortDelivery,
+            DisclosurePoint.messagesExpireUnread,
+            DisclosurePoint.pairwiseGroups,
+          },
+          reason: 'a reader from revision $accepted',
+        );
+      }
+    });
 
     test('a reader from revision 4 sees exactly what moved', () {
       expect(disclosure.requiresReacknowledgement(4), isTrue);
@@ -395,7 +462,7 @@ void main() {
         DisclosurePoint.bestEffortDelivery,
         DisclosurePoint.messagesExpireUnread,
         DisclosurePoint.deviceOnlyHistory,
-        DisclosurePoint.experimentalGroups,
+        DisclosurePoint.pairwiseGroups,
         DisclosurePoint.unbuiltSurfaces,
       });
     });
@@ -532,35 +599,39 @@ void main() {
     );
   });
 
-  test('no user-facing string calls this build a beta or claims assessment', () {
-    // ADR-044 permits "beta" only where it names the frozen application ID, the
-    // Gradle flavor or the AppEnvironment value, none of which are localized.
-    // ADR-045 adds the assessment words: no surface may label itself audited,
-    // reviewed, verified, supported, stable or production-ready.
-    const forbidden = [
-      'beta',
-      'audited',
-      'stable release',
-      'production ready',
-      'production-ready',
-    ];
-    for (final path in ['lib/l10n/app_en.arb', 'lib/l10n/app_fa.arb']) {
-      final strings = _catalogue(path);
-      for (final entry in strings.entries) {
-        if (entry.key.startsWith('@') || entry.value is! String) {
-          continue;
-        }
-        final value = (entry.value as String).toLowerCase();
-        for (final word in forbidden) {
-          expect(
-            value.contains(word),
-            isFalse,
-            reason: '$path/${entry.key} says "$word" to a user',
-          );
+  test(
+    'no user-facing string calls this build a beta or claims assessment',
+    () {
+      // ADR-044 held that "beta" promises a feature-complete, reviewed
+      // pre-release, and no build here is one; the flavor and the environment
+      // value that carried the word are deleted. ADR-045 adds the assessment
+      // words: no surface may label itself audited, reviewed, verified,
+      // supported, stable or production-ready.
+      const forbidden = [
+        'beta',
+        'audited',
+        'stable release',
+        'production ready',
+        'production-ready',
+      ];
+      for (final path in ['lib/l10n/app_en.arb', 'lib/l10n/app_fa.arb']) {
+        final strings = _catalogue(path);
+        for (final entry in strings.entries) {
+          if (entry.key.startsWith('@') || entry.value is! String) {
+            continue;
+          }
+          final value = (entry.value as String).toLowerCase();
+          for (final word in forbidden) {
+            expect(
+              value.contains(word),
+              isFalse,
+              reason: '$path/${entry.key} says "$word" to a user',
+            );
+          }
         }
       }
-    }
-  });
+    },
+  );
 
   test('the composed environment cannot disagree with the rendered one', () {
     // The disclosure is chosen by `appEnvironmentProvider`, while the shell

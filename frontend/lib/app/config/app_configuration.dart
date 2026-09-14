@@ -81,19 +81,10 @@ final class CompileTimeBootstrapConfiguration
     ),
   );
 
-  static const _betaValues = AppProvisioningValues(
-    serverOrigin: String.fromEnvironment('BETA_SERVER_ORIGIN'),
-    privateCaSha256: String.fromEnvironment('BETA_PRIVATE_CA_SHA256'),
-    primarySpkiSha256: String.fromEnvironment('BETA_PRIMARY_SPKI_SHA256'),
-    backupSpkiSha256: String.fromEnvironment('BETA_BACKUP_SPKI_SHA256'),
-    privateCaPemBase64: String.fromEnvironment('BETA_PRIVATE_CA_PEM_BASE64'),
-  );
-
   AppProvisioningValues get _selectedValues =>
       provisioningValues ??
       switch (environment) {
         AppEnvironment.development => _developmentValues,
-        AppEnvironment.beta => _betaValues,
         AppEnvironment.production => _productionValues,
       };
 

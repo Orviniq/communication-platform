@@ -220,9 +220,9 @@ void main() {
     tester,
   ) async {
     // Every flavor but development composes the unsupported profile
-    // ports, so the Private Experimental build cannot publish a profile.
-    // It used to claim a "development-only fake transport" instead and
-    // let the user press Save into a generic error (ADR-045).
+    // ports, so a production build cannot publish a profile. It used to
+    // claim a "development-only fake transport" instead and let the user
+    // press Save into a generic error (ADR-045).
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -230,7 +230,7 @@ void main() {
     await _pump(
       tester,
       const EditProfilePage(),
-      environment: AppEnvironment.beta,
+      environment: AppEnvironment.production,
     );
 
     expect(
@@ -279,7 +279,6 @@ void main() {
       publishingIn(AppEnvironment.development),
       ProfilePublishing.developmentStandIn,
     );
-    expect(publishingIn(AppEnvironment.beta), ProfilePublishing.notBuilt);
     expect(publishingIn(AppEnvironment.production), ProfilePublishing.notBuilt);
     expect(ProfilePublishing.notBuilt.canPublish, isFalse);
   });

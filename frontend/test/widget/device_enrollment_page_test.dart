@@ -177,7 +177,7 @@ void main() {
   });
 
   testWidgets(
-    'the private experimental gate discloses the build before it can be accepted',
+    'the production gate discloses the build before it can be accepted',
     (tester) async {
       await _pump(
         tester,
@@ -188,7 +188,7 @@ void main() {
             _identityBytes(display: false),
           ),
         ),
-        environment: AppEnvironment.beta,
+        environment: AppEnvironment.production,
       );
 
       // Every point ADR-045 requires is on the one screen the user has to
@@ -203,7 +203,7 @@ void main() {
         'fifteen minutes apart at best',
         'stored only on this phone',
         'never restores messages',
-        'experimental encryption that is not finished',
+        'the same encryption as direct messages',
         'not built yet',
         'already trust each other',
       ]) {

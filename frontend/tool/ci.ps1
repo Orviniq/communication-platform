@@ -42,22 +42,53 @@ try {
         '--target',
         'lib/main_development.dart'
     )
-    Invoke-CheckedCommand 'flutter' @(
-        'build',
-        'apk',
-        '--release',
-        '--flavor',
-        'production',
-        '--target',
-        'lib/main_production.dart'
+    # CI never holds the production key (ADR-076 D6). The release build asks for
+    # an unsigned package explicitly, and every production signing variable is
+    # removed from its environment, so a key in the caller's environment can
+    # neither sign this artifact nor fail the build for asking for both. This
+    # script runs in the caller's session, so the caller's values are put back
+    # afterwards.
+    $signingVariables = @(
+        Get-ChildItem -Path 'Env:' | Where-Object {
+            $_.Name -match '^CP_PRODUCTION_(KEYSTORE_|KEY_)' -or
+            $_.Name -eq 'CP_PRODUCTION_SIGNING_PROPERTIES'
+        }
     )
-    # Production must keep building and stay verifiable, while remaining
-    # undistributable: unsigned, correctly identified, and free of the Beta MLS
-    # core. Flutter copies this artifact without the "-unsigned" suffix the
-    # Android build gave it, so the name alone is never evidence.
+    $previousUnsignedRequest = $env:CP_PRODUCTION_UNSIGNED_BUILD
+    try {
+        foreach ($variable in $signingVariables) {
+            Remove-Item -Path "Env:$($variable.Name)"
+        }
+        $env:CP_PRODUCTION_UNSIGNED_BUILD = '1'
+        Invoke-CheckedCommand 'flutter' @(
+            'build',
+            'apk',
+            '--release',
+            '--flavor',
+            'production',
+            '--target',
+            'lib/main_production.dart'
+        )
+    }
+    finally {
+        foreach ($variable in $signingVariables) {
+            Set-Item -Path "Env:$($variable.Name)" -Value $variable.Value
+        }
+        if ($null -eq $previousUnsignedRequest) {
+            Remove-Item -Path 'Env:CP_PRODUCTION_UNSIGNED_BUILD' -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:CP_PRODUCTION_UNSIGNED_BUILD = $previousUnsignedRequest
+        }
+    }
+    # The unsigned artifact must still be the right application, declare only
+    # what ADR-054 recorded, and lack the deleted beta MLS core. It is verified as
+    # the unsigned CI artifact, never as a distributable one. Flutter copies it
+    # without the "-unsigned" suffix the Android build gave it, so the name alone
+    # is never evidence.
     Invoke-CheckedCommand 'bash' @(
         './tool/verify_release_apk.sh',
-        '--production',
+        '--production-unsigned',
         'build/app/outputs/flutter-apk/app-production-release.apk'
     )
 }

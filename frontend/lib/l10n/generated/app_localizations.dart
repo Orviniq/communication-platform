@@ -110,23 +110,11 @@ abstract class AppLocalizations {
   /// **'Communication Platform (Development)'**
   String get developmentAppTitle;
 
-  /// The application title for the Private Experimental build. It must match the Android launcher label set by the beta product flavor, and it must never read "Development": a build installed by other people may not present itself as a developer build (ADR-044).
-  ///
-  /// In en, this message translates to:
-  /// **'Communication Platform (Experimental)'**
-  String get experimentalAppTitle;
-
   /// A persistent warning that the running app is not production.
   ///
   /// In en, this message translates to:
   /// **'Development configuration'**
   String get developmentConfiguration;
-
-  /// A persistent warning that the running app is the private experimental build. It deliberately does not say 'beta': ADR-044 holds that 'beta' implies a feature-complete, reviewed pre-release, which this is not. The key still names the flavor, because the .beta application ID is frozen and cannot follow the wording.
-  ///
-  /// In en, this message translates to:
-  /// **'Private experimental build'**
-  String get betaConfiguration;
 
   /// Bootstrap text shown before product screens are implemented.
   ///
@@ -911,7 +899,7 @@ abstract class AppLocalizations {
   /// No description provided for @disclosureBestEffortDelivery.
   ///
   /// In en, this message translates to:
-  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
+  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
   String get disclosureBestEffortDelivery;
 
   /// Added at revision 5 (ADR-052). Every earlier revision described delivery only as slow, which an ordinary reader takes to mean eventual. The server prunes undelivered envelopes on a retention timer it does not publish to clients, so late and never are different outcomes and only one of them was disclosed.
@@ -938,11 +926,11 @@ abstract class AppLocalizations {
   /// **'Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.'**
   String get disclosureRecoveryExcludesHistory;
 
-  /// No description provided for @disclosureExperimentalGroups.
+  /// Revision 9 (ADR-076). It replaces disclosureExperimentalGroups, which still described the deleted closed-beta MLS track: unfinished experimental encryption, a group an update could reset, and groups switched off on an untested processor. A group is now a set of the pairwise sessions direct messages use (ADR-075), so the point states what that design costs the reader instead.
   ///
   /// In en, this message translates to:
-  /// **'Group chats use experimental encryption that is not finished, not standardised, and has not been independently reviewed. An update can reset a group and delete everything in it. On a phone whose processor it has not been tested on, group chats are switched off instead.'**
-  String get disclosureExperimentalGroups;
+  /// **'Group messages use the same encryption as direct messages. The signed changes that add and remove members are built on top of it, and nobody outside the project has reviewed them. Each group message is sent as one encrypted copy for each device of each member. If this phone loses a group\'s current state, only another member\'s app can send it again, and until then you cannot send messages in that group.'**
+  String get disclosurePairwiseGroups;
 
   /// Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature.
   ///

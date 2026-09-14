@@ -150,10 +150,13 @@ client MUST not claim otherwise.
 
 These are gates on a **release**. The Private Experimental deployment that ADR-044
 defined was not one: it was private, named, disclosed distribution of an artifact that
-stated its own maturity, and it left every gate below closed and unsatisfied. Nothing in
-that decision may be read as clearing one of them, and the written disclosure it required
-was what made distributing under them acceptable. ADR-075 closed ADR-044, and no flavor
-builds that artifact since the `beta` flavor that carried it was deleted.
+stated its own maturity, and it left every gate below closed and unsatisfied. ADR-075
+closed ADR-044 and deleted the `beta` flavor that carried it. The production builds that
+ADR-076 hands to named people for testing are not a release for the same reason: each
+reaches its recipient by hand with the written disclosure, carries the in-app statement
+of what it is, and opens, satisfies or narrows no gate below. Nothing in either decision
+may be read as clearing one of them, and the written disclosure is what makes handing a
+build over under them acceptable.
 
 - No handwritten cryptographic primitive.
 - No shipping an unreviewed cross-platform protocol implementation.
