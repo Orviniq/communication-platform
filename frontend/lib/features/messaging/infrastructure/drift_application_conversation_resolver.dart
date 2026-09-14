@@ -63,7 +63,7 @@ final class DriftApplicationConversationResolver
       if (existing != null) {
         final kind = ConversationKind.values[existing.kind];
         if (kind == ConversationKind.group) {
-          return _group(conversationId, sender, current);
+          return await _group(conversationId, sender, current);
         }
         final peer = existing.peerUserId;
         if (kind != ConversationKind.direct ||
@@ -87,7 +87,7 @@ final class DriftApplicationConversationResolver
                   peerUserId: sender,
                 ),
               )
-            : _group(conversationId, sender, current);
+            : await _group(conversationId, sender, current);
       }
 
       // An own-device copy does not expose the peer outside the encrypted event.
@@ -113,7 +113,7 @@ final class DriftApplicationConversationResolver
           );
         }
       }
-      return _group(conversationId, sender, current);
+      return await _group(conversationId, sender, current);
     } on Object {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.unauthenticatedInput),

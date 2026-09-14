@@ -58,7 +58,7 @@ base class AppearanceController extends Notifier<AppearancePreferences> {
     state = preferences;
     try {
       final store = await ref.read(appearancePreferenceStoreProvider.future);
-      return store.write(preferences);
+      return await store.write(preferences);
     } on Object {
       return const Result.failure(
         StorageFailure(StorageFailureKind.unavailable),

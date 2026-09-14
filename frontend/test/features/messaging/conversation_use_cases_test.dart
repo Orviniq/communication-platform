@@ -103,6 +103,28 @@ void main() {
     expect(fanout.events, hasLength(1));
   });
 
+  test('a malformed peer id is refused rather than thrown', () async {
+    // The id is parsed inside an async helper, so a malformed one comes
+    // back as a failed future, which only an awaited return lets the
+    // surrounding catch turn into a failure.
+    final sent = await sender.sendText(
+      currentUserId: currentUser,
+      currentDeviceId: currentDevice,
+      target: const DirectConversationTarget('not-a-user-id'),
+      text: 'never sent',
+    );
+
+    expect(
+      sent,
+      isA<FailureResult<SendMessageOutcome>>().having(
+        (result) => result.failure,
+        'failure',
+        const ValidationFailure(ValidationFailureKind.invalidInput),
+      ),
+    );
+    expect(fanout.events, isEmpty);
+  });
+
   test(
     'read receipts require visible-read state and explicit privacy consent',
     () async {
@@ -228,6 +250,40 @@ void main() {
       expect(repository.pending, isEmpty);
     },
   );
+
+  test('durable delivered work survives a fan-out that throws', () async {
+    repository
+      ..conversation = const ConversationSummary(
+        conversationId: _directConversationHex,
+        kind: ConversationKind.direct,
+        peerUserId: peerUser,
+        lastMessage: null,
+        lastActivityMs: 0,
+        unreadCount: 1,
+        mutedUntil: null,
+        draft: null,
+        pinnedMessageIds: {},
+      )
+      ..pending = const [
+        PendingDeliveredReceipt(
+          messageId: _messageOne,
+          conversationId: _directConversationHex,
+          targetUserId: peerUser,
+          localDeviceId: currentDevice,
+        ),
+      ];
+    fanout.commitError = Exception('the database is locked');
+    final flush = FlushPendingDeliveredReceipts(
+      repository: repository,
+      sender: sender,
+      currentUserId: currentUser,
+    );
+
+    // Awaited inside the send's try block, the fan-out's failure becomes a
+    // result the flush stops on, and the receipt waits for the next flush.
+    expect(await flush(), isA<FailureResult<int>>());
+    expect(repository.pending, hasLength(1));
+  });
 
   test('own-message mutations are authorized before fan-out', () async {
     repository.originalSender = false;
@@ -450,6 +506,7 @@ final class _Fanout implements ApplicationFanoutPort {
   final List<ApplicationEventCommit> events = [];
   final List<String> rearmed = [];
   bool hasFailedSend = false;
+  Exception? commitError;
 
   @override
   Future<Result<void>> commitLocalEcho({
@@ -461,6 +518,10 @@ final class _Fanout implements ApplicationFanoutPort {
     required Uint8List openedPayload,
     required ApplicationEventCommit applicationEvent,
   }) async {
+    final error = commitError;
+    if (error != null) {
+      throw error;
+    }
     events.add(applicationEvent);
     return const Result.success(null);
   }

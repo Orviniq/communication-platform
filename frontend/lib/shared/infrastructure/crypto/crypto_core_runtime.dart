@@ -331,7 +331,7 @@ final class CryptoCoreRuntime
       final writer = _ApplicationWriter()..bytes(ascii.encode('CPAEV001'));
       _writeApplicationProjection(writer, event);
       final response = await _applicationCall(1, writer.takeBytes());
-      return response.fold(
+      return response.fold<Result<Uint8List>>(
         onSuccess: (bytes) => _prefixedPayload(bytes, 'CPAOE001'),
         onFailure: Result.failure,
       );
@@ -515,7 +515,7 @@ final class CryptoCoreRuntime
           writer.u8(reason.index);
       }
       final response = await _applicationCall(6, writer.takeBytes());
-      return response.fold(
+      return response.fold<Result<Uint8List>>(
         onSuccess: (bytes) => _prefixedPayload(bytes, 'CPDCO001'),
         onFailure: Result.failure,
       );

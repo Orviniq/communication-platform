@@ -300,7 +300,7 @@ final class SendConversationEvents {
         references: ids,
         body: ReceiptBody(messageIds: ids),
       );
-      return _send(event, conversation, currentUserId, currentDeviceId);
+      return await _send(event, conversation, currentUserId, currentDeviceId);
     } on Object {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
@@ -350,7 +350,7 @@ final class SendConversationEvents {
         currentUserId,
         currentDeviceId,
       );
-      return sent.fold(
+      return sent.fold<Result<void>>(
         onSuccess: (_) => const Result.success(null),
         onFailure: Result.failure,
       );
@@ -465,7 +465,7 @@ final class SendConversationEvents {
     ConversationTarget target,
   ) async {
     try {
-      return switch (target) {
+      return await switch (target) {
         DirectConversationTarget() => _deriveDirect(
           currentUserId,
           target.peerUserId,
