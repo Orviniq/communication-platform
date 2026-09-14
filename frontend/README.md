@@ -42,7 +42,7 @@ The two are separate, coexisting applications; neither upgrades into the other. 
 ([ADR-044](docs/decisions.md)) under the frozen application ID `com.orviniq.chat.beta`
 was deleted with the closed-beta MLS core, along with its signing and release tooling.
 No flavor builds that application ID now, so an existing install of it cannot be updated
-from this tree; [Beta release signing and key continuity](docs/release-signing.md)
+from this tree; [Production release signing and key continuity](docs/release-signing.md)
 records what its retained signing key still controls.
 
 The Android `namespace` is still `com.example.communication_platform`. That is only
