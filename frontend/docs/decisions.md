@@ -710,6 +710,17 @@ signed artifact passed all 15 checks of `--production`, and the script published
 `communication-platform-0.1.0-1.apk` with its SHA-256 and its metadata; and the script then
 refused build number 1 again. Build 1 is spent and was not installed.
 
+**2026-09-14, prompt 7 (the install).** `tool/build_production_release.sh` built number 2
+from the clean revision `f85196d`, the artifact passed all 15 checks of `--production`, and
+`adb install` put it, as a first install without `-r` or `-d`, on the owner's Samsung
+Galaxy A56 (Android 16, arm64-v8a) and on an Android 15 emulator (x86_64). Both reached
+the Login screen, which proves the origin and the CA and not the pins (D7). Nothing was
+uninstalled, `com.orviniq.chat.beta` stayed installed on both, and no account was signed
+in or registered. `release-signing.md` records 2 as the last installed build, and the
+"Direct signed APK distribution" row of `implementation-checklist.md` describes the signed
+channel with no gate ticked (D10). The run record is
+[`docs/validation/production-release/2026-09-14-build-2/`](validation/production-release/2026-09-14-build-2/README.md).
+
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
 **Status:** Accepted. Client-side record of server ADR-0001,
