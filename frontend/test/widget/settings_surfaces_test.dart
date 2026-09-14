@@ -305,19 +305,23 @@ void main() {
     testWidgets('reads the build from the build, and fetches nothing', (
       tester,
     ) async {
-      await _pump(tester, const AboutPage(), environment: AppEnvironment.beta);
+      await _pump(
+        tester,
+        const AboutPage(),
+        environment: AppEnvironment.production,
+      );
 
       expect(find.byKey(const ValueKey('about-version')), findsOneWidget);
       expect(find.text('0.1.0+1'), findsOneWidget);
       expect(find.byKey(const ValueKey('about-disclosure')), findsOneWidget);
+      expect(find.text('9'), findsOneWidget);
       // The build is named once, in the reviewed title, and the flavor
-      // identifier never reaches a user: `BETA` beneath "(Experimental)"
-      // would be a second maturity word for one artifact.
-      expect(
-        find.text('Communication Platform (Experimental)'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('BETA'), findsNothing);
+      // identifier never reaches a user: `PRODUCTION` beneath that title would
+      // be a second name for one artifact. Nor does production carry a
+      // maturity designation (ADR-076 D8).
+      expect(find.text('Communication Platform'), findsOneWidget);
+      expect(find.textContaining('PRODUCTION'), findsNothing);
+      expect(find.textContaining('Experimental'), findsNothing);
       expect(find.textContaining('Nothing was fetched'), findsOneWidget);
       expect(find.byKey(const ValueKey('about-diagnostics')), findsOneWidget);
     });
@@ -326,7 +330,7 @@ void main() {
       await _pump(
         tester,
         const AboutPage(),
-        environment: AppEnvironment.production,
+        environment: AppEnvironment.development,
       );
       expect(find.byKey(const ValueKey('about-disclosure')), findsNothing);
     });

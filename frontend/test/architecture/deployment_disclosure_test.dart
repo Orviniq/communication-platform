@@ -15,20 +15,19 @@ Map<String, dynamic> _catalogue(String path) =>
 /// somebody who accepted an older one.
 void main() {
   test('only a build that is handed to someone else carries a disclosure', () {
-    // Production packages unsigned and cannot be installed (ADR-042), and the
-    // development flavor is never distributed. Neither may render Private
-    // Experimental wording, so temporary text cannot leak into a release that
-    // no longer deserves it.
-    expect(AppEnvironment.production.deploymentDisclosure, isNull);
-    expect(AppEnvironment.development.deploymentDisclosure, isNull);
+    // ADR-076 hands production builds to named people, so production states
+    // what it is. The development flavor is never distributed and names itself
+    // in its own banner, so it carries no statement that could reach a build
+    // nobody is handed.
     expect(
-      AppEnvironment.beta.deploymentDisclosure,
-      same(DeploymentDisclosure.privateExperimental),
+      AppEnvironment.production.deploymentDisclosure,
+      same(DeploymentDisclosure.distributed),
     );
+    expect(AppEnvironment.development.deploymentDisclosure, isNull);
   });
 
   test('the disclosure states every fact ADR-052 requires, in order', () {
-    expect(DeploymentDisclosure.privateExperimental.points, const [
+    expect(DeploymentDisclosure.distributed.points, const [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,
       DisclosurePoint.messagesExpireUnread,
@@ -40,7 +39,7 @@ void main() {
     ]);
     expect(
       DisclosurePoint.values.toSet(),
-      DeploymentDisclosure.privateExperimental.points.toSet(),
+      DeploymentDisclosure.distributed.points.toSet(),
       reason:
           'A point that exists but is never shown is a fact the decision '
           'recorded and the app withholds.',
@@ -54,7 +53,7 @@ void main() {
     // test; the only way to make that pass is to raise the point's `since`; and
     // raising `since` past the revision fails here. The bump is therefore
     // forced by the edit rather than remembered by a person.
-    final disclosure = DeploymentDisclosure.privateExperimental;
+    final disclosure = DeploymentDisclosure.distributed;
     final highest = disclosure.points
         .map((point) => point.since)
         .reduce((a, b) => a > b ? a : b);
@@ -80,7 +79,7 @@ void main() {
   test('the disclosure revision moves whenever the disclosure moves', () {
     // ADR-045 rejects periodic re-consent - repetition of an unchanged warning
     // measurably destroys it - and makes re-consent content-triggered instead.
-    expect(DeploymentDisclosure.privateExperimental.revision, 9);
+    expect(DeploymentDisclosure.distributed.revision, 9);
 
     final english = _catalogue('lib/l10n/app_en.arb');
 
@@ -414,7 +413,7 @@ void main() {
   });
 
   group('what a changed statement owes an earlier reader', () {
-    const disclosure = DeploymentDisclosure.privateExperimental;
+    const disclosure = DeploymentDisclosure.distributed;
 
     test('a current reader is asked nothing', () {
       expect(disclosure.requiresReacknowledgement(9), isFalse);

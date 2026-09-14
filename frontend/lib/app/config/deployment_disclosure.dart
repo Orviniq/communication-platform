@@ -172,8 +172,12 @@ enum DisclosurePoint {
 final class DeploymentDisclosure {
   const DeploymentDisclosure._({required this.revision, required this.points});
 
-  /// The statement carried by the Private Experimental artifact (ADR-044).
-  static const privateExperimental = DeploymentDisclosure._(
+  /// The statement carried by every build that is handed to someone else.
+  ///
+  /// Named for that rather than for one deployment. It was the Private
+  /// Experimental artifact's statement until ADR-075 deleted the `beta` flavor
+  /// that carried it, and since ADR-076 production carries it.
+  static const distributed = DeploymentDisclosure._(
     revision: 9,
     points: [
       DisclosurePoint.noIndependentReview,
@@ -218,13 +222,15 @@ final class DeploymentDisclosure {
 /// Which builds carry a deployment disclosure, and which carry none.
 ///
 /// Only a build that is handed to someone else needs to state what it is.
-/// Production is unsigned and cannot be installed at all (ADR-042), and the
-/// development flavor is never distributed and already names itself in its own
-/// banner; neither of them may render the Private Experimental text, so the
-/// wording of one build can never leak into the other.
+/// ADR-076 hands production builds to named people, so production carries the
+/// statement; ADR-045 had given it none only because it could not be installed.
+/// The development flavor is never distributed and already names itself in its
+/// own banner, so it carries none, and the statement never reaches a build that
+/// nobody is handed.
 extension AppDeploymentDisclosure on AppEnvironment {
   DeploymentDisclosure? get deploymentDisclosure => switch (this) {
-    AppEnvironment.beta => DeploymentDisclosure.privateExperimental,
-    AppEnvironment.development || AppEnvironment.production => null,
+    AppEnvironment.beta ||
+    AppEnvironment.production => DeploymentDisclosure.distributed,
+    AppEnvironment.development => null,
   };
 }

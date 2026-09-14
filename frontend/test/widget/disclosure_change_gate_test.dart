@@ -103,21 +103,21 @@ void main() {
     }
   });
 
-  testWidgets('a build that carries no disclosure renders no gate', (
+  testWidgets('only a build that carries the disclosure has a gate', (
     tester,
   ) async {
-    // Production is unsigned and uninstallable, and development is never handed
-    // to anyone; neither may render Private Experimental wording.
-    for (final environment in const [
-      AppEnvironment.production,
-      AppEnvironment.development,
-    ]) {
-      expect(
-        environment.deploymentDisclosure,
-        isNull,
-        reason: '$environment must have nothing to re-present',
-      );
-    }
+    // Development is never handed to anyone, so it has nothing to re-present.
+    // Production is handed to named people (ADR-076), so it carries the one
+    // statement this gate re-presents.
+    expect(
+      AppEnvironment.development.deploymentDisclosure,
+      isNull,
+      reason: 'development must have nothing to re-present',
+    );
+    expect(
+      AppEnvironment.production.deploymentDisclosure,
+      same(DeploymentDisclosure.distributed),
+    );
   });
 }
 
@@ -136,7 +136,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        appEnvironmentProvider.overrideWithValue(AppEnvironment.beta),
+        appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
       ],
       child: MaterialApp(
         locale: locale,
@@ -148,7 +148,7 @@ Future<void> _pump(
         home: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
           child: DisclosureChangePage(
-            disclosure: DeploymentDisclosure.privateExperimental,
+            disclosure: DeploymentDisclosure.distributed,
             acknowledgedRevision: acknowledged,
             onAcknowledged: () => onAcknowledged?.call(),
           ),
