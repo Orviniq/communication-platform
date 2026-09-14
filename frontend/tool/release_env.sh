@@ -142,6 +142,65 @@ refuse_repository_path() {
   fi
 }
 
+# --- Production provisioning -------------------------------------------------
+
+# The five public values a production build for a phone compiles in (ADR-076 D7).
+# None of them is a secret, and none of them is ever committed.
+readonly -a production_provisioning_names=(
+  PRODUCTION_SERVER_ORIGIN
+  PRODUCTION_PRIVATE_CA_SHA256
+  PRODUCTION_PRIMARY_SPKI_SHA256
+  PRODUCTION_BACKUP_SPKI_SHA256
+  PRODUCTION_PRIVATE_CA_PEM
+)
+
+# Fails unless all five are present, each in the form
+# lib/app/config/app_configuration.dart accepts, with two different pins and a CA
+# certificate file that exists. The app refuses anything else when it starts, so a
+# build that compiled such a value would be spent. Sets production_server_host and
+# production_server_port from the origin.
+require_production_provisioning() {
+  local name
+  local missing=()
+  for name in "${production_provisioning_names[@]}"; do
+    [[ -n "${!name:-}" ]] || missing+=("$name")
+  done
+  [[ "${#missing[@]}" -eq 0 ]] ||
+    fail "Missing production provisioning: ${missing[*]}.
+       A build without complete provisioning stops at the \"App not provisioned\"
+       screen and tests nothing. docs/release-signing.md shows how to derive every
+       value afresh."
+
+  # An origin as ServerOrigin.parse accepts it: https, with no user info, path,
+  # query or fragment. The trust config pins one exact host, so the host has to
+  # be a DNS name.
+  local authority="${PRODUCTION_SERVER_ORIGIN#https://}"
+  authority="${authority%/}"
+  [[ "$PRODUCTION_SERVER_ORIGIN" == https://* && -n "$authority" && "$authority" != *[/?#@]* ]] ||
+    fail "PRODUCTION_SERVER_ORIGIN must be an https origin with no user info, path, query
+       or fragment, but is '$PRODUCTION_SERVER_ORIGIN'."
+  production_server_host="${authority%%:*}"
+  production_server_port="${authority#"$production_server_host"}"
+  production_server_port="${production_server_port#:}"
+  production_server_port="${production_server_port:-443}"
+  [[ "$production_server_host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] ||
+    fail "PRODUCTION_SERVER_ORIGIN must name a DNS host, but names '$production_server_host'."
+  [[ "$production_server_port" =~ ^[1-9][0-9]{0,4}$ && "$production_server_port" -le 65535 ]] ||
+    fail "PRODUCTION_SERVER_ORIGIN names an invalid port, '$production_server_port'."
+
+  [[ "$PRODUCTION_PRIVATE_CA_SHA256" =~ ^[[:xdigit:]]{64}$ ]] ||
+    fail "PRODUCTION_PRIVATE_CA_SHA256 must be 64 hexadecimal characters."
+  for name in PRODUCTION_PRIMARY_SPKI_SHA256 PRODUCTION_BACKUP_SPKI_SHA256; do
+    [[ "${!name}" =~ ^[A-Za-z0-9+/]{43}=$ ]] ||
+      fail "$name must be a base64 SHA-256 digest: 44 characters ending in '='."
+  done
+  [[ "$PRODUCTION_PRIMARY_SPKI_SHA256" != "$PRODUCTION_BACKUP_SPKI_SHA256" ]] ||
+    fail "The primary and backup pins are identical, so pin rotation is impossible."
+
+  [[ -f "$PRODUCTION_PRIVATE_CA_PEM" ]] ||
+    fail "CA certificate not found: $PRODUCTION_PRIVATE_CA_PEM"
+}
+
 # --- Android SDK -------------------------------------------------------------
 
 resolve_android_sdk() {
