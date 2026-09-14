@@ -86,21 +86,22 @@ is not silently edited out of history.
 | ADR-073 | Accepted | A direct conversation is marked read from visibility rather than from the chat route's first frame, a message arriving into the conversation on screen is read where it lands, and a repeat mark is a no-op instead of a write (2026-09-10) | `ChatConversationView.initState` scheduled a post-frame `MarkConversationReadIntent`, which made mounting the route the whole of the test. Mounting is not reading: a chat route stays in the navigator behind a backgrounded application, and it is built and laid out before the platform has reported the application in front of anybody — so opening the application marked everything that had arrived while it was away as read, and would have reported it read to the sender the moment ADR-048's follow-up 4 wires `MarkConversationVisiblyRead`. The trigger becomes `VisibleConversationRegistry.conversationId`, which is mounted-and-foregrounded by construction and is already the thing that stops the alert path announcing the conversation on screen, so one definition of "the user is looking at this" now serves both. It is re-evaluated rather than fired once: returning to the foreground is a read, and so is a message landing in the conversation being looked at — which closes ADR-048's known limitation that such a message stayed unread until the user left and came back. `VisibleConversationReadMarker` holds the subscription and collapses signals arriving mid-write into one further pass; `MarkConversationReadIntent` is deleted, because the view no longer decides this and nothing else emitted it. `markConversationRead` returns before writing anything when no message is unread and the aggregate is already zero, which is what makes re-evaluation affordable: it now runs on every visibility change and every arrival, and a `conversations` write that changed no value still re-derives every summary the chat list draws and still answers the observer that provoked it. **Not done here**: read receipts are still never sent, `MarkConversationVisiblyRead` is still unwired, and groups are untouched — the piece-18 projection sets no unread state for them, so there is nothing there to mark. **Not verified**: no device run; the evidence is unit tests over the marker's gating and over the repository's write count. |
 | ADR-074 | Accepted | Supersedes the "not done here" of ADR-073: the second tick is reserved for *seen* and `MarkConversationVisiblyRead` is wired to the visibility trigger, so reading is the only thing that draws two ticks and the only thing that reports one (2026-09-10) | ADR-073 fixed which device state counts as read and left the sender's copy alone, and on a device that was the whole of what the user could see. Two faults met there. `AppIcons.delivered` drew `checkCheck` — **two ticks for delivered**, which a recipient's own device sends by itself the moment the inbox transaction commits, with nobody having looked at anything; and `MarkConversationVisiblyRead` was still unwired, so `receiptRead` was never sent by any client and the accent-coloured `read` state was **unreachable**. The result is that the only two-tick state the application could reach meant "stored on their phone", and a sender was told their message had been seen while the other person was on the chat list. A reader who has used any other messenger arrives knowing two ticks means somebody read what they sent and will not re-learn it here, so the glyph moves rather than the meaning: `delivered` becomes `check`, a new `read` token takes `checkCheck`, and the two arrival states are told apart by colour and by the label each already carried — `chatStateAccepted`, `chatStateDelivered` and `chatStateRead` were already written and already translated. Reading is then made reachable on ADR-073's trigger and no other: `_markRead` becomes `MarkConversationVisiblyRead`, so the receipt names exactly the message ids the local mark cleared and the two readings of "the user saw this" cannot disagree. `allowReadReceipts` is `!savedMessages`; `sendReceipt` already refuses anything that is not a direct conversation. Receipts are bounded by the mark, not by a timer: the second visibility change finds nothing left to clear and therefore sends nothing, which is what makes a trigger that fires on every foreground return and every arrival affordable. The receipt is a durable local commit before it is a network call (ADR-061), so one made with no connection is delivered by the ordinary cycle rather than lost. **No backend change, and none needed**: `openapi.json` has no occurrence of the word receipt, the server relays padded opaque blobs through the same three envelope routes, and a `receiptRead` is byte-indistinguishable from the `receiptDelivered` that already flows. **Not done here**: no privacy setting behind `allowReadReceipts`, which is passed `true` for every direct conversation — the parameter's existence says a setting was intended, and the disclosure makes no statement either way; no per-message reading, the receipt covers the conversation the way the mark does; and groups still set no unread state. |
 | ADR-075 | Accepted | Client-side record of server ADR-0001: a group is a set of pairwise sessions, so piece 19 is cancelled rather than blocked, the group screens open on every build, and each group message states what it costs — one encrypted copy for each device of each member — and is shown as sent only when its fan-out has ended; closes ADR-026, ADR-036, ADR-037, ADR-039, ADR-040, ADR-041, ADR-044, ADR-055 and ADR-056 (2026-09-13) | The server deleted every MLS route: `PUT /api/v1/me/devices/{device_id}/keypackages`, `GET /api/v1/me/devices/{device_id}/keypackages/count` and `POST /api/v1/users/{user_id}/keypackages/claim` answer `404`, `backend/openapi.json` holds 28 paths of which none accepts, stores or serves a key package, a Welcome, a commit or any other MLS artefact, and `KEYPACKAGE_BUCKETS` is gone. The five external prerequisites piece 19 waited on therefore gate nothing — meeting all of them would leave no server to talk to — so the item is cancelled, not blocked, and the nine decisions that shaped the closed-beta MLS track close with it. The pairwise design pays for groups in ciphertext rather than server state, and the screens say so rather than let a slow send in a large group look broken |
-| ADR-076 | Proposed (2026-09-14), awaiting the owner's answers to four questions | The `production` flavor, `com.orviniq.chat`, gains one persistent signing identity so that the owner can install real builds and test groups on real phones: an RSA-4096 v2+v3 key whose public fingerprint is committed beside the application ID and which reaches Gradle only from outside the repository; a release build without it fails closed unless it asks to be unsigned; one script provisions, signs, verifies and records each artifact; a signed build carries the deployment disclosure; and an artifact reaches a device only through `adb install`. It is not a public release and opens no gate. Once accepted it amends the clause ADR-042 made and ADR-067 carried that production packages unsigned, and the production half of ADR-045's D1 and D6 (2026-09-14) | Production packages unsigned by design, so no phone can install it, and groups have never run on a phone against the live server (ADR-075). The identity, the build mechanism and the verifier are the beta pipeline ADR-042 reviewed, readable at `8267429`, under production's names and without its in-repository properties fallback, because the rule behind them has not moved: Android updates an install only when the application ID and the signing certificate both match, and this client cannot survive the uninstall a mismatch forces (ADR-067 D2). What moves is custody. `deployment-and-release.md` step 4, `release-signing.md` and ADR-044 keep production's key offline; the recommendation under review keeps it on a networked workstation that already holds the private CA's key; and with `minSdk` 24 the first key signs every later update, so the custody chosen for this test is the custody a public release under the same identity inherits. That is the owner's to decide, and so are the finality of the application ID, the disclosure, and whether an agent session may run a signed build. ADR-045 withheld the disclosure and the Experimental designation from production only because it could not be installed. The pinned `flutter_tools` uninstalls an installed app before `flutter install` installs and whenever `flutter run` is refused over it, and `flutter drive` uninstalls when it finishes, so none of the three is pointed at a device that holds the signed app. Found on the way and left open for a decision of its own: ADR-043 and the code enforce no SPKI pin on the app's own traffic, while ADR-067 D4, server ADR-0027 and `backend/SECURITY.md` state or rely on the opposite. ADR-017, every production completion gate and ADR-053's gate stay closed. |
+| ADR-076 | Accepted (2026-09-14) | The `production` flavor, `com.orviniq.chat`, gains one persistent signing identity so that the owner can install real builds and test groups on real phones: an RSA-4096 v2+v3 key whose public fingerprint is committed beside the application ID and which reaches Gradle only from outside the repository; a release build without it fails closed unless it asks to be unsigned; one script provisions, signs, verifies and records each artifact; a signed build carries the deployment disclosure and no Experimental designation; and an artifact reaches a device only through `adb install`. It is not a public release and opens no gate. It amends the clause ADR-042 made and ADR-067 carried that production packages unsigned, the production half of ADR-045's D6, and the reason its D1 gives for production carrying no designation (2026-09-14) | Production packages unsigned by design, so no phone can install it, and groups have never run on a phone against the live server (ADR-075). The identity, the build mechanism and the verifier are the beta pipeline ADR-042 reviewed, readable at `8267429`, under production's names and without its in-repository properties fallback, because the rule behind them has not moved: Android updates an install only when the application ID and the signing certificate both match, and this client cannot survive the uninstall a mismatch forces (ADR-067 D2). What moves is custody. `deployment-and-release.md` step 4, `release-signing.md` and ADR-044 keep production's key offline; the owner's answer keeps it, for now, on a networked workstation that already holds the private CA's key; and with `minSdk` 24 the first key signs every later update, so the custody chosen for this test is the custody a public release under the same identity inherits. The owner decided that on 2026-09-14, together with the other three questions: the application ID is final, production carries the disclosure and not the Experimental designation, and an agent session may run the signed build through the release script. ADR-045 withheld the disclosure and the Experimental designation from production only because it could not be installed. The pinned `flutter_tools` uninstalls an installed app before `flutter install` installs and whenever `flutter run` is refused over it, and `flutter drive` uninstalls when it finishes, so none of the three is pointed at a device that holds the signed app. Found on the way and left open for a decision of its own: ADR-043 and the code enforce no SPKI pin on the app's own traffic, while ADR-067 D4, server ADR-0027 and `backend/SECURITY.md` state or rely on the opposite. ADR-017, every production completion gate and ADR-053's gate stay closed. |
 
 ## ADR-076 in full — production gets a key, and the first install is the part that cannot be taken back (2026-09-14)
 
-**Status:** Proposed, 2026-09-14. Release-identity, key-custody and build decision for the
-`production` flavor, written before any file it governs changes, so that the owner reviews
-it first. It is written by the first of seven production-signing prompts of 2026-09-14,
-which live outside this repository and are called prompts 1 to 7 below. Four points wait
-on the owner, one question each: D2 (is the application ID final), D3 (where the key
-lives), D8 (does production carry the disclosure) and D9 (may an agent session run a
-signed build). Until they are answered this record is edited in place. The answers, and
-the status they give it, are written under "Owner questions" at the end of this section
-before prompt 2 changes any code, and from acceptance on it changes only by a dated record.
-Once accepted it **amends** the clause ADR-042 made and ADR-067 carried that production
-packages unsigned, and the production half of ADR-045's D1 and D6. It adds no dependency,
+**Status:** Accepted, 2026-09-14, on the owner's answers to its four questions, which are
+written under "Owner questions" at the end of this section. Release-identity, key-custody
+and build decision for the `production` flavor, written before any file it governs
+changed, so that the owner reviewed it first. It is written by the first of seven
+production-signing prompts of 2026-09-14, which live outside this repository and are
+called prompts 1 to 7 below. Four points waited on the owner, one question each: D2 (is
+the application ID final), D3 (where the key lives), D8 (does production carry the
+disclosure) and D9 (may an agent session run a signed build). The record was edited in
+place until they were answered, before prompt 2 changed any code, and from acceptance on
+it changes only by a dated record. It **amends** the clause ADR-042 made and ADR-067
+carried that production packages unsigned, the production half of ADR-045's D6, and the
+reason ADR-045's D1 gives for production carrying no designation. It adds no dependency,
 no cryptographic construction and no server route, and it **opens no production gate**.
 
 ### The question
@@ -385,18 +386,27 @@ same handover (`deployment-and-release.md` steps 8 to 10, ADR-054).
 gave production none only because nobody could be handed it. Signing removes the premise
 and leaves the rule.
 
-**Not decided: the designation.** ADR-045 has a second half, which the recommendation
-leaves out. Its D1 gives a distributed build one application-level designation,
-Experimental, carried by the banner, the launcher label and the task-switcher title, and
-withholds it from production "because it has none to carry and cannot be installed". Its
-D2 makes that designation load-bearing: an unlabelled surface is governed by it and by
-nothing stronger, so a distributed build without it lets every unlabelled screen read as
-though something stronger stood behind it. The sources therefore support carrying it as
-well. It costs three things. `test/golden/app_shell_golden_test.dart` renders its shell
-from production. The launcher label is a `resValue` in `android/app/build.gradle.kts`, a
-file prompt 2 is told not to change, so a yes moves that one line into prompt 5 or lifts
-the rule for it. And the retained beta app on the owner's devices already reads
-"Communication Platform (Experimental)", so two launcher entries would carry one name.
+**The designation: not carried, by the owner's answer.** ADR-045 has a second half, which
+the recommendation left out. Its D1 gives a distributed build one application-level
+designation, Experimental, carried by the banner, the launcher label and the task-switcher
+title, and withholds it from production "because it has none to carry and cannot be
+installed". Its D2 makes that designation load-bearing: an unlabelled surface is governed
+by it and by nothing stronger, so a distributed build without it lets every unlabelled
+screen read as though something stronger stood behind it. The sources therefore supported
+carrying it as well, at three costs. `test/golden/app_shell_golden_test.dart` renders its
+shell from production. The launcher label is a `resValue` in
+`android/app/build.gradle.kts`, a file prompt 2 is told not to change, so a yes would have
+moved that one line into prompt 5 or lifted the rule for it. And the retained beta app on
+the owner's devices already reads "Communication Platform (Experimental)", so two launcher
+entries would have carried one name. The owner answered no to the designation (question
+3): production's launcher label and task-switcher title stay "Communication Platform", and
+it shows no banner. An unlabelled production screen is therefore governed by the
+disclosure its user acknowledged at enrollment, whose first point says that nobody outside
+the project has reviewed the encryption and whose last says who the build is for, and by
+no label that stays on screen. The answer names the launcher name and the display, and
+this record reads it as the designation this point asked about, so the feature-level
+Experimental badge that ADR-045 D2 places at the head of the disclosure section itself is
+unchanged.
 
 **Owner question 3: does production carry the disclosure, and the designation with it?**
 
@@ -471,9 +481,9 @@ named, disclosed distribution is not a release, and it clears no gate.
 
 ### Consequences
 
-Once the owner has answered, the later prompts of this phase change these documents and
-tests, with the code they pin. Option B or C under question 2, or option B under question
-4, changes this list before any of them runs.
+With the owner's answers, the later prompts of this phase change these documents and
+tests, with the code they pin. The owner chose option A under questions 2 and 4, so no
+prompt is rewritten before it runs.
 
 - **Prompt 2, the disclosure.** Documents: the environment table and steps 8 and 9 of
   `deployment-and-release.md`; the passage in `ui-specification.md` that names
@@ -487,8 +497,9 @@ tests, with the code they pin. Option B or C under question 2, or option B under
   `disclosure_change_gate_test.dart`, `security_notice_test.dart`,
   `device_enrollment_page_test.dart`, `settings_surfaces_test.dart`,
   `bootstrap_app_test.dart`, `bootstrap_connection_test.dart` and
-  `contact_pages_test.dart`; with the designation, also `test/widget/app_shell_test.dart`
-  and `test/golden/app_shell_golden_test.dart`. Code: `deployment_disclosure.dart`,
+  `contact_pages_test.dart`. The designation is not carried (question 3), so
+  `test/widget/app_shell_test.dart` and `test/golden/app_shell_golden_test.dart` are not
+  among them. Code: `deployment_disclosure.dart`,
   `app_environment.dart`, `app_configuration.dart`, `app_environment_banner.dart` and
   `sustained_delivery_gate.dart` in `lib/app/config/`, a comment in
   `lib/features/settings/presentation/about_page.dart`, and `lib/l10n/app_en.arb` and
@@ -522,15 +533,37 @@ tests, with the code they pin. Option B or C under question 2, or option B under
 
 ### Owner questions
 
-| # | Question | Point | Recommendation | What the sources support |
-|---|---|---|---|---|
-| 1 | Is `com.orviniq.chat` the final application ID? The first install freezes it. | D2 | Yes | The value (ADR-044, ADR-067); its approval is still an unticked checklist item |
-| 2 | Is a key kept on this workstation acceptable, rather than an offline machine? | D3 | A, this workstation | B, an offline machine |
-| 3 | Should production carry the disclosure? | D8 | Yes; the designation is not part of the recommendation | The disclosure and the designation (ADR-045 D1, D2 and D6) |
-| 4 | May an agent session run the signed build? | D9 | A, through the script only | Nothing either way |
+| # | Question | Point | Recommendation | What the sources support | The owner's answer, 2026-09-14 |
+|---|---|---|---|---|---|
+| 1 | Is `com.orviniq.chat` the final application ID? The first install freezes it. | D2 | Yes | The value (ADR-044, ADR-067); its approval is still an unticked checklist item | Yes, as the permanent application ID |
+| 2 | Is a key kept on this workstation acceptable, rather than an offline machine? | D3 | A, this workstation | B, an offline machine | A, for now; encrypted backups on separate drives |
+| 3 | Should production carry the disclosure? | D8 | Yes; the designation is not part of the recommendation | The disclosure and the designation (ADR-045 D1, D2 and D6) | Yes to the disclosure; no Experimental label |
+| 4 | May an agent session run the signed build? | D9 | A, through the script only | Nothing either way | A: yes, including installing it |
 
-The answers, and the status they give this record, are written here before prompt 2
-changes any code.
+The owner answered on 2026-09-14, before prompt 2 changed any code, and the answers make
+this record **Accepted**. Each one binds as follows.
+
+1. **`com.orviniq.chat` is the permanent application ID** (D2), frozen at the first
+   install. The production release checklist item "Final application name, icon, Android
+   ID, and production origin approved" stays unticked: the answer approves the ID, and the
+   item also asks for the name, the icon and the origin.
+2. **Option A of D3: the key lives on this workstation, for now**, and the owner keeps
+   the encrypted backups on separate drives. The answer changes nothing else in D3: the
+   owner alone creates the key and the backups, both backups are made and test-decrypted
+   before the first install, one of them is kept in another building, and prompt 7 stops
+   until the owner confirms that both open. Moving the key offline later limits future
+   exposure and undoes none of the past (D3, D4).
+3. **Production carries the disclosure and not the designation** (D8). The owner asked
+   for the notice that says what the build is and what it cannot do, and for no
+   Experimental label on the launcher name or the display. Production keeps the launcher
+   label and title "Communication Platform" and shows no banner, so no Gradle file
+   changes.
+4. **Option A of D9.** A session may run the signed build through
+   `tool/build_production_release.sh` only, under D9's rules, and may install it only
+   with `adb install`, never with `-d`.
+
+Prompts 3 to 7 therefore run as written, and prompt 2's rule against changing a Gradle
+file stands.
 
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
