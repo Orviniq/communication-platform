@@ -625,8 +625,11 @@ Play App Signing does not apply: the application signing key is the distribution
 identity permanently, and there is no upload-key reset if it is lost. The deleted
 `beta` flavor carried a frozen application ID and a single persistent signing key for
 that reason; [Beta release signing and key continuity](release-signing.md) (ADR-042)
-records its custody and what the retained key still controls. No flavor is signed now,
-and production gains an identity only through an explicit release decision.
+records its custody and what the retained key still controls. Production now carries
+the same pair under its own names ([ADR-076](decisions.md)): the application ID and the
+certificate fingerprint recorded in `android/production-release-identity.properties`,
+and one persistent key that signs `productionRelease` alone. Without that key the
+release build fails closed, unless it explicitly asks to package unsigned, as CI does.
 
 ## Primary references
 

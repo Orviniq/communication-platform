@@ -1,13 +1,21 @@
 # Beta release signing and key continuity
 
-> **Status (2026-09-13).** The `beta` flavor, its frozen application ID
+> **Status (2026-09-14).** The `beta` flavor, its frozen application ID
 > `com.orviniq.chat.beta`, `android/beta-release-identity.properties`, the beta
 > scripts this manual names, and the `--beta` mode of `tool/verify_release_apk.sh`
-> were deleted with the closed-beta MLS core. No flavor is signed now, so none of the
-> procedures below can run from this tree. The manual is kept because the Beta
-> keystore and its encrypted backups still exist outside the repository and remain
-> the only key that can update an existing install of `com.orviniq.chat.beta`: do
-> not destroy them.
+> were deleted with the closed-beta MLS core, so none of the procedures below can
+> run from this tree. The manual is kept because the Beta keystore and its encrypted
+> backups still exist outside the repository and remain the only key that can update
+> an existing install of `com.orviniq.chat.beta`: do not destroy them.
+>
+> Production is signed now, with a persistent key of its own that is not the Beta
+> key ([ADR-076](decisions.md)). Gradle signs `productionRelease` from
+> `CP_PRODUCTION_SIGNING_PROPERTIES` and fails closed without it unless
+> `CP_PRODUCTION_UNSIGNED_BUILD=1` asks for an unsigned package, and
+> `tool/verify_release_apk.sh --production` checks the signer against
+> `android/production-release-identity.properties`. ADR-076 governs that key; the
+> section "Beta and Production use different keys" below still describes production
+> as unsigned, which it no longer is.
 
 This was the operating manual for shipping the Private Experimental Beta to its
 20–30 trusted users, written for whoever performed a release, including the

@@ -9,8 +9,9 @@ the disclosure, and the one acknowledgement - is decided by [ADR-045](decisions.
 since [ADR-076](decisions.md) the production flavor is the build that says it. The
 release signing, key custody, and upgrade-continuity verification that
 [Beta release signing and key continuity](release-signing.md) specified under ADR-042
-belonged to the same `beta` flavor; no flavor is signed now. This document covers the
-surrounding release process.
+belonged to the same `beta` flavor. Since ADR-076 the production flavor signs its release
+build with a persistent key of its own, which is not the beta key. This document covers
+the surrounding release process.
 
 ## Environments
 
@@ -42,9 +43,11 @@ three, although it is now handed to people: its launcher label and title read
 "Communication Platform", by the owner's answer recorded in [ADR-076](decisions.md) D8.
 
 The development and production flavors are separate, coexisting Android
-applications with different application IDs. Neither upgrades into the other. No
-flavor has a release signing identity: the production release build is deliberately
-unsigned so it keeps building and stays verifiable without being installable.
+applications with different application IDs. Neither upgrades into the other. Only
+production has a release signing identity ([ADR-076](decisions.md)): its release build is
+signed with the persistent production key and fails closed without it, unless
+`CP_PRODUCTION_UNSIGNED_BUILD=1` asks for the unsigned package that CI builds and
+verifies, which no device can install.
 
 No runtime text field changes the production server. Secrets are never compiled into the
 client; only public origins, CA certificates, SPKI hashes, and protocol capabilities are
@@ -99,9 +102,10 @@ by contract tests and conservative client behavior, not runtime version guessing
    rehearsal.
 3. Produce deterministic release APK artifacts where the toolchain permits.
 4. Sign with an offline-controlled application signing key; keep backup/recovery process
-   separate from source control. No flavor is signed today: the Beta signing path was
-   deleted with the `beta` flavor, and production's key is not created until an
-   explicit production release decision.
+   separate from source control. Production's release build is signed with its own
+   persistent key, which Gradle takes only from outside the repository
+   ([ADR-076](decisions.md) D5). That key is kept on the maintainer workstation for now,
+   a deviation from this step that ADR-076 D3 records.
 5. Generate SHA-256 artifact hashes and signed update metadata.
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
    private-CA connectivity on representative devices. Upgrade continuity has to be

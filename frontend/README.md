@@ -79,13 +79,22 @@ also requires the build-local resource generation described in
 
 ```sh
 flutter run --flavor development --target lib/main_development.dart
-flutter build apk --release --flavor production --target lib/main_production.dart
+CP_PRODUCTION_UNSIGNED_BUILD=1 flutter build apk --release --flavor production --target lib/main_production.dart
 ```
 
-No flavor has a release signing config. The production release build therefore packages
-unsigned: it keeps building and stays verifiable in CI, but the OS cannot install it,
-which is fail-closed by construction. Production gains its own identity only through an
-explicit, separate release decision.
+The production release build is signed with the one persistent production key
+([ADR-076](docs/decisions.md)), attached to the `production` flavor alone; the `release`
+build type itself carries no signing config, and never the debug one. Gradle reads the
+application ID from the committed `android/production-release-identity.properties`, and
+the key from outside the repository: from the untracked properties file that
+`CP_PRODUCTION_SIGNING_PROPERTIES` names, or from all four of
+`CP_PRODUCTION_KEYSTORE_FILE`, `CP_PRODUCTION_KEYSTORE_PASSWORD`,
+`CP_PRODUCTION_KEY_ALIAS` and `CP_PRODUCTION_KEY_PASSWORD`. Without the key the build
+fails closed, unless `CP_PRODUCTION_UNSIGNED_BUILD=1` asks for an unsigned package, as in
+the command above and in CI; the OS refuses to install that package. Asking for both
+fails as well. `tool/verify_release_apk.sh --production` is the gate for a distributable
+artifact and checks its signer against the recorded certificate, and
+`--production-unsigned` verifies the unsigned CI artifact.
 
 ## Generation and verification
 
@@ -101,8 +110,9 @@ sh ./tool/generate.sh
 ```
 
 The local CI commands run locked dependency resolution, generation with a clean-diff
-check, strict Flutter analysis, widget/unit tests, a development Android build, and
-production Android compilation:
+check, strict Flutter analysis, widget/unit tests, a development Android build, and an
+unsigned production Android build verified with
+`tool/verify_release_apk.sh --production-unsigned`:
 
 ```powershell
 ./tool/ci.ps1
