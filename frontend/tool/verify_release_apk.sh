@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Verify a built production release artifact (ADR-076 D6).
+# Verify a built production release artifact (ADR-076 D6 and D7).
 #
 # Two modes answer two different questions, and every answer must hold:
 #
 #   --production            the gate for a distributable artifact. Is this the
-#                           application it claims to be, and is it signed by the
+#                           application it claims to be, is it signed by the
 #                           one identity recorded in
-#                           android/production-release-identity.properties?
+#                           android/production-release-identity.properties,
+#                           and does it package the Android trust config that
+#                           tool/render_production_trust.sh renders?
 #   --production-unsigned   the artifact CI builds. Is it the same application,
 #                           and unsigned, so that the OS refuses to install it?
 #
@@ -32,11 +34,17 @@ Usage: tool/verify_release_apk.sh (--production | --production-unsigned) <apk>
                           application ID recorded in
                           android/production-release-identity.properties,
                           exactly one signer, APK Signature Scheme v2 and v3
-                          without v1, no debug certificate, and the signing
-                          certificate recorded in the same file.
+                          without v1, no debug certificate, the signing
+                          certificate recorded in the same file, and a
+                          packaged Android trust config with a domain-config,
+                          at least two SPKI pins, cleartext disabled and the
+                          provisioned private CA. When PRODUCTION_SERVER_ORIGIN,
+                          PRODUCTION_PRIMARY_SPKI_SHA256 or
+                          PRODUCTION_BACKUP_SPKI_SHA256 is set, the config must
+                          also pin that host or carry that pin.
   --production-unsigned   Verify the unsigned production artifact CI builds:
                           the recorded application ID, and NOT signed, so it
-                          cannot be installed.
+                          cannot be installed. Its trust config is not checked.
 
 Both modes also compare what the merged manifest declares - permissions and
 components, including everything a dependency contributed - against the set
@@ -287,6 +295,87 @@ exported_components="$(printf '%s\n' "$components" | awk -F'|' '$3 == "true" { p
        be exported - the launcher activity - because everything else in this
        artifact is started by this application or by the platform binding to it."
 pass "one exported component, the launcher activity"
+
+# --- Native trust, read out of the packaged artifact -------------------------
+
+# Only a distributable artifact is provisioned. CI's unsigned artifact carries
+# the checked-in baseline, so --production-unsigned does not check trust.
+#
+# This resource governs the platform's Java HTTP stacks and WebView, not
+# dart:io, on which this app's REST and WebSocket traffic runs; that traffic
+# trusts the CA compiled into Dart instead (ADR-043), which
+# test/features/networking/transport_security_test.dart covers. These checks
+# confirm that the declarative Android configuration is correct and consistent
+# with provisioning. What the pins protect is the open question ADR-076 D7
+# records, and nothing here answers it.
+if [[ "$mode" == "production" ]]; then
+  # Resource file names are obfuscated in a release build, so resolve the real
+  # path through the resource table rather than guessing it.
+  resource_table="$(aapt2 dump resources "$native_apk_path" 2>/dev/null)" ||
+    fail "aapt2 could not read the resource table of the artifact."
+  trust_resource="$(printf '%s\n' "$resource_table" |
+    grep -A1 'xml/network_security_config' |
+    sed -n 's/.*(file) \(res\/[^ ]*\.xml\).*/\1/p' | head -n 1)" || true
+  [[ -n "$trust_resource" ]] ||
+    fail "The artifact has no network_security_config resource, so Android would
+       apply its platform default and pin nothing."
+
+  trust_tree="$(aapt2 dump xmltree "$native_apk_path" --file "$trust_resource" 2>&1)" ||
+    fail "aapt2 could not read $trust_resource:
+$trust_tree"
+
+  [[ "$trust_tree" == *"domain-config"* ]] ||
+    fail "The packaged trust config has no domain-config, so this artifact trusts
+       the system CA store and pins nothing. Only tool/build_production_release.sh
+       makes a production artifact for a phone, and it renders the trust config
+       on every build."
+
+  expected_host="${PRODUCTION_SERVER_ORIGIN:-}"
+  expected_host="${expected_host#https://}"
+  expected_host="${expected_host%%/*}"
+  expected_host="${expected_host%%:*}"
+  if [[ -n "$expected_host" ]]; then
+    # aapt2 prints the domain as a quoted text node. Match the quotes too, so a
+    # superstring such as evil-chat.example.com cannot satisfy the check.
+    [[ "$trust_tree" == *"'$expected_host'"* ]] ||
+      fail "The packaged trust config does not pin $expected_host."
+    pass "declared Android trust config pins $expected_host"
+  else
+    pass "packaged trust config carries a domain-config"
+  fi
+
+  pin_count="$(grep -c 'digest="SHA-256"' <<<"$trust_tree" || true)"
+  [[ "$pin_count" -ge 2 ]] ||
+    fail "The packaged trust config carries $pin_count pin(s). A primary and a backup
+       are both required, so that the server key can move onto the backup."
+  provisioned_pins=0
+  for pin_name in PRODUCTION_PRIMARY_SPKI_SHA256 PRODUCTION_BACKUP_SPKI_SHA256; do
+    pin_value="${!pin_name:-}"
+    [[ -n "$pin_value" ]] || continue
+    # A pin is a quoted text node as well, so it is matched whole.
+    [[ "$trust_tree" == *"'$pin_value'"* ]] ||
+      fail "$pin_name is not present in the packaged trust config, so the
+       artifact pins something other than what was provisioned."
+    provisioned_pins=$((provisioned_pins + 1))
+  done
+  if [[ "$provisioned_pins" -eq 2 ]]; then
+    pass "declared Android trust config carries $pin_count SPKI pins, both provisioned pins among them"
+  else
+    pass "declared Android trust config carries $pin_count SPKI pins"
+  fi
+
+  [[ "$trust_tree" == *"cleartextTrafficPermitted=false"* &&
+    "$trust_tree" != *"cleartextTrafficPermitted=true"* ]] ||
+    fail "The packaged trust config does not disable cleartext traffic everywhere."
+  pass "declared Android trust config disables cleartext traffic"
+
+  # The packaged file name is obfuscated too, so the resource table is the only
+  # reliable place to look for the trust anchor.
+  [[ "$resource_table" == *"raw/provisioned_private_ca"* ]] ||
+    fail "The provisioned private CA is not packaged, so the pinned domain has no
+       trust anchor."
+  pass "provisioned private CA is packaged as a trust anchor"
+fi
 
 # --- The deleted beta MLS core stays deleted ---------------------------------
 
