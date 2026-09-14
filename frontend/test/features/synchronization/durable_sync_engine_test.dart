@@ -713,6 +713,67 @@ void main() {
     );
   });
 
+  test('a full device is sent its item again once the backoff ends', () async {
+    // Maximum jitter makes the backoff a real interval, so "later" can be
+    // told apart from "on the next pass of the same run".
+    final patient = DurableSyncEngine(
+      store: store,
+      remote: remote,
+      inspector: inspector,
+      staleDeviceRefresh: staleRefresh,
+      clock: clock,
+      jitter: const MaximumJitter(),
+      standDown: owner,
+    );
+    await patient.queuePreparedOperation(
+      operationId: 'full-retry-operation',
+      eventId: 'full-retry-event',
+      targets: [
+        PreparedOutboxTarget(
+          recipientUserId: 'full-user',
+          recipientDeviceId: uuid(63),
+          exactCiphertext: blob(63),
+        ),
+        PreparedOutboxTarget(
+          recipientUserId: 'live-user',
+          recipientDeviceId: uuid(64),
+          exactCiphertext: blob(64),
+        ),
+      ],
+    );
+    remote.fullDeviceIds.add(uuid(63));
+
+    expect(await patient.synchronize(), isA<Success<SyncRunReport>>());
+
+    expect(remote.sentBatches, hasLength(1));
+    final held = (await database.select(database.outboxOperations).get())
+        .singleWhere((row) => row.recipientDeviceId == uuid(63));
+    expect(held.attemptState, OutboxAttemptState.retryWait.index);
+    expect(held.nextAttemptAt!.isAfter(clock.now()), isTrue);
+
+    // The owner empties the mailbox. Until the backoff ends nothing is sent.
+    remote.fullDeviceIds.clear();
+    expect(await patient.synchronize(), isA<Success<SyncRunReport>>());
+    expect(remote.sentBatches, hasLength(1));
+
+    clock.advance(held.nextAttemptAt!.difference(clock.now()));
+    expect(await patient.synchronize(), isA<Success<SyncRunReport>>());
+
+    expect(remote.sentBatches, hasLength(2));
+    final resent = remote.sentBatches.last;
+    expect(resent.targets.map((target) => target.recipientDeviceId), [
+      uuid(63),
+    ]);
+    expect(resent.targets.single.exactCiphertext, blob(63));
+    expect(
+      (await database.select(database.outboxOperations).get()).map(
+        (row) => row.attemptState,
+      ),
+      everyElement(OutboxAttemptState.accepted.index),
+    );
+    expect(staleRefresh.users, isEmpty);
+  });
+
   test(
     'an answer that does not account for the batch is not recorded',
     () async {
