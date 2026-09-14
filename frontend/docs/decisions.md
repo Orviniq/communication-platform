@@ -619,6 +619,41 @@ tracked fingerprint, and never reached encryption, which the owner proves in pro
 no build's signing behaviour changed, and nothing was written under
 `~/.communication-platform/`.
 
+**2026-09-14, prompt 5 (Gradle signing).** `android/app/build.gradle.kts` reads
+`application.id` from `android/production-release-identity.properties`, fails when the file
+or the value is missing, and derives development's ID from it. A `production` signing
+config, with v2 and v3 and without v1 and v4, exists only when signing material is present,
+and it is attached inside the production flavor alone; `release` keeps
+`signingConfig = null`. `requireProductionReleaseSigning` runs before
+`validateSigningProductionRelease`, `packageProductionRelease`, `assembleProductionRelease`
+and `bundleProductionRelease`. It fails without material and without
+`CP_PRODUCTION_UNSIGNED_BUILD=1`, with both, and with a configured keystore that does not
+exist, which it reports by the configured and the resolved path, pointing at the backups.
+The mechanism is the reviewed beta code at `8267429`, and it differs from that code as
+follows. There is no default properties file (D5). `CP_PRODUCTION_SIGNING_PROPERTIES` must
+be absolute, as the keystore path already had to be, and a path that names no file fails,
+where the beta read a missing default file as no material. Naming the key through that
+variable and through any of the four variables at once fails, where the beta let the four
+win. `CP_PRODUCTION_UNSIGNED_BUILD` accepts `1` alone, and any other value fails. No failure
+names the keystore creator. `tool/verify_release_apk.sh` takes `--production` or
+`--production-unsigned`, reads the application ID and the fingerprint through
+`tool/release_env.sh` rather than out of the Gradle file, and refuses a second mode or a
+second APK. In `--production`, an apksigner report that lacks a scheme verdict, the signer's
+DN or its digest is an error rather than a mismatch. `tool/ci.sh` builds production in a
+subshell that unsets every `CP_PRODUCTION_KEYSTORE_*`, `CP_PRODUCTION_KEY_*` and
+`CP_PRODUCTION_SIGNING_PROPERTIES` variable, `tool/ci.ps1` removes them for that command and
+restores the caller's values, and both verify with `--production-unsigned`. D9 lets a
+session run a signed build through `tool/build_production_release.sh` only, and that script
+does not exist before prompt 6, so the owner confirmed in the session that prompt 5's signed
+proof build could run directly under D9's other rules: the properties file was passed only
+by its path, and the APK was neither installed nor copied. No trust provisioning changed.
+The proofs, in order: the unsigned build passed `--production-unsigned` with 7 checks; a
+build with neither the key nor the unsigned request, and one with both, each failed at
+`requireProductionReleaseSigning` with its own message; the signed build passed
+`--production` with 11 checks, signed by the recorded certificate
+`a06f9e8a250dc68bf95bdf3f9ffcf4c5dc81e6bd82a785011cd1a1e964cc8395`; and `--production`
+refused a copy of the unsigned APK, which apksigner does not verify.
+
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
 **Status:** Accepted. Client-side record of server ADR-0001,
