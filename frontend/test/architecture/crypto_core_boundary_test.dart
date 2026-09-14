@@ -58,6 +58,22 @@ void main() {
     expect(bindings, isNot(contains('error_message')));
   });
 
+  test('the deleted beta MLS entry point stays out of a release', () {
+    // Nothing in this tree defines cp_crypto_v1_beta_mls_operation any more.
+    // The Android build refuses every export outside the foundation list, and
+    // the release gate still refuses this one symbol by name, so a native core
+    // built from somewhere else cannot ship.
+    final androidBuild = File('tool/build_rust_android.sh').readAsStringSync();
+    final releaseGate = File('tool/verify_release_apk.sh').readAsStringSync();
+    expect(androidBuild, isNot(contains('cp_crypto_v1_beta_mls_operation')));
+    expect(androidBuild, isNot(contains('beta-pq-mls')));
+    expect(
+      releaseGate,
+      contains('readonly beta_symbol="cp_crypto_v1_beta_mls_operation"'),
+    );
+    expect(releaseGate, contains(r'grep -qx "$beta_symbol"'));
+  });
+
   test('a target without the native core is unsupported, not reimplemented', () {
     // The one adapter fails closed off Android rather than reaching for a Dart
     // primitive, and no Dart cryptographic package is available to reach for.

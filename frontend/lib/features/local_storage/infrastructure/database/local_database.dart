@@ -310,56 +310,35 @@ class PrekeyMaintenancePlans extends Table {
   Set<Column<Object>> get primaryKey => {deviceId};
 }
 
-@DataClassName('StoredMlsKeyPackageMaintenanceState')
-class MlsKeyPackageMaintenanceStates extends Table {
+/// One group this device follows.
+///
+/// A group is client state (`backend/CLIENT_CONTRACT.md` §F): the server holds
+/// no roster, epoch or key for it. [controlProjectionCiphertext] is this
+/// device's projection of the group, its member set included, and
+/// [GroupControlEvents] holds the signed transcript that justifies it.
+@DataClassName('StoredGroupStateRow')
+class GroupStates extends Table {
   @override
-  String get tableName => 'mls_key_package_maintenance_states';
-
-  TextColumn get deviceId => text()();
-  // 0 idle, 1 prepared, 2 consumable attempt started, 3 ambiguous.
-  IntColumn get stage => integer().check(stage.isBetweenValues(0, 3))();
-  IntColumn get expectedStateRevision => integer()
-      .withDefault(const Constant(0))
-      .check(expectedStateRevision.isBiggerOrEqualValue(0))();
-  IntColumn get plannedKind => integer().nullable().check(
-    plannedKind.isNull() | plannedKind.isBetweenValues(0, 1),
-  )();
-  BlobColumn get exactUploadProjection => blob().nullable()();
-  BoolColumn get lastResortUploaded =>
-      boolean().withDefault(const Constant(false))();
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column<Object>> get primaryKey => {deviceId};
-}
-
-class MlsGroups extends Table {
-  @override
-  String get tableName => 'mls_groups';
+  String get tableName => 'group_states';
 
   TextColumn get groupId => text()();
-  BlobColumn get opaqueCryptoStateHandle => blob()();
-  IntColumn get acceptedEpoch =>
-      integer().check(acceptedEpoch.isBiggerOrEqualValue(0))();
   IntColumn get stateVersion =>
       integer().check(stateVersion.isBiggerThanValue(0))();
-  IntColumn get queueGapRecoveryState => integer()
-      .withDefault(const Constant(0))
-      .check(queueGapRecoveryState.isBetweenValues(0, 2))();
-  BlobColumn get controlProjectionCiphertext => blob().nullable()();
-  IntColumn get controlRevision => integer()
-      .withDefault(const Constant(0))
-      .check(controlRevision.isBiggerOrEqualValue(0))();
-  BlobColumn get controlStateHash => blob().nullable()();
-  IntColumn get lifecycle => integer()
-      .withDefault(const Constant(0))
-      .check(lifecycle.isBetweenValues(0, 6))();
-  TextColumn get pendingMutationId => text().nullable()();
+  BlobColumn get controlProjectionCiphertext => blob()();
+  IntColumn get controlRevision =>
+      integer().check(controlRevision.isBiggerThanValue(0))();
+  BlobColumn get controlStateHash => blob()();
+  IntColumn get lifecycle => integer().check(lifecycle.isBetweenValues(0, 5))();
 
   @override
   Set<Column<Object>> get primaryKey => {groupId};
 }
 
+/// The accepted control transcript: one row per signed event, in chain order.
+///
+/// [canonicalControl] and [signature] are the exact bytes the signer's device
+/// produced, kept so that this device can hand the transcript to a member who
+/// needs it, and that member can check every signature itself.
 @DataClassName('StoredGroupControlEventRow')
 class GroupControlEvents extends Table {
   @override
@@ -367,23 +346,16 @@ class GroupControlEvents extends Table {
 
   TextColumn get eventId => text()();
   TextColumn get groupId =>
-      text().references(MlsGroups, #groupId, onDelete: KeyAction.cascade)();
+      text().references(GroupStates, #groupId, onDelete: KeyAction.cascade)();
   IntColumn get revision => integer().check(revision.isBiggerThanValue(0))();
   BlobColumn get previousControlStateHash => blob().nullable()();
   BlobColumn get controlStateHash => blob()();
-  BlobColumn get mlsCommitHash => blob().nullable()();
-  IntColumn get epoch => integer().check(epoch.isBiggerOrEqualValue(0))();
   TextColumn get signerUserId => text()();
   TextColumn get signerDeviceId => text()();
   IntColumn get operationKind =>
-      integer().check(operationKind.isBetweenValues(1, 8))();
-  TextColumn get deterministicProjection => text().nullable()();
+      integer().check(operationKind.isBetweenValues(1, 5))();
   BlobColumn get canonicalControl => blob()();
   BlobColumn get signature => blob()();
-  BlobColumn get signedPayload => blob().nullable()();
-  BlobColumn get signerAuthenticationProof => blob().nullable()();
-  IntColumn get applyState =>
-      integer().check(applyState.isBetweenValues(0, 2))();
   IntColumn get createdMs =>
       integer().check(createdMs.isBiggerOrEqualValue(0))();
 
@@ -396,27 +368,55 @@ class GroupControlEvents extends Table {
   ];
 }
 
+/// Exact group payloads owed to other devices.
+///
+/// A row commits with the state change that produced it and is routed into the
+/// pairwise outbox afterwards. [groupId] names no parent row, because a request
+/// for a group's state can precede the group.
 @DataClassName('StoredGroupOutboundObjectRow')
 class GroupOutboundObjects extends Table {
   @override
   String get tableName => 'group_outbound_objects';
 
   TextColumn get operationId => text()();
-  TextColumn get groupId =>
-      text().references(MlsGroups, #groupId, onDelete: KeyAction.cascade)();
+  TextColumn get groupId => text()();
   TextColumn get eventId => text()();
-  IntColumn get epoch => integer().check(epoch.isBiggerOrEqualValue(0))();
-  BlobColumn get mlsObject => blob()();
-  TextColumn get recipientUserIdsJson =>
-      text().withDefault(const Constant('[]'))();
-  // 0 development preview only and never dispatched, 1 committed and awaiting
-  // recipient-bound pairwise fan-out, 2 routed into the durable pairwise outbox.
+  BlobColumn get payload => blob()();
+  TextColumn get recipientUserIdsJson => text()();
+  TextColumn get recipientDeviceId => text().nullable()();
+  BoolColumn get includeOwnDevices =>
+      boolean().withDefault(const Constant(false))();
+  // 1 committed and awaiting recipient-bound pairwise fan-out, 2 routed into
+  // the durable pairwise outbox.
   IntColumn get deliveryState =>
-      integer().check(deliveryState.isBetweenValues(0, 2))();
+      integer().check(deliveryState.isBetweenValues(1, 2))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column<Object>> get primaryKey => {operationId};
+}
+
+/// Groups whose control state this device still has to ask a member for.
+///
+/// Reason 0 is a mailbox gap that may have carried a control event, and only
+/// those rows keep the checkpoint's gap open. Reason 1 is a control event that
+/// built on state this device does not hold.
+@DataClassName('StoredGroupStateRequestRow')
+class GroupStateRequests extends Table {
+  @override
+  String get tableName => 'group_state_requests';
+
+  TextColumn get groupId => text()();
+  IntColumn get reason => integer().check(reason.isBetweenValues(0, 1))();
+  TextColumn get peerUserId => text().nullable()();
+  IntColumn get attempts => integer()
+      .withDefault(const Constant(0))
+      .check(attempts.isBiggerOrEqualValue(0))();
+  DateTimeColumn get requestedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {groupId};
 }
 
 class Conversations extends Table {
@@ -440,23 +440,6 @@ class Conversations extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {conversationId};
-}
-
-class Memberships extends Table {
-  @override
-  String get tableName => 'memberships';
-
-  TextColumn get conversationId => text().references(
-    Conversations,
-    #conversationId,
-    onDelete: KeyAction.cascade,
-  )();
-  TextColumn get userId =>
-      text().references(Users, #userId, onDelete: KeyAction.cascade)();
-  BlobColumn get rolePolicyProjectionCiphertext => blob()();
-
-  @override
-  Set<Column<Object>> get primaryKey => {conversationId, userId};
 }
 
 /// The one index the timeline is read through.
@@ -1157,12 +1140,11 @@ class StorageMigrationHooks {
     PairwiseSessionAlternates,
     Prekeys,
     PrekeyMaintenancePlans,
-    MlsKeyPackageMaintenanceStates,
-    MlsGroups,
+    GroupStates,
     GroupControlEvents,
     GroupOutboundObjects,
+    GroupStateRequests,
     Conversations,
-    Memberships,
     Messages,
     MessageEvents,
     StoredApplicationEvents,
@@ -1194,7 +1176,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 19;
+  static const currentSchemaVersion = 22;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1218,7 +1200,6 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createTable(enrollmentIntents);
         }
         if (from < 3) {
-          await migrator.addColumn(mlsGroups, mlsGroups.queueGapRecoveryState);
           await migrator.addColumn(
             inboxEnvelopes,
             inboxEnvelopes.opaqueEventId,
@@ -1463,61 +1444,20 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createTable(historyTransferBatches);
         }
         if (from < 8) {
-          await migrator.addColumn(
-            mlsGroups,
-            mlsGroups.controlProjectionCiphertext,
-          );
-          await migrator.addColumn(mlsGroups, mlsGroups.controlRevision);
-          await migrator.addColumn(mlsGroups, mlsGroups.controlStateHash);
-          await migrator.addColumn(mlsGroups, mlsGroups.lifecycle);
-          await migrator.addColumn(mlsGroups, mlsGroups.pendingMutationId);
+          // This step, and the schema-3, schema-10, schema-11 and schema-21
+          // steps, used to reshape the MLS-era group tables as well. The
+          // schema-22 step drops those tables and creates their replacements,
+          // so a database of any age reaches the same group tables without
+          // being walked through shapes it would lose there anyway.
           await migrator.addColumn(
             conversations,
             conversations.displayTitleCiphertext,
           );
-          await migrator.createTable(groupControlEvents);
-          await migrator.createTable(groupOutboundObjects);
         }
-        if (from < 9) {
-          await migrator.createTable(mlsKeyPackageMaintenanceStates);
-        }
-        if (from < 10) {
-          final columns = await customSelect(
-            'PRAGMA table_info(group_outbound_objects)',
-          ).get();
-          final hasRecipientColumn = columns.any(
-            (row) => row.read<String>('name') == 'recipient_user_ids_json',
-          );
-          if (!hasRecipientColumn) {
-            await migrator.addColumn(
-              groupOutboundObjects,
-              groupOutboundObjects.recipientUserIdsJson,
-            );
-          }
-        }
-        if (from >= 8 && from < 11) {
-          final columns = await customSelect(
-            'PRAGMA table_info(group_control_events)',
-          ).map((row) => row.read<String>('name')).get();
-          if (!columns.contains('deterministic_projection')) {
-            await migrator.addColumn(
-              groupControlEvents,
-              groupControlEvents.deterministicProjection,
-            );
-          }
-          if (!columns.contains('signed_payload')) {
-            await migrator.addColumn(
-              groupControlEvents,
-              groupControlEvents.signedPayload,
-            );
-          }
-          if (!columns.contains('signer_authentication_proof')) {
-            await migrator.addColumn(
-              groupControlEvents,
-              groupControlEvents.signerAuthenticationProof,
-            );
-          }
-        }
+        // Schema 9 created `mls_key_package_maintenance_states` and nothing
+        // else, and the schema-20 step below drops it again. No step between
+        // reads the table and the drop tolerates its absence, so a database
+        // older than 9 is not handed a table only to lose it.
         if (from < 12) {
           // Checked rather than assumed, like the schema-7 and schema-11 steps
           // above: a database whose recorded version is behind its actual shape
@@ -1820,6 +1760,68 @@ final class LocalDatabase extends _$LocalDatabase {
           if (present) {
             await migrator.dropColumn(devices, 'last_active_date');
           }
+        }
+        if (from < 20) {
+          // The server deleted MLS. The three KeyPackage routes answer 404 and
+          // no endpoint stores or serves a KeyPackage, so nothing uploads one.
+          // This table was the bookkeeping for those uploads: nothing writes
+          // it any more and nothing reads it.
+          //
+          // Only a closed-beta database ever held a row. Everywhere else the
+          // table was created empty and stayed that way, so the drop takes no
+          // state any build can still use.
+          //
+          // `deleteTable` issues `DROP TABLE IF EXISTS`. The declaration is
+          // gone, so `createAll` no longer makes the table, and a database
+          // created by this build and stamped back — which is what the
+          // migration tests do, and what a development build does — reaches
+          // this step with nothing to drop.
+          await migrator.deleteTable('mls_key_package_maintenance_states');
+        }
+        if (from < 22) {
+          // A group is a set of pairwise sessions now, and its roster is
+          // client state (`backend/CLIENT_CONTRACT.md` §F). The group tables
+          // are replaced rather than reshaped: every row in them was written
+          // by the closed-beta or development-preview MLS stack, under a
+          // control encoding and signatures no build can verify any more, and
+          // a group whose transcript cannot be verified cannot be carried
+          // forward. Production never wrote a group row.
+          //
+          // `memberships` goes with them. Its user foreign key cannot hold a
+          // member who is not a contact of this device, nothing but the group
+          // repository read it, and the member set lives in the group's own
+          // projection now.
+          //
+          // `deleteTable` issues `DROP TABLE IF EXISTS`, children first. A
+          // database this build created and something stamped back loses its
+          // new group tables to the same drop and gets them back empty.
+          for (final table in const [
+            'group_outbound_objects',
+            'group_control_events',
+            'group_state_requests',
+            'memberships',
+            'mls_groups',
+            'group_states',
+          ]) {
+            await migrator.deleteTable(table);
+          }
+          await migrator.createTable(groupStates);
+          await migrator.createTable(groupControlEvents);
+          await migrator.createTable(groupOutboundObjects);
+          await migrator.createTable(groupStateRequests);
+          // The conversations those groups owned keep their history on disk,
+          // hidden, because nothing can send into them again. Kind 1 is
+          // `ConversationKind.group`.
+          await customStatement(
+            'UPDATE conversations SET tombstoned = 1 WHERE kind = 1',
+          );
+          // Envelopes held back until an MLS re-admission go back to ordinary
+          // inspection: 5 is `InboxProcessingState.blockedByQueueGap` and 0 is
+          // `received`. No group payload waits on a gap any more.
+          await customStatement(
+            'UPDATE inbox_envelopes SET processing_state = 0 '
+            'WHERE processing_state = 5',
+          );
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

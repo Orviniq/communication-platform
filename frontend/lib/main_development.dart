@@ -8,7 +8,7 @@ Future<void> main() => bootstrap(AppEnvironment.development);
 /// The headless entry point the platform runs for a deferred catch-up.
 ///
 /// One per flavor, deliberately. The compiled environment is what decides the
-/// provisioned server, the trust anchor and the closed-beta group permit, and
+/// provisioned server and the trust anchor, and
 /// this repository holds that it must be fixed by the entry point rather than
 /// selectable at runtime — so the platform picks a *name*, and which
 /// `AppEnvironment` that name resolves to is decided by which file was
@@ -22,8 +22,8 @@ Future<void> backgroundDelivery() =>
 ///
 /// One per flavor, for the same reason the deferred one is: the platform picks
 /// a *name*, and which `AppEnvironment` that name resolves to is decided by
-/// which file was compiled, so nothing about the provisioned server, the trust
-/// anchor or the closed-beta group permit is selectable at runtime. A build
+/// which file was compiled, so nothing about the provisioned server or the
+/// trust anchor is selectable at runtime. A build
 /// asked for an entry point it does not contain fails to start one, which is
 /// the fail-closed direction.
 @pragma('vm:entry-point')

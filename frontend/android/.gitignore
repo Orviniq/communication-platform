@@ -14,8 +14,9 @@ key.properties
 **/*.keystore
 **/*.jks
 
-# Private Beta release signing material. Only the public frozen identity in
-# beta-release-identity.properties belongs in source control.
+# Release signing material never belongs in source control. The deleted beta
+# flavor read its keystore passwords from beta-signing.properties, and a
+# leftover copy stays ignored.
 beta-signing.properties
 *.p12
 *.pfx

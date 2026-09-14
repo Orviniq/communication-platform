@@ -7,7 +7,7 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/application/ports/contact_ports.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 
-/// Authentication Service used by profile handling now and by later messaging/MLS.
+/// Authentication Service used by profile handling and by pairwise messaging.
 ///
 /// Backend listings are treated as untrusted inputs. A successful result chains exact
 /// response bytes through master, self-signing, device, prekey, and device-log checks.

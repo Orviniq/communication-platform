@@ -36,8 +36,8 @@ void main() {
               as Map<String, Object?>;
       // `RegisterDeviceIn` is `additionalProperties: false` and has no
       // `keypackages` field, so an extra key is a `400`, not a courtesy the
-      // route ignores. The gates in `docs/mls-profile.md` are closed and this
-      // client generates no production KeyPackage to put here in any case.
+      // route ignores. The server serves no MLS, so this client has no
+      // KeyPackage to put here in any case.
       expect(sent.containsKey('keypackages'), isFalse);
       expect(sent.keys, <String>[
         'ik_pub',

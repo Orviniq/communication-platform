@@ -91,7 +91,6 @@ void main() {
         ..execute(
           'ALTER TABLE pairwise_sessions DROP COLUMN last_authenticated_at',
         )
-        ..execute('ALTER TABLE mls_groups DROP COLUMN queue_gap_recovery_state')
         ..execute('ALTER TABLE inbox_envelopes DROP COLUMN opaque_event_id')
         ..execute('ALTER TABLE inbox_envelopes DROP COLUMN dependency_class')
         ..execute('ALTER TABLE inbox_envelopes DROP COLUMN attempt_count')
@@ -110,7 +109,6 @@ void main() {
         );
       _dropPieceFourteenSchema(versionOne);
       _dropPieceEighteenSchema(versionOne);
-      _dropPieceNineteenSchema(versionOne);
       versionOne.execute('PRAGMA user_version = 1');
       versionOne.close();
 
@@ -193,7 +191,6 @@ void main() {
         );
       _dropPieceFourteenSchema(versionThree);
       _dropPieceEighteenSchema(versionThree);
-      _dropPieceNineteenSchema(versionThree);
       versionThree.execute('PRAGMA user_version = 3');
       versionThree.close();
 
@@ -290,7 +287,6 @@ void main() {
       ..execute('ALTER TABLE conversations DROP COLUMN pinned')
       ..execute('ALTER TABLE messages DROP COLUMN starred');
     _dropPieceEighteenSchema(versionFive);
-    _dropPieceNineteenSchema(versionFive);
     versionFive.execute('PRAGMA user_version = 5');
     versionFive.close();
 
@@ -312,7 +308,7 @@ void main() {
   });
 
   test(
-    'version-eight upgrade preserves data and adds MLS maintenance state',
+    'version-eight upgrade preserves data and adds no KeyPackage table',
     () async {
       final current = LocalDatabase(NativeDatabase(databaseFile));
       await current.customSelect('SELECT 1').getSingle();
@@ -323,9 +319,11 @@ void main() {
       );
       await current.close();
 
-      final versionEight = sqlite3.open(databaseFile.path);
-      _dropPieceNineteenSchema(versionEight);
-      versionEight.execute('PRAGMA user_version = 8');
+      // Schema 9 added only the KeyPackage maintenance table, and this build no
+      // longer creates it, so nothing has to be taken away before the database
+      // is stamped back to 8.
+      final versionEight = sqlite3.open(databaseFile.path)
+        ..execute('PRAGMA user_version = 8');
       versionEight.close();
 
       final upgraded = LocalDatabase(NativeDatabase(databaseFile));
@@ -346,193 +344,9 @@ void main() {
               "SELECT name FROM sqlite_master WHERE type = 'table' "
               "AND name = 'mls_key_package_maintenance_states'",
             )
-            .getSingle(),
-        isNotNull,
+            .get(),
+        isEmpty,
       );
-      expect(
-        await upgraded
-            .customSelect('PRAGMA user_version')
-            .map((row) => row.read<int>('user_version'))
-            .getSingle(),
-        LocalDatabase.currentSchemaVersion,
-      );
-      await upgraded.close();
-    },
-  );
-
-  test('version-nine upgrade adds exact group outbound recipients', () async {
-    final current = LocalDatabase(NativeDatabase(databaseFile));
-    await current.customSelect('SELECT 1').getSingle();
-    await current.customStatement(
-      "INSERT INTO local_preferences "
-      "(preference_key, value_ciphertext, value_version) "
-      "VALUES ('piece-19-v10-preserved', X'0A', 1)",
-    );
-    await current.close();
-
-    final versionNine = sqlite3.open(databaseFile.path);
-    versionNine.execute(
-      'ALTER TABLE group_outbound_objects '
-      'DROP COLUMN recipient_user_ids_json',
-    );
-    versionNine.execute('PRAGMA user_version = 9');
-    versionNine.close();
-
-    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
-    await upgraded.customSelect('SELECT 1').getSingle();
-    expect(
-      await upgraded
-          .customSelect(
-            "SELECT preference_key FROM local_preferences "
-            "WHERE preference_key = 'piece-19-v10-preserved'",
-          )
-          .getSingle(),
-      isNotNull,
-    );
-    final columns = await upgraded
-        .customSelect('PRAGMA table_info(group_outbound_objects)')
-        .map((row) => row.read<String>('name'))
-        .get();
-    expect(columns, contains('recipient_user_ids_json'));
-    expect(
-      await upgraded
-          .customSelect('PRAGMA user_version')
-          .map((row) => row.read<int>('user_version'))
-          .getSingle(),
-      LocalDatabase.currentSchemaVersion,
-    );
-    await upgraded.close();
-  });
-
-  test(
-    'version-ten upgrade adds fail-closed control transcript evidence',
-    () async {
-      final current = LocalDatabase(NativeDatabase(databaseFile));
-      await current.customSelect('SELECT 1').getSingle();
-      await current.close();
-
-      final versionTen = sqlite3.open(databaseFile.path)
-        ..execute(
-          'ALTER TABLE group_control_events '
-          'DROP COLUMN deterministic_projection',
-        )
-        ..execute('ALTER TABLE group_control_events DROP COLUMN signed_payload')
-        ..execute(
-          'ALTER TABLE group_control_events '
-          'DROP COLUMN signer_authentication_proof',
-        )
-        ..execute('PRAGMA user_version = 10');
-      versionTen.close();
-
-      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
-      await upgraded.customSelect('SELECT 1').getSingle();
-      final columns = await upgraded
-          .customSelect('PRAGMA table_info(group_control_events)')
-          .map((row) => row.read<String>('name'))
-          .get();
-      expect(
-        columns,
-        containsAll(<String>[
-          'deterministic_projection',
-          'signed_payload',
-          'signer_authentication_proof',
-        ]),
-      );
-      await upgraded.close();
-    },
-  );
-
-  // Schema 11 adds nullable transcript-evidence columns. ADR-036/ADR-037 make
-  // pre-v3 group state disposable, so the upgrade must carry the opaque MLS
-  // handle across untouched and must leave absent evidence absent. Fabricating
-  // either would be the storage-layer form of the silent reinterpretation the
-  // crypto core rejects.
-  test(
-    'version-ten upgrade preserves opaque group state and fabricates no evidence',
-    () async {
-      final current = LocalDatabase(NativeDatabase(databaseFile));
-      await current.customSelect('SELECT 1').getSingle();
-      await current.close();
-
-      final opaqueState = Uint8List.fromList(
-        List<int>.generate(256, (index) => (index * 7 + 11) % 256),
-      );
-      final controlStateHash = Uint8List.fromList(List<int>.filled(32, 0xA7));
-      final canonicalControl = Uint8List.fromList(const [1, 2, 3, 4]);
-      final signature = Uint8List.fromList(List<int>.filled(64, 0x5C));
-
-      final versionTen = sqlite3.open(databaseFile.path)
-        ..execute(
-          'ALTER TABLE group_control_events '
-          'DROP COLUMN deterministic_projection',
-        )
-        ..execute('ALTER TABLE group_control_events DROP COLUMN signed_payload')
-        ..execute(
-          'ALTER TABLE group_control_events '
-          'DROP COLUMN signer_authentication_proof',
-        )
-        ..execute(
-          'INSERT INTO mls_groups (group_id, opaque_crypto_state_handle, '
-          'accepted_epoch, state_version) VALUES (?, ?, ?, ?)',
-          <Object?>['group-pre-v3', opaqueState, 3, 1],
-        )
-        ..execute(
-          'INSERT INTO group_control_events (event_id, group_id, revision, '
-          'control_state_hash, epoch, signer_user_id, signer_device_id, '
-          'operation_kind, canonical_control, signature, apply_state, '
-          'created_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          <Object?>[
-            'event-pre-v3',
-            'group-pre-v3',
-            1,
-            controlStateHash,
-            3,
-            'user-1',
-            'device-1',
-            1,
-            canonicalControl,
-            signature,
-            2,
-            1000,
-          ],
-        )
-        ..execute('PRAGMA user_version = 10');
-      versionTen.close();
-
-      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
-      final group = await upgraded
-          .customSelect(
-            "SELECT * FROM mls_groups WHERE group_id = 'group-pre-v3'",
-          )
-          .getSingle();
-
-      expect(
-        group.read<Uint8List>('opaque_crypto_state_handle'),
-        opaqueState,
-        reason: 'the upgrade never rewrites opaque MLS state',
-      );
-      expect(group.read<int>('accepted_epoch'), 3);
-      expect(group.read<int>('state_version'), 1);
-
-      final event = await upgraded
-          .customSelect(
-            'SELECT * FROM group_control_events '
-            "WHERE event_id = 'event-pre-v3'",
-          )
-          .getSingle();
-
-      expect(
-        event.readNullable<String>('deterministic_projection'),
-        isNull,
-        reason: 'absent transcript evidence stays absent',
-      );
-      expect(event.readNullable<Uint8List>('signed_payload'), isNull);
-      expect(
-        event.readNullable<Uint8List>('signer_authentication_proof'),
-        isNull,
-      );
-      expect(event.read<Uint8List>('canonical_control'), canonicalControl);
-
       expect(
         await upgraded
             .customSelect('PRAGMA user_version')
@@ -1169,10 +983,329 @@ void main() {
     );
     await upgraded.close();
   });
+
+  test(
+    'version-nineteen upgrade drops the KeyPackage maintenance table',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.customStatement(
+        "INSERT INTO local_preferences "
+        "(preference_key, value_ciphertext, value_version) "
+        "VALUES ('schema-20-preserved', X'14', 1)",
+      );
+      await current.close();
+
+      // A closed-beta device at 19 has the table and may hold a row in it.
+      // This build no longer creates it, so it is put back the way schema 9
+      // made it before the step has anything to drop.
+      final versionNineteen = sqlite3.open(databaseFile.path)
+        ..execute(_keyPackageMaintenanceTableV19)
+        ..execute(
+          'INSERT INTO mls_key_package_maintenance_states '
+          '(device_id, stage, planned_kind, exact_upload_projection) '
+          'VALUES (?, ?, ?, ?)',
+          <Object?>[
+            _deviceV19,
+            1,
+            0,
+            Uint8List.fromList(const [4]),
+          ],
+        )
+        ..execute('PRAGMA user_version = 19');
+      versionNineteen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+      // The table and its primary-key index both go.
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT name FROM sqlite_master "
+              "WHERE tbl_name = 'mls_key_package_maintenance_states'",
+            )
+            .get(),
+        isEmpty,
+      );
+      // One table, not a rewrite of what sat beside it.
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT preference_key FROM local_preferences "
+              "WHERE preference_key = 'schema-20-preserved'",
+            )
+            .get(),
+        hasLength(1),
+      );
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
+
+  test('the table drop tolerates a database that never had it', () async {
+    // A database this build created and something stamped back to 19 has no
+    // table, because `createAll` no longer makes one. An upgrade that failed
+    // here would leave the application unable to open its storage.
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final stampedBack = sqlite3.open(databaseFile.path)
+      ..execute('PRAGMA user_version = 19');
+    stampedBack.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    expect(
+      await upgraded
+          .customSelect(
+            "SELECT name FROM sqlite_master "
+            "WHERE tbl_name = 'mls_key_package_maintenance_states'",
+          )
+          .get(),
+      isEmpty,
+    );
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test('version-twenty-one upgrade replaces the MLS group tables', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    // The group tables are put back the way schema 21 made them, holding a
+    // group only the MLS stack could have written: a conversation, a queued
+    // MLS object, and an envelope held back for a re-admission.
+    final versionTwentyOne = sqlite3.open(databaseFile.path)
+      ..execute('DROP TABLE group_state_requests')
+      ..execute('DROP TABLE group_outbound_objects')
+      ..execute('DROP TABLE group_control_events')
+      ..execute('DROP TABLE group_states')
+      ..execute(_mlsGroupsTableV21)
+      ..execute(_groupControlEventsTableV21)
+      ..execute(_groupOutboundObjectsTableV21)
+      ..execute(_membershipsTableV21)
+      ..execute(
+        'INSERT INTO mls_groups (group_id, accepted_epoch, state_version, '
+        'control_revision, lifecycle) VALUES (?, ?, ?, ?, ?)',
+        <Object?>[_groupV21, 4, 2, 3, 0],
+      )
+      ..execute(
+        'INSERT INTO group_outbound_objects (operation_id, group_id, '
+        'event_id, epoch, mls_object, delivery_state) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          'operation-v21',
+          _groupV21,
+          'event-v21',
+          4,
+          Uint8List.fromList(const [1]),
+          1,
+        ],
+      )
+      ..execute(
+        'INSERT INTO conversations (conversation_id, kind, '
+        "list_projection_ciphertext, sort_key) VALUES (?, 1, X'01', 1)",
+        <Object?>[_groupV21],
+      )
+      ..execute(
+        'INSERT INTO conversations (conversation_id, kind, '
+        "list_projection_ciphertext, sort_key) "
+        "VALUES ('direct-v21', 0, X'01', 1)",
+      )
+      ..execute(
+        'INSERT INTO inbox_envelopes (envelope_id, sequence, '
+        "envelope_ciphertext, processing_state) "
+        "VALUES ('held-v21', 1, X'01', 5)",
+      )
+      ..execute('PRAGMA user_version = 21');
+    versionTwentyOne.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final tables = await upgraded
+        .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(tables, isNot(contains('mls_groups')));
+    expect(tables, isNot(contains('memberships')));
+    expect(
+      tables,
+      containsAll(<String>[
+        'group_states',
+        'group_control_events',
+        'group_outbound_objects',
+        'group_state_requests',
+      ]),
+    );
+    expect(
+      await upgraded.customSelect('SELECT * FROM group_outbound_objects').get(),
+      isEmpty,
+    );
+    final controlColumns = await upgraded
+        .customSelect('PRAGMA table_info(group_control_events)')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(controlColumns, isNot(contains('epoch')));
+    expect(controlColumns, isNot(contains('mls_commit_hash')));
+    expect(controlColumns, contains('canonical_control'));
+
+    Future<int> tombstoned(String conversationId) => upgraded
+        .customSelect(
+          'SELECT tombstoned FROM conversations WHERE conversation_id = ?',
+          variables: [Variable<String>(conversationId)],
+        )
+        .map((row) => row.read<int>('tombstoned'))
+        .getSingle();
+    expect(await tombstoned(_groupV21), 1);
+    expect(await tombstoned('direct-v21'), 0);
+    expect(
+      await upgraded
+          .customSelect(
+            'SELECT processing_state FROM inbox_envelopes '
+            "WHERE envelope_id = 'held-v21'",
+          )
+          .map((row) => row.read<int>('processing_state'))
+          .getSingle(),
+      0,
+    );
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test(
+    'the group table replacement tolerates a database this build made',
+    () async {
+      // A database this build created and something stamped back to 21 already
+      // has the new group tables. An upgrade that failed on them would leave
+      // the application unable to open its storage.
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final stampedBack = sqlite3.open(databaseFile.path)
+        ..execute('PRAGMA user_version = 21');
+      stampedBack.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+      final tables = await upgraded
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(
+        tables,
+        containsAll(<String>['group_states', 'group_state_requests']),
+      );
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
 }
 
 const _userV19 = '00000000-0000-0000-0000-0000000000a1';
 const _deviceV19 = '00000000-0000-0000-0000-0000000000d1';
+const _groupV21 = 'group-v21';
+
+/// The group tables as schema 21 created them, before schema 22 replaced them.
+const _mlsGroupsTableV21 =
+    'CREATE TABLE "mls_groups" ("group_id" TEXT NOT NULL, '
+    '"accepted_epoch" INTEGER NOT NULL CHECK("accepted_epoch" >= 0), '
+    '"state_version" INTEGER NOT NULL CHECK("state_version" > 0), '
+    '"queue_gap_recovery_state" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("queue_gap_recovery_state" BETWEEN 0 AND 2), '
+    '"control_projection_ciphertext" BLOB NULL, '
+    '"control_revision" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("control_revision" >= 0), '
+    '"control_state_hash" BLOB NULL, '
+    '"lifecycle" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("lifecycle" BETWEEN 0 AND 6), '
+    '"pending_mutation_id" TEXT NULL, '
+    'PRIMARY KEY ("group_id"))';
+
+const _groupControlEventsTableV21 =
+    'CREATE TABLE "group_control_events" ("event_id" TEXT NOT NULL, '
+    '"group_id" TEXT NOT NULL '
+    'REFERENCES mls_groups (group_id) ON DELETE CASCADE, '
+    '"revision" INTEGER NOT NULL CHECK("revision" > 0), '
+    '"previous_control_state_hash" BLOB NULL, '
+    '"control_state_hash" BLOB NOT NULL, '
+    '"mls_commit_hash" BLOB NULL, '
+    '"epoch" INTEGER NOT NULL CHECK("epoch" >= 0), '
+    '"signer_user_id" TEXT NOT NULL, '
+    '"signer_device_id" TEXT NOT NULL, '
+    '"operation_kind" INTEGER NOT NULL '
+    'CHECK("operation_kind" BETWEEN 1 AND 8), '
+    '"deterministic_projection" TEXT NULL, '
+    '"canonical_control" BLOB NOT NULL, '
+    '"signature" BLOB NOT NULL, '
+    '"signed_payload" BLOB NULL, '
+    '"signer_authentication_proof" BLOB NULL, '
+    '"apply_state" INTEGER NOT NULL CHECK("apply_state" BETWEEN 0 AND 2), '
+    '"created_ms" INTEGER NOT NULL CHECK("created_ms" >= 0), '
+    'PRIMARY KEY ("event_id"), UNIQUE ("group_id", "revision"))';
+
+const _groupOutboundObjectsTableV21 =
+    'CREATE TABLE "group_outbound_objects" ("operation_id" TEXT NOT NULL, '
+    '"group_id" TEXT NOT NULL '
+    'REFERENCES mls_groups (group_id) ON DELETE CASCADE, '
+    '"event_id" TEXT NOT NULL, '
+    '"epoch" INTEGER NOT NULL CHECK("epoch" >= 0), '
+    '"mls_object" BLOB NOT NULL, '
+    "\"recipient_user_ids_json\" TEXT NOT NULL DEFAULT '[]', "
+    '"delivery_state" INTEGER NOT NULL '
+    'CHECK("delivery_state" BETWEEN 0 AND 2), '
+    '"created_at" INTEGER NOT NULL DEFAULT 0, '
+    'PRIMARY KEY ("operation_id"))';
+
+const _membershipsTableV21 =
+    'CREATE TABLE "memberships" ("conversation_id" TEXT NOT NULL '
+    'REFERENCES conversations (conversation_id) ON DELETE CASCADE, '
+    '"user_id" TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE, '
+    '"role_policy_projection_ciphertext" BLOB NOT NULL, '
+    'PRIMARY KEY ("conversation_id", "user_id"))';
+
+/// `mls_key_package_maintenance_states` as schema 9 created it, copied from
+/// `sqlite_master` before its declaration was deleted.
+const _keyPackageMaintenanceTableV19 =
+    'CREATE TABLE "mls_key_package_maintenance_states" ('
+    '"device_id" TEXT NOT NULL, '
+    '"stage" INTEGER NOT NULL CHECK("stage" BETWEEN 0 AND 3), '
+    '"expected_state_revision" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK("expected_state_revision" >= 0), '
+    '"planned_kind" INTEGER NULL '
+    'CHECK("planned_kind" IS NULL OR "planned_kind" BETWEEN 0 AND 1), '
+    '"exact_upload_projection" BLOB NULL, '
+    '"last_resort_uploaded" INTEGER NOT NULL DEFAULT 0 '
+    'CHECK ("last_resort_uploaded" IN (0, 1)), '
+    '"updated_at" INTEGER NOT NULL '
+    "DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)), "
+    'PRIMARY KEY ("device_id"))';
 
 const _conversationV17 =
     '0909090909090909090909090909090909090909090909090909090909090909';
@@ -1253,21 +1386,11 @@ void _dropPhaseTwoIndexes(Database database) {
 }
 
 void _dropPieceEighteenSchema(Database database) {
-  database
-    ..execute('DROP TABLE group_outbound_objects')
-    ..execute('DROP TABLE group_control_events')
-    ..execute(
-      'ALTER TABLE mls_groups DROP COLUMN control_projection_ciphertext',
-    )
-    ..execute('ALTER TABLE mls_groups DROP COLUMN control_revision')
-    ..execute('ALTER TABLE mls_groups DROP COLUMN control_state_hash')
-    ..execute('ALTER TABLE mls_groups DROP COLUMN lifecycle')
-    ..execute('ALTER TABLE mls_groups DROP COLUMN pending_mutation_id')
-    ..execute('ALTER TABLE conversations DROP COLUMN display_title_ciphertext');
-}
-
-void _dropPieceNineteenSchema(Database database) {
-  database.execute('DROP TABLE mls_key_package_maintenance_states');
+  // The group tables piece 18 reshaped are replaced whole by schema 22, so an
+  // older database needs only the conversation column taken back.
+  database.execute(
+    'ALTER TABLE conversations DROP COLUMN display_title_ciphertext',
+  );
 }
 
 final class _FailAfterSchemaCreation extends StorageMigrationHooks {

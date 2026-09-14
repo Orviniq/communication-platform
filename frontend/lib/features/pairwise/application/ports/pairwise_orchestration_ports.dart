@@ -50,6 +50,17 @@ abstract interface class PairwiseLiveDeviceResolverPort implements Port {
   );
 }
 
+/// Names who an owed send is for, from the event it carries.
+abstract interface class PairwiseSendAudiencePort implements Port {
+  /// Null when the event's conversation names its own recipient. Otherwise
+  /// every other user the event is for right now: an empty set is a group
+  /// this device's account is the only active member of.
+  Future<Result<Set<String>?>> resolveAudience({
+    required String eventId,
+    required String currentUserId,
+  });
+}
+
 /// Authenticates the full live-device set but consumes keys only for [deviceIds].
 abstract interface class PairwiseSelectiveClaimPort implements Port {
   Future<Result<VerifiedPairwiseClaims>> claimVerifiedDevices({

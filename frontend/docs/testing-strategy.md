@@ -51,14 +51,13 @@ not a version-1 target or release gate.
   MLS implementations.
 - Property tests for encode/decode, encrypt/decrypt, state serialization, replay, skipped
   messages, and epoch transitions.
-- Fuzzing of all untrusted binary parsers and state restoration. The closed-beta PQ
-  MLS input boundaries are covered by the in-crate harness described in
-  `native/crypto_core/fuzz/README.md`; it is structure-aware and mutational, not
-  coverage-guided, because the pinned stable toolchain and the offline/pinned-
-  dependency rules exclude `cargo-fuzz`, libFuzzer, AFL++, ASan, and Miri.
-  Coverage-guided instrumentation and a sanitizer build remain outstanding and need
-  an approved toolchain decision. The pairwise transport, application-message, and
-  attachment parsers are not fuzzed yet.
+- Fuzzing of all untrusted binary parsers and state restoration. Nothing is fuzzed
+  today: the one in-crate harness covered only the closed-beta PQ MLS inputs and was
+  deleted with that core, and the pairwise transport, application-message, and
+  attachment parsers were never fuzzed. The pinned stable toolchain and the
+  offline/pinned-dependency rules exclude `cargo-fuzz`, libFuzzer, AFL++, ASan, and
+  Miri, so coverage-guided instrumentation and a sanitizer build need an approved
+  toolchain decision.
 - Negative vectors for altered headers, signatures, associated data, padding, counters,
   final tags, credentials, and group commits.
 

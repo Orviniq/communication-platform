@@ -300,6 +300,137 @@ void main() {
     expect(store.commits, isEmpty);
   });
 
+  test(
+    'a group send makes one copy for each live device of each member',
+    () async {
+      const secondMemberNumber = 1002;
+      resolver.devices[uuid(secondMemberNumber)] = [
+        live(secondMemberNumber, 5),
+        live(secondMemberNumber, 6),
+        live(secondMemberNumber, 7),
+      ];
+      store.contexts.addAll({
+        uuid(5): context(primary: session(secondMemberNumber, 5)),
+        uuid(6): context(),
+        uuid(7): context(),
+      });
+      store.durable['application:group'] = DurablePairwiseOperation(
+        operationId: 'application:group',
+        eventId: 'group-event',
+        currentDeviceId: uuid(currentDeviceNumber),
+        openedLocalPayload: bytes(16, 12),
+        targets: const [],
+      );
+
+      final result = await coordinator.prepareOwedSend(
+        OwedSendPreparation(
+          operationId: 'application:group',
+          eventId: 'group-event',
+          currentUserId: uuid(currentUserNumber),
+          currentDeviceId: uuid(currentDeviceNumber),
+          peerUserId: uuid(peerUserNumber),
+          audienceUserIds: [uuid(secondMemberNumber), uuid(peerUserNumber)],
+        ),
+      );
+
+      expect(result, isA<Success<void>>());
+      // One operation, under the one event id the message reads its transport
+      // state from, however many members the group has.
+      final commit = store.commits.single;
+      expect(commit.eventId, 'group-event');
+      expect(commit.openedLocalPayload, bytes(16, 12));
+      expect(
+        commit.targets.map(
+          (target) => (target.recipientUserId, target.recipientDeviceId),
+        ),
+        [
+          (uuid(peerUserNumber), uuid(1)),
+          (uuid(peerUserNumber), uuid(2)),
+          (uuid(currentUserNumber), uuid(3)),
+          (uuid(currentUserNumber), uuid(4)),
+          (uuid(secondMemberNumber), uuid(5)),
+          (uuid(secondMemberNumber), uuid(6)),
+          (uuid(secondMemberNumber), uuid(7)),
+        ],
+      );
+      expect(crypto.calls.map((call) => call.recipient.deviceId), [
+        for (var device = 1; device <= 7; device += 1) uuid(device),
+      ]);
+      expect(claims.calls, {
+        uuid(peerUserNumber): [uuid(2)],
+        uuid(currentUserNumber): [uuid(3)],
+        uuid(secondMemberNumber): [uuid(6), uuid(7)],
+      });
+      expect(store.reconciliations.map((entry) => entry.$1), [
+        uuid(peerUserNumber),
+        uuid(secondMemberNumber),
+        uuid(currentUserNumber),
+      ]);
+    },
+  );
+
+  test(
+    'a member with no live device leaves the other members their copies',
+    () async {
+      const secondMemberNumber = 1002;
+      resolver.devices[uuid(secondMemberNumber)] = [];
+      store.durable['application:group'] = DurablePairwiseOperation(
+        operationId: 'application:group',
+        eventId: 'group-event',
+        currentDeviceId: uuid(currentDeviceNumber),
+        openedLocalPayload: bytes(16, 13),
+        targets: const [],
+      );
+
+      final result = await coordinator.prepareOwedSend(
+        OwedSendPreparation(
+          operationId: 'application:group',
+          eventId: 'group-event',
+          currentUserId: uuid(currentUserNumber),
+          currentDeviceId: uuid(currentDeviceNumber),
+          peerUserId: uuid(peerUserNumber),
+          audienceUserIds: [uuid(peerUserNumber), uuid(secondMemberNumber)],
+        ),
+      );
+
+      expect(result, isA<Success<void>>());
+      expect(
+        store.commits.single.targets.map((target) => target.recipientDeviceId),
+        [uuid(1), uuid(2), uuid(3), uuid(4)],
+      );
+    },
+  );
+
+  test(
+    "a group with no other active member reaches this account's devices",
+    () async {
+      store.durable['application:alone'] = DurablePairwiseOperation(
+        operationId: 'application:alone',
+        eventId: 'alone-event',
+        currentDeviceId: uuid(currentDeviceNumber),
+        openedLocalPayload: bytes(16, 14),
+        targets: const [],
+      );
+
+      final result = await coordinator.prepareOwedSend(
+        OwedSendPreparation(
+          operationId: 'application:alone',
+          eventId: 'alone-event',
+          currentUserId: uuid(currentUserNumber),
+          currentDeviceId: uuid(currentDeviceNumber),
+          peerUserId: uuid(currentUserNumber),
+          audienceUserIds: const <String>[],
+        ),
+      );
+
+      expect(result, isA<Success<void>>());
+      expect(
+        store.commits.single.targets.map((target) => target.recipientDeviceId),
+        [uuid(3), uuid(4)],
+      );
+    },
+  );
+
   test('an owed send whose event has gone is retired, not retried', () async {
     final owed = OwedSendPreparation(
       operationId: 'application:missing',

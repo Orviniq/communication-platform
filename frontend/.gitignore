@@ -50,8 +50,6 @@ app.*.map.json
 /android/app/src/development/res/xml/network_security_config.xml
 /android/app/src/production/res/raw/provisioned_private_ca.*
 /android/app/src/production/res/xml/network_security_config.xml
-/android/app/src/beta/res/raw/provisioned_private_ca.*
-/android/app/src/beta/res/xml/network_security_config.xml
 
 /.agents
 /docs/implementation-prompts.md

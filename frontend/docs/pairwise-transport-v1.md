@@ -4,7 +4,9 @@
 
 This document freezes the Android version-1 hybrid session-establishment and
 Double Ratchet profile. It is the review contract for implementation piece 13.
-It does not define application-message semantics, MLS, or a Web implementation.
+It does not define application-message semantics or a Web implementation. A group adds no
+transport of its own: it is this profile used once for every recipient device (see Group
+fan-out).
 
 The construction follows the Signal PQXDH revision 3 and Double Ratchet revision
 4 algorithms, with the project bindings and deviations below. The upstream
@@ -308,6 +310,50 @@ prekey signatures and the new `cross_sig` verify; `bundle_version` is exactly th
 version plus one; and the fetched device log validly extends the stored head. Any other
 cross-signature change remains a blocking safety-number change requiring explicit
 out-of-band resolution.
+
+## Group fan-out
+
+A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F, server ADR-0001).
+This profile carries a group unchanged: there is no group suite, header flag, key, or epoch.
+
+- **One copy per device.** A group message is one send with one event ID, sealed
+  separately, under each device's own session, for every live device of every active
+  member and every other live device of the sender. The current device applies its own
+  copy locally and is sent none. A group of 50 people with three devices each is about 150
+  envelopes for one message. Server ADR-0001 caps a group at 50 members and a member at 10
+  devices, so one message costs at most 500 envelopes plus the sender's own devices.
+- **Recipients at sealing time.** The member set is read from the group's accepted control
+  state when the copies are sealed, not when the message was written: a member removed in
+  between gets no copy, and one added in between gets one. A member with no live device is
+  not a recipient of that message. A group the device may no longer send into is sealed for
+  nobody, and the send fails where the user can retry it.
+- **Session start.** A recipient device with no primary session, or one whose authorized
+  repair replacement is pending, is claimed selectively after the recipient's complete live
+  device set is authenticated, and the live set the claim returns must equal the resolved
+  one. A claimed bundle without the signed ML-KEM prekey is refused when it is claimed and
+  again before the core is asked, and the core aborts setup without it (Claimed-bundle
+  requirements), so no copy is ever sealed under a classical-only root.
+- **One commit.** Every recipient's next session state and exact ciphertext commit in one
+  transaction with the outbox rows (Durable boundaries). A retry sends the stored bytes and
+  never encrypts again.
+- **Batches.** At most 256 items go in one `POST /api/v1/envelopes`; a larger fan-out is
+  several calls. An answer must account for exactly the batch sent: `accepted` equals the
+  batch less `stale_devices` less `full_devices`, and every device named is one the batch
+  addressed. Any other answer is retried whole.
+- **`stale_devices`.** The device is gone. Its item is terminal, its pairwise sessions are
+  deleted, and its owner's device list is queued for an authenticated refresh, so the next
+  seal no longer includes it. It leaves the message's copy count instead of holding the send
+  open.
+- **`full_devices`.** The device is live and its mailbox has reached `MAILBOX_MAX_BYTES`.
+  Its item waits out the ordinary backoff and is sent again, as the same bytes, when due;
+  its session and its owner's device list are untouched.
+- **Progress.** A group message is sent only when none of its copies is still owed. Until
+  then the conversation shows how many copies the server has accepted out of the copies
+  owed to devices still in the set.
+- **Control events.** A signed control event, a state request, and a transcript are group
+  payloads ([message-protocol.md](message-protocol.md), Groups) and fan out per recipient
+  user: one pairwise operation for each member they are owed to, so a member whose devices
+  cannot be reached delays only that member's copies.
 
 ## Durable boundaries
 

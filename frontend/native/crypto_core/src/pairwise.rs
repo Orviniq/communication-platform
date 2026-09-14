@@ -24,6 +24,7 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::{
     enrollment,
     error::{CryptoError, CryptoResult},
+    group_control,
     prekey_state::{
         DeviceState, KEY_ID_MAX, commit_pending_upload, decode_device_state, encode_device_state,
         prepare_replenishment, prepare_rotation,
@@ -49,6 +50,8 @@ pub(crate) const OP_DECRYPT: u32 = 14;
 pub(crate) const OP_CREATE_REPAIR: u32 = 15;
 pub(crate) const OP_CONSUME_REPAIR: u32 = 16;
 pub(crate) const OP_INSPECT_PUBLIC_HEADER: u32 = 17;
+pub(crate) const OP_SEAL_GROUP_CONTROL: u32 = 18;
+pub(crate) const OP_OPEN_GROUP_CONTROL: u32 = 19;
 pub(crate) const PAIRWISE_MAX_IO_BYTES: usize = 2 * 1024 * 1024;
 
 const REQUEST_MAGIC: &[u8; 8] = b"CPPWR001";
@@ -1649,8 +1652,50 @@ pub(crate) fn operation_with_provider<P: CryptoProvider>(
         OP_CREATE_REPAIR => operation_create_repair(provider, operation, &mut reader),
         OP_CONSUME_REPAIR => operation_consume_repair(provider, operation, &mut reader),
         OP_INSPECT_PUBLIC_HEADER => operation_inspect_public_header(operation, &mut reader),
+        OP_SEAL_GROUP_CONTROL => operation_seal_group_control(provider, operation, &mut reader),
+        OP_OPEN_GROUP_CONTROL => operation_open_group_control(provider, operation, &mut reader),
         _ => Err(CryptoError::UnsupportedOperation),
     }
+}
+
+/// Signs one group control event with this device's signing key.
+///
+/// It lives behind the pairwise multiplexer because the key lives in the
+/// pairwise device state, and the caller never sees either.
+fn operation_seal_group_control<P: CryptoProvider>(
+    provider: &P,
+    operation: u32,
+    reader: &mut Reader<'_>,
+) -> CryptoResult<Vec<u8>> {
+    let device_bytes = reader.framed()?;
+    let migration_day = reader.u32()?;
+    let projection = reader.framed()?;
+    finish(reader)?;
+    let device = decode_device_state(provider, device_bytes, migration_day)?;
+    let sealed = group_control::seal(provider, &device, projection)?;
+    let mut output = output_prefix(operation, OUTCOME_OK)?;
+    push_frame(&mut output, &sealed.canonical)?;
+    output.extend_from_slice(&sealed.signature);
+    output.extend_from_slice(&sealed.state_hash);
+    Ok(output)
+}
+
+/// Verifies one group control event under the device signing key its caller
+/// authenticated for the claimed signer, then returns its projection.
+fn operation_open_group_control<P: CryptoProvider>(
+    provider: &P,
+    operation: u32,
+    reader: &mut Reader<'_>,
+) -> CryptoResult<Vec<u8>> {
+    let signing_public = reader.array()?;
+    let canonical = reader.framed()?;
+    let signature: [u8; ED25519_SIGNATURE_BYTES] = reader.array()?;
+    finish(reader)?;
+    let opened = group_control::open(provider, &signing_public, canonical, &signature)?;
+    let mut output = output_prefix(operation, OUTCOME_OK)?;
+    push_frame(&mut output, &opened.projection)?;
+    output.extend_from_slice(&opened.state_hash);
+    Ok(output)
 }
 
 fn operation_inspect_public_header(

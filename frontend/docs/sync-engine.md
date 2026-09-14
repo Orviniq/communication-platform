@@ -37,10 +37,10 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
    required first auth frame within the backend deadline.
 6. Drain `GET /api/v1/me/envelopes`; before processing a page, compare its
    `pruned_through` with the durable highest contiguous acked sequence.
-7. If `last_acked_seq < pruned_through`, enter queue-gap recovery before accepting
-   potentially dependent MLS traffic; otherwise drain until `has_more` is false.
+7. If `last_acked_seq < pruned_through`, start queue-gap recovery for every active
+   group; either way, drain until `has_more` is false. Nothing that arrives waits on it.
 8. Process persisted outbox work, cross-signing/device-log verification, and
-   classical/PQ prekey and KeyPackage maintenance.
+   classical/PQ prekey maintenance.
 9. Subscribe to only the presence/rooms required by visible or active features.
 
 Socket events may arrive during drain. Inbox uniqueness and event IDs make ordering safe.
@@ -154,9 +154,9 @@ that inspects one envelope a thousand times; and a pass that is handed an envelo
 already deferred ends, leaving the drain, the acknowledgements and the outbox to run.
 8. Mark acked locally; an ambiguous ack is retried idempotently.
 
-Authentication failure, unknown session, missing MLS epoch, and unsupported version are
-different quarantine reasons. Recoverable dependency gaps trigger bounded repair; forged
-or malformed input never triggers an unbounded network loop.
+Authentication failure, unknown session, a refused group control event, and unsupported
+version are different quarantine reasons. Recoverable dependency gaps trigger bounded
+repair; forged or malformed input never triggers an unbounded network loop.
 
 ## Queue-gap recovery
 
@@ -165,27 +165,47 @@ an operator setting the client is never told** (`backend/messaging/API.md`). A c
 therefore state that waiting messages are eventually deleted, but may never state how long
 the window is. `pruned_through` is the highest sequence pruned from this device mailbox. If
 the durable highest contiguous acked sequence is lower, at least one envelope is
-permanently missing and may have been an MLS commit. The client:
+permanently missing. It may have carried a ratchet message or a group control event
+(`backend/CLIENT_CONTRACT.md` §H). The client:
 
-1. persists a blocking `queue_gap` security state and stops group sends/epoch mutation;
-2. keeps safely decryptable DM/local content but never guesses missing MLS state;
-3. marks every current group as potentially affected until peers confirm otherwise;
-4. sends authenticated recovery signals where sessions remain usable;
-5. asks peers to remove and re-add this device to affected groups, producing fresh
-   Welcomes; and
-6. clears the state only after each group is safely rejoined or explicitly left; in
-   that same transaction it advances the acknowledged loss baseline through the
-   observed `pruned_through` value and releases locally retained MLS-blocked envelopes,
-   preventing the already-recovered permanent gap from reopening on every drain.
+1. records the gap, and opens a state request for every group this device is an active
+   member of, in the transaction that persists the drained page. A group this device was
+   removed from, left, or holds in quarantine is not asked for: no answer could change it;
+2. keeps inspecting and acknowledging everything that did arrive. Nothing is parked. A
+   group control event that builds on state this device does not hold opens a request to
+   its sender instead, sent at most three times, and an event from a group or a member
+   this device has not seen waits for that answer within its inspection budget;
+3. reads each group with an open request as waiting for its state, and refuses group
+   changes and group sends until a member answers, because the roster may be stale;
+4. for each such group, picks a member in a fixed order — the owner, then admins, then
+   members, each in user-id order — starts the authenticated repair of this device's
+   pairwise sessions with that member's devices, and sends that member a request naming
+   the revision and state hash this device holds. An unanswered request is sent again
+   after six hours, to the next member in line;
+5. accepts an answer only when every entry verifies under the signing key the signer's
+   authenticated device list holds for the device the entry names, the entries chain from
+   the state named as their base, and every signer was allowed its change by the roster
+   the change was built on. An answer with nothing after the held state confirms it. An
+   answer that contradicts the chain this device holds moves the group to fork
+   quarantine, and retires the request too, because no other answer could undo the fork;
+   and
+6. closes the gap when the last group's request is retired, or at once if no group needed
+   asking. In that transaction the acknowledged baseline advances through the observed
+   `pruned_through`, so the permanent gap does not reopen on every drain, and envelopes
+   already acknowledged above it leave the inbox.
 
-Device-to-device history transfer cannot repair ratchets or MLS epochs and is not used as
+A member answers only a device whose account is an active member, only from a state it
+holds unquarantined as an active member itself, and only to the device that asked. The
+client never asks a member to remove this device and add it back: that was how a gap was
+repaired when a group was an MLS epoch, and a group is a set of pairwise sessions now.
+Device-to-device history transfer moves content, not ratchet or control state, and is not
 a substitute for this flow.
 
-**What the user is actually told, today.** Steps 1–6 above are implemented and the
-blocking state is durable, but it reaches the user **only for groups**:
-`DriftGroupRepository._overlayQueueGap` turns it into `GroupLifecycle.queueGapRejoinRequired`
-and the `groupQueueGapState` string. For a one-to-one conversation the gap is recorded and
-shown nowhere — `SyncProjection.isSecurityBlocked` exists, is correct, and has **no
+**What the user is actually told, today.** The gap reaches the user **only for groups**:
+`DriftGroupRepository` reads a group with an open state request as
+`GroupLifecycle.stateRecoveryRequired`, shown with the `groupQueueGapState` string. For a
+one-to-one conversation the gap is shown nowhere, and on a device with no active group it
+closes on the drain that found it; `SyncProjection.isSecurityBlocked` still has **no
 consumer at all**. Direct messages lost to the retention prune are therefore silently
 absent. [ADR-052](decisions.md) discloses that silence in the deployment disclosure rather
 than papering over it, and surfacing the one-to-one gap is recorded there as follow-up
@@ -298,12 +318,9 @@ with the backend/proxy configuration and a REST health probe only when necessary
   considered complete. A peer observing the narrow intermediate state waits for an
   extending log record; it does not convert an otherwise exact monotonic rotation into
   permanent fork evidence.
-- After the [PQ MLS production gates](mls-profile.md#production-gates) pass, MLS key
-  packages are replenished when the server count falls below 25, up to a target of 75,
-  staying below the backend cap of 100. Before then, no production package is uploaded.
-- One PQ MLS last-resort KeyPackage is then maintained separately from the consumable
-  count; its use is surfaced as degraded initial-join forward secrecy and triggers
-  immediate consumable replenishment.
+- No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
+  serves no MLS, and a group is a set of pairwise sessions
+  ([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F).
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.

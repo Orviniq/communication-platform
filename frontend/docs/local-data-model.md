@@ -39,11 +39,11 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `device_log` | Verified signed hash-chain records, last head/hash, fork state, gossip state |
 | `pairwise_sessions` | Opaque crypto-core Double Ratchet state per device pair |
 | `prekeys` | Local private prekey handles and upload/use state |
-| `mls_groups` | Opaque crypto-core MLS state, accepted epoch, control revision/hash, lifecycle/quarantine state, and pending mutation CAS marker |
-| `group_control_events` | Deterministic accepted control projection, exact signed-control payload, and signer Authentication Service proof |
-| `group_outbound_objects` | Exact prepared opaque group object and send-readiness state; piece 18 never marks development preview data production-ready |
+| `group_states` | One group this device follows: its encrypted projection (name, description, policies, and every member with a role and membership state), the accepted control revision and state hash, and its lifecycle — active, removed, left, fork-quarantined, or control-quarantined. A group is client state; the server holds no roster ([ADR-075](decisions.md)) |
+| `group_control_events` | The accepted control transcript, one row per signed event in chain order: revision, previous and resulting state hash, signer user and device, operation kind, and the exact canonical bytes and signature, kept so that a member who needs the transcript can check every signature itself |
+| `group_outbound_objects` | Exact group payloads owed to other devices — a signed control event, a state request, a transcript, or the answer to a request — committed with the change that produced them and marked routed once they are in the pairwise outbox |
+| `group_state_requests` | Groups whose control state this device still has to ask a member for, after a mailbox gap or an event that builds on state it does not hold: the reason, the member asked, the attempts, and when |
 | `conversations` | DM/group/saved identity and list projection |
-| `memberships` | Decrypted current group roles/policy projection |
 | `messages` | Current logical message projection, plus the columns the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048), `delivered_receipt_sent` ([ADR-060](decisions.md)), and `status` ([ADR-061](decisions.md)) |
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
 | `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](decisions.md)) |
@@ -142,6 +142,13 @@ projection time and updated narrowly on every attempt transition, and a projecti
 carries the existing value through rather than re-deriving it — the same rule `alerted`,
 `starred` and `delivered_receipt_sent` already follow.
 
+A group message reads as sent only when none of its copies is still owed, so a partly
+accepted fan-out reads as sending. How far it has got is read from the same rows: the
+copies the server has accepted, out of the copies owed to devices still in the set, where a
+`stale` or `removed` row leaves the count and a full device's waiting row stays in it. The
+count is taken only for messages whose status is still queued, sending, or partially
+accepted, so it costs what is in flight rather than what is in the history.
+
 ### Receive
 
 One transaction records the envelope, applies a verified event, updates projections,
@@ -177,20 +184,18 @@ withhold. The entered recovery secret is never a column. The first-device displa
 secret exists only inside the encrypted, resumable identity package until explicit
 confirmation, after which display material is sanitized and overwritten.
 
-### MLS state
+### Group state
 
-New MLS state, control event, membership projection, conversation projection, and exact
-outbound object commit atomically with a control revision/hash compare-and-swap. A
-process crash or persistence failure cannot expose a group transition or application
-message from an epoch whose complete opaque state was not persisted. Queue gaps and
-invalid or concurrent controls move the projection to a blocking quarantine state
-without guessing or replacing crypto-core state.
-
-A later closed-beta Welcome transaction additionally consumes the claimed KeyPackage and
-stores the complete verified control transcript with the joined opaque state and roster
-projection. Transcript rows redundantly preserve the deterministic projection, exact
-signed payload, and signer authentication proof so a new device can reconstruct and
-cross-check authorization rather than trusting a server-supplied projection.
+A control event, the group projection it leads to, the conversation projection, and the
+exact payloads it owes other devices commit in one transaction, with a compare-and-swap on
+the held control revision and state hash. A received event commits in the same transaction
+as the pairwise receive that carried it, so its envelope is acknowledged only once the
+change is durable. A transcript a member sent is stored row by row, and every row is checked
+against the one before it when it is read back, so a broken chain is never handed to
+anybody. A fork moves the group to quarantine; an event its signer was not allowed to make
+is recorded in `quarantine` and dropped. An open row in `group_state_requests` makes an
+active group read as waiting for its state, which withholds sending and group changes until
+a member answers.
 
 ## Migrations
 
@@ -252,13 +257,38 @@ cross-check authorization rather than trusting a server-supplied projection.
   or re-keyed, and no existing row is rewritten. A projection rebuild also rewrites the index
   rows for every fact it folds, so the recovery path repairs an interrupted back-fill.
 
+- Schema version 20 drops `mls_key_package_maintenance_states`. The server deleted MLS and
+  its KeyPackage routes, so nothing uploads a KeyPackage and the table's upload bookkeeping
+  has no writer and no reader. Only a closed-beta database ever held a row; on every other
+  the table was created empty and stayed empty. The step issues `DROP TABLE IF EXISTS`, so a
+  database that never had the table upgrades as well, and schema 9 no longer creates it on
+  the way.
+
+- Schema version 21 drops `mls_groups.opaque_crypto_state_handle`. The column held each
+  group's sealed MLS state, which only the closed-beta core could open, and its one reader
+  went with the MLS port. Production never wrote a group row; the closed-beta build and the
+  development preview did, and no build can use that state now. The step reads
+  `PRAGMA table_info` before it drops, so a database that never had the column upgrades as
+  well. The rest of the group row stays.
+
+- Schema version 22 replaces the group tables rather than reshaping them. `mls_groups`,
+  `memberships` and every group table are dropped, children first, and `group_states`,
+  `group_control_events`, `group_outbound_objects` and `group_state_requests` are created
+  empty. Every dropped row was written by the closed-beta or development-preview MLS stack
+  under a control encoding and signatures no build can verify any more, and a group whose
+  transcript cannot be verified cannot be carried forward; production never wrote a group
+  row. `memberships` goes because its user foreign key cannot hold a member who is not a
+  contact, and the member set lives in the group's own projection now. The conversations
+  those groups owned are tombstoned, keeping their history on disk, and envelopes held back
+  for an MLS re-admission return to ordinary inspection.
+
 ## Retention and deletion
 
 - Acked raw envelopes are removed after their logical event and local projection are safe.
 - Retained pairwise metadata is pruned on a sixteen-day cutoff, **except** the opaque
   payload of a send whose preparation is still owed. Discarding those bytes would leave a
   message on screen that nothing can ever seal.
-- Ratchet skipped keys and old MLS states obey strict protocol bounds.
+- Ratchet skipped keys obey the bounds in [Pairwise transport version 1](pairwise-transport-v1.md).
 - Decrypted attachment files and thumbnails use bounded LRU caches with explicit expiry.
 - Delete-for-me creates a tombstone before cache cleanup.
 - Logout/revocation closes handles, deletes the database key, then removes database and

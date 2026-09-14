@@ -8,14 +8,6 @@ configuration, then place it at
 private root PEM is placed at
 `app/src/production/res/raw/provisioned_private_ca.pem`.
 
-The closed-beta flavor does the same at `app/src/beta/res/`, and its rendering is
-automated: `tool/render_beta_trust.sh` substitutes the template from the same
-`BETA_*` provisioning values that reach Dart, refuses to run unless the supplied
-CA file matches `BETA_PRIVATE_CA_SHA256`, and `tool/build_beta_release.sh` calls
-it on every release build so the compiled trust cannot drift from the compiled
-configuration. `tool/verify_release_apk.sh --beta` then reads the pin-set back out
-of the packaged artifact.
-
 **These resources do not govern the app's own API traffic.** Android applies them
 to the platform's Java HTTP stacks and WebView; this client's REST and WebSocket
 transports both run on `dart:io`, which does not consult them. Trust for that

@@ -526,28 +526,13 @@ final class DurableSyncEngine {
   }
 
   Future<Result<void>> _processInbox(_RunProgress progress) async {
-    // Read once per pass, not once per envelope.
-    //
-    // The gap flag is one column on the singleton checkpoint row, and only
-    // `persistDrainPage` sets it — which happens between calls to this method,
-    // never inside one. Nothing this loop does can clear it either: while a gap
-    // is open the inspector is forbidden from advancing MLS state, so the
-    // authenticated re-admission that retires the obligation cannot be
-    // committed from here. Reading it per envelope re-ran a three-subquery
-    // aggregate over the two largest tables in the database up to
-    // `maximumInspectionsPerRun` times per pass, for an answer that cannot
-    // change while the pass runs.
-    final gapResult = await _store.readQueueGapState();
-    if (gapResult case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-    final gapBlocked =
-        (gapResult as Success<QueueGapState>).value ==
-        QueueGapState.recoveryRequired;
+    // A mailbox gap holds no envelope back. A group payload is a signed event
+    // that is checked on its own, and a group that may have lost one asks a
+    // member for its state instead (`backend/CLIENT_CONTRACT.md` §H).
 
     // Every envelope this pass has already been handed. Only a deferred one can
-    // come back — an applied envelope advances and a blocked one moves out of
-    // the due set — and the retry floor below ordinarily keeps even that from
+    // come back — an applied envelope advances and a quarantined one moves out
+    // of the due set — and the retry floor below ordinarily keeps even that from
     // happening inside the same pass. But a pass working through a large
     // mailbox can outlive the floor, and the row it deferred first is also the
     // lowest-sequence one, so without this it would return to the head of the
@@ -580,7 +565,6 @@ final class DurableSyncEngine {
       final inspection = await _inspector.inspect(
         envelopeId: envelope.id,
         exactCiphertext: envelope.exactCiphertext,
-        allowPotentiallyMls: !gapBlocked,
       );
       if (inspection case FailureResult(failure: final failure)) {
         final recorded = await _recordEnvelopeFailure(
@@ -595,17 +579,6 @@ final class DurableSyncEngine {
       }
       final inspectedEnvelope =
           (inspection as Success<OpaqueEnvelopeInspection>).value;
-      if (gapBlocked &&
-          inspectedEnvelope.dependency == EnvelopeDependency.potentiallyMls) {
-        final blockedResult = await _store.blockEnvelopeForQueueGap(
-          envelope.id,
-        );
-        if (blockedResult case FailureResult(failure: final failure)) {
-          return Result.failure(failure);
-        }
-        progress.blocked += 1;
-        continue;
-      }
       final committed = await _store.commitOpaqueInspection(
         envelopeId: envelope.id,
         inspection: inspectedEnvelope,
@@ -886,7 +859,6 @@ final class DurableSyncEngine {
 final class _RunProgress {
   int drainedPages = 0;
   int inspected = 0;
-  int blocked = 0;
   int acknowledged = 0;
   int sent = 0;
   int prepared = 0;

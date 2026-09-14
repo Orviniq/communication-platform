@@ -52,9 +52,7 @@ enum DiagnosticField {
   generatedAtUtcHour(DiagnosticSection.application, 'generated_utc_hour'),
 
   platform(DiagnosticSection.device, 'platform'),
-  nativeAbi(DiagnosticSection.device, 'native_abi'),
   cryptoCore(DiagnosticSection.device, 'crypto_core'),
-  groupSurface(DiagnosticSection.device, 'group_surface'),
 
   databaseSchema(DiagnosticSection.storage, 'database_schema'),
   protectedStorage(DiagnosticSection.storage, 'protected_storage'),
@@ -235,7 +233,7 @@ final class DiagnosticsReport {
   /// The version of the export's own layout. It moves when a field is added,
   /// removed or redefined, so somebody reading an old paste knows what they
   /// have.
-  static const formatVersion = 1;
+  static const formatVersion = 2;
 
   final List<DiagnosticEntry> entries;
 

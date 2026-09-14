@@ -34,12 +34,14 @@ a production artifact accidentally.
 ## Login and first device
 
 Login without a known live device ID returns register scope. Before registration, the
-client generates the device Ed25519/X25519 identity, classical and ML-KEM-768 prekeys,
-and—only after the [PQ MLS production gates](mls-profile.md#production-gates) pass—MLS
-KeyPackages. It calls `POST /api/v1/me/devices` without `cross_sig` or `bundle_version`,
-and without `keypackages`: `RegisterDeviceIn` has no such field and refuses an extra one,
-so the closed MLS gates cost nothing here. The `201` response supplies the assigned
-`device_id` and one full-scope session token with its `expires_in`.
+client generates the device Ed25519/X25519 identity and classical and ML-KEM-768
+prekeys. It generates no MLS KeyPackage: a group is a set of pairwise sessions with no
+group key material to upload
+([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F). It calls
+`POST /api/v1/me/devices` without `cross_sig` or `bundle_version`, and without
+`keypackages`: `RegisterDeviceIn` has no such field and refuses an extra one. The `201`
+response supplies the assigned `device_id` and one full-scope session token with its
+`expires_in`.
 
 For the first device, the client publishes the account identity, signs the canonical
 bundle containing the assigned ID, sends `cross_sig` plus `bundle_version: 1` through
@@ -179,15 +181,11 @@ See [ADR-065](decisions.md).
 ## Prekey and key-package policy
 
 Concrete low/target watermarks are configuration constants below the classical cap of
-200, ML-KEM cap of 100, and consumable KeyPackage cap of 100. The crypto core generates
-material; a maintenance use case uploads it only for the current device. Signed
-classical/PQ prekeys rotate on schedule and after suspicion of compromise, atomically
-with a fresh device `cross_sig` and incremented `bundle_version`. Each device maintains
-one last-resort PQ MLS KeyPackage outside the consumable count after the
-[PQ MLS production gates](mls-profile.md#production-gates) pass; reuse is recorded as a
-forward-secrecy degradation, not treated as equivalent inventory. Failed signature or
-cross-signature verification blocks session setup. No production KeyPackage is generated
-or uploaded while those gates remain open.
+200 and ML-KEM cap of 100. The crypto core generates material; a maintenance use case
+uploads it only for the current device. Signed classical/PQ prekeys rotate on schedule
+and after suspicion of compromise, atomically with a fresh device `cross_sig` and
+incremented `bundle_version`. Failed signature or cross-signature verification blocks
+session setup. No KeyPackage is generated or uploaded: the server serves no MLS.
 
 A routine prekey rotation does not reset the contact's confirmed master key only when
 the user/device ID, `ik_pub`, and registration ID are unchanged, the new classical/PQ

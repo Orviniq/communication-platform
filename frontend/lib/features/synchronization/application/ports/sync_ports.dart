@@ -17,14 +17,6 @@ abstract interface class DurableSyncStore implements Port {
 
   Future<Result<SyncProjection>> readProjection();
 
-  /// Reads only the queue-gap flag from the singleton checkpoint row.
-  ///
-  /// [readProjection] answers this question too, but it answers five others
-  /// with it — three of them aggregates over the two largest tables in the
-  /// database. The inbox loop needs this one column and nothing else, once per
-  /// pass, so it gets its own read rather than paying for the projection.
-  Future<Result<QueueGapState>> readQueueGapState();
-
   Future<Result<void>> queuePreparedOperation({
     required String operationId,
     required String eventId,
@@ -43,8 +35,6 @@ abstract interface class DurableSyncStore implements Port {
     required String envelopeId,
     required OpaqueEnvelopeInspection inspection,
   });
-
-  Future<Result<void>> blockEnvelopeForQueueGap(String envelopeId);
 
   /// Leaves an envelope for a later attempt.
   ///
@@ -140,22 +130,14 @@ abstract interface class DurableSyncStore implements Port {
   Future<Result<void>> clearReconnect({required DateTime? syncedAt});
 
   Future<Result<void>> recordSuccessfulSync(DateTime syncedAt);
-
-  Future<Result<void>> markGroupRecovered(String groupId);
-
-  Future<Result<void>> markGroupLeft(String groupId);
 }
 
-/// Inspects opaque fixture bytes without mutating crypto or application state.
-///
-/// A later protocol piece will replace this with a bounded crypto-core preparation
-/// step. When [allowPotentiallyMls] is false, an implementation must never advance
-/// MLS state.
+/// Prepares one envelope's receive without mutating crypto or application
+/// state. Everything it prepares commits later, in one transaction.
 abstract interface class OpaqueEnvelopeInspector implements Port {
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   });
 }
 

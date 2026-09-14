@@ -123,15 +123,6 @@ struct ParsedDevicePackage<'a> {
     _remainder: &'a [u8],
 }
 
-#[cfg_attr(not(feature = "beta-pq-mls"), allow(dead_code))]
-pub(crate) struct VerifiedClaimedDeviceBundle {
-    pub user_id: [u8; 16],
-    pub device_id: [u8; 16],
-    pub canonical_bundle: Vec<u8>,
-    pub signing_public: [u8; ED25519_PUBLIC_BYTES],
-    pub cross_signature: [u8; ED25519_SIGNATURE_BYTES],
-}
-
 pub fn prepare_device() -> impl FnOnce(&[u8]) -> CryptoResult<Vec<u8>> {
     |user_id| prepare_device_with_provider(&RustCryptoProvider::default(), user_id)
 }
@@ -677,12 +668,6 @@ pub fn verify_published_identity(input: &[u8]) -> CryptoResult<()> {
 
 /// Verifies the complete claimed device bundle, including both signed prekeys.
 pub fn verify_claimed_device_bundle(input: &[u8]) -> CryptoResult<()> {
-    inspect_verified_claimed_device_bundle(input).map(|_| ())
-}
-
-pub(crate) fn inspect_verified_claimed_device_bundle(
-    input: &[u8],
-) -> CryptoResult<VerifiedClaimedDeviceBundle> {
     let mut reader = Reader::new(input);
     if reader.take(8)? != VERIFY_BUNDLE_MAGIC {
         return Err(CryptoError::MalformedInput);
@@ -757,14 +742,7 @@ pub(crate) fn inspect_verified_claimed_device_bundle(
         &bundle,
         &self_signing_public,
         &cross_signature,
-    )?;
-    Ok(VerifiedClaimedDeviceBundle {
-        user_id: *user_id.as_bytes(),
-        device_id: *device_id.as_bytes(),
-        canonical_bundle: encode_cross_signature(&bundle)?,
-        signing_public: ik_public.device_signing_public(),
-        cross_signature: *cross_signature.as_bytes(),
-    })
+    )
 }
 
 /// Verifies a peer log record with only the peer's authenticated public subkey.

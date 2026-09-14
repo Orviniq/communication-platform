@@ -1,4 +1,3 @@
-import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
@@ -8,10 +7,9 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
-import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
-import 'package:communication_platform/features/groups/application/group_mls_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
-import 'package:communication_platform/features/groups/application/group_pending_eviction_service.dart';
+import 'package:communication_platform/features/groups/application/group_state_recovery_service.dart';
+import 'package:communication_platform/features/groups/infrastructure/drift_group_access_adapters.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_conversation_resolver.dart';
@@ -74,25 +72,14 @@ final durableSyncEngineProvider =
         database,
         config: ref.watch(serverConfigSnapshotProvider),
       );
-      final groupKeyPackageMaintenance =
-          GroupProductionGate.privateExperimentalPermit(
-                ref.watch(appEnvironmentProvider),
-                ref.watch(runtimeAbiProvider),
-              ) !=
-              null
-          ? await ref.watch(
-              groupKeyPackageMaintenanceServiceProvider((
-                userId: scope.userId,
-                deviceId: scope.deviceId,
-              )).future,
-            )
-          : null;
       final sender = await ref.watch(
         sendConversationEventsProvider((
           userId: scope.userId,
           deviceId: scope.deviceId,
         )).future,
       );
+      final groupScope = (userId: scope.userId, deviceId: scope.deviceId);
+      final groups = DriftGroupRepository(database);
       final historyTransfer = HistoryTransferCoordinator(
         database: database,
         applicationProtocol: ref.watch(applicationProtocolProvider),
@@ -123,14 +110,12 @@ final durableSyncEngineProvider =
         conversationResolver: DriftApplicationConversationResolver(
           database: database,
           protocol: ref.watch(applicationProtocolProvider),
+          groupMembership: DriftGroupConversationMembership(groups),
         ),
         currentUserId: scope.userId,
         clock: ref.watch(timeSourceProvider),
-        groupInbound: GroupMlsInboundCoordinator(
-          repository: DriftGroupRepository(database),
-          crypto: await ref.watch(fullyComposedGroupMlsCryptoProvider.future),
-          localUserId: scope.userId,
-          localDeviceId: scope.deviceId,
+        groupInbound: await ref.watch(
+          groupInboundCoordinatorProvider(groupScope).future,
         ),
       );
       final gossip = await ref.watch(
@@ -164,32 +149,20 @@ final durableSyncEngineProvider =
               deviceId: scope.deviceId,
             )).future,
           ),
+          audience: DriftGroupSendAudienceResolver(
+            database: database,
+            groups: groups,
+          ),
           onPreparedForPeer: owedGossip.owe,
         ),
         postInboxCommitWork: _CompositePostInboxWork([
-          if (groupKeyPackageMaintenance != null)
-            _GroupKeyPackagePostInboxWork(
-              groupKeyPackageMaintenance,
-              currentUserId: scope.userId,
-              currentDeviceId: scope.deviceId,
-            ),
-          _GroupPendingEvictionPostInboxWork(
-            GroupPendingEvictionService(
-              repository: DriftGroupRepository(database),
-              mutate: (await ref.watch(
-                groupUseCasesProvider.future,
-              )).mutate.call,
-              currentUserId: scope.userId,
-              currentDeviceId: scope.deviceId,
+          _GroupStateRecoveryPostInboxWork(
+            await ref.watch(
+              groupStateRecoveryServiceProvider(groupScope).future,
             ),
           ),
           _GroupOutboundPostInboxWork(
-            await ref.watch(
-              groupOutboundDispatcherProvider((
-                userId: scope.userId,
-                deviceId: scope.deviceId,
-              )).future,
-            ),
+            await ref.watch(groupOutboundDispatcherProvider(groupScope).future),
             currentUserId: scope.userId,
             currentDeviceId: scope.deviceId,
           ),
@@ -210,37 +183,17 @@ final durableSyncEngineProvider =
       );
     });
 
-final class _GroupKeyPackagePostInboxWork implements PostInboxCommitWorkPort {
-  const _GroupKeyPackagePostInboxWork(
-    this.maintenance, {
-    required this.currentUserId,
-    required this.currentDeviceId,
-  });
-
-  final GroupKeyPackageMaintenanceService maintenance;
-  final String currentUserId;
-  final String currentDeviceId;
-
-  @override
-  Future<void> run() async {
-    await maintenance.maintain(
-      userId: currentUserId,
-      deviceId: currentDeviceId,
-    );
-  }
-}
-
-final class _GroupPendingEvictionPostInboxWork
+final class _GroupStateRecoveryPostInboxWork
     implements PostInboxCommitWorkPort {
-  const _GroupPendingEvictionPostInboxWork(this.eviction);
+  const _GroupStateRecoveryPostInboxWork(this.recovery);
 
-  final GroupPendingEvictionService eviction;
+  final GroupStateRecoveryService recovery;
 
   @override
   Future<void> run() async {
-    // Runs before outbound dispatch so a freshly prepared eviction Commit is
-    // fanned out in the same drain that observed the leave.
-    await eviction.evictDepartedMembers();
+    // Runs before outbound dispatch, so that a state request queued here
+    // reaches the pairwise outbox in the same drain that found the gap.
+    await recovery.requestDueStates();
   }
 }
 
@@ -258,7 +211,7 @@ final class _GroupOutboundPostInboxWork implements PostInboxCommitWorkPort {
   @override
   Future<void> run() async {
     // Work remains durable when authentication, crypto, or storage is
-    // temporarily unavailable; the next sync run retries exact MLS bytes.
+    // temporarily unavailable; the next sync run retries the exact payload.
     await dispatcher.dispatchPending(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,

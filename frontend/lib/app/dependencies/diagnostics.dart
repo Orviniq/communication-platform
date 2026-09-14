@@ -3,7 +3,6 @@ import 'package:communication_platform/app/config/build_identity.dart';
 import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/deployment_disclosure_providers.dart';
-import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
@@ -70,12 +69,10 @@ final class _RuntimeDiagnosticsSource implements DiagnosticsSourcePort {
       () => ref.watch(disclosureAcknowledgementStateProvider.future),
     );
     final appearance = _orNull(() => ref.watch(appearancePreferencesProvider));
-    final abi = _orNull(() => ref.watch(runtimeAbiProvider));
     final cryptoComposed = _or(
       () => ref.watch(enrollmentCryptoProvider) is! UnsupportedEnrollmentCrypto,
       false,
     );
-    final groups = _orNull(() => ref.watch(groupFeatureAvailabilityProvider));
     final session = _orNull(
       () => ref.watch(authenticationControllerProvider).access,
     );
@@ -127,24 +124,12 @@ final class _RuntimeDiagnosticsSource implements DiagnosticsSourcePort {
         DiagnosticValue.constant('android'),
       ),
       DiagnosticEntry(
-        DiagnosticField.nativeAbi,
-        abi == null
-            ? const DiagnosticValue.term(DiagnosticWord.unknown)
-            : DiagnosticValue.term(abi),
-      ),
-      DiagnosticEntry(
         DiagnosticField.cryptoCore,
         DiagnosticValue.term(
           cryptoComposed
               ? DiagnosticWord.available
               : DiagnosticWord.unavailable,
         ),
-      ),
-      DiagnosticEntry(
-        DiagnosticField.groupSurface,
-        groups == null
-            ? const DiagnosticValue.term(DiagnosticWord.unknown)
-            : DiagnosticValue.term(groups),
       ),
       DiagnosticEntry(
         DiagnosticField.sessionState,

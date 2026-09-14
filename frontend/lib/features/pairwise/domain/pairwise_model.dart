@@ -192,19 +192,30 @@ final class PairwiseSendCommit {
 
 /// One send whose event is committed and whose recipients are still owed.
 final class OwedSendPreparation {
-  const OwedSendPreparation({
+  OwedSendPreparation({
     required this.operationId,
     required this.eventId,
     required this.currentUserId,
     required this.currentDeviceId,
     required this.peerUserId,
-  });
+    Iterable<String>? audienceUserIds,
+  }) : audienceUserIds = audienceUserIds == null
+           ? null
+           : Set.unmodifiable(
+               audienceUserIds.map((userId) => userId.toLowerCase()),
+             );
 
   final String operationId;
   final String eventId;
   final String currentUserId;
   final String currentDeviceId;
   final String peerUserId;
+
+  /// Every user the send is for, when that is more than [peerUserId]: the
+  /// members of the group the event was written into, resolved when the send
+  /// is prepared rather than when it was written, so a member removed in
+  /// between gets no copy. Null keeps [peerUserId] alone.
+  final Set<String>? audienceUserIds;
 }
 
 final class PairwiseReceiveCommit {

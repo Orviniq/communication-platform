@@ -522,9 +522,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactsNewGroup => 'New Group';
 
   @override
-  String get contactsNewGroupClosed => 'Not available on this device';
-
-  @override
   String get contactsNewVoiceRoom => 'New Voice Room';
 
   @override
@@ -1095,28 +1092,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatStateReceived => 'received';
 
   @override
-  String get groupProductionUnavailableTitle =>
-      'Production groups are not available';
-
-  @override
-  String get groupProductionUnavailableMessage =>
-      'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.';
-
-  @override
-  String get groupExperimentalWithheldTitle =>
-      'Group messaging is not available on this device';
-
-  @override
-  String get groupExperimentalWithheldMessage =>
-      'The experimental group encryption has been tested on 64-bit ARM phones, and this device uses a different processor. Rather than run it untested, group chats are switched off here: no keys are published for you and no group message can reach this device. Direct messages are unaffected.';
-
-  @override
-  String get groupDevelopmentPreviewBanner =>
-      'Development preview only — no production group ciphertext is sent';
-
-  @override
-  String get groupExperimentalBanner =>
-      'Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.';
+  String chatFanoutProgress(int sent, int total) {
+    return 'Copies sent: $sent of $total';
+  }
 
   @override
   String get groupCreateTitle => 'Create Group';
@@ -1149,6 +1127,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get groupMemberLimitMessage =>
       'A group can have at most 50 members, including you.';
+
+  @override
+  String get groupFanoutCostNote =>
+      'Every group message is encrypted separately for each device of each member. A group of 50 people with three devices each makes about 150 copies of one message, so a message in a large group takes longer to send and shows how many copies have gone out.';
 
   @override
   String get groupNameLabel => 'Group name';
@@ -1247,18 +1229,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupRemovedState =>
-      'You were removed. Past content on this device stays readable, but future group epochs are unavailable.';
+      'You were removed. Past content on this device stays readable, but new messages in this group no longer reach you.';
 
   @override
   String get groupLeftState => 'You left this group. This copy is read-only.';
 
   @override
   String get groupQueueGapState =>
-      'A mailbox gap may have hidden an MLS commit. This device must be removed and re-added with a fresh Welcome before sending.';
+      'Messages may have been lost while this device was away. A member has been asked for the group\'s current state, and sending resumes when it arrives.';
 
   @override
   String get groupForkState =>
-      'Concurrent MLS commits were quarantined. The client will not choose a branch.';
+      'Two conflicting group changes arrived. The group is paused, and the app will not choose between them.';
 
   @override
   String get groupControlQuarantineState =>
@@ -1296,14 +1278,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupConfirmRemoveBody =>
-      'Removing this member advances the group epoch and cuts off access to future messages. It cannot erase content already received.';
+      'This member stops receiving new messages from the group. Content they already received cannot be erased.';
 
   @override
   String get groupConfirmLeaveTitle => 'Leave group?';
 
   @override
   String get groupConfirmLeaveBody =>
-      'You will lose access to future group epochs. Content already stored on this device remains readable.';
+      'You will stop receiving new messages from this group. Content already stored on this device remains readable.';
 
   @override
   String get groupOwnerMustTransfer =>
@@ -1326,7 +1308,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupWithheldQueueGap =>
-      'Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.';
+      'Messaging withheld until a member confirms this group\'s current state.';
 
   @override
   String get groupWithheldConflict =>

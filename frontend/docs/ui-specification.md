@@ -63,8 +63,8 @@ These recur across screens. They are stated here so the individual screens can s
   best-effort — never Google/Apple push.** By default that is deferred polling; a user may
   additionally turn on keeping the app connected while it is closed (§15), which is faster
   and still not a guarantee. Do not offer FCM/APNs-style options.
-  Uncollected envelopes expire after seven days; a detected queue gap becomes a visible
-  group-rejoin state.
+  Uncollected envelopes expire after seven days; a detected queue gap shows each affected
+  group as waiting for its state.
 - **Honesty over false comfort.** Several actions are **best-effort, not guarantees**, and
   the UI must say so plainly (detailed at each spot): *Delete for everyone*, voice-room
   *ephemeral* text, and history recovery. Never word a dialog to imply a stronger promise
@@ -223,8 +223,8 @@ only**.
 ## 4. Encryption Setup (First Run on a Device)
 
 **Purpose.** The first installation creates account cross-signing keys plus independent
-X25519 and ML-KEM-768 device material. MLS device material is created only after the
-[PQ MLS production gates](mls-profile.md#production-gates) pass. A new account creates a
+X25519 and ML-KEM-768 device material. No MLS device material is created: a group is a
+set of pairwise sessions. A new account creates a
 recovery-protected identity backup; an existing account restores that identity material.
 Message history is a later transfer from an existing online device, not part of the
 backup.
@@ -574,9 +574,19 @@ banner.
 **Role-gated actions** (owner/admins only): appear on member rows within Group Info
 (§12.2), not on individual messages.
 
-**States.** As §8, plus: *membership updating*; *removed* (read-only/exited, with no access
-to future epochs); and *queue gap — rejoin required*. The queue-gap state disables the
-composer until peers remove and re-add this device with a fresh Welcome.
+**States.** As §8, plus: *removed* (read-only/exited; nothing sent after the removal
+reaches this device); *waiting for group state*; and *forked* (members hold conflicting
+histories, so the group is quarantined). Waiting for group state follows a queue gap, or
+an event this device cannot yet place. It disables the composer and group changes until a
+member confirms the group's current control state, and it never asks members to remove and
+re-add this device.
+
+**Copies.** A group message is one encrypted copy for each device of each member
+([ADR-075](decisions.md)). While any copy is still owed, the message shows how many the
+server has accepted out of how many are owed ("Copies sent: 45 of 150"), and it takes the
+accepted mark only when none is still owed. A copy for a device the server reports as gone
+leaves the count; a copy for a device whose mailbox is full stays in it until it is
+accepted. A failed send offers a retry of the same message.
 
 ---
 
@@ -658,8 +668,10 @@ hierarchy.
 ### 12.1 Create Group flow
 Reached from Contacts (§7). Multi-step:
 1. **Pick members** — searchable contact list, multi-select, **Next**. (~50 cap guidance.)
-2. **Group details** — set **name**, **photo**, optional **description**. **[PRIVACY]** All
-   three are encrypted; the server stores only ciphertext.
+2. **Group details** — set **name** and optional **description**. **[PRIVACY]** Both are
+   encrypted; the server stores only ciphertext. The step states what a group message
+   costs: one encrypted copy for each device of each member, about 150 copies for 50
+   people with three devices each (§9, Copies).
 3. **Create** — the creator becomes **owner**; opens the Group chat (§9).
 - **States.** validating name, creating, error/offline.
 
@@ -677,6 +689,7 @@ Reached from Contacts (§7). Multi-step:
      member cuts off their access to future messages.
    - **Add members** (visible per the group's invite policy) → member picker (like §12.1
      step 1).
+   - The same statement of what a group message costs as §12.1 step 2.
 5. **Leave group** (all members) → confirm.
 
 ### 12.3 Edit Group screen (owner/admin)
@@ -931,14 +944,14 @@ transfer locally held history.
   2. After unsigned registration returns full-scope tokens, restore cross-signing
      identity using the recovery secret and finish the device cross-signature through
      the prekey endpoint.
-  3. Establish fresh hybrid sessions; peers remove/re-add the device to groups for fresh
-     Welcomes where required.
+  3. Establish fresh hybrid sessions. A group reaches the new device when one of its
+     members sends it the group's current control state; nobody removes and re-adds it.
   4. Ask an existing online device to send its locally held history through ordinary
      encrypted envelopes. Show the source device and whether its history is partial.
 - **States.** *registering device*, *awaiting secret*, *restoring identity*, *wrong
   secret*, *finishing secure setup*, *identity recovered*, *waiting for existing
-  device*, *transferring history*, *no history source online*, *group re-invitation
-  required*, *queue gap recovery*, and *done*. **[PRIVACY]** The server supplies no
+  device*, *transferring history*, *no history source online*, *groups arrive from their
+  members*, *queue gap recovery*, and *done*. **[PRIVACY]** The server supplies no
   ciphertext history and the recovery secret cannot reconstruct it.
 
 ---

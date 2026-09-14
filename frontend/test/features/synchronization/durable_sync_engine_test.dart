@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
@@ -524,16 +526,19 @@ void main() {
   );
 
   test(
-    'seven-day prune gap blocks possible MLS before recovery and resumes at safe baseline',
+    'a prune gap asks each active group for its state and parks nothing',
     () async {
+      final groupId = 'a1' * 32;
       await database
-          .into(database.mlsGroups)
+          .into(database.groupStates)
           .insert(
-            MlsGroupsCompanion.insert(
-              groupId: 'opaque-group',
-              opaqueCryptoStateHandle: Uint8List.fromList([1]),
-              acceptedEpoch: 4,
+            GroupStatesCompanion.insert(
+              groupId: groupId,
               stateVersion: 1,
+              controlProjectionCiphertext: Uint8List.fromList([1]),
+              controlRevision: 1,
+              controlStateHash: Uint8List(32),
+              lifecycle: GroupLifecycle.active.index,
             ),
           );
       remote.prunedThrough = 5;
@@ -547,33 +552,52 @@ void main() {
         ),
       );
 
-      final blocked = await engine.synchronize();
+      final open = await engine.synchronize();
 
-      expect(blocked, isA<Success<SyncRunReport>>());
-      expect(inspector.allowMlsValues, [false]);
-      expect(remote.acknowledgedIds, isEmpty);
-      final blockedProjection =
-          await store.readProjection() as Success<SyncProjection>;
-      expect(
-        blockedProjection.value.queueGapState,
-        QueueGapState.recoveryRequired,
+      expect(open, isA<Success<SyncRunReport>>());
+      // A lost envelope may have carried a control event, so the group asks a
+      // member for its state. Nothing that did arrive waits for the answer.
+      expect(inspector.calls, 1);
+      expect(remote.acknowledgedIds.single, [uuid(31)]);
+      final request = await database
+          .select(database.groupStateRequests)
+          .getSingle();
+      expect(request.groupId, groupId);
+      expect(request.reason, 0);
+      final waiting = await store.readProjection() as Success<SyncProjection>;
+      expect(waiting.value.queueGapState, QueueGapState.recoveryRequired);
+
+      await DriftGroupRepository(database).retireStateRequest(groupId);
+
+      final closed = await store.readProjection() as Success<SyncProjection>;
+      expect(closed.value.queueGapState, QueueGapState.clear);
+      expect(closed.value.highestContiguousAcknowledgedSequence, 6);
+      expect(await database.select(database.inboxEnvelopes).get(), isEmpty);
+    },
+  );
+
+  test(
+    'a prune gap with no group to ask closes on the drain that found it',
+    () async {
+      remote.prunedThrough = 5;
+      remote.pages.add(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(32), sequence: 6, exactCiphertext: blob(9)),
+          ],
+          hasMore: false,
+          prunedThrough: 5,
+        ),
       );
-      expect(
-        (await database.select(database.mlsGroups).getSingle())
-            .queueGapRecoveryState,
-        1,
-      );
 
-      await store.markGroupRecovered('opaque-group');
-      final recovered = await engine.synchronize();
+      final result = await engine.synchronize();
 
-      expect(recovered, isA<Success<SyncRunReport>>());
-      expect(inspector.allowMlsValues, [false, true]);
+      expect(result, isA<Success<SyncRunReport>>());
+      expect(remote.acknowledgedIds.single, [uuid(32)]);
       final projection =
           await store.readProjection() as Success<SyncProjection>;
       expect(projection.value.queueGapState, QueueGapState.clear);
       expect(projection.value.highestContiguousAcknowledgedSequence, 6);
-      expect(remote.acknowledgedIds.single, [uuid(31)]);
     },
   );
 
@@ -687,6 +711,67 @@ void main() {
       await database.select(database.staleDeviceRefreshRequests).get(),
       isEmpty,
     );
+  });
+
+  test('a full device is sent its item again once the backoff ends', () async {
+    // Maximum jitter makes the backoff a real interval, so "later" can be
+    // told apart from "on the next pass of the same run".
+    final patient = DurableSyncEngine(
+      store: store,
+      remote: remote,
+      inspector: inspector,
+      staleDeviceRefresh: staleRefresh,
+      clock: clock,
+      jitter: const MaximumJitter(),
+      standDown: owner,
+    );
+    await patient.queuePreparedOperation(
+      operationId: 'full-retry-operation',
+      eventId: 'full-retry-event',
+      targets: [
+        PreparedOutboxTarget(
+          recipientUserId: 'full-user',
+          recipientDeviceId: uuid(63),
+          exactCiphertext: blob(63),
+        ),
+        PreparedOutboxTarget(
+          recipientUserId: 'live-user',
+          recipientDeviceId: uuid(64),
+          exactCiphertext: blob(64),
+        ),
+      ],
+    );
+    remote.fullDeviceIds.add(uuid(63));
+
+    expect(await patient.synchronize(), isA<Success<SyncRunReport>>());
+
+    expect(remote.sentBatches, hasLength(1));
+    final held = (await database.select(database.outboxOperations).get())
+        .singleWhere((row) => row.recipientDeviceId == uuid(63));
+    expect(held.attemptState, OutboxAttemptState.retryWait.index);
+    expect(held.nextAttemptAt!.isAfter(clock.now()), isTrue);
+
+    // The owner empties the mailbox. Until the backoff ends nothing is sent.
+    remote.fullDeviceIds.clear();
+    expect(await patient.synchronize(), isA<Success<SyncRunReport>>());
+    expect(remote.sentBatches, hasLength(1));
+
+    clock.advance(held.nextAttemptAt!.difference(clock.now()));
+    expect(await patient.synchronize(), isA<Success<SyncRunReport>>());
+
+    expect(remote.sentBatches, hasLength(2));
+    final resent = remote.sentBatches.last;
+    expect(resent.targets.map((target) => target.recipientDeviceId), [
+      uuid(63),
+    ]);
+    expect(resent.targets.single.exactCiphertext, blob(63));
+    expect(
+      (await database.select(database.outboxOperations).get()).map(
+        (row) => row.attemptState,
+      ),
+      everyElement(OutboxAttemptState.accepted.index),
+    );
+    expect(staleRefresh.users, isEmpty);
   });
 
   test(
@@ -1039,7 +1124,6 @@ final class FakeSyncRemote implements SyncRemotePort {
 
 final class FixtureInspector implements OpaqueEnvelopeInspector {
   int calls = 0;
-  final List<bool> allowMlsValues = [];
 
   /// Called with the running inspection count, so a test can change the world
   /// at an exact point inside a cycle.
@@ -1049,17 +1133,15 @@ final class FixtureInspector implements OpaqueEnvelopeInspector {
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
-    required bool allowPotentiallyMls,
   }) async {
     calls += 1;
-    allowMlsValues.add(allowPotentiallyMls);
     onInspected?.call(calls);
     final marker = exactCiphertext.first;
     return Result.success(
       OpaqueEnvelopeInspection(
         opaqueEventId: 'opaque-event-$marker',
         dependency: marker == 9
-            ? EnvelopeDependency.potentiallyMls
+            ? EnvelopeDependency.groupState
             : EnvelopeDependency.directOrLocal,
       ),
     );

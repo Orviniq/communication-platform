@@ -73,9 +73,7 @@ final class ApplicationRuntime {
     // headless catch-up count into the same one rather than each keeping a
     // private tally of half the traffic.
     final networkDiagnostics = RecordingNetworkDiagnostics();
-    final cryptoCore = createPlatformCryptoCore(
-      betaMlsEnabled: environment == AppEnvironment.beta,
-    );
+    final cryptoCore = createPlatformCryptoCore();
     final enrollmentCrypto = cryptoCore is EnrollmentCryptoPort
         ? cryptoCore as EnrollmentCryptoPort
         : const UnsupportedEnrollmentCrypto();

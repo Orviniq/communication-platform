@@ -9,7 +9,6 @@ import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
 import 'package:communication_platform/features/groups/presentation/group_member_picker.dart';
-import 'package:communication_platform/features/groups/presentation/group_production_gate_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,12 +29,9 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
-      return const GroupProductionGatePage();
-    }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = auth.userId;
-    if (userId == null) return const GroupProductionGatePage();
+    if (userId == null) return groupErrorPage(context);
     final group = ref.watch(groupProvider(widget.groupId));
     final contacts = ref.watch(contactListProvider(userId));
     final device = ref.watch(currentMessagingDeviceIdProvider);
@@ -59,8 +55,6 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(AppSpacing.x4),
                   children: [
-                    const GroupMaturityBanner(),
-                    const SizedBox(height: AppSpacing.x4),
                     GroupMemberPicker(
                       contacts: eligible,
                       selectedUserIds: _selected,
@@ -93,7 +87,7 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
                                 groupId: widget.groupId,
                                 actorUserId: userId,
                                 actorDeviceId: deviceId,
-                                operation: InviteGroupMembersOperation(members),
+                                operation: AddGroupMembersOperation(members),
                               );
                               if (mounted && result is Success<GroupState>) {
                                 this.context.pop();

@@ -1,5 +1,3 @@
-import 'package:communication_platform/app/config/deployment_disclosure.dart';
-import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -7,7 +5,6 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The group's identity block: avatar, name, description and member count.
 ///
@@ -63,78 +60,6 @@ class GroupInfoSummary extends StatelessWidget {
   }
 }
 
-/// States what this build's group stack actually is.
-///
-/// The two reachable states make materially different promises, so one shared
-/// string cannot cover both: the development preview sends nothing at all,
-/// while the private experimental artifact really does transmit group objects
-/// and really can lose the state they produce (ADR-036, ADR-044).
-class GroupMaturityBanner extends ConsumerWidget {
-  const GroupMaturityBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final label = switch (ref.watch(groupFeatureAvailabilityProvider)) {
-      GroupFeatureAvailability.developmentPreview =>
-        l10n.groupDevelopmentPreviewBanner,
-      GroupFeatureAvailability.privateExperimental =>
-        l10n.groupExperimentalBanner,
-      // Unreachable: every screen renders the closed gate before this point.
-      GroupFeatureAvailability.privateExperimentalWithheld ||
-      GroupFeatureAvailability.productionUnavailable => null,
-    };
-    if (label == null) return const SizedBox.shrink();
-    // The badge comes from the shared maturity vocabulary so a group screen and
-    // a not-built screen cannot end up naming their maturity in two different
-    // words; the sentence below it states this surface's specific consequence,
-    // which no shared badge can carry (ADR-045).
-    final maturity = switch (ref.watch(groupFeatureAvailabilityProvider)) {
-      GroupFeatureAvailability.privateExperimental =>
-        SurfaceMaturity.experimental,
-      _ => null,
-    };
-    final badge = maturity?.label(l10n);
-    return Semantics(
-      liveRegion: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.tokens.colors.warning.withValues(alpha: 0.14),
-          borderRadius: AppRadii.compact,
-          border: Border.all(color: context.tokens.colors.warning),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x3),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (badge != null) ...[
-                AppStatusBadge(kind: AppStatusKind.warning, label: badge),
-                const SizedBox(height: AppSpacing.x2),
-              ],
-              Row(
-                children: [
-                  AppIcon(
-                    AppIcons.warning,
-                    color: context.tokens.colors.warning,
-                  ),
-                  const SizedBox(width: AppSpacing.x2),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: context.tokens.typography.compact,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The banner a group raises when its lifecycle is anything but active.
 ///
 /// Shared by the conversation and the info screen so that a removed, left,
@@ -149,10 +74,9 @@ class GroupLifecycleNotice extends StatelessWidget {
     final strings = AppLocalizations.of(context);
     final message = switch (lifecycle) {
       GroupLifecycle.active => '',
-      GroupLifecycle.membershipUpdating => strings.groupMembershipUpdatingState,
       GroupLifecycle.removed => strings.groupRemovedState,
       GroupLifecycle.left => strings.groupLeftState,
-      GroupLifecycle.queueGapRejoinRequired => strings.groupQueueGapState,
+      GroupLifecycle.stateRecoveryRequired => strings.groupQueueGapState,
       GroupLifecycle.forkQuarantined => strings.groupForkState,
       GroupLifecycle.controlQuarantined => strings.groupControlQuarantineState,
     };
@@ -165,6 +89,45 @@ class GroupLifecycleNotice extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.x3),
           child: Text(message, style: context.tokens.typography.compact),
+        ),
+      ),
+    );
+  }
+}
+
+/// What every message in a group costs, said where a group is made and where
+/// its members are listed.
+///
+/// A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F), so
+/// one message is one encrypted copy for each device of each member. Saying so
+/// keeps a slow send in a large group from looking like a broken one.
+class GroupFanoutNotice extends StatelessWidget {
+  const GroupFanoutNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.tokens.colors;
+    return DecoratedBox(
+      key: const ValueKey('group-fanout-notice'),
+      decoration: BoxDecoration(
+        color: colors.surfaceRaised,
+        borderRadius: AppRadii.card,
+        border: Border.all(color: colors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.x3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppIcon(AppIcons.info, color: colors.textMuted, size: 18),
+            const SizedBox(width: AppSpacing.x2),
+            Expanded(
+              child: Text(
+                AppLocalizations.of(context).groupFanoutCostNote,
+                style: context.tokens.typography.compact,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,135 +1,24 @@
-import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
-import 'package:communication_platform/core/application/ports/beta_mls_crypto_port.dart';
-import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
-import 'package:communication_platform/features/groups/application/group_mls_admission_service.dart';
+import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/groups/application/group_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
+import 'package:communication_platform/features/groups/application/group_state_recovery_service.dart';
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
-import 'package:communication_platform/features/groups/application/ports/group_key_package_ports.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
-import 'package:communication_platform/features/groups/infrastructure/conversation_group_application_identity_adapter.dart';
-import 'package:communication_platform/features/groups/infrastructure/development_in_memory_group_mls.dart';
-import 'package:communication_platform/features/groups/infrastructure/dio_group_key_package_repository.dart';
-import 'package:communication_platform/features/groups/infrastructure/drift_group_key_package_maintenance_store.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
-import 'package:communication_platform/features/groups/infrastructure/native_beta_group_mls.dart';
-import 'package:communication_platform/features/groups/infrastructure/pairwise_group_key_package_authentication.dart';
+import 'package:communication_platform/features/groups/infrastructure/group_pairwise_adapters.dart';
+import 'package:communication_platform/features/groups/infrastructure/native_group_control_crypto.dart';
 import 'package:communication_platform/features/groups/infrastructure/pairwise_group_live_device_adapter.dart';
 import 'package:communication_platform/features/groups/infrastructure/pairwise_group_outbound_envelope_adapter.dart';
-import 'package:communication_platform/features/groups/infrastructure/unsupported_group_mls.dart';
+import 'package:communication_platform/features/pairwise/application/pairwise_session_repair_service.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
+import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-enum GroupFeatureAvailability {
-  /// The in-memory fake, in a non-release development build. Nothing is sent.
-  developmentPreview,
-
-  /// The real closed-beta PQ MLS stack in the private experimental artifact.
-  /// Group objects are transmitted over the pairwise transport, and the state
-  /// they produce is disposable by decision (ADR-036, ADR-044).
-  privateExperimental,
-
-  /// The artifact the group stack belongs to, with the stack withheld on *this
-  /// device* because the packaged native core it would load has not been
-  /// observed running on this processor (ADR-055, narrowed to per-ABI by
-  /// ADR-056).
-  ///
-  /// Distinct from [productionUnavailable] so the interface can say which of
-  /// the two it is. Nothing is composed, nothing is uploaded and no screen is
-  /// reachable in either, but only one of them is waiting on evidence.
-  privateExperimentalWithheld,
-
-  /// No group stack. Production always lands here; so does any build without a
-  /// permit. Every group screen renders the closed gate instead.
-  productionUnavailable;
-
-  bool get isAvailable =>
-      this == GroupFeatureAvailability.developmentPreview ||
-      this == GroupFeatureAvailability.privateExperimental;
-}
-
-final groupFeatureAvailabilityProvider = Provider<GroupFeatureAvailability>((
-  ref,
-) {
-  final environment = ref.watch(appEnvironmentProvider);
-  final abi = ref.watch(runtimeAbiProvider);
-  if (GroupProductionGate.developmentPreviewPermit(environment) != null) {
-    return GroupFeatureAvailability.developmentPreview;
-  }
-  if (GroupProductionGate.privateExperimentalPermit(environment, abi) != null) {
-    return GroupFeatureAvailability.privateExperimental;
-  }
-  if (GroupProductionGate.privateExperimentalWithheld(environment, abi)) {
-    return GroupFeatureAvailability.privateExperimentalWithheld;
-  }
-  return GroupFeatureAvailability.productionUnavailable;
-});
-
-final groupMlsCryptoProvider = Provider<GroupMlsCryptoPort>((ref) {
-  final environment = ref.watch(appEnvironmentProvider);
-  final permit = GroupProductionGate.developmentPreviewPermit(environment);
-  if (permit != null) {
-    return DevelopmentInMemoryGroupMls.forDevelopmentPreview(permit);
-  }
-  if (GroupProductionGate.privateExperimentalPermit(
-        environment,
-        ref.watch(runtimeAbiProvider),
-      ) !=
-      null) {
-    final crypto = ref.watch(cryptoCoreProvider);
-    if (crypto is BetaMlsCryptoPort) {
-      return NativeBetaGroupMls(crypto as BetaMlsCryptoPort);
-    }
-  }
-  return const UnsupportedGroupMlsCrypto();
-});
-
-typedef GroupKeyPackageMaintenanceScope = ({String userId, String deviceId});
-
-final groupKeyPackageRemoteProvider = Provider<GroupKeyPackageRemotePort>(
-  (ref) => DioGroupKeyPackageRepository(
-    ref.watch(authenticatedRestClientProvider),
-    ref.watch(serverConfigSnapshotProvider),
-  ),
-);
-
-final groupKeyPackageMaintenanceServiceProvider =
-    FutureProvider.family<
-      GroupKeyPackageMaintenanceService,
-      GroupKeyPackageMaintenanceScope
-    >((ref, scope) async {
-      if (GroupProductionGate.privateExperimentalPermit(
-            ref.watch(appEnvironmentProvider),
-            ref.watch(runtimeAbiProvider),
-          ) ==
-          null) {
-        throw StateError(
-          'PQ MLS KeyPackage maintenance is closed without a private '
-          'experimental permit.',
-        );
-      }
-      final database = await ref.watch(localDatabaseProvider.future);
-      final peerAuthentication = await ref.watch(
-        peerAuthenticationServiceProvider.future,
-      );
-      return GroupKeyPackageMaintenanceService(
-        remote: ref.watch(groupKeyPackageRemoteProvider),
-        authentication: PairwiseGroupKeyPackageAuthentication(
-          ContactSelectivePairwiseClaimAdapter(
-            delegate: peerAuthentication,
-            currentUserId: scope.userId,
-          ),
-        ),
-        crypto: ref.watch(groupMlsCryptoProvider),
-        store: DriftGroupKeyPackageMaintenanceStore(database),
-        clock: ref.watch(timeSourceProvider),
-      );
-    });
 
 final groupRepositoryProvider = FutureProvider<GroupRepositoryPort>((
   ref,
@@ -138,61 +27,50 @@ final groupRepositoryProvider = FutureProvider<GroupRepositoryPort>((
   return DriftGroupRepository(database);
 });
 
-final fullyComposedGroupMlsCryptoProvider = FutureProvider<GroupMlsCryptoPort>((
-  ref,
-) async {
-  final fallback = ref.watch(groupMlsCryptoProvider);
-  if (GroupProductionGate.privateExperimentalPermit(
-        ref.watch(appEnvironmentProvider),
-        ref.watch(runtimeAbiProvider),
-      ) ==
-      null) {
-    return fallback;
-  }
-  final core = ref.watch(cryptoCoreProvider);
-  if (core is! BetaMlsCryptoPort) return fallback;
-  final betaCore = core as BetaMlsCryptoPort;
-  final database = await ref.watch(localDatabaseProvider.future);
-  final peerAuthentication = await ref.watch(
-    peerAuthenticationServiceProvider.future,
-  );
-  final conversationRepository = await ref.watch(
-    conversationRepositoryProvider.future,
-  );
-  return NativeBetaGroupMls(
-    betaCore,
-    admission: GroupMlsAdmissionService(
-      remote: ref.watch(groupKeyPackageRemoteProvider),
-      authenticationForCurrentUser: (currentUserId) =>
-          PairwiseGroupKeyPackageAuthentication(
-            ContactSelectivePairwiseClaimAdapter(
-              delegate: peerAuthentication,
-              currentUserId: currentUserId,
-            ),
-          ),
-      store: DriftGroupKeyPackageMaintenanceStore(database),
-      liveDevicesForCurrentUser: (currentUserId) =>
-          PairwiseGroupLiveDeviceAdapter(
-            ContactPairwiseLiveDeviceResolverAdapter(
-              delegate: peerAuthentication,
-              currentUserId: currentUserId,
-            ),
-          ),
-      clock: ref.watch(timeSourceProvider),
-    ),
-    applicationProtocol: ref.watch(applicationProtocolProvider),
-    applicationIdentity: ConversationGroupApplicationIdentityAdapter(
-      conversationRepository,
-    ),
-    transcript: DriftGroupRepository(database),
-  );
-});
+typedef GroupScope = ({String userId, String deviceId});
+
+/// Signs and opens group control events with this device's signing key,
+/// which stays inside the native device state.
+final groupControlCryptoProvider =
+    FutureProvider.family<GroupControlCryptoPort, GroupScope>((
+      ref,
+      scope,
+    ) async {
+      final database = await ref.watch(localDatabaseProvider.future);
+      return NativeGroupControlCrypto(
+        crypto: ref.watch(pairwiseCryptoProvider),
+        store: DriftPairwiseTransportStore(
+          database,
+          config: ref.watch(serverConfigSnapshotProvider),
+        ),
+        localDeviceId: scope.deviceId,
+        clock: ref.watch(timeSourceProvider),
+      );
+    });
+
+/// The devices a group control event may come from, each with the signing
+/// key the contacts feature authenticated through the device log.
+final groupLiveDeviceResolverProvider =
+    FutureProvider.family<GroupLiveDeviceResolverPort, GroupScope>((
+      ref,
+      scope,
+    ) async {
+      final authentication = await ref.watch(
+        peerAuthenticationServiceProvider.future,
+      );
+      return PairwiseGroupLiveDeviceAdapter(
+        ContactPairwiseLiveDeviceResolverAdapter(
+          delegate: authentication,
+          currentUserId: scope.userId,
+        ),
+      );
+    });
 
 final groupOutboundDispatcherProvider =
-    FutureProvider.family<
-      GroupOutboundDispatcher,
-      GroupKeyPackageMaintenanceScope
-    >((ref, scope) async {
+    FutureProvider.family<GroupOutboundDispatcher, GroupScope>((
+      ref,
+      scope,
+    ) async {
       final repository = await ref.watch(groupRepositoryProvider.future);
       final fanout = await ref.watch(
         pairwiseFanoutCoordinatorProvider((
@@ -206,37 +84,88 @@ final groupOutboundDispatcherProvider =
       );
     });
 
+final groupInboundCoordinatorProvider =
+    FutureProvider.family<GroupInboundCoordinator, GroupScope>((
+      ref,
+      scope,
+    ) async {
+      return GroupInboundCoordinator(
+        repository: await ref.watch(groupRepositoryProvider.future),
+        crypto: await ref.watch(groupControlCryptoProvider(scope).future),
+        liveDevices: await ref.watch(
+          groupLiveDeviceResolverProvider(scope).future,
+        ),
+        clock: ref.watch(timeSourceProvider),
+        localUserId: scope.userId,
+      );
+    });
+
+final groupStateRecoveryServiceProvider =
+    FutureProvider.family<GroupStateRecoveryService, GroupScope>((
+      ref,
+      scope,
+    ) async {
+      final database = await ref.watch(localDatabaseProvider.future);
+      final authentication = await ref.watch(
+        peerAuthenticationServiceProvider.future,
+      );
+      return GroupStateRecoveryService(
+        repository: await ref.watch(groupRepositoryProvider.future),
+        repair: PairwiseGroupSessionRepairAdapter(
+          PairwiseSessionRepairService(
+            store: DriftPairwiseTransportStore(
+              database,
+              config: ref.watch(serverConfigSnapshotProvider),
+            ),
+            liveDevices: ContactPairwiseLiveDeviceResolverAdapter(
+              delegate: authentication,
+              currentUserId: scope.userId,
+            ),
+            crypto: ref.watch(pairwiseSessionCryptoProvider),
+            clock: ref.watch(timeSourceProvider),
+          ),
+        ),
+        clock: ref.watch(timeSourceProvider),
+        currentUserId: scope.userId,
+        currentDeviceId: scope.deviceId,
+      );
+    });
+
+/// The group use cases for the signed-in account on this device.
+///
+/// Signing a control event and sending a message both act as one device, so
+/// the account and device are resolved here rather than by each screen.
 final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
+  final userId = ref.watch(
+    authenticationControllerProvider.select((state) => state.userId),
+  );
+  if (userId == null) {
+    throw StateError('group use cases need a signed-in account');
+  }
+  final deviceId = await ref.watch(currentMessagingDeviceIdProvider.future);
+  final scope = (userId: userId, deviceId: deviceId);
   final repository = await ref.watch(groupRepositoryProvider.future);
-  final preview =
-      ref.watch(groupFeatureAvailabilityProvider) ==
-      GroupFeatureAvailability.developmentPreview;
-  final crypto = await ref.watch(fullyComposedGroupMlsCryptoProvider.future);
+  final crypto = await ref.watch(groupControlCryptoProvider(scope).future);
   final clock = ref.watch(timeSourceProvider);
+  final identity = NativeGroupIdentity(ref.watch(applicationProtocolProvider));
+  final sender = ConversationGroupMessageSender(
+    await ref.watch(sendConversationEventsProvider(scope).future),
+  );
   return GroupUseCases(
     create: CreateGroup(
       repository: repository,
       crypto: crypto,
+      identity: identity,
       clock: clock,
-      developmentPreviewOnly: preview,
     ),
     mutate: MutateGroup(
       repository: repository,
       crypto: crypto,
+      identity: identity,
       clock: clock,
-      developmentPreviewOnly: preview,
     ),
-    sendMessage: SendGroupMessage(
-      repository: repository,
-      crypto: crypto,
-      clock: clock,
-      developmentPreviewOnly: preview,
-    ),
-    acceptWelcome: AcceptGroupWelcome(repository: repository, crypto: crypto),
-    applyIncomingMessage: ApplyIncomingGroupMessage(
-      repository: repository,
-      crypto: crypto,
-    ),
+    sendMessage: SendGroupMessage(repository: repository, sender: sender),
+    retryMessage: RetryGroupMessage(repository: repository, sender: sender),
   );
 });
 
@@ -252,4 +181,12 @@ final groupMessagesProvider = StreamProvider.autoDispose
     .family<List<GroupMessage>, String>((ref, groupId) async* {
       final repository = await ref.watch(groupRepositoryProvider.future);
       yield* repository.watchMessages(groupId);
+    });
+
+/// How far each of this device's messages in a group has got, for the
+/// messages whose fan-out has not ended.
+final groupFanoutProgressProvider = StreamProvider.autoDispose
+    .family<Map<String, GroupFanoutProgress>, String>((ref, groupId) async* {
+      final repository = await ref.watch(groupRepositoryProvider.future);
+      yield* repository.watchFanoutProgress(groupId);
     });

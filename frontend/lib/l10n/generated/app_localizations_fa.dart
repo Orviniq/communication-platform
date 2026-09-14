@@ -520,9 +520,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get contactsNewGroup => 'گروه جدید';
 
   @override
-  String get contactsNewGroupClosed => 'روی این دستگاه در دسترس نیست';
-
-  @override
   String get contactsNewVoiceRoom => 'اتاق صوتی جدید';
 
   @override
@@ -1095,28 +1092,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatStateReceived => 'دریافت‌شده';
 
   @override
-  String get groupProductionUnavailableTitle =>
-      'گروه‌های عملیاتی در دسترس نیستند';
-
-  @override
-  String get groupProductionUnavailableMessage =>
-      'پروفایل MLS پساکوانتومی هنوز پشت دروازهٔ امنیتی است. این ساخت نمی‌تواند گروه بسازد، KeyPackage تولید کند یا متن رمز گروهی بفرستد.';
-
-  @override
-  String get groupExperimentalWithheldTitle =>
-      'پیام‌رسانی گروهی روی این دستگاه در دسترس نیست';
-
-  @override
-  String get groupExperimentalWithheldMessage =>
-      'رمزنگاری گروهی آزمایشی روی گوشی‌های ARM ۶۴بیتی آزمایش شده است و این دستگاه از پردازندهٔ دیگری استفاده می‌کند. به‌جای اجرای آزمایش‌نشده، گفت‌وگوهای گروهی اینجا خاموش است: هیچ کلیدی برای شما منتشر نمی‌شود و هیچ پیام گروهی به این دستگاه نمی‌رسد. پیام‌های مستقیم بی‌تأثیر می‌مانند.';
-
-  @override
-  String get groupDevelopmentPreviewBanner =>
-      'فقط پیش‌نمایش توسعه — هیچ متن رمز گروهی عملیاتی ارسال نمی‌شود';
-
-  @override
-  String get groupExperimentalBanner =>
-      'رمزنگاری گروهی آزمایشی — بازبینی‌نشده و غیراستاندارد. یک به‌روزرسانی ممکن است این گروه‌ها را بازنشانی کند و پیام‌هایشان را حذف کند.';
+  String chatFanoutProgress(int sent, int total) {
+    return 'نسخه‌های ارسال‌شده: $sent از $total';
+  }
 
   @override
   String get groupCreateTitle => 'ساخت گروه';
@@ -1148,6 +1126,10 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get groupMemberLimitMessage =>
       'گروه با احتساب شما حداکثر ۵۰ عضو دارد.';
+
+  @override
+  String get groupFanoutCostNote =>
+      'هر پیام گروهی برای هر دستگاه هر عضو جداگانه رمزنگاری می‌شود. در گروهی با ۵۰ نفر که هر کدام سه دستگاه دارند، هر پیام حدود ۱۵۰ نسخه است؛ برای همین ارسال در گروه بزرگ طول می‌کشد و هر پیام نشان می‌دهد چند نسخه‌اش ارسال شده است.';
 
   @override
   String get groupNameLabel => 'نام گروه';
@@ -1245,7 +1227,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupRemovedState =>
-      'شما حذف شده‌اید. محتوای قبلی این دستگاه خواندنی می‌ماند، اما دوره‌های آیندهٔ گروه در دسترس نیست.';
+      'شما حذف شده‌اید. محتوای قبلی این دستگاه خواندنی می‌ماند، اما پیام‌های تازهٔ این گروه دیگر به شما نمی‌رسد.';
 
   @override
   String get groupLeftState =>
@@ -1253,11 +1235,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupQueueGapState =>
-      'ممکن است شکاف صندوق پستی یک Commit از MLS را پنهان کرده باشد. پیش از ارسال، این دستگاه باید حذف و با Welcome تازه دوباره افزوده شود.';
+      'ممکن است هنگام دور بودن این دستگاه پیام‌هایی از دست رفته باشد. وضعیت فعلی گروه از یکی از اعضا خواسته شده است و ارسال پس از رسیدن آن ادامه می‌یابد.';
 
   @override
   String get groupForkState =>
-      'Commitهای هم‌زمان MLS قرنطینه شدند. برنامه هیچ شاخه‌ای را خودسرانه انتخاب نمی‌کند.';
+      'دو تغییر ناسازگار در گروه رسید. گروه متوقف شده است و برنامه میان آن‌ها انتخاب نمی‌کند.';
 
   @override
   String get groupControlQuarantineState =>
@@ -1295,14 +1277,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupConfirmRemoveBody =>
-      'حذف عضو دورهٔ گروه را جلو می‌برد و دسترسی او به پیام‌های آینده را قطع می‌کند؛ محتوای از قبل دریافت‌شده پاک نمی‌شود.';
+      'این عضو دیگر پیام‌های تازهٔ گروه را دریافت نمی‌کند. محتوایی که پیش‌تر دریافت کرده پاک نمی‌شود.';
 
   @override
   String get groupConfirmLeaveTitle => 'گروه ترک شود؟';
 
   @override
   String get groupConfirmLeaveBody =>
-      'دسترسی به دوره‌های آیندهٔ گروه را از دست می‌دهید. محتوای ذخیره‌شده روی این دستگاه خواندنی می‌ماند.';
+      'دیگر پیام‌های تازهٔ این گروه را دریافت نمی‌کنید. محتوای ذخیره‌شده روی این دستگاه خواندنی می‌ماند.';
 
   @override
   String get groupOwnerMustTransfer => 'پیش از ترک گروه، مالکیت را منتقل کنید.';
@@ -1324,7 +1306,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupWithheldQueueGap =>
-      'ارسال پیام متوقف است: پس از شکاف صندوق پستی باید با Welcome تازه دوباره بپیوندید.';
+      'ارسال پیام متوقف است تا یکی از اعضا وضعیت فعلی این گروه را تأیید کند.';
 
   @override
   String get groupWithheldConflict =>

@@ -87,8 +87,8 @@ endpoint, wire format, or weaker security behavior.
 - Never add classical-only fallback for PQXDH or PQ MLS, placeholder signatures,
   private-use production ciphersuite identifiers, TOFU messaging, TLS bypasses, or
   arbitrary server selection.
-- Keep the PQ MLS production gates in `docs/mls-profile.md` closed until every condition
-  is evidenced. Do not generate or upload production MLS KeyPackages before then.
+- A group is a set of pairwise sessions, and the client uploads no group key material
+  (`backend/CLIENT_CONTRACT.md` §F).
 - Never log plaintext, credentials, stable identifiers, keys, recovery secrets,
   ciphertext, attachment capabilities, or decoded tokens. Test redaction.
 - Android and future Web protection are different threat boundaries. Do not claim

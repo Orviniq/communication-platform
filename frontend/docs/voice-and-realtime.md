@@ -67,11 +67,9 @@ backend rename API; clients authenticate accepted metadata updates and surface c
 rather than trusting server ciphertext alone.
 
 Room MLS credentials obey the same verified account-master/device-cross-signature as group
-chat, the same [PQ MLS production gates](mls-profile.md#production-gates), and — since
-ADR-056 — the same per-ABI experimental permit. Voice is never available on a device where
-groups are withheld, and it may not introduce a second availability rule
-([ADR-058](decisions.md) P3). An unsigned, unverified, forked, or classical-only peer
-cannot receive room membership/media keys.
+chat. Voice is never available on a device where groups are withheld, and it may not
+introduce a second availability rule ([ADR-058](decisions.md) P3). An unsigned,
+unverified, forked, or classical-only peer cannot receive room membership/media keys.
 
 Leaving is a client-protocol action, not a backend deletion. The client sends an
 authenticated `room.control` leave/removal event, commits the MLS membership change,

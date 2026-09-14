@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 
-/// Canonical native Authentication-Service input shared by pairwise and MLS.
+/// Canonical native Authentication-Service input for pairwise sessions.
 Uint8List encodeVerifiedClaimedBundleRequest({
   required Uint8List userId,
   required Uint8List deviceId,

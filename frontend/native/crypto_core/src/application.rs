@@ -1173,7 +1173,7 @@ fn encode_projection(event: &ApplicationEvent, output: &mut Vec<u8>) -> CryptoRe
     Ok(())
 }
 
-fn encode_key(encoder: &mut Encoder<&mut Vec<u8>>, key: u8) -> CryptoResult<()> {
+pub(crate) fn encode_key(encoder: &mut Encoder<&mut Vec<u8>>, key: u8) -> CryptoResult<()> {
     encoder
         .u8(key)
         .map(|_| ())
@@ -1351,14 +1351,14 @@ fn push_optional_text(output: &mut Vec<u8>, value: Option<&str>) -> CryptoResult
     }
 }
 
-fn read_exact_map(decoder: &mut Decoder<'_>, expected: usize) -> CryptoResult<()> {
+pub(crate) fn read_exact_map(decoder: &mut Decoder<'_>, expected: usize) -> CryptoResult<()> {
     if read_map_len(decoder)? != expected {
         return Err(CryptoError::MalformedInput);
     }
     Ok(())
 }
 
-fn read_map_len(decoder: &mut Decoder<'_>) -> CryptoResult<usize> {
+pub(crate) fn read_map_len(decoder: &mut Decoder<'_>) -> CryptoResult<usize> {
     let first = peek(decoder)?;
     if first >> 5 != 5 || first & 0x1f == 0x1f {
         return Err(CryptoError::MalformedInput);
@@ -1372,14 +1372,14 @@ fn read_map_len(decoder: &mut Decoder<'_>) -> CryptoResult<usize> {
     Ok(length)
 }
 
-fn read_key(decoder: &mut Decoder<'_>, expected: u8) -> CryptoResult<()> {
+pub(crate) fn read_key(decoder: &mut Decoder<'_>, expected: u8) -> CryptoResult<()> {
     if read_uint(decoder)? != u64::from(expected) {
         return Err(CryptoError::MalformedInput);
     }
     Ok(())
 }
 
-fn read_uint(decoder: &mut Decoder<'_>) -> CryptoResult<u64> {
+pub(crate) fn read_uint(decoder: &mut Decoder<'_>) -> CryptoResult<u64> {
     let first = peek(decoder)?;
     if first >> 5 != 0 || first & 0x1f == 0x1f {
         return Err(CryptoError::MalformedInput);
@@ -1398,7 +1398,7 @@ fn read_uint(decoder: &mut Decoder<'_>) -> CryptoResult<u64> {
     Ok(value)
 }
 
-fn read_array_len(decoder: &mut Decoder<'_>) -> CryptoResult<usize> {
+pub(crate) fn read_array_len(decoder: &mut Decoder<'_>) -> CryptoResult<usize> {
     let first = peek(decoder)?;
     if first >> 5 != 4 || first & 0x1f == 0x1f {
         return Err(CryptoError::MalformedInput);
@@ -1421,12 +1421,14 @@ fn read_array_len(decoder: &mut Decoder<'_>) -> CryptoResult<usize> {
     Ok(length)
 }
 
-fn read_exact_bytes<const LENGTH: usize>(decoder: &mut Decoder<'_>) -> CryptoResult<[u8; LENGTH]> {
+pub(crate) fn read_exact_bytes<const LENGTH: usize>(
+    decoder: &mut Decoder<'_>,
+) -> CryptoResult<[u8; LENGTH]> {
     let bytes = read_bytes(decoder)?;
     bytes.try_into().map_err(|_| CryptoError::MalformedInput)
 }
 
-fn read_bytes<'a>(decoder: &mut Decoder<'a>) -> CryptoResult<&'a [u8]> {
+pub(crate) fn read_bytes<'a>(decoder: &mut Decoder<'a>) -> CryptoResult<&'a [u8]> {
     let first = peek(decoder)?;
     if first >> 5 != 2 || first & 0x1f == 0x1f {
         return Err(CryptoError::MalformedInput);
@@ -1438,7 +1440,7 @@ fn read_bytes<'a>(decoder: &mut Decoder<'a>) -> CryptoResult<&'a [u8]> {
     Ok(bytes)
 }
 
-fn read_text(
+pub(crate) fn read_text(
     decoder: &mut Decoder<'_>,
     maximum_bytes: usize,
     maximum_scalars: usize,
@@ -1497,7 +1499,7 @@ fn read_bool(decoder: &mut Decoder<'_>) -> CryptoResult<bool> {
     }
 }
 
-fn peek(decoder: &Decoder<'_>) -> CryptoResult<u8> {
+pub(crate) fn peek(decoder: &Decoder<'_>) -> CryptoResult<u8> {
     decoder
         .input()
         .get(decoder.position())
@@ -1505,7 +1507,7 @@ fn peek(decoder: &Decoder<'_>) -> CryptoResult<u8> {
         .ok_or(CryptoError::MalformedInput)
 }
 
-fn canonical_length_header(first: u8, length: usize, major: u8) -> bool {
+pub(crate) fn canonical_length_header(first: u8, length: usize, major: u8) -> bool {
     match length {
         0..=23 => first == (major << 5) | u8::try_from(length).unwrap_or(u8::MAX),
         24..=0xff => first == (major << 5) | 0x18,

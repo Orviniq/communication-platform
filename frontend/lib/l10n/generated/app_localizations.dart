@@ -986,12 +986,6 @@ abstract class AppLocalizations {
   /// **'New Group'**
   String get contactsNewGroup;
 
-  /// Subtitle on the disabled New Group row when this build has no reachable group stack (ADR-055).
-  ///
-  /// In en, this message translates to:
-  /// **'Not available on this device'**
-  String get contactsNewGroupClosed;
-
   /// No description provided for @contactsNewVoiceRoom.
   ///
   /// In en, this message translates to:
@@ -2024,41 +2018,11 @@ abstract class AppLocalizations {
   /// **'received'**
   String get chatStateReceived;
 
-  /// No description provided for @groupProductionUnavailableTitle.
+  /// No description provided for @chatFanoutProgress.
   ///
   /// In en, this message translates to:
-  /// **'Production groups are not available'**
-  String get groupProductionUnavailableTitle;
-
-  /// No description provided for @groupProductionUnavailableMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.'**
-  String get groupProductionUnavailableMessage;
-
-  /// Title of the closed gate in the private experimental build, where the group stack exists but is withheld for want of on-device evidence (ADR-055).
-  ///
-  /// In en, this message translates to:
-  /// **'Group messaging is not available on this device'**
-  String get groupExperimentalWithheldTitle;
-
-  /// Explains that the group surface is withheld pending measurement, that it is off in substance rather than hidden, and that direct messages still work.
-  ///
-  /// In en, this message translates to:
-  /// **'The experimental group encryption has been tested on 64-bit ARM phones, and this device uses a different processor. Rather than run it untested, group chats are switched off here: no keys are published for you and no group message can reach this device. Direct messages are unaffected.'**
-  String get groupExperimentalWithheldMessage;
-
-  /// Shown on group screens in a development build, where the in-memory fake never transmits anything.
-  ///
-  /// In en, this message translates to:
-  /// **'Development preview only — no production group ciphertext is sent'**
-  String get groupDevelopmentPreviewBanner;
-
-  /// Shown on group screens in the private experimental build. Group objects really are transmitted here, and the state they produce is disposable by decision, so the wording must not reuse the development preview's promise that nothing is sent.
-  ///
-  /// In en, this message translates to:
-  /// **'Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.'**
-  String get groupExperimentalBanner;
+  /// **'Copies sent: {sent} of {total}'**
+  String chatFanoutProgress(int sent, int total);
 
   /// No description provided for @groupCreateTitle.
   ///
@@ -2119,6 +2083,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'A group can have at most 50 members, including you.'**
   String get groupMemberLimitMessage;
+
+  /// No description provided for @groupFanoutCostNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Every group message is encrypted separately for each device of each member. A group of 50 people with three devices each makes about 150 copies of one message, so a message in a large group takes longer to send and shows how many copies have gone out.'**
+  String get groupFanoutCostNote;
 
   /// No description provided for @groupNameLabel.
   ///
@@ -2297,7 +2267,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupRemovedState.
   ///
   /// In en, this message translates to:
-  /// **'You were removed. Past content on this device stays readable, but future group epochs are unavailable.'**
+  /// **'You were removed. Past content on this device stays readable, but new messages in this group no longer reach you.'**
   String get groupRemovedState;
 
   /// No description provided for @groupLeftState.
@@ -2309,13 +2279,13 @@ abstract class AppLocalizations {
   /// No description provided for @groupQueueGapState.
   ///
   /// In en, this message translates to:
-  /// **'A mailbox gap may have hidden an MLS commit. This device must be removed and re-added with a fresh Welcome before sending.'**
+  /// **'Messages may have been lost while this device was away. A member has been asked for the group\'s current state, and sending resumes when it arrives.'**
   String get groupQueueGapState;
 
   /// No description provided for @groupForkState.
   ///
   /// In en, this message translates to:
-  /// **'Concurrent MLS commits were quarantined. The client will not choose a branch.'**
+  /// **'Two conflicting group changes arrived. The group is paused, and the app will not choose between them.'**
   String get groupForkState;
 
   /// No description provided for @groupControlQuarantineState.
@@ -2387,7 +2357,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupConfirmRemoveBody.
   ///
   /// In en, this message translates to:
-  /// **'Removing this member advances the group epoch and cuts off access to future messages. It cannot erase content already received.'**
+  /// **'This member stops receiving new messages from the group. Content they already received cannot be erased.'**
   String get groupConfirmRemoveBody;
 
   /// No description provided for @groupConfirmLeaveTitle.
@@ -2399,7 +2369,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupConfirmLeaveBody.
   ///
   /// In en, this message translates to:
-  /// **'You will lose access to future group epochs. Content already stored on this device remains readable.'**
+  /// **'You will stop receiving new messages from this group. Content already stored on this device remains readable.'**
   String get groupConfirmLeaveBody;
 
   /// No description provided for @groupOwnerMustTransfer.
@@ -2435,7 +2405,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupWithheldQueueGap.
   ///
   /// In en, this message translates to:
-  /// **'Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.'**
+  /// **'Messaging withheld until a member confirms this group\'s current state.'**
   String get groupWithheldQueueGap;
 
   /// No description provided for @groupWithheldConflict.

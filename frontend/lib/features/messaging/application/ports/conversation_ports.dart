@@ -102,6 +102,19 @@ abstract interface class ApplicationConversationResolverPort implements Port {
   });
 }
 
+/// Admits application events into group conversations.
+abstract interface class GroupConversationMembershipPort implements Port {
+  /// Succeeds when [senderUserId] is an active member of the group [groupId]
+  /// names and [currentUserId] is one too. A group, or a member, this device
+  /// has not been told about yet is asked for, and the event is refused for
+  /// now.
+  Future<Result<void>> authorizeGroupEvent({
+    required String groupId,
+    required String senderUserId,
+    required String currentUserId,
+  });
+}
+
 abstract interface class ApplicationFanoutPort implements Port {
   /// Commits the event locally, and records that its recipients are still owed.
   ///

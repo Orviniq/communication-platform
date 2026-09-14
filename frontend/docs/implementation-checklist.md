@@ -41,7 +41,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Register/list/label/revoke devices | Ready; two-phase enrollment contract | Pieces 10/17 complete enrollment plus authenticated own-device ETag listing, account-private encrypted labels, relabel, explicit remote/self revocation, crash-resumable log-first removal, secure self cleanup, and Linked Devices UI. **Corrected 2026-09-08 (ADR-070, server ADR-0024)**: the screen showed a last-active value the server no longer answers with. Server ADR-0024 stopped the server recording an activity day for a device at all, so `GET /api/v1/me/devices` carries no `last_active_date` and a DTO requiring it fails to parse the response. The client had nothing to render, and the row is gone from the DTO, the domain model, the repository, the screen and both catalogues; local schema 19 drops the column that cached it |
 | Peer device lists, ETags, signed device log | Ready opaque transport | Pieces 10/11/17 complete authenticated own/peer device sets, canonical signed-log verification and extension, exact predicted-sequence confirmation, concurrent append recovery, encrypted pairwise head gossip, and persistent global fork/equivocation blocking |
 | Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
-| PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on the unassigned MLS suite identifier, the hybrid KEM's expiring draft reference, maintained OpenMLS/provider support, vectors, and review |
+| PQ MLS key packages | Deleted: the three KeyPackage routes answer `404` and `KEYPACKAGE_BUCKETS` is gone (server ADR-0001) | **Cancelled 2026-09-13 (ADR-075), not blocked.** No endpoint accepts, stores or serves a key package, and none will, so the client generates, uploads and claims none. The five external prerequisites this row waited on gate nothing now |
 | SAS/QR master-key verification | Client protocol | Piece 11 exact-two-master-key SAS/QR, explicit out-of-band confirmation, user-signing attestation, and persistent verified/change states complete; messaging remains withheld on every non-verified state |
 | Recovery onboarding | Identity backup API ready | Piece 10 one-time checksummed secret, Rust Argon2id/XChaCha backup, first upload, later restore, wrong-secret handling, and honest no-history notice complete. **Replacement added 2026-08-25 (ADR-057)**: §15.2's rotation is implemented end to end. `cp_crypto_v1_rotate_recovery_secret` re-wraps the *same* cross-signing identity under fresh entropy through the same `encode_recovery_secret` and `encrypt_backup` the first upload used — no construction, ciphersuite or format changes, and the encoded package is byte-identical apart from the recovery and backup fields — so every device cross-signature and peer attestation survives. The new secret is shown **only** after the server accepted a strictly higher backup version, a stale 409 is reconciled once against what the server holds, and every refusal states that the current secret still works, because the server still holds the blob it opens. Nothing local is rewritten. The screen blocks screen capture while it is open and copies through the expiring clipboard path. Covered by 2 Rust tests, 9 use-case tests over faked ports, and 6 screen tests. **Not verified:** a live 409 against a running server, and what `FLAG_SECURE` and the clipboard clear do on a device |
 
@@ -52,7 +52,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Per-device durable envelope queue | Ready | Piece 12 durable Drift inbox/outbox journals, opaque event deduplication, bounded queues, and process-death recovery plus piece 14 atomic application-event markers/projections complete |
 | Batched fan-out/stale devices | Ready | Piece 12 UUID-byte-sorted <=256 target batches, exact-ciphertext retry, partial progress, stale terminal state/session invalidation, and durable refresh requests complete |
 | Drain/ack | Ready | Piece 12 authoritative REST paging, duplicate/reorder handling, post-commit idempotent ack, and durable contiguous checkpoint complete |
-| Seven-day TTL / `pruned_through` gaps | Ready signal | Piece 12 pre-processing comparison, blocking queue-gap/group recovery state, retained MLS-dependent opaque envelopes, and recovered loss-baseline transition complete; fresh Welcome production flow remains gated on MLS pieces |
+| Seven-day TTL / `pruned_through` gaps | Ready signal | Piece 12 pre-processing comparison, blocking queue-gap/group recovery state, and recovered loss-baseline transition complete. **Corrected 2026-09-13 (ADR-075)**: no envelope is held back for an MLS re-admission any more. A gap repairs the pairwise sessions with one member of each active group and asks that member for the group's control state (`backend/CLIENT_CONTRACT.md` §H) |
 | WebSocket live delivery | Ready | Piece 06 authenticated gateway/close-code mapping and piece 12 lifecycle supervisor complete, with socket envelopes treated as wake-up hints that always trigger an authoritative REST drain. **Composed 2026-08-21 (ADR-047)**, closing ADR-046 follow-up step 1: `MessageDeliveryController` starts one session per device-bound full session, the socket is built from the one `NetworkingFoundation` that `AuthenticationAssembly` owns, and a composition test drives the real controller, session, supervisor, engine, store, gateway and coordinator against a fake transport. On-device the provisioned beta build clears the fail-closed gate against the live backend; a signed-in socket has not been observed on a device, because reaching full scope needs an account the server owner activates by hand |
 | DM identity/session | Client protocol | Piece 13 hybrid PQXDH/Double Ratchet transport and exact pairwise fan-out/outbox integration complete |
 | Text messages | Client protocol | Pieces 14–15 complete deterministic-CBOR events, typed projections, honest optimistic transport state, Riverpod streams, and the production app-owned timeline |
@@ -68,16 +68,17 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Key-package claim | Ready | Piece 19 has real closed-beta generation, replenishment, consumable claim, and separately uploaded last-resort lifecycle wiring; backend bucket/consumption contract execution remains pending and production upload is disabled |
-| Group ciphertext delivery | Envelope transport ready | Piece 19 routes every closed-beta MLS object through durable recipient-bound Double Ratchet fan-out, including own other devices, with exact ciphertext retry. The commit-to-network leg is covered by crash and transaction-failure injection against the real repository, outbox, and fan-out coordinator (2026-08-18), which found and fixed two defects: one logical send identity per group object collided with the durable outbox's unique event id, so any group with two or more remote members committed its epoch and could never transmit it on any retry, and a single unroutable operation stranded every later group behind it. Execution against the packaged Rust core and physical devices remains pending; production remains disabled. **That pending item is now the condition ADR-055 puts in front of the surface reaching a user at all**, measured by `tool/measure_beta_mls_core.sh` |
-| Group availability by build | Client protocol | ADR-044: one source-only `GroupProductionGate.privateExperimentalPermit` decides both the closed-beta stack and its screens. Before it, `groupFeatureAvailabilityProvider` read the development-preview permit alone, which requires `!kReleaseMode`, so every group screen in the shipped Beta release rendered the closed gate while that same artifact composed `NativeBetaGroupMls`, ran `GroupKeyPackageMaintenanceService` as post-inbox work, and processed inbound group objects - uploading MLS KeyPackages for groups no user of it could create. Screens now gate on `GroupFeatureAvailability.isAvailable` rather than naming one tier, and the group banner states what the running build's stack actually is: the development preview says it transmits nothing, the Private Experimental build says the encryption is experimental and an update may reset the group and delete its messages. Production is unchanged and still resolves `UnsupportedGroupMlsCrypto`. Covered by three architecture tests and one widget test. **Withheld 2026-08-24 (ADR-055).** Re-deciding the exposure on evidence rather than on ADR-044's conclusion found the group *logic* well evidenced and its *execution* evidenced nowhere: `cp_crypto_v1_beta_mls_operation` has never run on any physical device or emulator, on any ABI, on any date, which five rows of this checklist and `mls-beta-review-readiness.md` already recorded. The `beta` Cargo profile is the only one linking `aws-lc-sys` - C and assembly cross-compiled per ABI - and the C ABI's `catch_unwind` contains a Rust panic but not a fault below Rust, which would take the supported direct-message tier down with it. `integration_test/crypto_core_android_smoke_test.dart` covers the fifteen foundation symbols and never reaches the beta symbol, and `tool/ci.sh` does not run `integration_test` at all. The permit now requires the beta environment **and** an admissible record in `GroupExperimentalGate` for every mandatory ABI (`arm64-v8a`, `armeabi-v7a`; `x86_64` is non-mandatory because an emulated record is inadmissible and no recipient has x86 hardware). The ledger is **empty**, so the distributed artifact resolves `UnsupportedGroupMlsCrypto` on all nine port methods, `groupKeyPackageMaintenanceServiceProvider` throws so **no KeyPackage is generated or uploaded and the device advertises no group capability**, the durable sync engine composes no KeyPackage post-inbox work, the inbound coordinator refuses group objects rather than processing them, every group screen renders the closed gate, and the Contacts entry point is disabled and labelled rather than routing to a refusal. Withheld and production-unavailable are distinct states with distinct wording, because only one of them is waiting on evidence. **Nothing is unwired**: ADR-036, ADR-037, ADR-039, ADR-040 and ADR-041 are untouched and every one of their tests still runs - this is a gate, not a removal, and `tool/measure_beta_mls_core.sh` is the instrument that opens it, cross-compiling the crate's own `--features beta-pq-mls` test binary for one ABI and running it on-device with nothing added to the application. It exits non-zero with no device attached, which is what it did here. A real defect was found and fixed on the way: `CreateGroupPage`, `GroupChatPage` and `GroupInfoPage` each checked their injected-collaborator path **before** the availability gate, so a caller supplying its own collaborators rendered the flow in a build with no group stack; the gate is now first on all five routed screens and a test pins the ordering. Disclosure moves 5 → 6: the statement had been telling readers that group chats use experimental encryption and can be reset, which in an artifact with no group stack describes a feature they do not have. Production is untouched and provably so - a test asserts that even a fully satisfied ledger leaves production holding no permit. Covered by 20 gate assertions plus the updated screen, contacts and disclosure tests. **Reopened on one measured ABI 2026-08-24 (ADR-056).** A Samsung Galaxy A56 (SM-A566B, Android 16, API 36, retail `user` build, `release-keys`) became available, so the one outstanding item was run instead of argued about: `tool/measure_beta_mls_core.sh arm64-v8a` cross-compiled the crate's own `--features beta-pq-mls` test binary with the pinned toolchain, pushed it to the phone and ran it there - **128 passed, 0 failed, 3 ignored in 172.07 s**, the *same* counts `cargo test --locked --all-features` gives on the x86_64 host, so the device ran the whole suite rather than a subset that linked. Forty `mls_beta::` tests ran, including the create/join/private-message/proposal/commit/remove round trip and `suite_signs_with_ed25519_and_round_trips_hybrid_hpke`, which is where `aws-lc`'s ML-KEM runs. Hardware exposed two defects in the instrument, both fixed and neither findable another way: MSYS rewrote `adb push … /data/local/tmp/…` into `C:/Program Files/Git/data/…` so the first run died on `remote secure_mkdirs() failed`, and the three setup lines sent stdout to `/dev/null` while `adb shell` folds remote stderr into stdout, so that failure printed nothing at all. The A56 reports an **empty `abilist32`** - its Exynos s5e8855 is 64-bit-only - so `armeabi-v7a` cannot be measured on the hardware that measured `arm64-v8a`. Rather than demote a cell for being unmeasurable (the move ADR-053 exists to forbid and ADR-055 pre-refused) or withhold from everyone over a device nobody here has, the *question* became per-ABI: `GroupExperimentalGate.hasEvidenceFor(Abi)` replaces the global `isOpen`, the permit takes the running ABI from `runtimeAbiProvider`, and one APK's three libraries get three answers. `arm64-v8a` is open; `armeabi-v7a` and `x86_64` stay withheld in substance and `armeabi-v7a` stays in the ledger recorded as unmeasured. This is **stricter** than ADR-055 where it matters: a satisfied ledger would previously have opened every ABI including one added later with no run, whereas an unmeasured ABI is now withheld whatever the ledger holds and an unpackaged ABI maps to no cell and fails closed. The ABI is read, never chosen - `Abi.current()` is fixed by the loaded AOT snapshot, reaches the app through one seam a test asserts is the only caller, can only narrow, and cannot reach production. Disclosure moves 6 → 7: the point now carries ADR-036's disposable-state rule *and* the fact that an unmeasured processor is withheld the feature, because it has to be true for a reader on either kind of phone. Production re-verified by rebuild plus `verify_release_apk.sh --production` (7/7), and a test asserts a full ledger still leaves production holding no permit on any ABI. Covered by 25 gate assertions |
-| Group creation/membership | Client protocol | Piece 19 implements real closed-beta create, authenticated later Welcome/re-add, membership controls, opaque state, and piece-18 CAS storage. The device-local crash and transaction-failure matrix over that CAS boundary is implemented and passing on 2026-08-18: 39 tests abort one exact statement inside the real transaction at every write in the unit, outbound and inbound, and assert the whole unit is absent; a simulated process restart reopens the durable file, passes `PRAGMA quick_check`, and finishes or discards the interrupted operation. The physical-device half — process kill, Doze, force-stop, torn writes, Keystore after reboot, packaged Rust core — has not been run. Remaining recovery/concurrency matrices keep production fail-closed |
-| Owner/admin/member roles | Client protocol | Piece 19 signs and verifies deterministic controls with device authentication proofs and replays the authenticated transcript; full adversarial/device matrix and independent review remain pending |
-| Invite/remove/leave | Client protocol | Closed-beta Invite/re-add, remove, and ADR-039 two-phase leave with automatic owner-side eviction are integrated. The queue-gap remove/re-add matrix is implemented and tested on 2026-08-18: an evicted member is re-admissible by a fresh Add against newly claimed KeyPackages, while a live member and one whose eviction is still uncommitted stay refused; a blocked device admits an authenticated re-admission Welcome and nothing else, requires a consumed KeyPackage and a strictly forward revision, and replaces the retained group, roster, and transcript in the same transaction that retires the group's obligation, advances the acknowledged loss baseline through `pruned_through`, and releases the retained MLS-blocked envelopes. Covered by 45 Dart tests across three files (11 domain re-admission, 31 device-side recovery matrix, 3 admission-service re-invite), including compare-and-swap abort, rollback of the pairwise receive, multi-group blocking, explicit local abandonment, and restart-mid-recovery resumability, against a scripted crypto port. The peer-to-peer signal that asks peers to remove and re-add a gapped device has no defined wire format in either the backend or frontend contract and is not implemented; recovery is driven by the re-admission itself. Execution against the real crypto core, a running backend, and multiple physical devices remains pending, and production MLS commits remain gated |
-| Encrypted metadata | Opaque envelope transport ready | Closed beta processes metadata/policy controls inside authenticated MLS transport and the atomic state/projection boundary; production remains gated |
-| History for new members | Envelope transport ready; no server history | Policy and authenticated Welcome are integrated; bounded cryptographic history re-share validation remains pending and never implies server history |
-| Fork/conflict handling | Client protocol | ADR-041 canonical same-revision convergence is implemented and tested: siblings are authenticated and replayed against the shared parent, and the winner is decided by operation precedence class, then the signer's authority in that parent, then the authenticated signer identity, so no branch author can bias the outcome; a superseded branch fork-quarantines atomically for remove/re-add. ADR-038's hash-only order was superseded on 2026-08-17 after the hash was measured to be author-grindable at about 24,500 candidate branches per second per core. Covered by a Rust grinding measurement and 32 Dart tests, including an adversarial sweep over every role and invitation policy. Multi-device execution against the real crypto core remains pending |
-| Leave coordination | Client protocol | ADR-039 two-phase departure is implemented and tested: the leaver signs a non-membership announcement at the current epoch and the active owner automatically commits the `Remove` that evicts the leaves. Covered by a Rust descriptor test and 16 Dart tests; multi-device execution against real devices remains pending |
+| Group fan-out | Envelope transport ready; no group endpoint, roster or key (server ADR-0001) | **Implemented 2026-09-13 (ADR-075).** A group message is one send, sealed for every live device of every active member and the sender's other devices, with the recipients read when the copies are sealed. `stale_devices` removes a device from the set and `full_devices` keeps it and sends its copy again after the backoff. A claimed bundle without PQ material starts no session. Host-tested against the real group store, outbox and audience resolver in `group_fanout_delivery_test.dart`, and in the fan-out coordinator, sync engine and PQ-refusal tests |
+| Fan-out cost on screen | Client protocol | **Implemented 2026-09-13 (ADR-075).** Group details and Group Info state that a message is one encrypted copy for each device of each member, about 150 for 50 people with three devices each. A message shows how many copies the server has accepted, is marked sent only when none is still owed, and offers a retry of the same message when it fails |
+| Group availability by build | Client protocol | **Open on every build (ADR-075).** The production gate, `groupFeatureAvailabilityProvider`, the experimental ledger and the per-ABI permit went with the MLS stack; no group screen checks a gate |
+| Group creation/membership | Client protocol | Signed control events built and signed by the native core and chained by state hash: create, add, remove, leave, role change, ownership transfer and rename, each committed through a compare-and-swap with the payloads it owes. A member an event adds is sent the whole transcript and replays it |
+| Owner/admin/member roles | Client protocol | Authority is checked against the roster each event builds on, by the signing device and by every receiver; an event its signer was not allowed to make is recorded and dropped |
+| Invite/remove/leave | Client protocol | A removed member is sent its removal once and nothing after it, including a message written before the removal and sealed after it. Leaving is removing yourself; an owner may leave only a group it is alone in |
+| Encrypted metadata | Opaque envelope transport ready | Name and description travel inside signed control events over pairwise envelopes. No group photo is carried |
+| History for new members | Envelope transport ready; no server history | New messages only: the create event fixes the policy, and nothing re-shares earlier messages |
+| Fork/conflict handling | Client protocol | Two events at one revision quarantine the group, and the client picks no branch |
+| Queue-gap recovery | `pruned_through` ready | Every active group waits for its state after a gap; the device repairs its pairwise sessions with one member and asks that member for the control state, and sending is withheld until the answer arrives |
+| Not yet run | — | Execution on physical devices against a live backend, and independent review of the control-event construction |
 
 ## Attachments and recovery
 
@@ -96,13 +97,13 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 **Decided, not implemented.** Piece 20 has no implementation of any kind and does not
 start until every condition of [ADR-058](decisions.md) is met — P1 a granted media-key
 source, P2 that exporter reachable through the native boundary, P3 the same per-ABI permit
-that governs groups, P4 a settled frame-encryption contract, P5 an admissible Android wire
+that governed groups (deleted with MLS by ADR-075), P4 a settled frame-encryption contract, P5 an admissible Android wire
 record under `docs/validation/voice-media/`, P6 self-hosted LiveKit and TURN reviewed into
 the pinned dependency map, P7 a truthful tier and disclosure. **On 2026-08-25 none of P1,
 P2, P4, P5 or P6 is met**, and the rows below stay Pending regardless of backend
 readiness. ADR-058 replaced ADR-044's "a decision must be made", which replaced the
-prompt's "after piece 19 passes every production gate" — unreachable, because
-`mls-profile.md` records that gate 2 cannot be reached by any work inside this project.
+prompt's "after piece 19 passes every production gate" — unreachable, because piece 19
+is cancelled (ADR-075): no server serves MLS, so none of its gates will ever pass.
 
 | Capability | Backend | Flutter |
 |---|---|---|
@@ -163,40 +164,14 @@ prompt's "after piece 19 passes every production gate" — unreachable, because
   (ADR-058 P2), no self-hosted LiveKit or TURN deployment is recorded (P6), and no media
   dependency is declared. `docs/validation/voice-media/` does not exist. A reasoned
   argument that the SFU cannot decrypt is not an admissible record (ADR-058 P5).
-- [ ] Piece 19 Phase-A production prerequisites pass. The former combined
-  specification/identifier prerequisite is now two separately evidenced rows, because the
-  primitive mapping and the MLS suite value sit in different registries with different
-  owners, registration policies, and completion paths. As rechecked against primary
-  sources on 2026-08-16, all five remain blocked. (1) The primitive mapping is blocked on
-  one identifier of five: hybrid KEM `0x647A` is assigned in the IANA HPKE KEM registry
-  (last updated 2026-04-16) but its only reference there is
-  `draft-connolly-cfrg-xwing-kem-06`, a superseded Independent-stream draft now at `-10`
-  and expiring 2026-09-03, while KDF `0x0002`, AEAD `0x0002`, hash SHA-384, and signature
-  `ed25519` `0x0807` already rest on published standards. (2) The MLS suite identifier is
-  blocked outright: `draft-ietf-mls-pq-ciphersuites-06` is an expiring Internet-Draft that
-  the working group has already flagged as needing another revision, its IANA
-  Considerations touch only the MLS Cipher Suites registry, and `TBD2` has no assignment
-  there (that registry, last updated 2025-11-17, still holds only RFC 9420
-  `0x0001`-`0x0007`, GREASE, and Private Use). (3) OpenMLS 0.8.1 stable and 0.9.0-rc.2
-  still document only the three classical suites and their *released* post-quantum work
-  targets X-Wing rather than the selected mapping — corrected 2026-08-18: OpenMLS's
-  unreleased `main` branch does now implement the selected mapping exactly, at provisional
-  code point `0x004E` behind a cargo feature, which changes the gap from a mapping gap to a
-  release-and-registry gap without changing the result, (4) the MLS Working Group vector repository
-  still publishes only classical fixtures, and (5) no qualified independent reviewer is
-  retained. Draft-06 still defines `TBD2` with the exact recorded primitive mapping, so no
-  suite/ADR stop-and-decide is triggered. Separately re-verified on 2026-08-17 against the
-  pinned vendored crate sources and the X-Wing draft text: the closed beta implements
-  `TBD2`'s signature, AEAD, KDF, and hash choices but not its KEM `0x647a`, so beta groups
-  are not `TBD2`-conformant and are not `TBD2` interoperability evidence. The divergence is
-  now recorded as a complete ten-row set (D1-D10) with per-row file-and-line evidence, and
-  **ADR-040 resolves that the beta KEM is not changed**: the pinned `mls-rs` crypto crates
-  are already the newest published versions so no maintained fix exists, no maintained
-  provider implements `TBD2` at all, and supplying a conformant KEM through `mls-rs`'s
-  public extension points would be a project-local cryptographic fork because
-  `AwsLcCipherSuite` cannot be re-parameterized. The per-identifier registry evidence and
-  every evidence table are in `docs/mls-profile.md`; production has seven mandatory gates,
-  and ADR-040 opens none of them.
+- Piece 19 Phase-A production prerequisites — **cancelled 2026-09-13 (ADR-075), not
+  blocked.** The server deleted MLS (server ADR-0001): no endpoint accepts, stores or
+  serves a key package, a Welcome, a commit or any other MLS artefact, and none will. The
+  five external prerequisites this item tracked — the primitive mapping, the MLS suite
+  identifier, maintained provider support, upstream interoperability vectors and a retained
+  independent reviewer — therefore gate nothing: satisfying every one of them would leave
+  no server to talk to. The evidence as last checked, on 2026-08-16 and 2026-08-18, is in
+  `docs/mls-profile.md` as it stood before commit `4525d3f` deleted it.
 - [x] Piece 10 first/later-device two-phase enrollment is crash-safe and resumable;
   registration response loss never causes a blind duplicate; recoverable unsigned
   orphans are adopted or revoked; every intermediate state remains withheld through the
@@ -241,111 +216,14 @@ prompt's "after piece 19 passes every production gate" — unreachable, because
   Flutter suite, fatal analysis, and development/production Android APK builds on
   2026-08-02. Development uses an explicitly non-cryptographic in-memory preview;
   production is compile-time fail-closed with no KeyPackage, suite ID, or group
-  ciphertext path. All cryptographic production enablement remains piece 19.
-- [ ] Piece 19 real closed-beta PQ MLS implementation is complete and production-ready.
-  The dark implementation currently uses locked maintained `mls-rs 0.55.2` and
-  `mls-rs-crypto-awslc 0.25.0` with the draft-06 candidate's symmetric and signature
-  mapping over that provider's own pre-standard hybrid KEM — not draft-06's KEM `0x647a`,
-  as recorded in `docs/mls-profile.md` — and Private Use identifier `0xFE4C`; implements
-  authenticated BasicCredential/device proof binding,
-  KeyPackage maintenance and last-resort separation, create/Welcome/Proposal/Commit/
-  PrivateMessage processing, signed deterministic controls, later-member authenticated
-  transcript replay, member add/remove, epoch/exporter state, opaque state-format
-  versioning, and durable per-recipient pairwise fan-out through the piece-18 atomic CAS
-  boundary. Transport v3 and schema v11 reject insufficient v2 transcript state rather
-  than silently migrating it. The production fail-closed audit is covered by
-  five `test/architecture/group_production_gate_test.dart` assertions, including the
-  fully composed port that the use cases and sync engine actually consume, the closed
-  KeyPackage-maintenance path, and every `GroupMlsCryptoPort` method on the unsupported
-  adapter. The Windows host toolchain carries the MSVC C++ build tools, LLVM, NASM, and
-  Ninja that the pinned `x86_64-pc-windows-msvc` host requires, so the **entire** Rust
-  validation stack executes. Verified on 2026-08-16: `cargo fmt --all -- --check`,
-  `cargo test --locked` (49), `cargo test --locked --all-features` (60, including the
-  `mls_beta` suite), `cargo clippy --locked --all-targets --all-features -- -D warnings`,
-  `dart format --set-exit-if-changed lib test` (310 files, 0 changed),
-  `flutter analyze --fatal-infos` (no issues), the full Flutter suite (403 tests), and
-  `flutter build apk --release --flavor production`. Packaged Android builds of **both**
-  the foundation and beta profiles cover all three ABIs (arm64-v8a, armeabi-v7a, x86_64)
-  with the export allowlist, 16 KiB alignment, and static-libsodium checks. Artifact-level
-  fail-closed evidence: `llvm-nm -D --defined-only` on the native libraries extracted from
-  the built **production release APK** reports exactly the 15-symbol foundation allowlist
-  on every ABI and zero `cp_crypto_v1_beta_mls_operation` symbols, which exist only in the
-  separate `beta` artifact, so a production build contains no PQ MLS code path at all.
-  ADR-041 canonical fork convergence (superseding ADR-038) and ADR-039
-  two-phase leave are both implemented and tested. ADR-040 (2026-08-17) keeps this KEM
-  mapping unchanged, so no beta state, sealed snapshot, KeyPackage, or group is
-  reinitialized by that decision; it also records what a later KEM change would cost.
-  The divergent hybrid KEM and its HPKE integration now carry construction-level
-  known-answer coverage (`vectors/beta-hybrid-kem-project-kats.json`,
-  `src/beta_kem_vectors.rs`, 10 tests): exact `kem_derive` bytes, a deterministic
-  encapsulation, key schedule, ciphertext and exporter output, and probes that
-  demonstrate D1-D4 and D8 by computation. **Those vectors are project-generated and are
-  not external conformance evidence** — official construction vectors do not exist for
-  this construction and cannot, because it is not a published one — so they close no gate
-  and do not advance the upstream-vector prerequisite. They found no mismatch: the
-  implementation performs exactly the construction D1-D10 describe. The beta group
-  operations additionally carry protocol-level vectors written in the MLS working group's
-  published vector schema (`vectors/mls-beta-upstream-schema/`, `src/beta_mls_vectors.rs`,
-  10 tests plus an `#[ignore]`d generator): Welcome, Passive Client Scenarios, and Vector
-  Deserialization, with round trips that rejoin from the recorded `Welcome` and reproduce
-  every epoch authenticator, and negative tests that keep those round trips from passing
-  vacuously. The other eleven categories are skipped because the constructions they vector
-  are `pub(crate)` inside `mls-rs`, or — for Messages — cannot be fully populated at all.
-  **The schema is upstream; the values are not.** They are project-generated, are not
-  external interoperability evidence, close no gate, and do not advance the upstream-vector
-  prerequisite. Cross-implementation interoperability against a second, independent MLS
-  implementation was attempted on 2026-08-18 and is **externally blocked**; no harness was
-  built. All eleven implementations on the MLS working group's list fail the same
-  requirement — the beta hybrid KEM is not a published construction, so it has no
-  specification, no IANA code point, and exactly one implementation in existence, which is
-  the `mls-rs` crate this project already depends on. ts-mls is configurable on five of the
-  six requirements (arbitrary ciphersuite identifier, HKDF-SHA384, AES-256-GCM, SHA-384,
-  Ed25519) and fails only on the KEM; every other candidate fails on the identifier or on
-  ML-KEM support as well. The blocker is structural rather than scheduling: it clears only
-  on the same upstream event ADR-040 names as its reversal trigger. Two findings were
-  recorded rather than acted on — OpenMLS's unreleased `main` now implements `TBD2`'s exact
-  five-primitive mapping at provisional code point `0x004E`, which **corrects** this
-  document's and `docs/mls-profile.md`'s prior statement that OpenMLS had the right KEM on
-  the wrong AEAD/KDF/hash; and OpenMLS and MLSpp have chosen two mutually incompatible
-  provisional code points (`0x004E` and `0x0008`) for that one suite, which is direct
-  evidence that no provisional value may be adopted in place of the IANA assignment. Full
-  per-candidate gaps are in `docs/mls-profile.md`, "Cross-implementation interoperability
-  determination". Remaining blockers are the full
-  queue-gap remove/re-add/history matrix, upstream/project interoperability and
-  bucket/backend contract execution against a running backend, multi-device and
-  process-death/fault matrices on real hardware, state-format migration fuzzing, and
-  independent cryptographic review. Device-local crash and transaction-failure
-  injection over the piece-18 CAS boundary and the commit-to-network leg is done as of
-  2026-08-18: 39 Dart tests across
-  `test/features/groups/infrastructure/group_commit_boundary_injection_test.dart`,
-  `test/features/groups/application/group_outbound_interruption_test.dart`, and
-  `test/features/synchronization/group_inbox_crash_injection_test.dart`, using a
-  temporary SQLite `RAISE(ABORT)` trigger per failure point and a reopened file-backed
-  database for process death. It found and fixed a per-recipient logical send identity
-  collision that made closed-beta groups of three or more members permanently
-  untransmittable, a head-of-line stall in outbound dispatch, and a missing
-  outbound-direction check in the three locally originated use cases
-  (`docs/mls-profile.md`). This runs on the host VM against SQLite and the development
-  MLS port; it does not substitute for the on-hardware matrix above. Input-boundary fuzzing of the beta MLS operation is
-  done: twelve targets over every relay-reachable decoder, run on 2026-08-18, which found
-  and fixed one non-canonical MLS object acceptance (`docs/mls-profile.md`,
-  `native/crypto_core/fuzz/README.md`). The material an independent assessor needs is now
-  assembled in `docs/mls-beta-review-readiness.md` (2026-08-18, revision `4e65eaf`): source
-  baseline and pinned versions, in-scope claims and an explicit out-of-scope list, the full
-  implementation inventory, the ten project-specific protocol inventions no external
-  specification or vector can validate, the official-versus-project vector split, the
-  adversarial state-machine question set, verified reproduction commands, and a
-  finding-disposition template. **That packet is not a review, records no assessment, and
-  closes no gate**; no reviewer is retained, and its own disposition table is empty.
-  The engagement that would use that packet is prepared in
-  `docs/independent-review-engagement.md` (2026-08-18): a qualification bar, a scope of work
-  bounded to this implementation, the seven deliverables required before the review gate can
-  close, and an evaluation of candidates and funding routes against primary sources.
-  **That document retains nobody, names nobody as retained, and moves no gate**; retaining a
-  reviewer, funding, the review, and closure of its findings are all external, and its
-  engagement record is empty. Production still resolves the unsupported adapter,
-  `GroupProductionGate` remains false, and production KeyPackage/group creation remains
-  impossible.
+  ciphertext path. Cryptographic enablement was left to piece 19, which ADR-075
+  cancelled: groups now run on pairwise sessions instead.
+- Piece 19 closed-beta and production PQ MLS — **cancelled 2026-09-13 (ADR-075).** With no
+  server serving MLS, the closed-beta implementation this item described was removed rather
+  than finished: the Dart MLS stack with its gate and ledger, the Rust `beta-pq-mls` core
+  with `mls-rs` and `aws-lc-sys`, the `beta` Android flavor and its tooling, the MLS profile
+  and review packet, and every test of that stack. Its on-device run records are kept in
+  `docs/archive/beta-mls-core/`. What replaced it is recorded under Groups above.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

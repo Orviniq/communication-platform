@@ -26,8 +26,6 @@ The documents use three requirement words:
 - [Cryptographic protocol](cryptographic-protocol.md)
 - [Pairwise transport version 1](pairwise-transport-v1.md)
 - [Pairwise independent-review packet](pairwise-review-readiness.md)
-- [Post-quantum MLS profile](mls-profile.md)
-- [Closed-beta PQ MLS independent-review packet](mls-beta-review-readiness.md)
 - [Retaining an independent cryptographic reviewer](independent-review-engagement.md)
 - [Application-message protocol](message-protocol.md)
 - [Authentication and devices](authentication-and-devices.md)

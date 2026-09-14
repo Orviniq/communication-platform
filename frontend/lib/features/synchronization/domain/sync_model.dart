@@ -3,7 +3,11 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/protocol/group_sync_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
 
-enum EnvelopeDependency { directOrLocal, potentiallyMls }
+/// What a committed receive changed beyond its own pairwise state.
+///
+/// [groupState] marks a receive that commits in one transaction with a change
+/// to a group's control state.
+enum EnvelopeDependency { directOrLocal, groupState }
 
 enum QueueGapState { clear, recoveryRequired }
 
@@ -13,6 +17,10 @@ enum InboxProcessingState {
   readyToAcknowledge,
   acknowledgementSending,
   acknowledged,
+
+  /// Held back until an MLS re-admission. Nothing enters this state any more:
+  /// the value keeps its index because rows store it, and schema 22 returned
+  /// every held envelope to [received].
   blockedByQueueGap,
 }
 

@@ -6,7 +6,6 @@ import 'package:communication_platform/core/application/ports/attachment_crypto_
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
-import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -18,8 +17,6 @@ import 'package:communication_platform/shared/infrastructure/crypto/native/appli
 import 'package:communication_platform/shared/infrastructure/crypto/native/application_protocol_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/attachment_crypto_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/attachment_crypto_native_session.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/native/beta_mls_ffi.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/native/beta_mls_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart';
@@ -50,7 +47,6 @@ const int _operationVerifyUserAttestation = 16;
 const int _operationPairwise = 17;
 const int _operationApplicationProtocol = 18;
 const int _operationAttachment = 19;
-const int _operationBetaMls = 20;
 const int _operationRotateRecoverySecret = 21;
 const int _attachmentCreate = 1;
 const int _attachmentPush = 2;
@@ -72,11 +68,7 @@ final class IsolateCryptoCoreWorker
         IdentityCryptoWorker,
         PairwiseCryptoWorker,
         ApplicationProtocolWorker,
-        AttachmentCryptoWorker,
-        BetaMlsCryptoWorker {
-  IsolateCryptoCoreWorker({this.betaMlsEnabled = false});
-
-  final bool betaMlsEnabled;
+        AttachmentCryptoWorker {
   bool _closed = false;
   Future<_CryptoWorkerState?>? _stateFuture;
   Future<void>? _closeFuture;
@@ -573,188 +565,6 @@ final class IsolateCryptoCoreWorker
     return _decodeBytesReply(reply);
   });
 
-  @override
-  Future<Result<GeneratedMlsKeyPackages>> generateBetaMlsKeyPackages(
-    MlsKeyPackageGenerationRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(_operationBetaMls, <Object?>[
-      request.kind.index + 1,
-      request.opaqueDeviceState,
-      request.migrationUnixDay,
-      request.localVerifiedBundleRequest,
-      request.additionalVerifiedBundleRequests,
-      request.priorOpaqueKeyPackageState,
-      request.count,
-      request.kind.index,
-    ]);
-    return _decodeBetaMlsKeyPackageReply(reply, request);
-  });
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> createBetaMlsGroup(
-    BetaMlsCreateRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(3, request.authentication, <Object?>[
-        request.wrappedKeyPackages,
-        request.authenticatedData,
-      ]),
-    );
-    return _decodeBetaMlsCommitReply(reply, 3);
-  });
-
-  @override
-  Future<Result<BetaMlsJoinOutput>> joinBetaMlsGroup(
-    BetaMlsJoinRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(4, request.authentication, <Object?>[
-        request.sealedKeyPackageState,
-        request.welcome,
-      ]),
-    );
-    return _decodeBetaMlsJoinReply(reply);
-  });
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> addBetaMlsMembers(
-    BetaMlsAddMembersRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(5, request.authentication, <Object?>[
-        request.sealedGroupState,
-        request.wrappedKeyPackages,
-        request.authenticatedData,
-      ]),
-    );
-    return _decodeBetaMlsCommitReply(reply, 5);
-  });
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> removeBetaMlsMembers(
-    BetaMlsRemoveMembersRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(6, request.authentication, <Object?>[
-        request.sealedGroupState,
-        request.targetUserIds,
-        request.authenticatedData,
-      ]),
-    );
-    return _decodeBetaMlsCommitReply(reply, 6);
-  });
-
-  @override
-  Future<Result<BetaMlsMessageOutput>> sendBetaMlsApplication(
-    BetaMlsSendApplicationRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(7, request.authentication, <Object?>[
-        request.sealedGroupState,
-        request.applicationData,
-        request.authenticatedData,
-      ]),
-    );
-    return _decodeBetaMlsMessageReply(reply, 7);
-  });
-
-  @override
-  Future<Result<BetaMlsProcessedMessage>> processBetaMlsMessage(
-    BetaMlsProcessMessageRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(8, request.authentication, <Object?>[
-        request.sealedGroupState,
-        request.message,
-      ]),
-    );
-    return _decodeBetaMlsProcessedReply(reply);
-  });
-
-  @override
-  Future<Result<BetaMlsMessageOutput>> proposeBetaMlsUpdate(
-    BetaMlsPendingCommitRequest request,
-  ) => _guarded(() async {
-    if (request.kind != BetaMlsPendingCommitKind.proposeUpdate) {
-      return const Result.failure(
-        ValidationFailure(ValidationFailureKind.invalidInput),
-      );
-    }
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(9, request.authentication, <Object?>[
-        request.sealedGroupState,
-        request.authenticatedData,
-      ]),
-    );
-    return _decodeBetaMlsMessageReply(reply, 9);
-  });
-
-  @override
-  Future<Result<BetaMlsCommitOutput>> commitBetaMlsPendingProposals(
-    BetaMlsPendingCommitRequest request,
-  ) => _guarded(() async {
-    if (request.kind != BetaMlsPendingCommitKind.commitPendingProposals) {
-      return const Result.failure(
-        ValidationFailure(ValidationFailureKind.invalidInput),
-      );
-    }
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(10, request.authentication, <Object?>[
-        request.sealedGroupState,
-        request.authenticatedData,
-      ]),
-    );
-    return _decodeBetaMlsCommitReply(reply, 10);
-  });
-
-  @override
-  Future<Result<BetaMlsSignedControlOutput>> signBetaMlsControl(
-    BetaMlsSignControlRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(11, request.authentication, <Object?>[
-        request.descriptor,
-      ]),
-    );
-    return _decodeBetaMlsSignedControlReply(reply, 11);
-  });
-
-  @override
-  Future<Result<BetaMlsSignedControlOutput>> verifyBetaMlsControl(
-    BetaMlsVerifyControlRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(12, request.authentication, <Object?>[
-        request.descriptor,
-        request.signerUserId,
-        request.signerDeviceId,
-        request.signedPayload,
-      ]),
-    );
-    return _decodeBetaMlsSignedControlReply(reply, 12);
-  });
-
-  @override
-  Future<Result<Uint8List>> hashBetaMlsObject(
-    BetaMlsHashObjectRequest request,
-  ) => _guarded(() async {
-    final reply = await _request(
-      _operationBetaMls,
-      _betaMlsArguments(13, request.authentication, <Object?>[request.object]),
-    );
-    return _decodeBetaMlsHashReply(reply);
-  });
-
   Future<Result<T>> _guarded<T>(Future<Result<T>> Function() operation) {
     if (_closed) {
       return Future<Result<T>>.value(
@@ -817,9 +627,9 @@ final class IsolateCryptoCoreWorker
     final bootstrapPort = ReceivePort();
     Isolate? isolate;
     try {
-      isolate = await Isolate.spawn<(SendPort, bool)>(
+      isolate = await Isolate.spawn<SendPort>(
         _cryptoCoreWorkerEntrypoint,
-        (bootstrapPort.sendPort, betaMlsEnabled),
+        bootstrapPort.sendPort,
         debugName: 'communication-crypto-core-v1',
       );
       final handshake = await bootstrapPort.first.timeout(
@@ -885,14 +695,11 @@ final class _CryptoWorkerState {
 }
 
 @pragma('vm:entry-point')
-void _cryptoCoreWorkerEntrypoint((SendPort, bool) bootstrap) {
-  unawaited(_runCryptoCoreWorker(bootstrap.$1, bootstrap.$2));
+void _cryptoCoreWorkerEntrypoint(SendPort bootstrapPort) {
+  unawaited(_runCryptoCoreWorker(bootstrapPort));
 }
 
-Future<void> _runCryptoCoreWorker(
-  SendPort bootstrapPort,
-  bool betaMlsEnabled,
-) async {
+Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
   final commandPort = ReceivePort();
   late final CryptoCoreNativeSession session;
   late final EnrollmentCryptoNativeSession enrollmentSession;
@@ -900,7 +707,6 @@ Future<void> _runCryptoCoreWorker(
   late final PairwiseCryptoNativeSession pairwiseSession;
   late final ApplicationProtocolNativeSession applicationSession;
   late final AttachmentCryptoNativeSession attachmentSession;
-  BetaMlsNativeSession? betaMlsSession;
   try {
     session = CryptoCoreNativeSession(
       api: DynamicCryptoCoreNativeApi.openAndroid(),
@@ -920,11 +726,6 @@ Future<void> _runCryptoCoreWorker(
     attachmentSession = AttachmentCryptoNativeSession(
       api: DynamicAttachmentCryptoNativeApi.openAndroid(),
     );
-    if (betaMlsEnabled) {
-      betaMlsSession = BetaMlsNativeSession(
-        api: DynamicBetaMlsNativeApi.openAndroid(),
-      );
-    }
   } on Object {
     bootstrapPort.send(const <Object?>[_handshakeFailed]);
     commandPort.close();
@@ -1078,18 +879,6 @@ Future<void> _runCryptoCoreWorker(
               await _attachmentInWorker(attachmentSession, message),
             );
             continue;
-          case _operationBetaMls:
-            final betaSession = betaMlsSession;
-            replyPort.send(
-              betaSession == null
-                  ? _encodeFailureReply(
-                      const UnsupportedProtocolFailure(
-                        UnsupportedProtocolFailureKind.capability,
-                      ),
-                    )
-                  : _betaMlsInWorker(betaSession, message),
-            );
-            continue;
           case _operationClose:
             replyPort.send(const <Object?>[_replySuccess]);
             commandPort.close();
@@ -1124,30 +913,6 @@ Uint8List _bytesArgument(List<Object?> message, int index) {
   }
   return value;
 }
-
-List<Uint8List> _byteListArgument(List<Object?> message, int index) {
-  final value = message.length > index ? message[index] : null;
-  if (value is! List) throw const FormatException();
-  return value
-      .map((entry) {
-        if (entry is! Uint8List) throw const FormatException();
-        return entry;
-      })
-      .toList(growable: false);
-}
-
-List<Object?> _betaMlsArguments(
-  int operation,
-  BetaMlsAuthenticationInput authentication,
-  List<Object?> tail,
-) => <Object?>[
-  operation,
-  authentication.opaqueDeviceState,
-  authentication.migrationUnixDay,
-  authentication.localVerifiedBundleRequest,
-  authentication.additionalVerifiedBundleRequests,
-  ...tail,
-];
 
 Result<Uint8List> _crossSignInWorker(
   EnrollmentCryptoNativeSession session,
@@ -1409,222 +1174,6 @@ Result<Uint8List> _applicationInWorker(
   return session.operation(operation, _bytesArgument(message, 3));
 }
 
-List<Object?> _betaMlsInWorker(
-  BetaMlsNativeSession session,
-  List<Object?> message,
-) {
-  try {
-    final operation = message.length > 2 ? message[2] : null;
-    final day = message.length > 4 ? message[4] : null;
-    if (operation is! int || operation < 1 || operation > 12 || day is! int) {
-      throw const FormatException();
-    }
-    final authentication = BetaMlsAuthenticationInput(
-      opaqueDeviceState: _bytesArgument(message, 3),
-      migrationUnixDay: day,
-      localVerifiedBundleRequest: _bytesArgument(message, 5),
-      additionalVerifiedBundleRequests: _byteListArgument(message, 6),
-    );
-    switch (operation) {
-      case 1:
-      case 2:
-        final prior = message.length > 7 ? message[7] : null;
-        final count = message.length > 8 ? message[8] : null;
-        final rawKind = message.length > 9 ? message[9] : null;
-        if ((prior != null && prior is! Uint8List) ||
-            count is! int ||
-            rawKind is! int ||
-            rawKind < 0 ||
-            rawKind >= MlsKeyPackageKind.values.length ||
-            operation != rawKind + 1) {
-          throw const FormatException();
-        }
-        return session
-            .generate(
-              MlsKeyPackageGenerationRequest(
-                opaqueDeviceState: authentication.opaqueDeviceState,
-                migrationUnixDay: authentication.migrationUnixDay,
-                localVerifiedBundleRequest:
-                    authentication.localVerifiedBundleRequest,
-                additionalVerifiedBundleRequests:
-                    authentication.additionalVerifiedBundleRequests,
-                priorOpaqueKeyPackageState: prior as Uint8List?,
-                count: count,
-                kind: MlsKeyPackageKind.values[rawKind],
-              ),
-            )
-            .fold(
-              onSuccess: (value) =>
-                  _encodeBetaMlsKeyPackageSuccess(operation, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 3:
-        return session
-            .createGroup(
-              BetaMlsCreateRequest(
-                authentication: authentication,
-                wrappedKeyPackages: _byteListArgument(message, 7),
-                authenticatedData: _bytesArgument(message, 8),
-              ),
-            )
-            .fold(
-              onSuccess: (value) => _encodeBetaMlsCommitSuccess(3, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 4:
-        return session
-            .joinGroup(
-              BetaMlsJoinRequest(
-                authentication: authentication,
-                sealedKeyPackageState: _bytesArgument(message, 7),
-                welcome: _bytesArgument(message, 8),
-              ),
-            )
-            .fold(
-              onSuccess: _encodeBetaMlsJoinSuccess,
-              onFailure: _encodeFailureReply,
-            );
-      case 5:
-        return session
-            .addMembers(
-              BetaMlsAddMembersRequest(
-                authentication: authentication,
-                sealedGroupState: _bytesArgument(message, 7),
-                wrappedKeyPackages: _byteListArgument(message, 8),
-                authenticatedData: _bytesArgument(message, 9),
-              ),
-            )
-            .fold(
-              onSuccess: (value) => _encodeBetaMlsCommitSuccess(5, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 6:
-        return session
-            .removeMembers(
-              BetaMlsRemoveMembersRequest(
-                authentication: authentication,
-                sealedGroupState: _bytesArgument(message, 7),
-                targetUserIds: _byteListArgument(message, 8),
-                authenticatedData: _bytesArgument(message, 9),
-              ),
-            )
-            .fold(
-              onSuccess: (value) => _encodeBetaMlsCommitSuccess(6, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 7:
-        return session
-            .sendApplication(
-              BetaMlsSendApplicationRequest(
-                authentication: authentication,
-                sealedGroupState: _bytesArgument(message, 7),
-                applicationData: _bytesArgument(message, 8),
-                authenticatedData: _bytesArgument(message, 9),
-              ),
-            )
-            .fold(
-              onSuccess: (value) => _encodeBetaMlsMessageSuccess(7, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 8:
-        return session
-            .processMessage(
-              BetaMlsProcessMessageRequest(
-                authentication: authentication,
-                sealedGroupState: _bytesArgument(message, 7),
-                message: _bytesArgument(message, 8),
-              ),
-            )
-            .fold(
-              onSuccess: _encodeBetaMlsProcessedSuccess,
-              onFailure: _encodeFailureReply,
-            );
-      case 9:
-        return session
-            .proposeUpdate(
-              BetaMlsPendingCommitRequest(
-                authentication: authentication,
-                sealedGroupState: _bytesArgument(message, 7),
-                authenticatedData: _bytesArgument(message, 8),
-                kind: BetaMlsPendingCommitKind.proposeUpdate,
-              ),
-            )
-            .fold(
-              onSuccess: (value) => _encodeBetaMlsMessageSuccess(9, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 10:
-        return session
-            .commitPendingProposals(
-              BetaMlsPendingCommitRequest(
-                authentication: authentication,
-                sealedGroupState: _bytesArgument(message, 7),
-                authenticatedData: _bytesArgument(message, 8),
-                kind: BetaMlsPendingCommitKind.commitPendingProposals,
-              ),
-            )
-            .fold(
-              onSuccess: (value) => _encodeBetaMlsCommitSuccess(10, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 11:
-        final descriptor = message.length > 7 ? message[7] : null;
-        if (descriptor is! BetaMlsControlDescriptor) {
-          throw const FormatException();
-        }
-        return session
-            .signControl(
-              BetaMlsSignControlRequest(
-                authentication: authentication,
-                descriptor: descriptor,
-              ),
-            )
-            .fold(
-              onSuccess: (value) =>
-                  _encodeBetaMlsSignedControlSuccess(11, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 12:
-        final descriptor = message.length > 7 ? message[7] : null;
-        if (descriptor is! BetaMlsControlDescriptor) {
-          throw const FormatException();
-        }
-        return session
-            .verifyControl(
-              BetaMlsVerifyControlRequest(
-                authentication: authentication,
-                descriptor: descriptor,
-                signerUserId: _bytesArgument(message, 8),
-                signerDeviceId: _bytesArgument(message, 9),
-                signedPayload: _bytesArgument(message, 10),
-              ),
-            )
-            .fold(
-              onSuccess: (value) =>
-                  _encodeBetaMlsSignedControlSuccess(12, value),
-              onFailure: _encodeFailureReply,
-            );
-      case 13:
-        return session
-            .hashObject(
-              BetaMlsHashObjectRequest(
-                authentication: authentication,
-                object: _bytesArgument(message, 7),
-              ),
-            )
-            .fold(
-              onSuccess: (value) => <Object?>[_replySuccess, 13, value],
-              onFailure: _encodeFailureReply,
-            );
-    }
-    throw const FormatException();
-  } on Object {
-    return _encodeFailureReply(
-      const SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
 Future<List<Object?>> _attachmentInWorker(
   AttachmentCryptoNativeSession session,
   List<Object?> message,
@@ -1797,378 +1346,6 @@ List<Object?> _encodePairwiseReply(Result<PairwiseCryptoResponse> result) =>
       ],
       onFailure: _encodeFailureReply,
     );
-
-List<Object?> _encodeBetaMlsKeyPackageSuccess(
-  int operation,
-  GeneratedMlsKeyPackages value,
-) => <Object?>[
-  _replySuccess,
-  operation,
-  value.kind.index,
-  value.opaqueKeyPackageState,
-  value.wrappedKeyPackages,
-];
-
-List<Object?> _encodeBetaMlsCommitSuccess(
-  int operation,
-  BetaMlsCommitOutput value,
-) => <Object?>[
-  _replySuccess,
-  operation,
-  value.sealedGroupState,
-  value.commit,
-  value.commitDigest,
-  value.authenticationBundleRequests,
-  value.welcomes,
-  value.groupInfo,
-  value.groupId,
-  value.epoch,
-  value.exporterConfirmation,
-];
-
-List<Object?> _encodeBetaMlsJoinSuccess(BetaMlsJoinOutput value) => <Object?>[
-  _replySuccess,
-  4,
-  value.sealedGroupState,
-  value.sealedKeyPackageState,
-  value.groupId,
-  value.epoch,
-  <Object?>[
-    for (final member in value.roster)
-      <Object?>[member.userId, member.deviceId],
-  ],
-  value.exporterConfirmation,
-];
-
-List<Object?> _encodeBetaMlsMessageSuccess(
-  int operation,
-  BetaMlsMessageOutput value,
-) => <Object?>[
-  _replySuccess,
-  operation,
-  value.sealedGroupState,
-  value.message,
-  value.groupId,
-  value.epoch,
-  value.exporterConfirmation,
-];
-
-List<Object?> _encodeBetaMlsProcessedSuccess(BetaMlsProcessedMessage value) =>
-    <Object?>[
-      _replySuccess,
-      8,
-      value.sealedGroupState,
-      value.messageDigest,
-      value.kind.index,
-      value.senderLeafIndex,
-      value.senderUserId,
-      value.senderDeviceId,
-      value.data,
-      value.authenticatedData,
-      value.groupId,
-      value.epoch,
-      value.exporterConfirmation,
-    ];
-
-List<Object?> _encodeBetaMlsSignedControlSuccess(
-  int operation,
-  BetaMlsSignedControlOutput value,
-) => <Object?>[
-  _replySuccess,
-  operation,
-  value.canonicalBytes,
-  value.signature,
-  value.controlStateHash,
-  value.signedPayload,
-  value.signerUserId,
-  value.signerDeviceId,
-];
-
-Result<GeneratedMlsKeyPackages> _decodeBetaMlsKeyPackageReply(
-  Object? rawReply,
-  MlsKeyPackageGenerationRequest request,
-) {
-  if (rawReply is! List<Object?> || rawReply.isEmpty) {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.policyBlocked),
-    );
-  }
-  if (rawReply[0] == _replyFailure) {
-    return Result.failure(_decodeFailureReply(rawReply));
-  }
-  if (rawReply.length != 5 ||
-      rawReply[0] != _replySuccess ||
-      rawReply[1] != request.kind.index + 1 ||
-      rawReply[2] != request.kind.index ||
-      rawReply[3] is! Uint8List ||
-      rawReply[4] is! List) {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-  try {
-    final packages = (rawReply[4]! as List)
-        .map((value) {
-          if (value is! Uint8List) throw const FormatException();
-          return value;
-        })
-        .toList(growable: false);
-    if (packages.length != request.count) {
-      throw const FormatException();
-    }
-    return Result.success(
-      GeneratedMlsKeyPackages(
-        kind: request.kind,
-        opaqueKeyPackageState: rawReply[3]! as Uint8List,
-        wrappedKeyPackages: packages,
-      ),
-    );
-  } on Object {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
-Result<BetaMlsCommitOutput> _decodeBetaMlsCommitReply(
-  Object? rawReply,
-  int operation,
-) {
-  final failure = _betaMlsReplyFailure<BetaMlsCommitOutput>(rawReply);
-  if (failure != null) return failure;
-  try {
-    final reply = rawReply! as List<Object?>;
-    if (reply.length != 13 ||
-        reply[0] != _replySuccess ||
-        reply[1] != operation ||
-        reply[2] is! Uint8List ||
-        reply[3] is! Uint8List ||
-        reply[4] is! Uint8List ||
-        reply[5] is! List ||
-        reply[6] is! List ||
-        reply[7] is! Uint8List ||
-        reply[8] is! Uint8List ||
-        reply[9] is! int ||
-        reply[10] is! Uint8List) {
-      throw const FormatException();
-    }
-    return Result.success(
-      BetaMlsCommitOutput(
-        sealedGroupState: reply[2]! as Uint8List,
-        commit: reply[3]! as Uint8List,
-        commitDigest: reply[4]! as Uint8List,
-        authenticationBundleRequests: _byteListFromRaw(reply[5]),
-        welcomes: _byteListFromRaw(reply[6]),
-        groupInfo: reply[7]! as Uint8List,
-        groupId: reply[8]! as Uint8List,
-        epoch: reply[9]! as int,
-        exporterConfirmation: reply[10]! as Uint8List,
-      ),
-    );
-  } on Object {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
-Result<BetaMlsJoinOutput> _decodeBetaMlsJoinReply(Object? rawReply) {
-  final failure = _betaMlsReplyFailure<BetaMlsJoinOutput>(rawReply);
-  if (failure != null) return failure;
-  try {
-    final reply = rawReply! as List<Object?>;
-    if (reply.length != 8 ||
-        reply[0] != _replySuccess ||
-        reply[1] != 4 ||
-        reply[2] is! Uint8List ||
-        reply[3] is! Uint8List ||
-        reply[4] is! Uint8List ||
-        reply[5] is! int ||
-        reply[6] is! List<Object?> ||
-        reply[7] is! Uint8List) {
-      throw const FormatException();
-    }
-    final rawRoster = reply[6]! as List<Object?>;
-    final roster = rawRoster
-        .map((value) {
-          if (value is! List<Object?> ||
-              value.length != 2 ||
-              value[0] is! Uint8List ||
-              value[1] is! Uint8List) {
-            throw const FormatException();
-          }
-          return BetaMlsRosterDevice(
-            userId: value[0]! as Uint8List,
-            deviceId: value[1]! as Uint8List,
-          );
-        })
-        .toList(growable: false);
-    return Result.success(
-      BetaMlsJoinOutput(
-        sealedGroupState: reply[2]! as Uint8List,
-        sealedKeyPackageState: reply[3]! as Uint8List,
-        groupId: reply[4]! as Uint8List,
-        epoch: reply[5]! as int,
-        roster: roster,
-        exporterConfirmation: reply[7]! as Uint8List,
-      ),
-    );
-  } on Object {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
-Result<BetaMlsMessageOutput> _decodeBetaMlsMessageReply(
-  Object? rawReply,
-  int operation,
-) {
-  final failure = _betaMlsReplyFailure<BetaMlsMessageOutput>(rawReply);
-  if (failure != null) return failure;
-  try {
-    final reply = rawReply! as List<Object?>;
-    if (reply.length != 7 ||
-        reply[0] != _replySuccess ||
-        reply[1] != operation ||
-        reply[2] is! Uint8List ||
-        reply[3] is! Uint8List ||
-        reply[4] is! Uint8List ||
-        reply[5] is! int ||
-        reply[6] is! Uint8List) {
-      throw const FormatException();
-    }
-    return Result.success(
-      BetaMlsMessageOutput(
-        sealedGroupState: reply[2]! as Uint8List,
-        message: reply[3]! as Uint8List,
-        groupId: reply[4]! as Uint8List,
-        epoch: reply[5]! as int,
-        exporterConfirmation: reply[6]! as Uint8List,
-      ),
-    );
-  } on Object {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
-Result<BetaMlsProcessedMessage> _decodeBetaMlsProcessedReply(Object? rawReply) {
-  final failure = _betaMlsReplyFailure<BetaMlsProcessedMessage>(rawReply);
-  if (failure != null) return failure;
-  try {
-    final reply = rawReply! as List<Object?>;
-    if (reply.length != 11 ||
-        reply[0] != _replySuccess ||
-        reply[1] != 8 ||
-        reply[2] is! Uint8List ||
-        reply[3] is! Uint8List ||
-        reply[4] is! int ||
-        reply[5] is! int ||
-        reply[6] is! Uint8List ||
-        reply[7] is! Uint8List ||
-        reply[8] is! Uint8List ||
-        reply[9] is! Uint8List ||
-        reply[10] is! Uint8List ||
-        reply[11] is! int ||
-        reply[12] is! Uint8List) {
-      throw const FormatException();
-    }
-    final kind = reply[4]! as int;
-    if (kind < 0 || kind >= BetaMlsReceivedKind.values.length) {
-      throw const FormatException();
-    }
-    return Result.success(
-      BetaMlsProcessedMessage(
-        sealedGroupState: reply[2]! as Uint8List,
-        messageDigest: reply[3]! as Uint8List,
-        kind: BetaMlsReceivedKind.values[kind],
-        senderLeafIndex: reply[5]! as int,
-        senderUserId: reply[6]! as Uint8List,
-        senderDeviceId: reply[7]! as Uint8List,
-        data: reply[8]! as Uint8List,
-        authenticatedData: reply[9]! as Uint8List,
-        groupId: reply[10]! as Uint8List,
-        epoch: reply[11]! as int,
-        exporterConfirmation: reply[12]! as Uint8List,
-      ),
-    );
-  } on Object {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
-Result<BetaMlsSignedControlOutput> _decodeBetaMlsSignedControlReply(
-  Object? rawReply,
-  int operation,
-) {
-  final failure = _betaMlsReplyFailure<BetaMlsSignedControlOutput>(rawReply);
-  if (failure != null) return failure;
-  try {
-    final reply = rawReply! as List<Object?>;
-    if (reply.length != 8 ||
-        reply[0] != _replySuccess ||
-        reply[1] != operation ||
-        reply.sublist(2).any((value) => value is! Uint8List)) {
-      throw const FormatException();
-    }
-    return Result.success(
-      BetaMlsSignedControlOutput(
-        canonicalBytes: reply[2]! as Uint8List,
-        signature: reply[3]! as Uint8List,
-        controlStateHash: reply[4]! as Uint8List,
-        signedPayload: reply[5]! as Uint8List,
-        signerUserId: reply[6]! as Uint8List,
-        signerDeviceId: reply[7]! as Uint8List,
-      ),
-    );
-  } on Object {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-}
-
-Result<T>? _betaMlsReplyFailure<T>(Object? rawReply) {
-  if (rawReply is! List<Object?> || rawReply.isEmpty) {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.policyBlocked),
-    );
-  }
-  if (rawReply[0] == _replyFailure) {
-    return Result.failure(_decodeFailureReply(rawReply));
-  }
-  return null;
-}
-
-Result<Uint8List> _decodeBetaMlsHashReply(Object? rawReply) {
-  final failure = _betaMlsReplyFailure<Uint8List>(rawReply);
-  if (failure != null) return failure;
-  if (rawReply is! List<Object?> ||
-      rawReply.length != 3 ||
-      rawReply[0] != _replySuccess ||
-      rawReply[1] != 13 ||
-      rawReply[2] is! Uint8List ||
-      (rawReply[2]! as Uint8List).length != 32) {
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.malformedServerResponse),
-    );
-  }
-  return Result.success(rawReply[2]! as Uint8List);
-}
-
-List<Uint8List> _byteListFromRaw(Object? value) {
-  if (value is! List) throw const FormatException();
-  return value
-      .map((entry) {
-        if (entry is! Uint8List) throw const FormatException();
-        return entry;
-      })
-      .toList(growable: false);
-}
 
 Result<PairwiseCryptoResponse> _decodePairwiseReply(
   Object? reply,

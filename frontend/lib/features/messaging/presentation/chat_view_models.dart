@@ -49,6 +49,18 @@ final class ChatReactionViewModel {
   final bool selectedByCurrentUser;
 }
 
+/// How many of a message's copies the server has accepted.
+///
+/// A group message is one encrypted copy for each device of each member, so a
+/// send lasts as long as its slowest copy. A direct message shows no count.
+@immutable
+final class ChatFanoutProgress {
+  const ChatFanoutProgress({required this.sent, required this.total});
+
+  final int sent;
+  final int total;
+}
+
 @immutable
 final class ChatMessageViewModel {
   ChatMessageViewModel({
@@ -75,6 +87,7 @@ final class ChatMessageViewModel {
     this.replyToMessageId,
     this.replyAuthor,
     this.replyQuote,
+    this.fanoutProgress,
     Iterable<ChatReactionViewModel> reactions = const [],
   }) : reactions = List.unmodifiable(reactions);
 
@@ -88,6 +101,9 @@ final class ChatMessageViewModel {
   final List<AttachmentTransferState> attachmentStates;
   final DateTime timestamp;
   final ChatDeliveryViewState delivery;
+
+  /// Set only while some of the message's copies are still owed.
+  final ChatFanoutProgress? fanoutProgress;
   final bool firstInAuthorGroup;
   final bool lastInAuthorGroup;
   final bool edited;

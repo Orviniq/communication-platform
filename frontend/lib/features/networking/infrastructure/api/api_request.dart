@@ -46,7 +46,6 @@ abstract final class ApiContractLimits {
   static const profileBuckets = {1024, 4096};
   static const labelBuckets = {256, 1024};
   static const nameBuckets = {256, 1024};
-  static const keyPackageBuckets = {4096, 16384};
   static const deviceLogBuckets = {256, 1024};
   static const backupBuckets = {4096, 16384, 65536, 262144, 1048576};
 
@@ -61,10 +60,6 @@ abstract final class ApiContractLimits {
   static const prekeyJson = PayloadLimits(
     maximumRequestBytes: 256 * 1024,
     maximumResponseBytes: 64 * 1024,
-  );
-  static const keyPackageJson = PayloadLimits(
-    maximumRequestBytes: 3 * 1024 * 1024,
-    maximumResponseBytes: 3 * 1024 * 1024,
   );
   static const envelopeBatchJson = PayloadLimits(
     maximumRequestBytes: 90 * 1024 * 1024,

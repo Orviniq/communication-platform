@@ -463,7 +463,7 @@ void main() {
   );
 
   test(
-    'additional MLS write failure rolls back the pairwise receive transaction',
+    'a failed group write rolls back the pairwise receive transaction',
     () async {
       final sync = DriftSyncStore(database);
       await inspectEnvelope(sync, 55);
@@ -474,7 +474,7 @@ void main() {
           stateMarker: 2,
           replayMarker: bytes(32, 55),
         ),
-        dependency: EnvelopeDependency.potentiallyMls,
+        dependency: EnvelopeDependency.groupState,
         additionalCommit: () async {
           await database
               .into(database.conversations)
@@ -486,7 +486,7 @@ void main() {
                   sortKey: 1,
                 ),
               );
-          throw StateError('injected MLS transaction failure');
+          throw StateError('injected group transaction failure');
         },
       );
 

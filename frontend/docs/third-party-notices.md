@@ -21,15 +21,15 @@ recorded as follow-up F2 in ADR-054.
 To read the machine-generated half out of a built artifact:
 
 ```sh
-unzip -p app-beta-release.apk assets/flutter_assets/NOTICES.Z |
+unzip -p app-production-release.apk assets/flutter_assets/NOTICES.Z |
   python -c "import sys,zlib; sys.stdout.write(zlib.decompress(sys.stdin.buffer.read(), 16+zlib.MAX_WBITS).decode())"
 ```
 
 ## Android libraries linked into a distributed build
 
-This is the exact set on `betaReleaseRuntimeClasspath` and `productionReleaseRuntimeClasspath`,
-which are identical. It is generated from `android/app/gradle.lockfile`; that file is the
-authority, and `test/architecture/dependency_policy_test.dart` fails if the two disagree.
+This is the exact set on `productionReleaseRuntimeClasspath`. It is generated from
+`android/app/gradle.lockfile`; that file is the authority, and
+`test/architecture/dependency_policy_test.dart` fails if the two disagree.
 
 ### Copyright The Android Open Source Project — Apache License 2.0
 

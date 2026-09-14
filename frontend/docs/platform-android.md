@@ -67,15 +67,15 @@ packaged into the development and production flavors — is `cp_crypto_v1_abi_ve
 `cp_crypto_v1_identity_operation`, `cp_crypto_v1_inspect_device_log_record`,
 `cp_crypto_v1_pairwise_operation`, `cp_crypto_v1_prepare_device`,
 `cp_crypto_v1_prepare_first_identity`, `cp_crypto_v1_restore_identity`,
-`cp_crypto_v1_sanitize_identity`, and `cp_crypto_v1_self_test`.
+`cp_crypto_v1_rotate_recovery_secret`, `cp_crypto_v1_sanitize_identity`, and
+`cp_crypto_v1_self_test`.
 
-The isolated `beta` crypto profile is the same list plus exactly one additional symbol,
-`cp_crypto_v1_beta_mls_operation`, produced only by the non-default `beta-pq-mls` Cargo
-feature and packaged only into the separate `beta` flavor's `jniLibs` source set. The
-build script fails the build on any deviation from either list, so a production artifact
-that exported the closed-beta PQ MLS entry point could not be produced. Its public status
-range is the payload-free integer set 0
-through 14 frozen in `native/crypto_core/include/communication_crypto.h`. Enrollment,
+No other crypto profile exists. The isolated `beta` profile, its `beta-pq-mls` Cargo
+feature, and its one extra export, `cp_crypto_v1_beta_mls_operation`, were deleted with
+the closed-beta MLS core. The build script fails the build on any deviation from this
+list, and `tool/verify_release_apk.sh` still refuses that one symbol by name in a
+packaged production artifact. The ABI's public status range is the payload-free integer
+set 0 through 14 frozen in `native/crypto_core/include/communication_crypto.h`. Enrollment,
 peer identity/device/prekey/log verification, safety fingerprints, and user-signing
 attestation cross only through these bounded typed operations; private key material
 remains inside opaque Rust identity packages. Rust-owned `SecretBytes` and `SecretVec` values are
@@ -93,26 +93,16 @@ unmodified. Do not override `RUSTUP_TOOLCHAIN`.
 | Prerequisite | Needed by | Install |
 |---|---|---|
 | VS 2022 Build Tools, `VC.Tools.x86.x64` + Windows SDK | host `link.exe`/`cl.exe`; without it nothing links | `winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621"` |
-| LLVM (`libclang.dll`) | the `aws-lc-sys` `bindgen` feature used by the beta profile | `winget install LLVM.LLVM`, then set `LIBCLANG_PATH=C:\Program Files\LLVM\bin` |
-| NASM | `aws-lc-sys` x86-64 assembly when building the beta feature for the host | `winget install NASM.NASM` |
-| Ninja | CMake generator for AWS-LC; Windows CMake otherwise picks a Visual Studio generator that cannot drive the NDK cross-compiler | `winget install Ninja-build.Ninja` |
-| CMake, Android NDK 28.2.13676358 | AWS-LC configure; Android targets | Android Studio SDK manager / CMake installer |
+| Android NDK 28.2.13676358 | Android targets | Android Studio SDK manager |
 
-Put `%USERPROFILE%\.cargo\bin`, `C:\Program Files\LLVM\bin`, the NASM directory,
-and `%LOCALAPPDATA%\Microsoft\WinGet\Links` on `PATH`, and Git's `bash.exe` must
-be resolvable for the POSIX build scripts.
+Put `%USERPROFILE%\.cargo\bin` on `PATH`, and Git's `bash.exe` must be resolvable for
+the POSIX build scripts.
 
-Two cross-compilation details are handled by the build scripts rather than the
+One cross-compilation detail is handled by the build scripts rather than the
 environment. `libsodium-sys-stable` 1.24.0 picks its link name with
 `cfg!(target_env = "msvc")`, which a build script evaluates against the host
 instead of the target, so `build_libsodium_android.sh` installs the archive as
-both `libsodium.a` and `liblibsodium.a`. `aws-lc-sys` needs a target C++
-compiler, `ANDROID_NDK_ROOT`, and an explicit generator, so
-`build_rust_android.sh` exports `CXX_<target>`, `ANDROID_NDK_ROOT`,
-`ANDROID_NDK`, and `CMAKE_GENERATOR=Ninja` for the beta profile.
-
-CMake caches its generator in the build directory. After changing generators,
-delete `build/rust-android/<profile>` before rebuilding.
+both `libsodium.a` and `liblibsodium.a`.
 
 Verification on 2026-07-28 passed:
 
@@ -158,12 +148,10 @@ The authority reaches the app as `<ENVIRONMENT>_PRIVATE_CA_PEM_BASE64`, because
 configuration carries. Absent or malformed authority material blocks at
 configuration rather than falling back to public roots.
 
-The closed-beta flavor still renders the Android resources from its `BETA_*`
-values — `tool/render_beta_trust.sh` refuses to run unless the supplied CA file
-matches `BETA_PRIVATE_CA_SHA256`, and `tool/verify_release_apk.sh --beta` reads
-the pin-set back out of the artifact — but that configuration is retained as
-defence in depth for any future WebView or Java-side traffic. It is not what
-protects the API traffic, and must not be described as though it were.
+The Android network security resources that
+[`android/provisioning/README.md`](../android/provisioning/README.md) describes are
+retained as defence in depth for any future WebView or Java-side traffic. They are not
+what protects the API traffic, and must not be described as though they were.
 
 Leaf SPKI pinning is deliberately not reimplemented in Dart: `X509Certificate`
 exposes no SPKI accessor and no SHA-256, so it would take hand-written ASN.1
@@ -632,12 +620,11 @@ of TLS. A store channel may be added later but cannot become a runtime dependenc
 
 Because distribution is a direct APK rather than an App Bundle through a store,
 Play App Signing does not apply: the application signing key is the distribution
-identity permanently, and there is no upload-key reset if it is lost. The Private
-Experimental Beta therefore has a frozen application ID and a single persistent
-signing key, with `minSdk` 24 fixing the available signature schemes at v2 and
-v3. Key custody, backup and recovery, the release procedure, artifact
-verification, and the upgrade-continuity proof are specified in
-[Beta release signing and key continuity](release-signing.md) under ADR-042.
+identity permanently, and there is no upload-key reset if it is lost. The deleted
+`beta` flavor carried a frozen application ID and a single persistent signing key for
+that reason; [Beta release signing and key continuity](release-signing.md) (ADR-042)
+records its custody and what the retained key still controls. No flavor is signed now,
+and production gains an identity only through an explicit release decision.
 
 ## Primary references
 
