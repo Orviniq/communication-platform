@@ -9,8 +9,16 @@ and the MLS profile and the closed-beta PQ MLS review packet were deleted from t
 Every MLS gate, prerequisite, and packet named below is historical and can no longer
 open. The pairwise scope is unaffected.
 
-This document prepares the *engagement* that production gate 7 in the MLS profile and
-ADR-017 require. **It retains nobody, names nobody as retained, and closes nothing.**
+**Updated 2026-09-14.** Piece 19 is cancelled, not blocked ([ADR-075](decisions.md)), so
+where this document says an MLS gate or prerequisite remains open or blocked, that is the
+state it was in when the track was cancelled. Files marked deleted in work packages WP1,
+WP2, WP5, WP6 and WP7 were deleted with the MLS track. The signed group control events
+that replaced the MLS group construction ([message-protocol.md](message-protocol.md))
+have no work package of their own, and ADR-075 leaves their review open.
+
+This document prepares the *engagement* that ADR-017 requires, and that production gate 7
+in the deleted MLS profile also required. **It retains nobody, names nobody as retained,
+and closes nothing.**
 
 - No reviewer, firm, or individual named below has been approached, contacted, solicited,
   or engaged. Nobody has agreed to anything. Availability, willingness, price, and
@@ -65,10 +73,10 @@ mandatory item does not meet the bar, regardless of standing.
 
 | # | Requirement | Evidence that satisfies it | Why this implementation needs it |
 |---|---|---|---|
-| **Q1** | **Demonstrated MLS competence** | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | The construction is MLS. A reviewer who learns MLS on this engagement is being paid to acquire the competence the engagement exists to apply |
-| **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The beta's KEM diverges from `TBD2` in ten recorded ways (rows D1-D10 of the deleted MLS profile) and the pairwise track is hybrid PQXDH. Judging whether a *non-standard* hybrid combiner is sound is the single hardest question in the packet, and it is not answerable from an MLS background alone |
+| **Q1** | **Demonstrated MLS competence** | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | Written when the group construction was MLS. It is not any more: a group is a set of pairwise sessions and the MLS core is deleted ([ADR-075](decisions.md)), so no material now in scope is MLS |
+| **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The pairwise track is hybrid PQXDH. The beta's *non-standard* hybrid KEM, which diverged from `TBD2` in ten recorded ways (rows D1-D10 of the deleted MLS profile) and posed the hardest question in the MLS packet, was deleted with the MLS core ([ADR-075](decisions.md)) |
 | **Q3** | **Implementation-level review, not design-only** | At least one published engagement that read source and reported source-anchored findings, not solely a design/architecture opinion | The two packets are implementation packets. A design review of the profile documents would leave the entire inventory unread |
-| **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with 46 `unsafe` blocks in the shared C ABI and one 1 MiB-bounded `dart:ffi` allocation path; `mls_beta.rs` itself contains no `unsafe` and inherits `lib.rs`'s |
+| **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with 46 `unsafe` blocks in the shared C ABI and one 1 MiB-bounded `dart:ffi` allocation path. `mls_beta.rs`, which had no `unsafe` of its own, was deleted with the MLS core ([ADR-075](decisions.md)) |
 | **Q5** | **Protocol-invention review capability** | Evidence of reviewing bespoke state machines, concurrency, and persistence — not only primitive or parameter checking | The ten project inventions in the packet are the highest-value targets *precisely because* no external specification or vector can validate them: credential binding, control transcript, fork convergence, leave/eviction, queue-gap re-admission, the transactional commit boundary, state sealing, per-recipient re-wrapping, the FFI boundary, and redaction |
 | **Q6** | **A published report of the required shape** | At least one publicly readable report containing, per finding: an identifier, a severity, a source location, and a disposition; plus a statement of what was and was not in scope | Section 3 requires exactly this shape. A candidate who has never produced it is being asked to invent their deliverable format on this engagement |
 | **Q7** | **Named assessors** | The individuals who will do the work are named, with their own attributable prior work | A firm brand is not evidence that the people assigned to this engagement have Q1-Q5. Reports that name their assessors are the norm in this field, including in the closest comparable engagements |
@@ -83,7 +91,7 @@ Independence is a property of the *engagement*, not a compliment paid to the rev
 |---|---|
 | **I1** | The reviewer did not author, co-author, maintain, or contribute to any code, document, vector, or decision under review, and is not doing so during the engagement |
 | **I2** | The reviewer has no ownership, employment, contractor, advisory, or revenue relationship with the project owner beyond this engagement, and none is created by it |
-| **I3** | The reviewer discloses, in writing and before the engagement starts, any relationship to the parties whose work this implementation *depends on or criticises*: `mls-rs` and AWS; OpenMLS and Phoenix R&D; the authors of `draft-ietf-mls-pq-ciphersuites`, `draft-ietf-hpke-pq`, `draft-irtf-cfrg-concrete-hybrid-kems`, and `draft-connolly-cfrg-xwing-kem`; and libsodium and mlkem-native. Disclosure is not disqualification — the strongest candidates are close to this work — but an undisclosed relationship is |
+| **I3** | The reviewer discloses, in writing and before the engagement starts, any relationship to the parties whose work this implementation *depends on or criticises*, or did while it carried the MLS core deleted under [ADR-075](decisions.md): `mls-rs` and AWS; OpenMLS and Phoenix R&D; the authors of `draft-ietf-mls-pq-ciphersuites`, `draft-ietf-hpke-pq`, `draft-irtf-cfrg-concrete-hybrid-kems`, and `draft-connolly-cfrg-xwing-kem`; and libsodium and mlkem-native. Disclosure is not disqualification — the strongest candidates are close to this work — but an undisclosed relationship is |
 | **I4** | The reviewer's fee, scope, and continuation are not contingent on the findings, their severity, or a favourable conclusion. No clause may let the owner suppress a finding, and the reviewer keeps editorial control of the findings text |
 | **I5** | The reviewer states positively, in the report, what they did **not** review, and what their conclusions therefore do not cover |
 
@@ -101,10 +109,10 @@ A candidate is out, regardless of other evidence, if any of these hold:
    without a per-finding register.
 6. They would treat the project's ten inventions as out of scope, or would scope the
    engagement to "conformance with RFC 9420" only. Conformance is not the risk here; the
-   inventions and the recorded divergence are.
-7. They offer to review against `TBD2` as a conformance target. The beta is not `TBD2` and
-   never has been; such an engagement would produce wrong conclusions by construction (see
-   the packet's "The one thing to read first").
+   inventions are, as the recorded KEM divergence was until the MLS core was deleted.
+7. They offer to review against `TBD2` as a conformance target. The beta was not `TBD2` and
+   never had been; such an engagement would have produced wrong conclusions by construction
+   (see the deleted packet's "The one thing to read first").
 
 ### 1.4 How the bar is applied
 
@@ -143,17 +151,17 @@ engagement, they become a *second* recorded revision in D2, or they wait.
 | WP | Subject | Primary material | Deliverable contribution |
 |---|---|---|---|
 | **WP0** | Scope agreement and threat-model reconciliation. Confirm the claims in scope, confirm the out-of-scope list is understood and accepted, and reconcile against [the threat model](threat-model.md) | Both packets' "Security claims in scope" and "Explicitly out of scope"; [threat model](threat-model.md) | D1 |
-| **WP1** | **The ten project inventions.** Credential binding to the Authentication Service; the control transcript and later-member admission (ADR-037); fork convergence (ADR-041); leave and eviction (ADR-039); queue-gap re-admission; the transactional commit boundary; state sealing and versioning; per-recipient envelope re-wrapping (ADR-011); the FFI boundary; redaction and the error surface | MLS packet, "The project's own protocol inventions"; `group_model.dart`, `native_beta_group_mls.dart`, `drift_group_repository.dart`, `mls_beta.rs` | D3 |
-| **WP2** | **Suite assembly and the recorded KEM divergence.** Whether rows D1-D10 are complete and correctly characterised; whether the divergence has consequences beyond the loss of `TBD2` interoperability that ADR-040 asserts; whether an unassigned HPKE `kem_id` reaching every key schedule is confined as claimed | MLS profile (deleted) rows D1-D10; `docs/upstream/mls-rs-hybrid-kem-defect-report.md`; `mls_beta.rs`; `beta_kem_vectors.rs` | D3 |
+| **WP1** | **The ten project inventions.** Credential binding to the Authentication Service; the control transcript and later-member admission (ADR-037); fork convergence (ADR-041); leave and eviction (ADR-039); queue-gap re-admission; the transactional commit boundary; state sealing and versioning; per-recipient envelope re-wrapping (ADR-011); the FFI boundary; redaction and the error surface | MLS packet, "The project's own protocol inventions"; `group_model.dart`, `native_beta_group_mls.dart` (deleted), `drift_group_repository.dart`, `mls_beta.rs` (deleted) | D3 |
+| **WP2** | **Suite assembly and the recorded KEM divergence.** Whether rows D1-D10 are complete and correctly characterised; whether the divergence has consequences beyond the loss of `TBD2` interoperability that ADR-040 asserts; whether an unassigned HPKE `kem_id` reaching every key schedule is confined as claimed | MLS profile (deleted) rows D1-D10; `docs/upstream/mls-rs-hybrid-kem-defect-report.md`; `mls_beta.rs` (deleted); `beta_kem_vectors.rs` (deleted) | D3 |
 | **WP3** | **Pairwise transport v1.** Hybrid PQXDH composition and transcript, the ratchet state machine, skipped-key bounds, repair, rotation overlap, revocation | [pairwise transport v1](pairwise-transport-v1.md); [pairwise packet](pairwise-review-readiness.md) | D3 |
 | **WP4** | **Persistence, concurrency, and the commit boundary.** Compare-and-swap under control revision and hash; crash between commit and fan-out; exact-ciphertext retry; the 20,000-key account bound under concurrent transactions | `drift_group_repository.dart`, `drift_pairwise_transport_store.dart`, `drift_sync_store.dart`, `local_database.dart` (schema 11) | D3 |
-| **WP5** | **The boundary.** The single C ABI operation, the 46 `unsafe` blocks in `lib.rs`, the 1 MiB-bounded `dart:ffi` allocation and its zero-and-free path, isolate ownership, typed-response decoding | `lib.rs`, `beta_mls_ffi.dart`, `beta_mls_native_session.dart`, `isolate_crypto_core_worker.dart` | D3 |
-| **WP6** | **Isolation and packaging.** That the production release artifact contains no beta code path — not a disabled one, not a dead one — and that the source-only production gate cannot be flipped by accident | `tool/build_rust_android.sh/.ps1`, `android/app/build.gradle.kts`, `group_production_gate.dart`, `unsupported_group_mls.dart`; the 15-vs-16 symbol allowlists | D3 |
-| **WP7** | **Evidence adequacy.** Whether the vector split (official primitive vectors vs project-generated regression pins), the 12-target fuzz campaign, and the fault-injection matrix support the claims made — and whether the packets' stated limits are stated *honestly and completely* | `native/crypto_core/vectors/README.md`, `fuzz/README.md`, both packets' validation tables | D3, D7 |
+| **WP5** | **The boundary.** The single C ABI operation, the 46 `unsafe` blocks in `lib.rs`, the 1 MiB-bounded `dart:ffi` allocation and its zero-and-free path, isolate ownership, typed-response decoding | `lib.rs`, `beta_mls_ffi.dart` (deleted), `beta_mls_native_session.dart` (deleted), `isolate_crypto_core_worker.dart` | D3 |
+| **WP6** | **Isolation and packaging.** That the production release artifact contains no beta code path — not a disabled one, not a dead one — and that the source-only production gate cannot be flipped by accident | `tool/build_rust_android.sh/.ps1`, `android/app/build.gradle.kts`, `group_production_gate.dart` (deleted), `unsupported_group_mls.dart` (deleted); the 15-vs-16 symbol allowlists (the beta list was deleted) | D3 |
+| **WP7** | **Evidence adequacy.** Whether the vector split (official primitive vectors vs project-generated regression pins), the 12-target fuzz campaign (deleted with the MLS core), and the fault-injection matrix support the claims made — and whether the packets' stated limits are stated *honestly and completely* | `native/crypto_core/vectors/README.md`, `fuzz/README.md` (deleted), both packets' validation tables | D3, D7 |
 | **WP8** | **Retest.** Re-examine every finding the owner claims to have fixed, at a new recorded revision, and state per finding whether the fix resolves it | the fixes produced under D4 | D5 |
 
-WP1 is the centre of gravity. The packet says so directly, and it is the correct emphasis:
-external specifications and vectors cover the primitives, and nothing external covers the
+WP1 was the centre of gravity. The deleted MLS packet said so directly: external
+specifications and vectors cover the primitives, and nothing external covers the
 inventions.
 
 ### 2.3 Explicitly out of scope
@@ -169,19 +177,20 @@ The reviewer must accept and restate these, so the report cannot be read as cove
 - **`backend/`.** Read-only here, governed by its own contract, and not assessable from
   this track.
 - **The internals of pinned upstream dependencies**, beyond how this implementation uses
-  them. With one deliberate exception: WP2 requires reading the pinned `mls-rs` crypto
-  crates far enough to confirm or refute rows D1-D10, because the divergence lives there.
-- **Any claim about production readiness of the beta track.** The beta is Private Use
-  `0xFE4C` with disposable state. A favourable review does not make it a production
-  deployment, and the report must not be worded so that it could be read that way.
+  them. The one deliberate exception, WP2's reading of the pinned `mls-rs` crypto crates to
+  confirm or refute rows D1-D10, went with `mls-rs` and the MLS core
+  ([ADR-075](decisions.md)).
+- **Any claim about production readiness of the beta track.** The beta was Private Use
+  `0xFE4C` with disposable state, and it was deleted. A favourable review could not have
+  made it a production deployment, and no report may be worded so that it could be read
+  that way.
 
-One dependency fact belongs in the residual-risk record rather than in scope: the upstream
+One dependency fact belonged in the residual-risk record rather than in scope: the upstream
 `mls-rs` project states in its own README that it "has been validated for conformance to
 the RFC 9420 specification but has not yet received a full security audit by a 3rd party"
-(verified 2026-08-18). This implementation's assurance therefore rests on an unaudited
-protocol engine. That is not a defect this engagement can fix, and it is not a reason to
-widen scope to auditing `mls-rs`; it is a residual risk the owner must accept explicitly
-under D7.
+(verified 2026-08-18), so the MLS core's assurance rested on an unaudited protocol engine.
+`mls-rs` left the tree with that core ([ADR-075](decisions.md)), so D7 no longer has it to
+accept.
 
 ### 2.4 Effort benchmarks
 
@@ -197,13 +206,15 @@ and no candidate has been asked what this would cost.
 | Go cryptographic libraries security review | 12 engineer-weeks, Mar 2025 | Trail of Bits publications index |
 | OpenMLS security assurance assessment | 4 named assessors; code reviewed to a commit dated 22 October 2025; report v1.2 dated 11 March 2026; biweekly meetings throughout | SRLabs report, obtained from the OpenMLS blog |
 
-This implementation's reviewable surface is larger than DAVE's: the group feature alone is
-22 files and 9,779 lines of Dart, `mls_beta.rs` is 5,363 lines, and WP3 adds the whole
-pairwise transport. A DAVE-shaped engagement (design + implementation, 8 engineer-weeks)
-is the floor, not the target. **A defensible planning figure for WP0-WP8 across both
-packets is 10-16 engineer-weeks, plus a separate retest pass for WP8.** Treat it as an
-order of magnitude for deciding whether a funding route is viable at all, not as a number
-to negotiate against.
+On 2026-08-18 this implementation's reviewable surface was larger than DAVE's: the group
+feature alone was 22 files and 9,779 lines of Dart, `mls_beta.rs` was 5,363 lines, and WP3
+added the whole pairwise transport. A DAVE-shaped engagement (design + implementation, 8
+engineer-weeks) was the floor, not the target. **The planning figure then for WP0-WP8
+across both packets was 10-16 engineer-weeks, plus a separate retest pass for WP8.** Treat
+it as an order of magnitude for deciding whether a funding route is viable at all, not as a
+number to negotiate against. It predates [ADR-075](decisions.md): `mls_beta.rs` and the MLS
+packet are deleted, the group feature was rebuilt on pairwise sessions, and nothing has
+been re-estimated since.
 
 ---
 
@@ -220,12 +231,12 @@ or high finding — not before, and not partially.
 | **D4** | **Remediation evidence** | For every finding disposed *fixed* or *mitigated*: the commit that changed it, the test or vector that now covers it, and a note where the fix changes a documented behaviour (which then updates the owning document). Fixes without a regression test are incomplete |
 | **D5** | **Explicit retest confirmation** | A written statement **by the reviewer**, at a named revision, that they re-examined each fix and whether it resolves the finding — including any fix that does not. This cannot be produced by the owner, and no amount of owner-side testing substitutes for it. Absent D5, gate 7 stays open even if every finding is marked fixed |
 | **D6** | **Written independence statement** | Signed by the reviewer, covering I1-I5: no authorship or maintenance of the reviewed material; no relationship to the owner beyond this engagement; disclosure of relationships to `mls-rs`/AWS, OpenMLS/Phoenix R&D, the four draft author sets, and the vendored C dependencies; confirmation that fee and scope were not contingent on findings; and a positive statement of what was not reviewed |
-| **D7** | **Recorded owner acceptance of residual risk** | Signed and dated by the owner, itemising each accepted residual risk individually — every *risk accepted* disposition from D3, plus each item on the packets' out-of-scope lists that remains unexercised at release, plus the unaudited-`mls-rs` dependency. A blanket "residual risks accepted" sentence does not satisfy D7; the owner must be able to show they knew what they were accepting, one item at a time |
+| **D7** | **Recorded owner acceptance of residual risk** | Signed and dated by the owner, itemising each accepted residual risk individually — every *risk accepted* disposition from D3, plus each item on the packets' out-of-scope lists that remains unexercised at release. A blanket "residual risks accepted" sentence does not satisfy D7; the owner must be able to show they knew what they were accepting, one item at a time |
 
-Where the outputs land: D1, D2, D3, D5, and D6 populate the disposition tables that both
-packets already carry, which are currently empty. D4 lands as commits and tests. D7 lands
-in this document, as a dated appendix, and is referenced from the MLS profile when — and
-only when — the owner actually signs it.
+Where the outputs land: D1, D2, D3, D5, and D6 populate the review disposition template
+the pairwise packet carries, which is currently empty; the MLS packet's table was deleted
+with it. D4 lands as commits and tests. D7 lands in this document, as a dated appendix,
+when — and only when — the owner actually signs it.
 
 **What these deliverables do not do.** All seven complete, with a clean register, closes
 gate 7 alone. Gates 1, 2, and 3 are registry, specification, and upstream-provider
