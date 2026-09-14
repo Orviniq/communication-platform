@@ -206,9 +206,10 @@ never suggests one.
 
 Message history arrives only from an existing online, cross-signing-authorized device
 over ordinary per-device envelopes. Without one, the new device starts with no history.
-Pairwise sessions start fresh; missing MLS state requires peers to remove and re-add the
-device with a fresh Welcome. The UI separates `identity recovered`, `waiting for existing
-device`, `history transferring`, `group rejoin required`, and `ready`.
+Pairwise sessions start fresh, and a group reaches the device when one of its members sends
+it the group's current control state; nobody removes and re-adds it. The UI separates
+`identity recovered`, `waiting for existing device`, `history transferring`, `groups arrive
+from their members`, and `ready`.
 
 ## Error mapping
 

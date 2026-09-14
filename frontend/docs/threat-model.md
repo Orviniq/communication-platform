@@ -9,8 +9,7 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 ## Protected assets
 
 - Message, profile, group, room, attachment, locally held history, and voice plaintext.
-- Cross-signing, device identity, ML-KEM, ratchet, MLS, attachment, and media private
-  keys.
+- Cross-signing, device identity, ML-KEM, ratchet, attachment, and media private keys.
 - Login and refresh credentials.
 - Recovery secrets.
 - Local decrypted indexes, thumbnails, drafts, and notification previews.
@@ -126,9 +125,10 @@ evidence for a future Web trust boundary or its browser vectors.
   blocking equivocation alert.
 - Hybrid X25519 + ML-KEM-768 session establishment with no silent classical downgrade.
 - Exact replay and duplicate handling with bounded caches.
-- Explicit `pruned_through` mailbox-gap detection and fresh-Welcome group recovery.
-- Limits on message size, nesting, skipped ratchet keys, pending epochs, attachments,
-  retries, and decompression.
+- Explicit `pruned_through` mailbox-gap detection, and group state recovery from a member
+  over repaired pairwise sessions.
+- Limits on message size, nesting, skipped ratchet keys, group control payloads,
+  attachments, retries, and decompression.
 - Encrypted local Android database; a future Web client must not persist plaintext.
 - Redacted local diagnostics and hidden notification previews by default.
 - Clipboard warnings/expiry where supported for recovery secrets.
@@ -148,11 +148,12 @@ client MUST not claim otherwise.
 
 ## Security release gates
 
-These are gates on a **release**. ADR-044 defines the initial Private Experimental
-deployment, which is not one: it is private, named, disclosed distribution of an
-artifact that states its own maturity, and it leaves every gate below closed and
-unsatisfied. Nothing in that decision may be read as clearing one of them, and the
-written disclosure it requires is what makes distributing under them acceptable.
+These are gates on a **release**. The Private Experimental deployment that ADR-044
+defined was not one: it was private, named, disclosed distribution of an artifact that
+stated its own maturity, and it left every gate below closed and unsatisfied. Nothing in
+that decision may be read as clearing one of them, and the written disclosure it required
+was what made distributing under them acceptable. ADR-075 closed ADR-044, and no flavor
+builds that artifact since the `beta` flavor that carried it was deleted.
 
 - No handwritten cryptographic primitive.
 - No shipping an unreviewed cross-platform protocol implementation.
