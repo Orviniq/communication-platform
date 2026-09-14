@@ -40,7 +40,7 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
 7. If `last_acked_seq < pruned_through`, start queue-gap recovery for every active
    group; either way, drain until `has_more` is false. Nothing that arrives waits on it.
 8. Process persisted outbox work, cross-signing/device-log verification, and
-   classical/PQ prekey and KeyPackage maintenance.
+   classical/PQ prekey maintenance.
 9. Subscribe to only the presence/rooms required by visible or active features.
 
 Socket events may arrive during drain. Inbox uniqueness and event IDs make ordering safe.
