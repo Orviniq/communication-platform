@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Verify a built Production release artifact.
+# Verify a built production release artifact (ADR-076 D6).
 #
-# Production must keep building and stay verifiable without ever becoming
-# installable. This answers the questions that decide that, all of which must
-# hold:
+# Two modes answer two different questions, and every answer must hold:
 #
-#   * is this the application it claims to be (application ID)?
-#   * is it unsigned, so that the OS refuses to install it?
-#   * does it declare only the permissions and components ADR-054 recorded?
-#   * does its packaged native core still lack the deleted beta MLS symbol?
+#   --production            the gate for a distributable artifact. Is this the
+#                           application it claims to be, and is it signed by the
+#                           one identity recorded in
+#                           android/production-release-identity.properties?
+#   --production-unsigned   the artifact CI builds. Is it the same application,
+#                           and unsigned, so that the OS refuses to install it?
+#
+# Both modes also ask whether the artifact declares only the permissions and
+# components ADR-054 recorded, and whether its packaged native core still lacks
+# the deleted beta MLS symbol.
 #
 # Every check fails closed. A check that cannot be performed is an error, never
 # a pass.
@@ -17,33 +21,48 @@ set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/release_env.sh"
 
-production=0
+mode=""
 apk_path=""
 
 usage() {
   cat <<'USAGE'
-Usage: tool/verify_release_apk.sh --production <apk>
+Usage: tool/verify_release_apk.sh (--production | --production-unsigned) <apk>
 
-  --production   Verify a Production artifact: correct application ID, NOT
-                 signed (so it cannot be installed), and no beta MLS symbol
-                 in the packaged native core.
+  --production            Verify a distributable production artifact: the
+                          application ID recorded in
+                          android/production-release-identity.properties,
+                          exactly one signer, APK Signature Scheme v2 and v3
+                          without v1, no debug certificate, and the signing
+                          certificate recorded in the same file.
+  --production-unsigned   Verify the unsigned production artifact CI builds:
+                          the recorded application ID, and NOT signed, so it
+                          cannot be installed.
 
-The check also compares what the merged manifest declares - permissions and
+Both modes also compare what the merged manifest declares - permissions and
 components, including everything a dependency contributed - against the set
-ADR-054 recorded.
+ADR-054 recorded, and check that the packaged native core does not export the
+deleted beta MLS symbol.
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --production) production=1; shift ;;
+    --production | --production-unsigned)
+      [[ -z "$mode" ]] || { usage >&2; fail "Choose exactly one mode."; }
+      mode="${1#--}"
+      shift
+      ;;
     -h | --help) usage; exit 0 ;;
     -*) usage >&2; fail "Unknown option: $1" ;;
-    *) apk_path="$1"; shift ;;
+    *)
+      [[ -z "$apk_path" ]] || { usage >&2; fail "Give exactly one APK."; }
+      apk_path="$1"
+      shift
+      ;;
   esac
 done
 
-[[ "$production" -eq 1 ]] || { usage >&2; fail "Pass --production."; }
+[[ -n "$mode" ]] || { usage >&2; fail "Pass --production or --production-unsigned."; }
 [[ -n "$apk_path" ]] || { usage >&2; fail "No APK given."; }
 [[ -f "$apk_path" ]] || fail "APK not found: $apk_path"
 
@@ -55,20 +74,15 @@ pass() {
   echo "  ok    $*"
 }
 
-echo "Verifying $(basename "$apk_path") as production"
+echo "Verifying $(basename "$apk_path") as $mode"
 echo
 
 # --- Application identity ----------------------------------------------------
 
-# The Gradle build that produces the artifact is the one place the application
-# ID is written, so the built identity and the verified identity cannot drift
-# apart.
-readonly app_build_file="$android_root/app/build.gradle.kts"
-expected_application_id="$(sed -n \
-  's/^[[:space:]]*val productionApplicationId = "\([^"]*\)".*$/\1/p' \
-  "$app_build_file" | head -n 1)"
-[[ -n "$expected_application_id" ]] ||
-  fail "No productionApplicationId is declared in $app_build_file."
+# The Gradle build reads the application ID from the same committed identity
+# file that release_env.sh reads it from, so the built identity and the verified
+# identity cannot drift apart.
+readonly expected_application_id="$production_application_id"
 
 badging="$(aapt2 dump badging "$native_apk_path")"
 actual_application_id="$(printf '%s' "$badging" |
@@ -87,21 +101,104 @@ pass "version $version_name ($version_code)"
 
 # --- Signature ---------------------------------------------------------------
 
-# Production must stay undistributable. An unsigned APK is refused by the
-# package installer, which is exactly the fail-closed property we want.
-# apksigner also exits non-zero when it cannot run at all - a JAVA_HOME it
-# cannot use is enough - so only its own verdict counts as unsigned.
+# apksigner exits non-zero both when an artifact does not verify and when it
+# cannot run at all - a JAVA_HOME it cannot use is enough - so its exit status
+# alone never decides either mode.
+signature_verified=0
 if signature_report="$(apksigner verify --verbose --print-certs "$native_apk_path" 2>&1)"; then
-  fail "The Production artifact is signed. Production must remain unsigned so it
-       cannot be installed or distributed. Check that buildTypes.release does
-       not set a signingConfig and that no signing config reached the
-       production flavor."
+  signature_verified=1
 fi
-printf '%s\n' "$signature_report" | grep -q 'DOES NOT VERIFY' ||
-  fail "apksigner did not reach a verdict, so whether this artifact is signed is
+
+report_value() {
+  printf '%s\n' "$signature_report" | sed -n "s/^$1: \(.*\)$/\1/p" | head -n 1 | tr -d '\r'
+}
+
+scheme_state() {
+  printf '%s\n' "$signature_report" |
+    sed -n "s/^Verified using $1 scheme ([^)]*): \(.*\)$/\1/p" | head -n 1 | tr -d '\r'
+}
+
+if [[ "$mode" == "production-unsigned" ]]; then
+  # CI builds production without the key. The package installer refuses an
+  # unsigned APK, so this artifact cannot reach anyone by accident. Flutter
+  # copies it to app-production-release.apk signed or not, so only apksigner's
+  # own verdict counts as unsigned.
+  [[ "$signature_verified" -eq 0 ]] ||
+    fail "The artifact is signed, but --production-unsigned verifies the unsigned
+       artifact CI builds. Build it with CP_PRODUCTION_UNSIGNED_BUILD=1 and no
+       signing variable, or verify a signed artifact with --production."
+  printf '%s\n' "$signature_report" | grep -q 'DOES NOT VERIFY' ||
+    fail "apksigner did not reach a verdict, so whether this artifact is signed is
        unknown:
 $signature_report"
-pass "unsigned, so the OS cannot install it"
+  pass "unsigned, so the OS cannot install it"
+else
+  [[ "$signature_verified" -eq 1 ]] ||
+    fail "apksigner could not verify the artifact, so it is not a distributable
+       production artifact:
+$signature_report"
+  pass "apksigner verifies the signature"
+
+  signer_count="$(report_value 'Number of signers')"
+  [[ "$signer_count" == "1" ]] ||
+    fail "Expected exactly one signer, found '$signer_count'."
+  pass "exactly one signer"
+
+  v1_state="$(scheme_state v1)"
+  v2_state="$(scheme_state v2)"
+  v3_state="$(scheme_state v3)"
+  for state in "$v1_state" "$v2_state" "$v3_state"; do
+    [[ "$state" == "true" || "$state" == "false" ]] ||
+      fail "apksigner did not report a verdict for each of v1, v2 and v3, so which
+       schemes sign this artifact is unknown:
+$signature_report"
+  done
+  [[ "$v2_state" == "true" ]] || fail "APK Signature Scheme v2 is not present."
+  [[ "$v3_state" == "true" ]] || fail "APK Signature Scheme v3 is not present."
+  [[ "$v1_state" == "false" ]] ||
+    fail "The legacy JAR (v1) signature is present. minSdk 24 makes it unnecessary,
+       and ADR-076 D2 disables it."
+  pass "signed with v2 and v3, without the legacy v1 scheme"
+
+  signer_dn="$(report_value 'Signer #1 certificate DN')"
+  [[ -n "$signer_dn" ]] ||
+    fail "apksigner reported no certificate DN for the signer:
+$signature_report"
+  case "$signer_dn" in
+    *"Android Debug"*)
+      fail "This artifact is DEBUG SIGNED ($signer_dn). A debug-signed build must
+           never reach anyone: the debug key differs per machine, so no release
+           could ever update it."
+      ;;
+  esac
+  pass "not debug signed"
+
+  actual_fingerprint="$(normalize_fingerprint "$(report_value 'Signer #1 certificate SHA-256 digest')")"
+  [[ "$actual_fingerprint" =~ ^[[:xdigit:]]{64}$ ]] ||
+    fail "apksigner reported no certificate SHA-256 digest for the signer:
+$signature_report"
+
+  if [[ -z "$production_certificate_sha256" ]]; then
+    fail "No certificate is recorded in android/production-release-identity.properties,
+       so this artifact's signer cannot be checked against anything. It signs as:
+         $actual_fingerprint
+       The fingerprint is written once, when the production key is created, and
+       never changes. If the line was emptied, restore it from the history of that
+       file. Never copy an artifact's fingerprint into it to make this check pass:
+       the file decides which key is trusted, not the artifact."
+  fi
+
+  [[ "$actual_fingerprint" == "$production_certificate_sha256" ]] ||
+    fail "SIGNING IDENTITY MISMATCH.
+         expected $production_certificate_sha256
+         actual   $actual_fingerprint
+       This artifact is signed by a different key than the production identity
+       recorded in android/production-release-identity.properties. Android refuses
+       it over any install that key signed, and the only way to apply it is an
+       uninstall that permanently destroys that install's local data. Do not
+       distribute it. Find the real keystore, or restore it from a backup."
+  pass "signed by the recorded production identity $actual_fingerprint"
+fi
 
 # --- What the artifact declares, including what came from outside ----------
 
@@ -215,7 +312,7 @@ exported_symbols="$("$llvm_nm_tool" -D --defined-only "$(to_native_path "$extrac
   awk '{print $NF}')"
 
 if printf '%s\n' "$exported_symbols" | grep -qx "$beta_symbol"; then
-  fail "The Production artifact's packaged native core exports $beta_symbol.
+  fail "The production artifact's packaged native core exports $beta_symbol.
        No source in this tree defines that symbol, so this native core was not
        built from it. Do not ship or accept this build."
 fi
