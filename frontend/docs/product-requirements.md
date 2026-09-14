@@ -54,9 +54,10 @@ is not called the production release.
 - The server stores no history. Message history remains on client devices and a new
   device receives it only through an encrypted transfer from an existing online device.
 - The recovery backup restores cross-signing identity material, not message history,
-  ratchets, MLS epochs, or authorization.
-- A mailbox `pruned_through` gap is a blocking recovery state; potentially affected MLS
-  memberships are removed and re-added with a fresh Welcome.
+  ratchets, group control state, or authorization.
+- A mailbox `pruned_through` gap is a blocking recovery state; each active group waits
+  until a member confirms its current control state, and recovery never removes and
+  re-adds the device ([sync-engine.md](sync-engine.md)).
 - Revoked devices lose tokens, queued content, local session access, and future group
   access.
 - Voice is audio-only and uses the self-hosted LiveKit and TURN deployment.

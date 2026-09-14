@@ -12,10 +12,10 @@ LiveKit device testing; lowering it may not weaken required security controls si
   key. Prefer StrongBox/TEE when available and record only coarse capability state.
 - Do not require hardware attestation or Google services; operation during disconnection
   takes precedence and the documented threat model does not trust a remote Google check.
-- Store identity/ratchet/MLS material only through the encrypted database/crypto-core
+- Store identity and ratchet material only through the encrypted database/crypto-core
   boundary.
 - Store cross-signing private keys in platform-protected storage and in the
-  recovery-encrypted backup only; device X25519/ML-KEM/ratchet/MLS private state never
+  recovery-encrypted backup only; device X25519/ML-KEM/ratchet private state never
   enters that backup.
 - Disable Android Auto Backup/data extraction for databases, keys, tokens, caches, and
   attachments.
@@ -115,8 +115,9 @@ Verification on 2026-07-28 passed:
 - `flutter test integration_test/crypto_core_android_smoke_test.dart -d
   <android-device> --flavor development` on an Android 15/API 35 x86_64 emulator.
 
-This Android scope does not implement PQXDH, Double Ratchet, MLS state,
-application-message schemas, production KeyPackages, or the post-v1 Web/Wasm adapter.
+This Android scope does not implement PQXDH, Double Ratchet, application-message schemas,
+or the post-v1 Web/Wasm adapter. It also excluded MLS state and KeyPackages, which no
+piece builds now that a group is a set of pairwise sessions ([ADR-075](decisions.md)).
 It is sufficient for the Android-only version-1 foundation; browser interoperability
 remains a post-v1 release gate.
 
@@ -198,8 +199,9 @@ Modes:
   explains the vendor settings the app cannot check for itself. **Built 2026-08-22
   (ADR-051)** and described in full below, but **not offered to anyone**: ADR-053 found
   that no cell of the physical-device matrix had ever been run, and gates the capability
-  closed in the beta and production artifacts until it is. Only the development flavour
-  resolves it, so that the matrix can be run at all.
+  closed in the production artifact until it is, as it did in the `beta` one while that
+  flavor existed. Only the development flavour resolves it, so that the matrix can be run
+  at all.
 - **Active voice:** microphone/communication foreground service for the duration of the
   joined room with visible controls.
 

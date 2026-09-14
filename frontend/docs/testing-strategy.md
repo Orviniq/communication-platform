@@ -38,19 +38,17 @@ A host-native dynamic-library test alone is not the packaged Android smoke. The
 preserved Web build may exercise only an explicit fail-closed unavailable adapter; it is
 not a version-1 target or release gate.
 
-- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, the finalized PQ MLS/OpenMLS profile,
-  Argon2id, CBOR, secretstream, and SFrame vectors applicable to the selected
-  implementation. Experimental PQ MLS fixtures cannot satisfy the production gate.
+- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, Argon2id, CBOR, secretstream, and SFrame
+  vectors applicable to the selected implementation.
 - The binding backend golden vectors for `cross_sig`, `master_sig`, `spk_sig`,
   `pq_spk_sig`, optional-field encoding, and the Ed25519/X25519 `ik_pub` layout, plus
   project vectors for SAS/QR values, device-log records/gossip, every event,
   history-transfer batches, attachment headers, and protocol upgrades.
 - Future Web release: byte equality between Android `mlkem_native`/shared native code
   and the reviewed browser Wasm implementation.
-- Interoperability between independent devices/versions and, where available, independent
-  MLS implementations.
+- Interoperability between independent devices/versions.
 - Property tests for encode/decode, encrypt/decrypt, state serialization, replay, skipped
-  messages, and epoch transitions.
+  messages, and group control revisions.
 - Fuzzing of all untrusted binary parsers and state restoration. Nothing is fuzzed
   today: the one in-crate harness covered only the closed-beta PQ MLS inputs and was
   deleted with that core, and the pairwise transport, application-message, and
@@ -59,7 +57,7 @@ not a version-1 target or release gate.
   Miri, so coverage-guided instrumentation and a sanitizer build need an approved
   toolchain decision.
 - Negative vectors for altered headers, signatures, associated data, padding, counters,
-  final tags, credentials, and group commits.
+  final tags, credentials, and group control events.
 
 ### Device validation
 
@@ -79,7 +77,7 @@ the artifact a user would run.
 ### Database tests
 
 - Constraints and exactly-once event application.
-- Atomic send/receive/MLS boundaries with failure at each statement.
+- Atomic send/receive/group-control boundaries with failure at each statement.
 - Migration from every supported released schema and restoration after interrupted
   migration.
 - Encrypted database/wrapping-key loss behavior.
@@ -100,8 +98,7 @@ and LiveKit/coturn where applicable:
   orphan revocation/device-log updates, and successful prekey cross-signature follow-up;
 - identity versioning, ETag/device-log-head invalidation, device-log paging, and opaque
   record behavior;
-- classical/PQ prekey races, atomic signed-prekey/cross-signature rotation, consumable
-  KeyPackage depletion, last-resort reuse, and 4096/16384 buckets;
+- classical/PQ prekey races and atomic signed-prekey/cross-signature rotation;
 - envelope fan-out above 256 targets, partial-batch progress, ambiguous retry with exact
   ciphertext reuse, drain pagination, duplicates, ack, stale devices, and TTL behavior;
 - WebSocket frame/size/rate limits and all close codes;
@@ -133,10 +130,11 @@ Use at least two accounts and multiple Android devices for version 1:
 - DM send offline/online, process death, ambiguous retry, delivery/read;
 - add/revoke devices, verify valid cross-signed additions, and reject invalid/PQ-missing
   devices;
-- create group, concurrent admin changes, add/remove, epoch rotation, history sharing;
+- create group, concurrent admin changes, add/remove, no later copy to a removed member,
+  history sharing;
 - attachment upload/download/corruption/expiry;
 - device-to-device full/partial history transfer, no source online, wrong/lost recovery
-  secret, identity recovered without history, and mailbox-gap fresh-Welcome recovery;
+  secret, identity recovered without history, and mailbox-gap group state recovery;
 - voice create/invite/join/reconnect/remove with encrypted media validation;
 - logout, remote revocation, local wipe, deep links, and hidden notifications. The alert
   policy is decided entirely in Dart and is covered by host tests; what a device actually
