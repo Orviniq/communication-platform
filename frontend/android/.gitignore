@@ -14,9 +14,11 @@ key.properties
 **/*.keystore
 **/*.jks
 
-# Release signing material never belongs in source control. The deleted beta
-# flavor read its keystore passwords from beta-signing.properties, and a
-# leftover copy stays ignored.
+# Release signing material never belongs in source control. The production
+# key's passwords live in production-signing.properties outside the repository
+# (ADR-076 D5), and the deleted beta flavor read its own from
+# beta-signing.properties; a stray copy of either stays ignored here.
+production-signing.properties
 beta-signing.properties
 *.p12
 *.pfx
