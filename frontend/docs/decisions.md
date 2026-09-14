@@ -587,6 +587,38 @@ history, recovery and intended-use points do not depend on the flavor. The launc
 label, the task-switcher title and the banner are unchanged, and no Gradle file, script
 or signing behaviour changed.
 
+**2026-09-14, prompt 3 (the key tooling).** The new
+`android/production-release-identity.properties` holds `application.id=com.orviniq.chat`
+and an empty `signing.certificate.sha256`. `tool/release_env.sh` reads both and gains
+`normalize_fingerprint`, `to_properties_path`, a refusal of any material path inside the
+repository in any letter case, and a resolver for a JDK 17 or newer whose home is in
+`C:/...` form on Windows, so that a release script can export it as `JAVA_HOME` for
+`apksigner`; a script that runs no JDK tool never fails for want of one.
+`tool/create_production_keystore.sh` and `tool/backup_production_keystore.sh` adapt the
+beta scripts at `8267429` to D2 and D3, and differ from them as follows. The backup
+stretches its passphrase with `--s2k-digest-algo SHA512`. The beta script's
+`--digest-algo SHA512` names the signature hash and never reached the S2K, whose hash
+GnuPG 2.4.5 takes from `--s2k-digest-algo` alone and otherwise sets to SHA-256
+(`g10/main.h` and `g10/encrypt.c` at tag `gnupg-2.4.5`), so the SHA-512 that
+`release-signing.md` names for the beta backups was never requested; restoring them is
+unaffected, because gpg reads the S2K parameters from the archive. The creator reads the
+passphrase with `IFS=`, so no space is trimmed unseen, and refuses one that is not
+printable ASCII, holds a backslash, or begins or ends with a space, because
+`java.util.Properties`, with which the reviewed build at `8267429` read the signing
+properties file, would hand the build a different passphrase from the keystore's. Beside
+the beta refusals of an existing keystore and a recorded fingerprint, it refuses an
+existing properties file, a path inside the repository and an identity file that names
+another application ID. It takes no `--alias`, because D2 fixes the alias, and it takes
+`--identity-file`, with which it was proven against a scratch copy: a throwaway key with
+D2's subject, RSA 4096, `SHA384withRSA` and 10 000 days, its fingerprint recorded in the
+copy, a refusal from each run after it, and the tracked file unchanged. The backup script
+refused a `--out` inside the repository, a missing `gpg`, a missing keystore and the empty
+tracked fingerprint, and never reached encryption, which the owner proves in prompt 4.
+`android/.gitignore` ignores `production-signing.properties`, and
+`test/architecture/production_key_tooling_test.dart` pins the tooling. No Gradle file and
+no build's signing behaviour changed, and nothing was written under
+`~/.communication-platform/`.
+
 ## ADR-075 in full — a group is pairwise, and the screen says what that costs (2026-09-13)
 
 **Status:** Accepted. Client-side record of server ADR-0001,
