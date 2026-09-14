@@ -99,7 +99,7 @@ final class NativePrekeyMaintenanceCrypto
                 ..bytes(batchId)
                 ..boolean(rotationLogAppended))
               .takeBytes();
-      return _stateOperation(
+      return await _stateOperation(
         PairwiseCryptoOperation.commitPendingUpload,
         payload,
         maximumUnixDay: unixDay,
