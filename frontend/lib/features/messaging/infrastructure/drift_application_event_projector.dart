@@ -1415,8 +1415,8 @@ final class DriftApplicationEventProjector {
     if (conversation.kind != ConversationKind.group.index) {
       return false;
     }
-    // Group role projection is established by the later MLS/control piece.
-    // Until then no moderator-only mutation is guessed in Dart.
+    // A group's roles live in its signed control state, which this projector
+    // does not read, so no moderator-only mutation is guessed here.
     return false;
   }
 

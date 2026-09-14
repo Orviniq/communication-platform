@@ -301,11 +301,11 @@ void main() {
 
   group('which build a background run believes it is', () {
     test('the compiled entry point fixes the environment, not the platform', () {
-      // ADR-036 and ADR-044 hold that the environment decides the provisioned
-      // server, the trust anchor and the closed-beta group permit, and that it
-      // must be fixed by the entry point rather than selectable at runtime. The
-      // platform picks a name; which `AppEnvironment` that name resolves to is
-      // decided by which file was compiled.
+      // ADR-044 holds that the environment decides both the provisioned server
+      // and the trust anchor, and that it must be fixed by the entry point
+      // rather than selectable at runtime. The platform picks a name; which
+      // `AppEnvironment` that name resolves to is decided by which file was
+      // compiled.
       const flavors = {
         'lib/main.dart': 'AppEnvironment.development',
         'lib/main_development.dart': 'AppEnvironment.development',
