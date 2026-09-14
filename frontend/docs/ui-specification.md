@@ -581,6 +581,13 @@ an event this device cannot yet place. It disables the composer and group change
 member confirms the group's current control state, and it never asks members to remove and
 re-add this device.
 
+**Copies.** A group message is one encrypted copy for each device of each member
+([ADR-075](decisions.md)). While any copy is still owed, the message shows how many the
+server has accepted out of how many are owed ("Copies sent: 45 of 150"), and it takes the
+accepted mark only when none is still owed. A copy for a device the server reports as gone
+leaves the count; a copy for a device whose mailbox is full stays in it until it is
+accepted. A failed send offers a retry of the same message.
+
 ---
 
 ## 10. Live Voice Room Screen
@@ -661,8 +668,10 @@ hierarchy.
 ### 12.1 Create Group flow
 Reached from Contacts (§7). Multi-step:
 1. **Pick members** — searchable contact list, multi-select, **Next**. (~50 cap guidance.)
-2. **Group details** — set **name**, **photo**, optional **description**. **[PRIVACY]** All
-   three are encrypted; the server stores only ciphertext.
+2. **Group details** — set **name** and optional **description**. **[PRIVACY]** Both are
+   encrypted; the server stores only ciphertext. The step states what a group message
+   costs: one encrypted copy for each device of each member, about 150 copies for 50
+   people with three devices each (§9, Copies).
 3. **Create** — the creator becomes **owner**; opens the Group chat (§9).
 - **States.** validating name, creating, error/offline.
 
@@ -680,6 +689,7 @@ Reached from Contacts (§7). Multi-step:
      member cuts off their access to future messages.
    - **Add members** (visible per the group's invite policy) → member picker (like §12.1
      step 1).
+   - The same statement of what a group message costs as §12.1 step 2.
 5. **Leave group** (all members) → confirm.
 
 ### 12.3 Edit Group screen (owner/admin)
@@ -934,14 +944,14 @@ transfer locally held history.
   2. After unsigned registration returns full-scope tokens, restore cross-signing
      identity using the recovery secret and finish the device cross-signature through
      the prekey endpoint.
-  3. Establish fresh hybrid sessions; peers remove/re-add the device to groups for fresh
-     Welcomes where required.
+  3. Establish fresh hybrid sessions. A group reaches the new device when one of its
+     members sends it the group's current control state; nobody removes and re-adds it.
   4. Ask an existing online device to send its locally held history through ordinary
      encrypted envelopes. Show the source device and whether its history is partial.
 - **States.** *registering device*, *awaiting secret*, *restoring identity*, *wrong
   secret*, *finishing secure setup*, *identity recovered*, *waiting for existing
-  device*, *transferring history*, *no history source online*, *group re-invitation
-  required*, *queue gap recovery*, and *done*. **[PRIVACY]** The server supplies no
+  device*, *transferring history*, *no history source online*, *groups arrive from their
+  members*, *queue gap recovery*, and *done*. **[PRIVACY]** The server supplies no
   ciphertext history and the recovery secret cannot reconstruct it.
 
 ---

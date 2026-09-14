@@ -99,8 +99,8 @@ boundary; the size-notification anchor path is shared by every row builder.
 - **Register:** username/password confirmation, server-authoritative errors, transition to
   Pending Activation.
 - **Pending Activation:** Check Again and Back to Login; no fake activation polling.
-- **Encryption Setup:** account cross-signing plus X25519/ML-KEM device generation and,
-  only after its production gates pass, MLS material; new-account recovery-secret
+- **Encryption Setup:** account cross-signing plus X25519/ML-KEM device generation (no
+  group material exists to generate); new-account recovery-secret
   display or existing-account identity restore; explicit resumable two-phase
   enrollment/finishing-secure-setup state; mandatory Security Notice.
 - **Security Notice:** exact protected/unprotected boundaries and mandatory acknowledgement
@@ -165,7 +165,8 @@ boundary; the size-notification anchor path is shared by every row builder.
 - **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
 - **Add Device/Restore:** two-phase registration, recovery-secret identity restore,
   wrong secret, finishing secure setup, waiting for an existing online history source,
-  partial transfer, queue-gap/group re-invitation, done, and unrecoverable wording.
+  partial transfer, queue-gap recovery, groups arriving from their members, done, and
+  unrecoverable wording.
 
 ### Shared modal surfaces
 
