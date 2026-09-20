@@ -435,6 +435,17 @@ classical and one ML-KEM one-time prekey of that device, so a first call into a 
 ten costs nine of each; the ordinary replenishment on
 `GET /me/devices/{device_id}/prekeys/count` covers it and nothing special is needed.
 
+**When a peer's safety number changes.** An expected prekey rotation does not reset
+account-master verification and costs a call nothing
+([`pairwise-transport-v1.md`](pairwise-transport-v1.md), Simultaneous initiation and
+overlap). Any other cross-signature change is a blocking safety-number change, and in a
+call it is blocking per peer: the connection to that device is closed, nothing further is
+sealed to it, and the tile says so with a route to verify. Everybody else keeps talking.
+Closing is a decision rather than a consequence — the DTLS session was authenticated by a
+fingerprint the pairwise session vouched for *at the time the offer was sealed*, so a key
+change afterwards does not break the media on its own. It is closed because the peer's
+identity is now in doubt and a call is the wrong place to carry that doubt silently.
+
 **How an inbound blob finds its session.** Identically to a durable envelope, and this is
 why the `signal` frame's missing sender field is not a problem to solve. A regular header
 names the `session_id`; an initial header names the prekey ids that locate the private

@@ -3,14 +3,22 @@
 **Status: derived export. Not authoritative.**
 Reconciled from [`ui-specification.md`](../ui-specification.md) §0.2, §10, §13 and §17,
 [`responsive-ui.md`](../responsive-ui.md), [`voice-and-realtime.md`](../voice-and-realtime.md),
+[`voice-signalling-v1.md`](../voice-signalling-v1.md),
 [`platform-android.md`](../platform-android.md),
-[`backend/voicerooms/API.md`](../../../backend/voicerooms/API.md), and
+[`backend/CLIENT_CONTRACT.md`](../../../backend/CLIENT_CONTRACT.md) §N, and
 [`backend/realtime/API.md`](../../../backend/realtime/API.md). Where they disagree, those
 files win. Read alongside [`DESIGN.md`](DESIGN.md).
 
-**Implementation is gated.** `/voice-rooms` currently renders `StructuralPlaceholderPage`,
-and piece 20 is blocked on ADR-058's seven prerequisites — most unmet as of 2026-08-25.
-Designing these screens is not gated by that. Building them is. This is not a schedule.
+**Implementation is not gated.** `/voice-rooms` currently renders
+`StructuralPlaceholderPage`, and phase 6 replaces it. [ADR-058](../decisions.md)'s seven
+prerequisites named an MLS exporter, a per-ABI permit and a LiveKit deployment, none of
+which exists to be met; [ADR-077](../decisions.md) supersedes them with the design this
+document draws. What is left between here and a call is work rather than a gate.
+
+**The design canvas** at `Desktop\voice-rooms-design\artboards\` draws every state below
+as a `.dc.html` file with each value inline. It binds nothing: where an artboard and this
+document disagree, this document wins, and where this document and §N or server ADR-0021
+disagree, those win.
 
 ---
 
@@ -18,35 +26,54 @@ Designing these screens is not gated by that. Building them is. This is not a sc
 
 From the protocol, not from taste. A design that violates one of these cannot be built.
 
-- **All peers are equal.** No owner, no admin, no roles, no kick, no moderation. The
-  backend has no member table and no owner column. A room is a capability id plus an
-  encrypted name.
-- **Anyone holding the capability can read, rename, and join.** Membership is client-side
-  MLS state and the backend cannot enforce it. A hostile capability holder *can* rename
-  the room server-side; clients authenticate metadata updates and **surface a conflict**
-  rather than trusting server ciphertext.
-- **Leaving does not delete the room.** It removes local membership, keys, capability and
-  live access. The backend row persists, the capability cannot be revoked, and returning
-  needs a fresh authenticated invite. The confirmation must say all of this and must not
-  imply deletion.
-- **Room names are encrypted and padded into two buckets** (256 or 1024 bytes). Off-bucket
-  is rejected, so the name field needs a length limit.
-- **`live_count` is a coarse, laggy hint counted per *device*.** One person on two devices
-  reads as 2. The LiveKit connection is authoritative for tiles; `live_count` is for the
-  list row and info header only.
-- **Renames are discovered by polling, and `updated_date` is day-coarse.** A rename is not
-  a realtime event. Do not design a live "renamed just now" affordance.
-- **No data channel.** The grant is audio-only — microphone publish and subscribe, no
-  video, no unencrypted data channel. Reactions, raised hands and typing indicators cannot
-  ride LiveKit; anything like that is client protocol over the messaging queue. Treat as
-  out of scope unless specified.
-- **Ephemeral text is genuinely best-effort.** In memory only, dropped when the room
-  empties or membership becomes invalid, and another participant can retain what they
-  decrypted. Copy says best-effort, never "disappears forever".
-- **Voice is never offered where groups are withheld.** Same per-ABI permit as group MLS
-  (ADR-056), so "unavailable on this device" is a real reachable screen.
-- **Presence is device-granular.** `room_presence` reports a *device* joining or leaving,
-  and leave fires on disconnect as well as explicit leave.
+- **The server holds no room.** No room row, no name, no roster, no capability, no join
+  token, no live count and no participant list. The whole voice surface it serves is
+  `POST /api/v1/me/relay` and the relaying of `signal` frames. A room is client state
+  carried by signed control events, exactly as a group is (server ADR-0021 point 7).
+- **All peers are equal.** No owner, no admin, no roles. Every active member may add a
+  member, remove a member and rename the room. The cost is real and is stated rather than
+  designed away: any member can eject any other, and the remedy is a new room.
+- **Creating, renaming and inviting are not server calls.** Each is a signed control
+  event fanned out as ordinary envelopes. There is no `POST`, no `201`, no `PUT` and no
+  `400 bad_bucket` to design a state for, and no server-set name limit — a room name is
+  at most 100 Unicode scalar values, the same bound a group name has. The one throttle in
+  reach is `429` on the envelope fan-out, `envelopes` scope, 600/min per account.
+- **Leaving does not reach the server.** It is a signed `remove member` event naming
+  yourself. The other members keep the room, nothing is deleted anywhere, and returning
+  needs a fresh invite. The confirmation must say that and must not imply deletion.
+- **A conflict is a fork, not a server disagreement.** Two members who rename at the same
+  revision produce two valid signed events, and the room is quarantined: the client never
+  picks a branch. There is no server copy of the name to disagree with.
+- **A room's name is decryptable or the room is not held.** The name lives inside the
+  control events this device verified, so there is no state where a held room has an
+  unreadable name. A room this device has no state for is *waiting for its state*, which
+  is a different row with different copy.
+- **Audio is end to end, and there is no media server.** Each connection is keyed by
+  DTLS-SRTP between its two endpoints, and every path crosses the self-hosted coturn
+  relay, which forwards packets it cannot open. There is no SFU and no application-level
+  media key, so there is no key rotation, no encryption-negotiation step and no
+  "publishing paused while keys rotate".
+- **Trouble is per person.** Each tile is its own encrypted connection, so one peer can be
+  unreachable or blocked by a changed safety number while everybody else keeps talking.
+  Nothing pauses when one connection fails and nothing pauses when somebody leaves.
+- **A call holds ten joined devices**, refused by the client and by nothing on the server
+  (§N rule 10). A person on two devices occupies two of the ten.
+- **No video and no data channel.** One audio track for each connection (§N rule 1).
+  Reactions, raised hands and typing indicators cannot ride the media path; anything like
+  that is client protocol. Treat as out of scope unless specified.
+- **Ephemeral text is genuinely best-effort.** A `signal` frame to one device at a time,
+  in memory only, dropped when the call empties or membership becomes invalid, and another
+  participant can retain what they decrypted. Copy says best-effort, never "disappears
+  forever".
+- **Presence is what a connection says.** There is no presence frame, no subscription and
+  no `live_count` (server ADR-0022). A participant is present because a connection to them
+  is open. A room nobody has told this device about reads as *Empty*, which is honest.
+- **Voice is withheld by the server, not by the device.** `voice_configured` from
+  `GET /api/v1/config` is the one gate, and it is per deployment. The per-ABI permit that
+  would have withheld voice per device was deleted with the MLS core
+  ([ADR-075](../decisions.md)).
+- **There is no web client** (server ADR-0020). Android only. Keyboard-only operation is
+  not a gate here; the external-keyboard and screen-reader paths on Android are.
 
 ---
 
@@ -60,8 +87,9 @@ Row: locally decrypted name + state line. The shell owns the tab bar and FAB.
 | Populated | Rooms known locally | Rows: name + **Live now · N** or **Empty** |
 | Empty | No rooms | `AppStatePanel.empty` — one title, one sentence, one action |
 | Offline | Server unreachable | Cached list, shell connection strip above, rows still tappable |
-| Name undecryptable | Metadata key missing or conflicting | Neutral placeholder + conflict marker, never raw ciphertext |
-| Unavailable on this device | Voice withheld by the per-ABI permit | Destination visible, content explains, actions disabled |
+| Room waiting for its state | A queue gap may have carried a control event, or an event arrived building on state this device does not hold | Row state line **Asking a member for its state**. The room is visible and tappable; joining waits |
+| Room quarantined | Two valid events at one revision — a fork | Row state line names the conflict and routes to info; joining, inviting and renaming are paused |
+| No voice on this server | `voice_configured` is false | Destination visible, content explains, the compose button is hidden as well |
 | Not built yet | Current shipping reality | `SurfaceMaturity` badge, exact wording **"Not built yet"** |
 
 Ordering, unread affordances and swipe actions are **not** specified upstream. Propose
@@ -69,39 +97,41 @@ them and mark the proposal as new.
 
 ## 3. Create voice room — `/voice-rooms/new`
 
-Three steps: **room details** → **invite members** → **create**.
+Three steps: **room details** → **invite members** → **create**. Nothing here calls the
+server: the create event is signed locally and fanned out as envelopes.
 
 | State | Trigger | On screen |
 |---|---|---|
 | Step 1 idle | — | Name field; standalone room, never tied to a DM or group |
-| Name too long | Exceeds the 1024-byte bucket | Inline field error, Create disabled |
+| Name too long | Over 100 Unicode scalar values | Inline field error, Create disabled |
 | Step 2 picker | — | Searchable contact multi-select, all invitees equal peers |
 | No verified contacts | Nothing selectable | Empty state routing to verification — verification precedes messaging |
-| Creating | POST in flight | Progress on the primary action, step not dismissible |
-| Rate limited | `429`, accounts scope 120/min | Honest retry message, action disabled while cooling down |
-| Invalid payload | `400 bad_bucket` | Field-level error, not a toast |
-| Created | `201` | Opens the room or its info card |
+| Creating | Event signed, envelopes in flight | Progress on the primary action, step not dismissible |
+| Rate limited | `429` on the fan-out, `envelopes` scope 600/min | Honest retry message, action disabled while cooling down |
+| Created | Every member's copies accepted | Opens the room or its info card |
+| Partly delivered | Some members' devices are gone or full | The room exists and is usable; the info card says who has not been reached yet |
 
 ## 4. Voice room info
 
 | State | Trigger | On screen |
 |---|---|---|
-| Empty | `live_count == 0` | State line **Empty**, primary action **Rejoin** |
-| Live | `live_count > 0` | **Live now · N**, primary action **Join** |
-| Unknown room | `404 not_found` | Gone from the backend — explain, offer local cleanup |
-| Rename in flight | `PUT` sent | Progress on the field, same bucket limit as create |
-| Rename rejected | `400 bad_bucket` / `429` | Field error or cooldown |
-| Rename conflict | Authenticated metadata disagrees with server ciphertext | Surface the conflict; do not silently prefer either side |
+| Empty | No call this device knows of | State line **Empty**, primary action **Start a call** |
+| Live | A call this device has been told about | **Live now · N**, primary action **Join** |
+| Waiting for its state | Queue gap, or an event on state this device does not hold | Explains that changes may have been lost, that a member has been asked, and that joining resumes when the answer arrives |
+| Conflicting changes | Two valid events at one revision | Names both changes and both signers; states that the app will not choose; joining, inviting and renaming are paused |
+| Rename in flight | Event signed, envelopes in flight | Progress on the field, same 100-scalar limit as create |
+| Rename rate limited | `429` on the fan-out | Field-level cooldown, not a toast |
+| Removed from this room | A member signed an event removing you | Room is read-only history; explains who signed it and that returning needs a fresh invite |
 | Offline | Server unreachable | Cached state, Join disabled **with a stated reason** |
 | Leave confirmation | User taps leave | See below |
 
 Member rows are avatar + name with **no role tags**. Invite is available to every peer —
 there is no permission gate to design.
 
-**Leave dialog** (a §17 confirm dialog) must state: removes local membership, keys,
-capability and live access; does **not** delete the backend room or revoke copies of the
-capability held by others; returning requires a fresh authenticated invite. Honest wording
-is a release rule, not a preference.
+**Leave dialog** (a §17 confirm dialog) must state: it is a signed event the other members
+apply; it removes this account from the room and ends its access to calls; it does **not**
+delete the room, which the remaining members keep; and returning requires a fresh invite.
+Honest wording is a release rule, not a preference.
 
 ## 5. Live voice room
 
@@ -118,76 +148,91 @@ are terminal states, not retry loops.
 |---|---|---|
 | Requesting microphone | Explicit join only — never on screen open | Pre-join state |
 | Microphone denied | Refused | Blocking explanation + route to settings; no partial join |
-| Requesting notifications | `POST_NOTIFICATIONS` for active-voice disclosure | Off by default on a fresh install, so this is the common path, not the edge |
+| Requesting notifications | `POST_NOTIFICATIONS` for the active-call disclosure | Off by default on a fresh install, so this is the common path, not the edge |
 | Notifications denied | Refused | A **stated outcome**, not a retry loop; the foreground-service disclosure is degraded and the screen says so |
 
 ### 5.2 Session lifecycle
 
 | State | Trigger | On screen |
 |---|---|---|
-| Minting token | `POST /rooms/{id}/token` | Connecting indicator |
-| Negotiating encryption | Deriving media keys from room MLS state | Distinct from connecting — publishing has **not** started |
-| Connecting | LiveKit connect before token expiry | Connecting indicators on tiles |
-| Connected | Normal | Tiles live, controls enabled |
-| Alone in room | Only participant | Single-tile state inviting others |
-| Reconnecting | Network change or drop | Audio drops, reconnecting indicator, **speaking indicators must stop**, text panel shows volatile state, token re-minted |
-| Key rotation | A participant left or was removed | Audio pauses until rotation completes |
-| Encryption failure | Media key unavailable or rejected | **Publishing is muted and a blocking encryption error shows.** Never degrade to unencrypted |
-| Room emptied | Last peer left | Ephemeral text dropped; room stays rejoinable |
-| Left | User taps leave | Returns to previous screen, banner disappears |
+| Minting a relay credential | `POST /api/v1/me/relay` | Connecting indicator |
+| Announcing | `join` fanned out to each member device | Connecting indicator; no tile has answered yet |
+| Connecting | Offers exchanged, DTLS handshaking | Connecting indicators on tiles, one per peer |
+| Connected | At least one connection open | Tiles live, controls enabled |
+| Alone in the call | Nobody else joined | Single-tile state inviting others |
+| Reconnecting | Network change or drop | Audio drops, reconnecting indicator, **speaking indicators must stop**, text panel shows its volatile state |
+| Participant not reachable | Four attempts over about 20 s and no answer (§N rule 7) | **That tile only** says not reachable, with *Try again*. Everybody else's audio carries on |
+| Participant's safety number changed | The peer's cross-signature changed in a way that is not an expected rotation | **That tile only** is stopped, with a route to verify. Everybody else's audio carries on. Audio to that peer does not resume until the user checks the new number |
+| Everyone has left | The last connection closed | Ephemeral text dropped; the room stays and any member can start a call again |
+| Left | User taps leave | Returns to the previous screen, banner disappears |
 
-### 5.3 REST failure states
+There is no *negotiating encryption* state and no *key rotation* state. DTLS-SRTP keys each
+connection during its own handshake, and a connection's keys die with it, so there is
+nothing to rotate when somebody leaves and nothing to pause for.
 
-| State | Response | On screen |
-|---|---|---|
-| Device not bound | `403 device_scope_required` | Explain the binding requirement; do not offer a retry that cannot succeed |
-| Voice not configured | `503 voice_unconfigured` | Server has no LiveKit — honest, non-retryable, **no foreign fallback** |
-| Token rate limited | `429`, roomtoken scope 60/min | Cooldown on join |
-| Room gone | `404 not_found` | Cannot join; offer local cleanup |
-| Token expired mid-join | 300s lifetime elapsed | Silent re-mint; surface only if the re-mint fails |
-| Offline | Server unreachable | Honest error, no foreign fallback attempted |
-
-### 5.4 Realtime socket states
-
-The room's presence and ephemeral text ride the app's WebSocket, which fails
-independently of LiveKit. **The room can be audio-connected while the socket is down** —
-audio continues, ephemeral text and presence do not. That split needs a visible design.
+### 5.3 Getting-in failure states
 
 | State | Trigger | On screen |
 |---|---|---|
-| Socket degraded | Socket down, LiveKit up | Audio unaffected; text panel and presence marked stale, not silently frozen |
-| Auth expired | Close **4001** | Client refreshes the token and reconnects; transient, usually invisible |
+| Voice not set up on this server | `voice_configured` false, or `503 voice_unconfigured` | No relay is configured — honest, **non-retryable**, and **no foreign fallback**. The call action is not offered in the first place when the config already said so |
+| Relay not answering | A credential minted, but no connection reached `connected` within 15 s and every candidate pair failed | The server answered and its relay did not. **Retryable**, and the copy says nothing else will carry the call |
+| Call full | This device's participant set already holds ten joined devices, or it was the eleventh by device-id sort and nobody offered | States the ceiling and why it exists — every phone sends its audio to every other phone. Retryable when somebody leaves |
+| Rate limited | `429` on `POST /api/v1/me/relay`, `relay` scope 60/min | Cooldown on join for exactly the `Retry-After` seconds |
+| Room waiting for its state | A queue gap may have carried a removal | Join is held, not failed; it resumes when a member answers |
+| Room quarantined | A fork | Join is paused with the conflict named |
+| Offline | Server unreachable | Honest error, no foreign fallback attempted |
+
+A credential minted against a relay that is down is a `200`, because the route reads a
+setting and never reaches coturn. *Relay not answering* is how that surfaces, and telling
+it apart from nine unreachable people is the reason it is its own state.
+
+### 5.4 Realtime socket states
+
+The call's signalling and its ephemeral text ride the app's WebSocket, which fails
+independently of the media. **A call can be audio-connected while the socket is down** —
+audio continues, ephemeral text and joins and leaves do not. That split needs a visible
+design, and it is deliberately quiet: the warning belongs where it can mislead someone,
+not over a call that is working.
+
+| State | Trigger | On screen |
+|---|---|---|
+| Socket degraded | Socket down, connections up | Audio unaffected and calm; the text panel says loudly that it has stopped updating, and the participant count reads *last known* |
 | Device revoked | Close **4003** | **Hard blocking state.** The token is dead, the session ends, and recovery requires a fresh login on another device. Can land mid-call |
+| Server restarting | Close **1012** | Reconnect after a backoff; a deploy, not a fault. Behaves as *socket degraded* while it lasts |
 | Protocol violation | Close **4008** | Should not be user-reachable; if it is, it is a defect, not a state to style |
-| Subscription cap | 100 rooms per socket, subscribe silently dropped | Only reachable with very many rooms; presence silently absent |
-| Room subscribe ignored | Nonexistent room — silently ignored | There is **no error frame**; absence of presence is the only signal |
+
+A refused handshake carries **no close code**: authentication is decided before the accept
+and arrives as `403 Forbidden` on the upgrade (§O). It reads as "renew the token and
+reconnect" and is invisible unless the renewal fails.
 
 ### 5.5 Participant tiles
 
-Speaking · muted · connecting · reconnecting · unverified peer.
+Speaking · muted · connecting · reconnecting · not reachable · safety number changed ·
+unverified peer.
 
-Speaking and mic state come from local and LiveKit media state, never from the server.
+Speaking and mic state come from local media state, never from the server.
 **Each needs a non-color signal** — shape, icon or text — this is an explicit
-accessibility gate, and speaking/mute are named in it. Tapping a tile opens the
+accessibility gate, and speaking and mute are named in it. Tapping a tile opens the
 participant sheet (§17) with the name and, if unverified, a link to verify the safety
 number. On wide layouts that sheet becomes a dialog or panel.
 
+*Not reachable* and *safety number changed* are per tile and never global. Both must read
+as "audio with this one person has stopped" and never as "the call is broken".
+
 ### 5.6 Ephemeral text panel
 
-**For the voice phase.** `room_signal` is not a frame (server ADR-0021). Room text is
-relayed `signal` by `signal`, addressed to one device at a time, so there is no subscriber
-fan-out and no echo of the sender's own message to account for; the panel renders what this
-client sent because it sent it. The states below survive that change and the triggers are
-restated when the phase specifies the relay.
+Room text is a `CPVSV001` frame addressed to one device at a time, so there is no
+subscriber fan-out and no echo of the sender's own message to account for: the panel
+renders what this client sent because it sent it.
 
 | State | Trigger | On screen |
 |---|---|---|
 | Idle | — | Persistent, plain indication that it is ephemeral and best-effort |
-| Empty | No messages | One line explaining messages vanish when the room empties |
-| Sending | Blob relayed | Simple send state; no pin, star, reply, edit, receipts |
-| Too large | **For the voice phase.** `SIGNAL_MAX` is gone: a `signal` blob is now base64 of exactly 1024, 4096 or 16384 bytes, and anything off a bucket is **silently dropped** (server ADR-0022). The phase sets the composer rule against the bucket the plaintext is padded to, not against a ceiling | Composer limit must prevent this; there is no server error to surface |
+| Empty | No messages | One line explaining messages vanish when the call empties |
+| Sending | Frames sealed and relayed | Simple send state; no pin, star, reply, edit, receipts |
+| Too long | Over 2,000 scalar values or 8,000 encoded bytes | The composer's limit prevents it. A blob off a bucket is **dropped in silence** by the server (ADR-0022), so there is no error to surface and the limit is the whole of the defence |
 | Stale | Socket degraded | Marked stale rather than appearing merely quiet |
-| Dropped | Membership invalid or room emptied | Panel clears with an explanation |
+| Dropped | Membership invalid or the call emptied | Panel clears with an explanation |
 
 ### 5.7 Output selection
 
@@ -199,8 +244,8 @@ propose and mark as new.
 
 Collapses to the shell's persistent banner: room name, live mic-state icon, return
 target. Above the bottom tab bar on narrow, atop the rail on wide, on **every** screen
-until leave. Android additionally runs a microphone/communication foreground service
-**with visible controls** in its notification for the duration of the joined room.
+until leave. Android additionally runs a microphone-type foreground service **with visible
+controls** in its notification for the duration of the call.
 
 Minimizing keeps audio **only when the platform can truthfully maintain it**. The
 notification is its own privacy surface: when privacy mode is on, sensitive text and
@@ -208,9 +253,12 @@ images must not appear in it or in the blurred app-switcher preview.
 
 ## 6. Invite picker
 
-Searchable contact multi-select + Invite confirm. States: loading, empty, no verified
-contacts, sending, **per-contact encrypted invite status**, rate limited, sent. On wide
-layouts this is a dialog or panel rather than a sheet.
+Searchable contact multi-select + Invite confirm. Inviting signs an `add members` event
+and fans the whole transcript out to the new member. States: loading, empty, no verified
+contacts, sending, **per-contact delivery status**, rate limited, sent, and a member whose
+devices could not be reached — the room is 50 members at most, and a transcript that would
+not fit one payload means the member is not added. On wide layouts this is a dialog or
+panel rather than a sheet.
 
 ---
 
@@ -222,7 +270,7 @@ layouts this is a dialog or panel rather than a sheet.
   optional details panel at **340–400px**.
 - Modals are **sheets on narrow, dialogs or panels on wide** — every sheet above needs
   both forms.
-- Resizing preserves state. Crossing a breakpoint must not drop the user out of the room,
+- Resizing preserves state. Crossing a breakpoint must not drop the user out of the call,
   lose the text draft, or close an active modal intent.
 - Deliver narrow and wide. Medium may follow from wide.
 
@@ -230,13 +278,16 @@ layouts this is a dialog or panel rather than a sheet.
 
 - **Live regions need a deliberate policy.** Participant join/leave and speaking changes
   are the obvious candidates and the obvious hazard: announcing every speaker change makes
-  the screen unusable with a screen reader. Decide what is announced, and say so.
+  the screen unusable with a screen reader. Decide what is announced, and say so. A
+  participant becoming *not reachable* or *safety number changed* is the one change that
+  clearly must be announced.
 - **Focus restoration** across minimize → return, and on every sheet open and close.
 - **Text at maximum scale must not hide primary or destructive actions** — Leave and Mute
   must survive it. Layout reflows before text truncates.
-- **Keyboard-only** operation on web, including context menus and dialogs.
-- **Color is never the only carrier** of verification, failure, mute, speaking or receipt
-  state.
+- **External keyboard and switch access** on Android, including context menus and dialogs.
+  There is no web client to cover (server ADR-0020).
+- **Color is never the only carrier** of verification, failure, mute, speaking or
+  reachability state.
 - Persian RTL and English LTR both covered for the shell and mixed text direction.
 - The global error and toast host announces accessibly and carries **no sensitive detail**.
 
@@ -259,10 +310,12 @@ Genuine latitude — propose, and flag as new rather than presenting as spec:
 
 - List ordering, unread affordances, swipe actions (§2)
 - Participant tile grid — shape, size, count before scrolling or paging, and behaviour at
-  large participant counts, which no upstream document bounds
+  ten participants, which no upstream document lays out
 - Output-route control design (§5.7)
 - Whether tapping a list row opens info or joins directly — §13.0 explicitly leaves this
   open and asks only for consistency
 - How the socket-degraded split (§5.4) is expressed without alarming a user whose audio is
   fine
 - Live-region announcement policy (§7)
+- How a room that is *waiting for its state* or *quarantined* reads in a list row beside
+  rooms that are fine
