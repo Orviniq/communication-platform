@@ -342,7 +342,7 @@ one-time ciphertext, or 2,518 with a repair replacement as well.
 **An SDP offer fits, and the measurement is on the record.** An audio-only offer from
 libwebrtc, with `iceTransportPolicy: 'relay'`, `bundlePolicy: 'max-bundle'`,
 `rtcpMuxPolicy: 'require'`, one `sendrecv` audio transceiver, no video and no data
-channel — which is exactly what §N rules 1 and 2 require — is **1,363 bytes** over 47
+channel — which is exactly what §N rules 1 and 2 require — is **1,363 bytes** over 46
 lines. Measured on 2026-09-20 against Chromium 152.0.7977.76; `flutter_webrtc` 1.6.1
 carries `io.github.webrtc-sdk:android:150.7871.01`, a near neighbour of the same stack,
 and an answer is that size or smaller because it narrows the codec list rather than
@@ -352,7 +352,7 @@ widening it. With the 126 bytes this framing costs and the 20 for `target_join_i
 Three rules follow, and they are the reason the arithmetic is written down:
 
 1. **An offer or an answer is sealed into bucket 4096**, which leaves 2,498 bytes of
-   margin — 165 % of the measured SDP — for a future codec list, another header extension
+   margin — 183 % of the measured SDP — for a future codec list, another header extension
    or a longer fingerprint. Bucket 1024 holds 942 bytes and cannot carry an SDP at all.
 2. **An SDP is never the first message to a peer.** An initial ratchet header in bucket
    4096 leaves 1,554 bytes, which clears 1,516 by 38 — a margin thin enough that one added
