@@ -532,6 +532,17 @@ attempts.
 §N rule 8: removal is immediate, and the server takes no part — it will keep relaying the
 removed member's frames, so the refusal has to be the client's.
 
+**How completely the server takes no part, verified on 2026-09-20.**
+`realtime/gateway.py` `_handle_signal` performs no authorization: it checks that
+`to_device` parses as a UUID and that the blob is a bucket length, then publishes to that
+device's topic. It never asks whether the two devices share a room, are contacts, or have
+ever spoken, so **any authenticated device can signal any device id it knows**. Nor is
+there anywhere for a room to live — the backend has ten models and none is a room, a
+membership or a participant, and `core/tests/test_seizure_guard.py` forbids a column
+named `members`, `membership`, `roster` or `group_members`. So the two steps below are
+not belt-and-braces over a server check. They are the entire enforcement, and the reason
+they work is that either end of a connection can close it.
+
 On applying a signed `remove member` control event, in this order:
 
 1. Close every `RTCPeerConnection` to every device of the removed account, at once, before

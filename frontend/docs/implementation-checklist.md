@@ -95,8 +95,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 ## Voice rooms and realtime
 
 **Designed, not implemented.** Phase 6 prompt 1 wrote the design and
-[ADR-077](decisions.md) records it; nothing under `lib/` implements a byte of it, and
-`RealtimeGateway.send` still has no caller.
+[ADR-077](decisions.md) records it, Accepted on 2026-09-20; nothing under `lib/`
+implements a byte of it, and `RealtimeGateway.send` still has no caller.
 
 [ADR-058](decisions.md)'s P1 to P7 are **superseded and no longer gate anything**. They
 named a granted MLS exporter, that exporter reachable through the native boundary, the

@@ -87,16 +87,17 @@ is not silently edited out of history.
 | ADR-074 | Accepted | Supersedes the "not done here" of ADR-073: the second tick is reserved for *seen* and `MarkConversationVisiblyRead` is wired to the visibility trigger, so reading is the only thing that draws two ticks and the only thing that reports one (2026-09-10) | ADR-073 fixed which device state counts as read and left the sender's copy alone, and on a device that was the whole of what the user could see. Two faults met there. `AppIcons.delivered` drew `checkCheck` — **two ticks for delivered**, which a recipient's own device sends by itself the moment the inbox transaction commits, with nobody having looked at anything; and `MarkConversationVisiblyRead` was still unwired, so `receiptRead` was never sent by any client and the accent-coloured `read` state was **unreachable**. The result is that the only two-tick state the application could reach meant "stored on their phone", and a sender was told their message had been seen while the other person was on the chat list. A reader who has used any other messenger arrives knowing two ticks means somebody read what they sent and will not re-learn it here, so the glyph moves rather than the meaning: `delivered` becomes `check`, a new `read` token takes `checkCheck`, and the two arrival states are told apart by colour and by the label each already carried — `chatStateAccepted`, `chatStateDelivered` and `chatStateRead` were already written and already translated. Reading is then made reachable on ADR-073's trigger and no other: `_markRead` becomes `MarkConversationVisiblyRead`, so the receipt names exactly the message ids the local mark cleared and the two readings of "the user saw this" cannot disagree. `allowReadReceipts` is `!savedMessages`; `sendReceipt` already refuses anything that is not a direct conversation. Receipts are bounded by the mark, not by a timer: the second visibility change finds nothing left to clear and therefore sends nothing, which is what makes a trigger that fires on every foreground return and every arrival affordable. The receipt is a durable local commit before it is a network call (ADR-061), so one made with no connection is delivered by the ordinary cycle rather than lost. **No backend change, and none needed**: `openapi.json` has no occurrence of the word receipt, the server relays padded opaque blobs through the same three envelope routes, and a `receiptRead` is byte-indistinguishable from the `receiptDelivered` that already flows. **Not done here**: no privacy setting behind `allowReadReceipts`, which is passed `true` for every direct conversation — the parameter's existence says a setting was intended, and the disclosure makes no statement either way; no per-message reading, the receipt covers the conversation the way the mark does; and groups still set no unread state. |
 | ADR-075 | Accepted | Client-side record of server ADR-0001: a group is a set of pairwise sessions, so piece 19 is cancelled rather than blocked, the group screens open on every build, and each group message states what it costs — one encrypted copy for each device of each member — and is shown as sent only when its fan-out has ended; closes ADR-026, ADR-036, ADR-037, ADR-039, ADR-040, ADR-041, ADR-044, ADR-055 and ADR-056 (2026-09-13) | The server deleted every MLS route: `PUT /api/v1/me/devices/{device_id}/keypackages`, `GET /api/v1/me/devices/{device_id}/keypackages/count` and `POST /api/v1/users/{user_id}/keypackages/claim` answer `404`, `backend/openapi.json` holds 28 paths of which none accepts, stores or serves a key package, a Welcome, a commit or any other MLS artefact, and `KEYPACKAGE_BUCKETS` is gone. The five external prerequisites piece 19 waited on therefore gate nothing — meeting all of them would leave no server to talk to — so the item is cancelled, not blocked, and the nine decisions that shaped the closed-beta MLS track close with it. The pairwise design pays for groups in ciphertext rather than server state, and the screens say so rather than let a slow send in a large group look broken |
 | ADR-076 | Accepted (2026-09-14) | The `production` flavor, `com.orviniq.chat`, gains one persistent signing identity so that the owner can install real builds and test groups on real phones: an RSA-4096 v2+v3 key whose public fingerprint is committed beside the application ID and which reaches Gradle only from outside the repository; a release build without it fails closed unless it asks to be unsigned; one script provisions, signs, verifies and records each artifact; a signed build carries the deployment disclosure and no Experimental designation; and an artifact reaches a device only through `adb install`. It is not a public release and opens no gate. It amends the clause ADR-042 made and ADR-067 carried that production packages unsigned, the production half of ADR-045's D6, and the reason its D1 gives for production carrying no designation (2026-09-14) | Production packages unsigned by design, so no phone can install it, and groups have never run on a phone against the live server (ADR-075). The identity, the build mechanism and the verifier are the beta pipeline ADR-042 reviewed, readable at `8267429`, under production's names and without its in-repository properties fallback, because the rule behind them has not moved: Android updates an install only when the application ID and the signing certificate both match, and this client cannot survive the uninstall a mismatch forces (ADR-067 D2). What moves is custody. `deployment-and-release.md` step 4, `release-signing.md` and ADR-044 keep production's key offline; the owner's answer keeps it, for now, on a networked workstation that already holds the private CA's key; and with `minSdk` 24 the first key signs every later update, so the custody chosen for this test is the custody a public release under the same identity inherits. The owner decided that on 2026-09-14, together with the other three questions: the application ID is final, production carries the disclosure and not the Experimental designation, and an agent session may run the signed build through the release script. ADR-045 withheld the disclosure and the Experimental designation from production only because it could not be installed. The pinned `flutter_tools` uninstalls an installed app before `flutter install` installs and whenever `flutter run` is refused over it, and `flutter drive` uninstalls when it finishes, so none of the three is pointed at a device that holds the signed app. Found on the way and left open for a decision of its own: ADR-043 and the code enforce no SPKI pin on the app's own traffic, while ADR-067 D4, server ADR-0027 and `backend/SECURITY.md` state or rely on the opposite. ADR-017, every production completion gate and ADR-053's gate stay closed. |
-| ADR-077 | Proposed (2026-09-20), pending the owner's answers to D1, D2, D3 and D5 | Client-side record of server ADR-0021 and ADR-0022: voice is a relayed WebRTC mesh with no server room, so a room becomes client state on the group's own signed-control machinery and a call becomes volatile `signal` frames between devices. Two wire formats, split by the channel each needs — `CPVRV001` for the room's control events over durable envelopes, `CPVSV001` for the call's signalling over `signal` frames — and a payload is refused from the other channel. A volatile frame rides the durable pairwise session's own Double Ratchet rather than a second session or a new key schedule, and pays for it in dead skipped keys that the retry bound caps. Supersedes the voice prerequisites P1 to P7 of ADR-058, which name three things that no longer exist, and deletes the `voice_rooms` table (2026-09-20) | Server ADR-0021 decides the architecture and stops at the edge of the client: a room is client state "carried by client-signed control events over ordinary envelopes, exactly as a group is", and ephemeral room text and join and leave announcements are `signal` frames. No source defines the room model or the signalling payload, and `CLIENT_CONTRACT.md` §N says so in as many words — "Everything below is therefore yours to build, and none of it is checked by anything upstream." **The split by channel is the load-bearing decision.** A roster has to survive a device being offline and an offer must not: a durable offer is a call invitation that arrives an hour late, and a volatile roster is a room that forgets who was removed. So membership is durable and signalling is volatile, and each is refused from the other's channel, because without that rule the volatile path is a way to write durable state and the durable queue is a way to replay a call's signalling hours later. **The room reuses the group's machinery down to the byte.** The same hash chain, the same six apply outcomes, the same transcript, state-request and queue-gap rules, under its own two signing domains so that no event of one kind can be replayed as the other. That machinery is built, reviewed and tested; inventing a second one for the same problem would be a defect, not a design. **The volatile seal is the one place this costs something real, and the cost is stated rather than engineered away.** §N rule 6 binds the signalling to the pairwise session of §F, and `pairwise-transport-v1.md` is frozen and under independent review, so there is no second session and no signalling-only key schedule. A frame the server drops is never redelivered, so it leaves a hole the receiver fills with a dead skipped key on the next message that does arrive — and at 2,000 per pair the bound's failure mode is a repair that interrupts the *text* conversation with that device too. The retry bound is therefore the budget: 32 sealed frames per peer per call, 62 wholly undelivered calls before a pair reaches the bound, and a peer already reported unreachable is sealed nothing further until it announces itself again. **What was measured rather than assumed**: an audio-only, relay-only, max-bundle offer from libwebrtc is 1,363 bytes over 46 lines (Chromium 152.0.7977.76, 2026-09-20). With this framing an offer is about 1,516 bytes, which clears bucket 4096's regular-header budget of 4,014 by 2,498 and its worst-case initial-header budget of 1,554 by 38 — so an SDP is never the first message to a peer, and a device with no session sends its small `join` first. A margin of 38 bytes is one `a=extmap` line from a frame that goes off-bucket and is dropped without a word. Adds no dependency, changes no `backend/` file, and opens no production gate: nothing under `lib/` implements a byte of it. **Four questions wait on the owner** and are written out under "Owner questions": D1 whether every member may remove every other, D2 whether the ceiling counts devices or people, D3 whether a group or DM may host a call, and D5 whether the volatile seal may share the durable ratchet. |
+| ADR-077 | Accepted (2026-09-20), on the owner's answers to D1, D2, D3 and D5 | Client-side record of server ADR-0021 and ADR-0022: voice is a relayed WebRTC mesh with no server room, so a room becomes client state on the group's own signed-control machinery and a call becomes volatile `signal` frames between devices. Two wire formats, split by the channel each needs — `CPVRV001` for the room's control events over durable envelopes, `CPVSV001` for the call's signalling over `signal` frames — and a payload is refused from the other channel. A volatile frame rides the durable pairwise session's own Double Ratchet rather than a second session or a new key schedule, and pays for it in dead skipped keys that the retry bound caps. Supersedes the voice prerequisites P1 to P7 of ADR-058, which name three things that no longer exist, and deletes the `voice_rooms` table (2026-09-20) | Server ADR-0021 decides the architecture and stops at the edge of the client: a room is client state "carried by client-signed control events over ordinary envelopes, exactly as a group is", and ephemeral room text and join and leave announcements are `signal` frames. No source defines the room model or the signalling payload, and `CLIENT_CONTRACT.md` §N says so in as many words — "Everything below is therefore yours to build, and none of it is checked by anything upstream." **The split by channel is the load-bearing decision.** A roster has to survive a device being offline and an offer must not: a durable offer is a call invitation that arrives an hour late, and a volatile roster is a room that forgets who was removed. So membership is durable and signalling is volatile, and each is refused from the other's channel, because without that rule the volatile path is a way to write durable state and the durable queue is a way to replay a call's signalling hours later. **The room reuses the group's machinery down to the byte.** The same hash chain, the same six apply outcomes, the same transcript, state-request and queue-gap rules, under its own two signing domains so that no event of one kind can be replayed as the other. That machinery is built, reviewed and tested; inventing a second one for the same problem would be a defect, not a design. **The volatile seal is the one place this costs something real, and the cost is stated rather than engineered away.** §N rule 6 binds the signalling to the pairwise session of §F, and `pairwise-transport-v1.md` is frozen and under independent review, so there is no second session and no signalling-only key schedule. A frame the server drops is never redelivered, so it leaves a hole the receiver fills with a dead skipped key on the next message that does arrive — and at 2,000 per pair the bound's failure mode is a repair that interrupts the *text* conversation with that device too. The retry bound is therefore the budget: 32 sealed frames per peer per call, 62 wholly undelivered calls before a pair reaches the bound, and a peer already reported unreachable is sealed nothing further until it announces itself again. **What was measured rather than assumed**: an audio-only, relay-only, max-bundle offer from libwebrtc is 1,363 bytes over 46 lines (Chromium 152.0.7977.76, 2026-09-20). With this framing an offer is about 1,516 bytes, which clears bucket 4096's regular-header budget of 4,014 by 2,498 and its worst-case initial-header budget of 1,554 by 38 — so an SDP is never the first message to a peer, and a device with no session sends its small `join` first. A margin of 38 bytes is one `a=extmap` line from a frame that goes off-bucket and is dropped without a word. Adds no dependency, changes no `backend/` file, and opens no production gate: nothing under `lib/` implements a byte of it. **Four questions went to the owner** and were answered A on 2026-09-20, as written out under "Owner questions": every member may remove every other, the ceiling counts devices, no group or DM hosts a call, and the volatile seal shares the durable ratchet. |
 
 ## ADR-077 in full — voice is a mesh of pairwise calls, and the room is one more thing the clients agree on (2026-09-20)
 
-**Status:** Proposed, 2026-09-20. Four points wait on the owner, one question each: D1
-(may every member remove every other), D2 (does the ceiling count devices or people), D3
-(may a group or a direct conversation host a call) and D5 (may a volatile frame share the
-durable ratchet). They are written out under "Owner questions" at the end of this section.
-The record is edited in place until they are answered, before any later prompt of the
-phase writes code, and from acceptance on it changes only by a dated record. It is written
+**Status:** Accepted, 2026-09-20, on the owner's answers to its four questions, which are
+written under "Owner questions" at the end of this section. Four points waited on the
+owner, one question each: D1 (may every member remove every other), D2 (does the ceiling
+count devices or people), D3 (may a group or a direct conversation host a call) and D5
+(may a volatile frame share the durable ratchet). **All four were answered A**, the
+recommended option in each case, on 2026-09-20 and before any later prompt of the phase
+wrote code. From acceptance on this record changes only by a dated record. It is written
 by the first of ten phase-6 prompts of 2026-09-20, which live outside this repository and
 are called prompts 1 to 10 below. It **supersedes** the voice prerequisites P1 to P7 of
 ADR-058. It adds no dependency, no cryptographic construction and no server route, and it
@@ -146,7 +147,23 @@ are equal", which `ui-specification.md` §13.2 and the design canvas both alread
 it is the only reading that keeps its own promise: a room whose members can each invite
 anyone is a room whose members can each remove anyone. **The cost is that any member can
 eject any other and there is no authority above them to appeal to.** It is stated in the
-design rather than designed away, and the remedy is a new room. *Owner question.*
+design rather than designed away, and the remedy is a new room. **Answered A.**
+
+**What the backend adds to that cost, checked on 2026-09-20 before acceptance.** The
+server cannot enforce a removal and cannot record one. It has ten models and none is a
+room, a membership or a participant; `core/tests/test_seizure_guard.py` forbids a column
+named `members`, `membership`, `roster` or `group_members`, so one cannot be added
+without failing a gate. More to the point, `realtime/gateway.py` `_handle_signal` runs
+**no authorization at all**: it checks that `to_device` parses as a UUID and that the
+blob is a bucket length, then publishes to that device's topic. It never asks whether the
+two devices share a room, are contacts, or have ever spoken, so any authenticated device
+can signal any device id it knows. **Each remaining member closing its own connection is
+therefore the whole of the enforcement**, which works because either end of a connection
+can close it — and it means a removal has no server-side record, no appeal and nothing to
+restore from. An owner role would be exactly as unenforceable, which is part of why A is
+the right answer rather than merely the simpler one, but under A a single compromised
+member device can sign events ejecting everybody, and the only remedy is the fork
+quarantine and a new room.
 
 **D2. A call holds ten joined devices.** §N rule 10 refuses an eleventh participant and
 the client is the only thing that enforces it. The cost the ceiling bounds is per
@@ -158,14 +175,14 @@ reads *ten people* and stays true. Two devices joining a nine-device call at onc
 find room, so the refusal holds on the receiving side too, by the same device-id string
 sort §N rule 3 already uses for the polite peer: a participant keeps the ten lowest and
 offers nothing to the rest, every participant computes the same set, and the eleventh
-exhausts its retry bound and shows *Call full*. *Owner question.*
+exhausts its retry bound and shows *Call full*. **Answered A.**
 
 **D3. A room is standalone. No group and no direct conversation hosts a call in this
 version.** A group call would make the group's roster double as a room's roster — two
 signed chains claiming authority over one member set, and a question with no good answer
 about which one a removal binds. `ui-specification.md` §13.1 already says rooms are
 standalone. Recommended as a later addition, once a room can be created *from* a group's
-roster as a snapshot rather than a live alias. *Owner question.*
+roster as a snapshot rather than a live alias. **Answered A.**
 
 **D4. Two wire formats, split by the channel each needs, and each refused from the
 other's.** `CPVRV001` carries the room's signed control events in durable envelopes;
@@ -205,7 +222,7 @@ The alternative is a second pairwise session dedicated to signalling, so that vo
 churn can never push the durable session into repair. It is the better isolation and the
 worse decision today: it is a change to a frozen, under-review transport profile, it
 doubles the prekey cost of a first call, and it buys protection against a case the budget
-already keeps 62 calls away. *Owner question.*
+already keeps 62 calls away. **Answered A.**
 
 **D6. `voice_rooms` is deleted, and four group-shaped tables replace it.** Its three
 columns describe a server room: a capability to hold, a name the server stored, a live
@@ -326,26 +343,35 @@ What changed is that the evidence was being demanded about a system that does no
 
 ### Owner questions
 
-**D1 — may every member remove every other?** Option A, recommended: yes, fully
-symmetric, no roles, matching §13.2 and the canvas. Any member can eject any other and the
-remedy is a new room. Option B: mirror the group exactly, with an owner and admins, which
-contradicts two documents that already say all peers are equal and adds a role
-hierarchy to a ten-person audio room.
+Asked on 2026-09-20 and **answered A — the recommended option — in all four**, together
+with an affirmation of D4, which carried no competing option. The rejected option is kept
+beside each answer, because what a decision turned down is the part a reader six months
+from now cannot reconstruct.
 
-**D2 — does the ceiling count devices or people?** Option A, recommended: ten joined
-devices, because the cost is per connection. A person on two devices takes two seats.
-Option B: ten people with unbounded devices each, which makes the mesh's cost unbounded —
-ten people on three devices each is 29 uplinks on every phone.
+**D1 — may every member remove every other?** **A.** Yes, fully symmetric, no roles,
+matching §13.2 and the canvas. Any member can eject any other and the remedy is a new
+room. *Rejected B:* mirror the group exactly, with an owner and admins, which contradicts
+two documents that already say all peers are equal, adds a role hierarchy to a ten-person
+audio room, and — as the backend check under D1 above establishes — would be exactly as
+unenforceable, because the server neither holds a roster nor authorizes a signal.
 
-**D3 — may a group or a direct conversation host a call?** Option A, recommended: no, not
-in this version; rooms stay standalone. Option B: a group hosts a call whose participants
-are its roster, which makes one member set answer to two signed chains.
+**D2 — does the ceiling count devices or people?** **A.** Ten joined devices, because the
+cost is per connection. A person on two devices takes two seats. *Rejected B:* ten people
+with unbounded devices each, which makes the mesh's cost unbounded — ten people on three
+devices each is 29 uplinks on every phone.
 
-**D5 — may a volatile frame share the durable ratchet?** Option A, recommended: yes, one
-session, with the 32-frame budget as the guard. Option B: a second pairwise session for
-signalling only, which isolates the text conversation completely and costs a change to a
-frozen transport profile that is under independent review, plus a second prekey for every
-first call.
+**D3 — may a group or a direct conversation host a call?** **A.** No, not in this
+version; rooms stay standalone. *Rejected B:* a group hosts a call whose participants are
+its roster, which makes one member set answer to two signed chains. Revisiting it is a
+dated record of its own, and the shape to revisit is a room created *from* a group's
+roster as a snapshot rather than a live alias.
+
+**D5 — may a volatile frame share the durable ratchet?** **A.** Yes, one session, with
+the 32-frame-per-peer-per-call budget as the guard. *Rejected B:* a second pairwise
+session for signalling only, which isolates the text conversation completely and costs a
+change to a frozen transport profile that is under independent review, plus a second
+prekey for every first call. If the budget is ever observed to be reached in practice, B
+is the recorded answer to reach for.
 
 ## ADR-076 in full — production gets a key, and the first install is the part that cannot be taken back (2026-09-14)
 
