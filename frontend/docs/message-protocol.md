@@ -51,8 +51,9 @@ with a different event ID is quarantined as sender-state rollback. Reuse with th
 event ID is an idempotent duplicate.
 
 DM IDs are a domain-separated hash of the sorted pair of account IDs. Saved Messages
-uses a domain-separated hash of the account ID. Group IDs are random 256-bit values.
-Voice room capability IDs remain backend UUIDs but are hashed into protocol contexts.
+uses a domain-separated hash of the account ID. Group IDs are random 256-bit values, and
+so are voice-room IDs: there is no backend room to carry a capability ID, and a room's
+32 random bytes are minted by the device that creates it (see Voice rooms).
 
 ## Event registry
 
@@ -73,8 +74,8 @@ Voice room capability IDs remain backend UUIDs but are hashed into protocol cont
 | `history.transfer_manifest` | Authorize and describe own-device history transfer | yes |
 | `history.transfer_batch` | Bounded own-device history content batch | yes |
 | `device_log.gossip` | Latest verified contact device-log heads | yes |
-| `room.invite` | Voice-room capability and encrypted membership material | yes |
-| `room.control` | Room metadata or removal event | yes |
+| `room.control` | Signed voice-room create, membership or rename transition, carried as a `CPVRV001` room payload rather than an application-event kind (see Voice rooms) | yes |
+| `room.signal` | Reserved. A call's join, leave, offer, answer, candidates, participant query and ephemeral text are `CPVSV001` payloads in volatile `signal` frames, never application events (see Voice rooms) | — |
 | `session.repair` | Authenticated request/response for pairwise repair | yes |
 | `protocol.notice` | Supported-version/capability announcement | yes |
 | `contact.block_set` | Synchronize private block state to the user's other devices | yes, own devices only |
@@ -128,16 +129,21 @@ logical message.
   It replaces local display with a tombstone and requests attachment-cache deletion; it
   cannot force a recipient to erase previously decrypted content.
 
-## Receipts, typing, and presence
+## Receipts and typing
 
 Delivery/read receipts name bounded explicit message-ID sets. A delivered receipt is
 sent after durable local application, not merely socket arrival. A read receipt is sent
 only after the conversation is visibly read and user privacy settings allow it.
 
 Typing is an encrypted volatile signal containing conversation ID, boolean state, and a
-short expiry. It is never queued. Presence uses the backend device subscription but the
-meaning shown to users is conservative: online means a subscribed device currently has
-a socket, not that the person is actively viewing a chat.
+short expiry. It is never queued.
+
+**There is no presence.** The gateway holds none and offers no subscription frame
+(server ADR-0022), so no screen claims that a peer is online: nothing the client can
+observe supports the claim, and the chat header's old presence line was structurally
+false for exactly that reason. The one place a device's liveness is reported is a voice
+call, where it is observed rather than asserted — a participant is present because a
+connection to them is open.
 
 ## Blocking
 
@@ -270,6 +276,33 @@ only, preserves original event IDs for deduplication, states source completeness
 never contains Double Ratchet state or a group's control state. A mailbox `pruned_through`
 gap is repaired through the authenticated session-repair path and a member's answer to a
 state request (Group payloads), not by replaying history batches.
+
+## Voice rooms
+
+A voice room is client state exactly as a group is, and a call inside it is a full mesh
+of WebRTC audio keyed by DTLS-SRTP between each pair of devices. The server holds no
+room, no roster, no name and no participant list: it mints a relay credential at
+`POST /api/v1/me/relay` and relays `signal` frames, and that is the whole of its part
+(`backend/CLIENT_CONTRACT.md` §N, server ADR-0021).
+
+Two payload formats carry it, and both are specified in
+[voice-signalling-v1.md](voice-signalling-v1.md), which is binding:
+
+- **`CPVRV001`**, the room's signed control events, in ordinary **durable** envelopes.
+  It mirrors `CPGSV001` above — the same three kinds, the same hash chain, the same
+  transcript, state-request and queue-gap rules — under its own signing domain
+  `"chat:v1:room-control"` and its own state-hash domain `"chat:v1:room-control-state"`,
+  so that no event of one kind can be replayed as the other. A room's id is 32 random
+  bytes, its name travels inside its control events, and every active member has the same
+  authority to add, remove and rename. There is no owner and no admin.
+- **`CPVSV001`**, the call's signalling — join, leave, offer, answer, candidates,
+  participant query, participant answer and ephemeral room text — in **volatile** `/ws`
+  `signal` frames, padded to 1024, 4096 or 16384 bytes.
+
+**A payload is accepted only from the channel it belongs to.** A `CPVRV001` arriving in a
+`signal` frame is dropped, and a `CPVSV001` arriving in a durable envelope is dropped.
+Without that rule the volatile channel is a way to write durable state, and the durable
+queue is a way to replay a call's signalling hours later.
 
 ## Multi-device rules
 
