@@ -38,8 +38,9 @@ A host-native dynamic-library test alone is not the packaged Android smoke. The
 preserved Web build may exercise only an explicit fail-closed unavailable adapter; it is
 not a version-1 target or release gate.
 
-- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, Argon2id, CBOR, secretstream, and SFrame
-  vectors applicable to the selected implementation.
+- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, Argon2id, CBOR, and secretstream vectors
+  applicable to the selected implementation. Voice needs none of its own: DTLS-SRTP is
+  negotiated by the WebRTC stack and the project writes no media cipher (server ADR-0021).
 - The binding backend golden vectors for `cross_sig`, `master_sig`, `spk_sig`,
   `pq_spk_sig`, optional-field encoding, and the Ed25519/X25519 `ik_pub` layout, plus
   project vectors for SAS/QR values, device-log records/gossip, every event,
@@ -86,8 +87,8 @@ the artifact a user would run.
 
 ### Backend contract tests
 
-Run against the real Django development stack, PostgreSQL, Redis, nginx attachment path,
-and LiveKit/coturn where applicable:
+Run against the real Django development stack, PostgreSQL, Redis, the nginx attachment
+path, and coturn where applicable:
 
 - every documented status/error and auth scope;
 - rotating refresh and concurrent single-flight requests;

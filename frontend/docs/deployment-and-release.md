@@ -205,8 +205,8 @@ metadata endpoint. It never fetches executable code or dependencies dynamically.
 Web is not shipped in version 1. The following is a future release procedure and is not
 part of the Android release gate:
 
-1. Build and test the Flutter web bundle, shared crypto Wasm, and LiveKit E2EE worker from
-   the same reviewed tag.
+1. Build and test the Flutter web bundle and the shared crypto Wasm from the same
+   reviewed tag.
 2. Generate a content-hash manifest/SRI metadata for every static artifact.
 3. Verify the strict CSP and security headers against the exact compiled output.
 4. Serve immutable hashed assets and a no-store/revalidated root document from the
@@ -250,8 +250,9 @@ self-hosted configuration or compile-time decisions and cannot weaken cryptograp
 Before every production release, isolate the environment from foreign networks and prove:
 
 - build succeeds from approved mirrors/caches;
-- version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx,
-  LiveKit, and TURN are local/self-hosted;
+- version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx, and
+  the coturn relay are local/self-hosted, and no STUN server and no foreign ICE server is
+  configured anywhere (`CLIENT_CONTRACT.md` §N rule 2);
 - Android installation/update works. Web loading is post-v1.
 - two-phase enrollment, cross-signing/SAS, PQXDH and pairwise group fan-out, device-log
   gossip, register/login/message/attachment/voice/identity-recovery flows work;

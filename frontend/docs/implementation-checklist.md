@@ -94,28 +94,30 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 ## Voice rooms and realtime
 
-**Decided, not implemented.** Piece 20 has no implementation of any kind and does not
-start until every condition of [ADR-058](decisions.md) is met — P1 a granted media-key
-source, P2 that exporter reachable through the native boundary, P3 the same per-ABI permit
-that governed groups (deleted with MLS by ADR-075), P4 a settled frame-encryption contract, P5 an admissible Android wire
-record under `docs/validation/voice-media/`, P6 self-hosted LiveKit and TURN reviewed into
-the pinned dependency map, P7 a truthful tier and disclosure. **On 2026-08-25 none of P1,
-P2, P4, P5 or P6 is met**, and the rows below stay Pending regardless of backend
-readiness. ADR-058 replaced ADR-044's "a decision must be made", which replaced the
-prompt's "after piece 19 passes every production gate" — unreachable, because piece 19
-is cancelled (ADR-075): no server serves MLS, so none of its gates will ever pass.
+**Designed, not implemented.** Phase 6 prompt 1 wrote the design and
+[ADR-077](decisions.md) records it; nothing under `lib/` implements a byte of it, and
+`RealtimeGateway.send` still has no caller.
+
+[ADR-058](decisions.md)'s P1 to P7 are **superseded and no longer gate anything**. They
+named a granted MLS exporter, that exporter reachable through the native boundary, the
+per-ABI permit that governed groups, a settled frame-encryption contract, an Android wire
+record proving an SFU could not decrypt, a self-hosted LiveKit, and a truthful tier. The
+MLS core and the permit were deleted (ADR-075), the SFU left with server ADR-0021, and
+DTLS-SRTP keys each connection between its two endpoints, so there is no media key for an
+exporter to supply and three of the seven could never be met. Voice is buildable; what is
+left is work.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Create/read/rename room | Ready opaque name | Pending |
-| Room live count/signals | Ready volatile relay | None. `room_signal` and `room_presence` were retired by server ADR-0021 and deleted from the client by ADR-069; the voice phase carries both over `signal` |
-| LiveKit token | Ready | Pending join/reconnect client. No media dependency is declared, and `dependency_policy_test.dart` fails if one is added without an ADR-054 review |
-| Self-hosted LiveKit/TURN | Deployment ready | Pending. No deployment is recorded and no integration test exists (ADR-058 P6) |
-| Room invitations/membership | Client protocol | Leave semantics specified (ADR-023); implementation pending |
-| Audio E2EE/key distribution | Server deliberately excluded | **Blocked at the source.** The core returns only SHA-256 over `export_secret` as an epoch-agreement digest; no exporter secret crosses the FFI boundary, so there is nothing to key media with on any path (ADR-058 P2) |
-| Media framing contract | Not applicable | **Unresolved and recorded as unresolved.** `voice-and-realtime.md`, `cryptographic-protocol.md` and `backend/SECURITY.md` do not agree, and LiveKit's own documentation names no SFrame. ADR-058 P4/P5 require a recorded decision on a wire measurement |
+| Room create, rename, invite, remove, leave | **Nothing to build.** The server holds no room | Pending. Signed `CPVRV001` control events on the group's own chain machinery ([voice-signalling-v1.md](voice-signalling-v1.md)) |
+| Room storage | Not applicable | Pending. `voice_rooms` is deleted; `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` mirror the group's |
+| Call signalling | Ready volatile relay | Pending. `CPVSV001` over `signal` frames: join, leave, offer, answer, candidates, participant query and answer, room text. `room_signal` and `room_presence` were retired by server ADR-0021 and deleted from the client by ADR-069 |
+| Relay credential | Ready, `POST /api/v1/me/relay` | Pending. Fetch at join, refresh under an hour, ICE restart on mid-call expiry. `voice_configured` and `signal_buckets` are already parsed |
+| WebRTC media | Not applicable. No media server exists | Pending. No media dependency is declared, and `dependency_policy_test.dart` fails if one is added without an ADR-054 review. `flutter_webrtc` 1.6.1 is the candidate ADR-0021 evidenced |
+| Audio encryption | Server deliberately excluded | **Nothing to distribute.** DTLS-SRTP keys each connection between its two endpoints; there is no application-level media key and none is designed (server ADR-0021 point 3) |
+| Volatile pairwise seal | Not applicable | Pending. The pairwise store has a durable path only; a volatile seal commits the advanced session state without an outbox row |
 | Ephemeral room text | Volatile relay ready | Pending encrypted memory-only UI |
-| Android active-call service | Not applicable | Pending. ADR-051 records that two foreground services can be armed at once if voice ships; ADR-058 P7 requires that be decided in advance |
+| Android active-call service | Not applicable | Pending. ADR-051 records that two foreground services can be armed at once if voice ships; the microphone-type service is required for the life of a call (§N rule 11) |
 
 ## UI
 
@@ -158,12 +160,12 @@ is cancelled (ADR-075): no server serves MLS, so none of its gates will ever pas
 - [ ] Android `mlkem_native` passes identical FIPS/PQXDH vectors; no educational or
   pure-Dart ML-KEM is present.
 - [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
-- [ ] Piece 20's Android media spike proves on real hardware that the self-hosted SFU
-  cannot decrypt published audio, and settles which frame encryption is in use. Not run,
-  and not startable: the exporter it would key from does not cross the FFI boundary
-  (ADR-058 P2), no self-hosted LiveKit or TURN deployment is recorded (P6), and no media
-  dependency is declared. `docs/validation/voice-media/` does not exist. A reasoned
-  argument that the SFU cannot decrypt is not an admissible record (ADR-058 P5).
+- [ ] A call runs on two real devices against the live server, both directions of audio
+  across the self-hosted coturn, on the signed `production` flavor. Not run. There is no
+  media dependency declared and no signalling code, so nothing is startable yet; phase 6
+  prompt 10 runs it. The media spike ADR-058 P5 asked for is **not needed**: it was to
+  prove an SFU could not decrypt, and there is no SFU — DTLS-SRTP keys each connection
+  between its two endpoints and the relay forwards packets it cannot open.
 - Piece 19 Phase-A production prerequisites — **cancelled 2026-09-13 (ADR-075), not
   blocked.** The server deleted MLS (server ADR-0001): no endpoint accepts, stores or
   serves a key package, a Welcome, a commit or any other MLS artefact, and none will. The
@@ -230,7 +232,9 @@ is cancelled (ADR-075): no server serves MLS, so none of its gates will ever pas
   and Android FFI/isolate smoke test verified on 2026-07-28).
 - [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
   pass malicious-server tests.
-- [ ] Android LiveKit Flutter E2EE meets the SFrame/media threat-model requirement.
+- [ ] A call's residual metadata matches what `threat-model.md` states: the relay sees the
+  peer pairs, the packet sizes and the timing; the gateway sees which device signals which
+  device; and nothing carries the audio, the room name, the roster or the SDP in clear.
 - [x] Piece 05 Drift foundation: the SQLCipher Android schema, transactional
   migrations/repositories, constraints, reactive Riverpod projections,
   restart/privacy checks, and key-loss/tamper/logout/revocation wipe tests pass for the

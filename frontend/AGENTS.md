@@ -38,7 +38,7 @@ endpoint, wire format, or weaker security behavior.
 - Prefer the Flutter and Dart documentation, the documentation/source repository for
   the exact pinned package version, Android developer documentation, browser-vendor or
   Web standards documentation, RFC Editor/IETF/IANA/NIST publications, and the official
-  OpenMLS or LiveKit documentation/repositories as applicable.
+  WebRTC, libwebrtc or coturn documentation/repositories as applicable.
 - Blogs, tutorials, forums, search-result summaries, generated answers, and unofficial
   examples may help discovery but are never normative evidence. Trace important claims
   back to the primary source.

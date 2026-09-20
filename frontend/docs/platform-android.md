@@ -4,7 +4,7 @@
 
 Use the Flutter stable version pinned during scaffolding and target the current Android
 SDK required for distribution. The minimum SDK is chosen after crypto, Keystore, and
-LiveKit device testing; lowering it may not weaken required security controls silently.
+WebRTC device testing; lowering it may not weaken required security controls silently.
 
 ## Key and data protection
 

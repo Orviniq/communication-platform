@@ -60,7 +60,10 @@ is not called the production release.
   re-adds the device ([sync-engine.md](sync-engine.md)).
 - Revoked devices lose tokens, queued content, local session access, and future group
   access.
-- Voice is audio-only and uses the self-hosted LiveKit and TURN deployment.
+- Voice is audio-only: a full mesh of WebRTC connections between devices, each keyed by
+  DTLS-SRTP between its two endpoints, every path across the self-hosted coturn relay.
+  There is no media server and no application-level media key. A room is client state
+  exactly as a group is, and a call holds ten joined devices.
 
 ## Non-functional requirements
 

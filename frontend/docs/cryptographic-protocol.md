@@ -58,7 +58,8 @@ Android-only completion is not a protocol downgrade or an alternate suite.
 | Backup AEAD | XChaCha20-Poly1305 with random 192-bit nonces |
 | Password/recovery KDF | Argon2id v1: 64 MiB, 3 iterations, parallelism 4, 16-byte salt, 32-byte output |
 | File streaming | libsodium `secretstream_xchacha20poly1305` |
-| Media framing | **Undecided.** RFC 9605 SFrame or the LiveKit E2EE implementation, on a recorded decision standing on an Android wire measurement. LiveKit's own documentation names no SFrame and exposes `EncryptionType` as `kNone`/`kGcm`/`kCustom`, so this row is not settled by the SDK either; see [ADR-058](decisions.md) P4/P5 and [voice-and-realtime.md](voice-and-realtime.md) |
+| Voice media | DTLS-SRTP, negotiated by the two endpoints of each connection. There is **no application-level media key** and none is designed: a connection's keys exist on its two endpoints only, and they die with the connection (server ADR-0021, [voice-and-realtime.md](voice-and-realtime.md)) |
+| Voice signalling | The offer, the answer, the candidates and every announcement are pairwise Double Ratchet ciphertext on the ordinary session, padded to a `signal` bucket ([voice-signalling-v1.md](voice-signalling-v1.md)) |
 
 Every KDF and signature input uses the exact domain label defined by its binding
 contract. Labels are constants in the shared crypto core and covered by test vectors;
@@ -390,7 +391,7 @@ interoperability fixtures, and an ADR; silent algorithm substitution is forbidde
 - [Signal PQXDH specification](https://signal.org/docs/specifications/pqxdh/)
 - [Signal Double Ratchet specification](https://signal.org/docs/specifications/doubleratchet/)
 - [Server ADR-0001: pairwise Double Ratchet group fan-out](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
-- [RFC 9605: SFrame](https://www.rfc-editor.org/info/rfc9605)
+- [Server ADR-0021: a relayed WebRTC mesh, and no server room](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 - [RFC 8949: CBOR](https://www.rfc-editor.org/info/rfc8949/)
 - [RFC 9106: Argon2](https://www.rfc-editor.org/info/rfc9106/)
 - [libsodium secretstream](https://libsodium.gitbook.io/doc/secret-key_cryptography/secretstream)

@@ -22,7 +22,10 @@ source of truth.
 - [Messaging API](../../backend/messaging/API.md)
 - [Realtime API](../../backend/realtime/API.md)
 - [Vault API](../../backend/vault/API.md)
-- [Voice Rooms API](../../backend/voicerooms/API.md)
+
+There is no voice-rooms API. The whole of the voice surface is one route,
+`POST /api/v1/me/relay`, published at the end of the realtime API, and the relaying of
+`signal` frames (server ADR-0021).
 
 ## The error vocabulary
 
