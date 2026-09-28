@@ -290,10 +290,16 @@ The comment beside the regeneration command in `android/app/build.gradle.kts` no
 - **Nothing ran on a device.** No call was placed, and the permission prompt, the audio
   route and the Bluetooth behaviour are untested.
 - **Neither WARP nor `zeroPlayoutDelay`.**
-- **How a TLS relay's certificate is checked.** The dex now carries libwebrtc's
-  `PlatformCertificateVerifier`. Whether the relay credential names a `turns:` URL, and
-  how its certificate should be checked, belong to prompts 3 and 5; the media path's own
-  authentication is the DTLS fingerprint under the pairwise session either way.
+- **How a TLS relay should be trusted.** What this build does is verified from source:
+  `flutter_webrtc` supplies libwebrtc no certificate verifier, so libwebrtc's TLS client
+  accepts a `turns:` relay's chain if it reaches the roots compiled into
+  `rtc_base/ssl_roots.h` or, failing that, the platform trust store, which
+  `PlatformCertificateVerifier` reads with user- and administrator-installed CAs
+  included. The provisioned private CA is in neither, so a relay certificate it issued
+  would not verify over `turns:`, and one from any public or user-installed CA would.
+  Whether the relay credential names a `turns:` URL at all, and what should be trusted
+  if it does, belong to prompts 3 and 5. The media path's own authentication is the
+  DTLS fingerprint under the pairwise session either way.
 - No signing configuration, keystore or release identity changed.
 
 ### Sources, read on 2026-09-28
@@ -305,6 +311,7 @@ The comment beside the regeneration command in `android/app/build.gradle.kts` no
 | `audioswitch`'s manifest, permission check and licence | [davidliu/audioswitch at `039a35ae`](https://github.com/davidliu/audioswitch/tree/039a35aefab7747c557242fa216c9ea11743b604) | `BLUETOOTH` with `maxSdkVersion` 30 and `MODIFY_AUDIO_SETTINGS`; `DefaultPermissionsCheckStrategy` keys on `targetSdkVersion`; `BluetoothHeadsetManager` is used by `LegacyAudioSwitch` only; "Copyright 2020 Twilio, inc." |
 | libwebrtc's POM and checksums | [Maven Central](https://repo1.maven.org/maven2/io/github/webrtc-sdk/android/150.7871.01/) | BSD 3-Clause, no dependencies; `.sha256` and `.sha1` equal to the cached AAR |
 | WebRTC's licence and patent grant | [webrtc-sdk/webrtc `m150_release`](https://github.com/webrtc-sdk/webrtc/tree/m150_release), commit `ba469aa2` | Copied verbatim to `docs/licenses/WebRTC-LICENSE.txt` and `WebRTC-PATENTS.txt` |
+| How libwebrtc's TLS client trusts a relay | [`rtc_base/openssl_adapter.cc`](https://github.com/webrtc-sdk/webrtc/blob/m150_release/rtc_base/openssl_adapter.cc) and [`PlatformCertificateVerifier.java`](https://github.com/webrtc-sdk/webrtc/blob/m150_release/sdk/android/src/java/org/webrtc/PlatformCertificateVerifier.java) at `m150_release`; the class disassembled from the AAR; `flutter_webrtc`'s Android sources | With no embedder verifier, the platform store is consulted only after `ssl_roots.h` finds no path, through `TrustManagerFactory.init(null)`; `flutter_webrtc` sets no `SSLCertificateVerifier` and no TLS certificate policy |
 | The publisher's aggregated third-party list | [webrtc-sdk/android `Licenses/WEBRTC.md`](https://github.com/webrtc-sdk/android/blob/main/Licenses/WEBRTC.md) | Last changed for m92 on 2021-09-08, so it is not this build's |
 | `audioswitch`'s published checksums | [JitPack](https://jitpack.io/com/github/davidliu/audioswitch/039a35aefab7747c557242fa216c9ea11743b604/) | `.sha1` and `.md5` equal to the cached AAR |
 | How Gradle adds a repository and applies exclusive content | Gradle 9.1.0 sources in the wrapper distribution | `addRepository` runs the configure action before adding; `exclusiveContent` applies through `repositories.all` |
