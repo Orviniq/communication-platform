@@ -595,21 +595,33 @@ reach a distributed runtime classpath, and the Espresso/JUnit set that arrives w
 `android:appComponentFactory="androidx.core.app.CoreComponentFactory"` (from
 `androidx.core`); two optional `androidx.window` `<uses-library>` entries and an
 unexported `androidx.startup.InitializationProvider` carrying the process-lifecycle and
-profile-installer initializers (from the Flutter embedding). One thing is **refused**:
-`androidx.profileinstaller` merges in an exported `ProfileInstallReceiver` with four
-intent filters, which nothing here starts, so the manifest deletes it with
-`tools:node="remove"`. The baseline profile is still written on first run by
-`ProfileInstallerInitializer`.
+profile-installer initializers (from the Flutter embedding); and `MODIFY_AUDIO_SETTINGS`
+(from `audioswitch`, through `flutter_webrtc`, now also declared locally; ADR-078). Two
+things are **refused**. `androidx.profileinstaller` merges in an exported
+`ProfileInstallReceiver` with four intent filters, which nothing here starts, so the
+manifest deletes it with `tools:node="remove"`; the baseline profile is still written on
+first run by `ProfileInstallerInitializer`. And `audioswitch` merges in `BLUETOOTH` for
+Android 11 and below, which nothing on the path `flutter_webrtc` takes ever checks, so the
+manifest deletes it the same way (ADR-078).
 
-**Nothing in the artifact's Java or Kotlin can open a connection.** The shrunk
-`classes.dex` of a production release build references no `java.net`, no `javax.net.ssl`,
-no `android.net.http`, no OkHttp, no Retrofit, no `DownloadManager` and no Google Play
-Services type at all; the only network-adjacent types it names are `android.net.Uri`,
-`android.webkit.MimeTypeMap` and `android.net.ConnectivityManager`. Every byte this
-application sends leaves through `dart:io` inside `libflutter.so`, on the one reviewed
-transport with the provisioned trust store. `tool/verify_release_apk.sh` additionally
-reads the packaged manifest's permissions and components back out of the artifact and
-fails on anything ADR-054 did not record.
+**No Java or Kotlin in the artifact opens an HTTP connection, and since ADR-078 not every
+byte leaves through `dart:io`.** The shrunk `classes.dex` of a production release build
+references no `android.net.http`, no OkHttp, no Retrofit, no `DownloadManager` and no
+Google Play Services type at all. Until ADR-078 it referenced no `java.net` and no
+`javax.net.ssl` either. The WebRTC stack `flutter_webrtc` brings adds
+`java.net.InetAddress`, `NetworkInterface` and `SocketException` and the
+`android.net` link, network-request and Wi-Fi types that libwebrtc's
+`NetworkMonitorAutoDetect` uses to follow the device's networks, and
+`javax.net.ssl.TrustManager`, `TrustManagerFactory` and `X509TrustManager`, which its
+`PlatformCertificateVerifier` uses to check a TLS relay's certificate. Everything else this
+application sends still leaves through `dart:io` inside `libflutter.so`, on the one
+reviewed transport with the provisioned trust store. A call will not:
+`libjingle_peerconnection_so.so` opens its own sockets to the relay, and what
+authenticates that path end to end is the DTLS fingerprint the pairwise session carries
+(`CLIENT_CONTRACT.md` §N rule 6), not that trust store. No Dart code reaches the package
+yet. `tool/verify_release_apk.sh` additionally reads the packaged manifest's permissions
+and components back out of the artifact and fails on anything ADR-054 and ADR-078 did not
+record.
 
 Third-party licence obligations are listed in
 [third-party-notices.md](third-party-notices.md), which travels with the handover.

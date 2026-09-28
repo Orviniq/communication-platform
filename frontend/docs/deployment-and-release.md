@@ -80,7 +80,11 @@ by contract tests and conservative client behavior, not runtime version guessing
   `android/app/gradle.lockfile` in `LockMode.STRICT` over the six configurations a built
   artifact resolves. Every direct Dart dependency is one exact version, never a range.
 - Mirror/cache all build dependencies so a clean release can build without international
-  internet.
+  internet. No mirror is set up yet. Since [ADR-078](decisions.md) the Gradle half reaches
+  one repository beyond Google's Maven, Maven Central and Flutter's engine repository:
+  JitPack, for `com.github.davidliu:audioswitch` at commit
+  `039a35aefab7747c557242fa216c9ea11743b604` and nothing else, so a mirror has to carry
+  that coordinate too.
 - Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
   libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened. The
   Dart and Android/Gradle halves are the two lockfiles above plus
