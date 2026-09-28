@@ -42,12 +42,19 @@ void main() {
     // one. `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE` are
     // normal protection level and grant nothing until a service actually
     // starts; `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` only permits *showing*
-    // the system's own dialog, whose answer is the user's.
+    // the system's own dialog, whose answer is the user's. ADR-078 added one
+    // more the same way: `FOREGROUND_SERVICE_MICROPHONE`, for the call's
+    // microphone-type service, which is normal protection level too and is
+    // neither granted by an alert nor asked for by one.
     expect(
       RegExp(
         'FOREGROUND_SERVICE[A-Z_]*',
       ).allMatches(manifest).map((match) => match.group(0)),
-      {'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_SPECIAL_USE'},
+      {
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_SPECIAL_USE',
+        'FOREGROUND_SERVICE_MICROPHONE',
+      },
       reason: 'no other foreground service type may be declared',
     );
     expect(

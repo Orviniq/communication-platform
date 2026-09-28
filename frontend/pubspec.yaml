@@ -24,6 +24,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_riverpod: 3.3.2
+  flutter_webrtc: 1.6.2+hotfix.3
   forui: 0.24.3
   go_router: 17.3.0
   intl: 0.20.2
