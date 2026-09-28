@@ -88,6 +88,245 @@ is not silently edited out of history.
 | ADR-075 | Accepted | Client-side record of server ADR-0001: a group is a set of pairwise sessions, so piece 19 is cancelled rather than blocked, the group screens open on every build, and each group message states what it costs — one encrypted copy for each device of each member — and is shown as sent only when its fan-out has ended; closes ADR-026, ADR-036, ADR-037, ADR-039, ADR-040, ADR-041, ADR-044, ADR-055 and ADR-056 (2026-09-13) | The server deleted every MLS route: `PUT /api/v1/me/devices/{device_id}/keypackages`, `GET /api/v1/me/devices/{device_id}/keypackages/count` and `POST /api/v1/users/{user_id}/keypackages/claim` answer `404`, `backend/openapi.json` holds 28 paths of which none accepts, stores or serves a key package, a Welcome, a commit or any other MLS artefact, and `KEYPACKAGE_BUCKETS` is gone. The five external prerequisites piece 19 waited on therefore gate nothing — meeting all of them would leave no server to talk to — so the item is cancelled, not blocked, and the nine decisions that shaped the closed-beta MLS track close with it. The pairwise design pays for groups in ciphertext rather than server state, and the screens say so rather than let a slow send in a large group look broken |
 | ADR-076 | Accepted (2026-09-14) | The `production` flavor, `com.orviniq.chat`, gains one persistent signing identity so that the owner can install real builds and test groups on real phones: an RSA-4096 v2+v3 key whose public fingerprint is committed beside the application ID and which reaches Gradle only from outside the repository; a release build without it fails closed unless it asks to be unsigned; one script provisions, signs, verifies and records each artifact; a signed build carries the deployment disclosure and no Experimental designation; and an artifact reaches a device only through `adb install`. It is not a public release and opens no gate. It amends the clause ADR-042 made and ADR-067 carried that production packages unsigned, the production half of ADR-045's D6, and the reason its D1 gives for production carrying no designation (2026-09-14) | Production packages unsigned by design, so no phone can install it, and groups have never run on a phone against the live server (ADR-075). The identity, the build mechanism and the verifier are the beta pipeline ADR-042 reviewed, readable at `8267429`, under production's names and without its in-repository properties fallback, because the rule behind them has not moved: Android updates an install only when the application ID and the signing certificate both match, and this client cannot survive the uninstall a mismatch forces (ADR-067 D2). What moves is custody. `deployment-and-release.md` step 4, `release-signing.md` and ADR-044 keep production's key offline; the owner's answer keeps it, for now, on a networked workstation that already holds the private CA's key; and with `minSdk` 24 the first key signs every later update, so the custody chosen for this test is the custody a public release under the same identity inherits. The owner decided that on 2026-09-14, together with the other three questions: the application ID is final, production carries the disclosure and not the Experimental designation, and an agent session may run the signed build through the release script. ADR-045 withheld the disclosure and the Experimental designation from production only because it could not be installed. The pinned `flutter_tools` uninstalls an installed app before `flutter install` installs and whenever `flutter run` is refused over it, and `flutter drive` uninstalls when it finishes, so none of the three is pointed at a device that holds the signed app. Found on the way and left open for a decision of its own: ADR-043 and the code enforce no SPKI pin on the app's own traffic, while ADR-067 D4, server ADR-0027 and `backend/SECURITY.md` state or rely on the opposite. ADR-017, every production completion gate and ADR-053's gate stay closed. |
 | ADR-077 | Accepted (2026-09-20), on the owner's answers to D1, D2, D3 and D5 | Client-side record of server ADR-0021 and ADR-0022: voice is a relayed WebRTC mesh with no server room, so a room becomes client state on the group's own signed-control machinery and a call becomes volatile `signal` frames between devices. Two wire formats, split by the channel each needs — `CPVRV001` for the room's control events over durable envelopes, `CPVSV001` for the call's signalling over `signal` frames — and a payload is refused from the other channel. A volatile frame rides the durable pairwise session's own Double Ratchet rather than a second session or a new key schedule, and pays for it in dead skipped keys that the retry bound caps. Supersedes the voice prerequisites P1 to P7 of ADR-058, which name three things that no longer exist, and deletes the `voice_rooms` table (2026-09-20) | Server ADR-0021 decides the architecture and stops at the edge of the client: a room is client state "carried by client-signed control events over ordinary envelopes, exactly as a group is", and ephemeral room text and join and leave announcements are `signal` frames. No source defines the room model or the signalling payload, and `CLIENT_CONTRACT.md` §N says so in as many words — "Everything below is therefore yours to build, and none of it is checked by anything upstream." **The split by channel is the load-bearing decision.** A roster has to survive a device being offline and an offer must not: a durable offer is a call invitation that arrives an hour late, and a volatile roster is a room that forgets who was removed. So membership is durable and signalling is volatile, and each is refused from the other's channel, because without that rule the volatile path is a way to write durable state and the durable queue is a way to replay a call's signalling hours later. **The room reuses the group's machinery down to the byte.** The same hash chain, the same six apply outcomes, the same transcript, state-request and queue-gap rules, under its own two signing domains so that no event of one kind can be replayed as the other. That machinery is built, reviewed and tested; inventing a second one for the same problem would be a defect, not a design. **The volatile seal is the one place this costs something real, and the cost is stated rather than engineered away.** §N rule 6 binds the signalling to the pairwise session of §F, and `pairwise-transport-v1.md` is frozen and under independent review, so there is no second session and no signalling-only key schedule. A frame the server drops is never redelivered, so it leaves a hole the receiver fills with a dead skipped key on the next message that does arrive — and at 2,000 per pair the bound's failure mode is a repair that interrupts the *text* conversation with that device too. The retry bound is therefore the budget: 32 sealed frames per peer per call, 62 wholly undelivered calls before a pair reaches the bound, and a peer already reported unreachable is sealed nothing further until it announces itself again. **What was measured rather than assumed**: an audio-only, relay-only, max-bundle offer from libwebrtc is 1,363 bytes over 46 lines (Chromium 152.0.7977.76, 2026-09-20). With this framing an offer is about 1,516 bytes, which clears bucket 4096's regular-header budget of 4,014 by 2,498 and its worst-case initial-header budget of 1,554 by 38 — so an SDP is never the first message to a peer, and a device with no session sends its small `join` first. A margin of 38 bytes is one `a=extmap` line from a frame that goes off-bucket and is dropped without a word. Adds no dependency, changes no `backend/` file, and opens no production gate: nothing under `lib/` implements a byte of it. **Four questions went to the owner** and were answered A on 2026-09-20, as written out under "Owner questions": every member may remove every other, the ceiling counts devices, no group or DM hosts a call, and the volatile seal shares the durable ratchet. |
+| ADR-078 | Accepted (2026-09-28) | Voice's media package is `flutter_webrtc` **1.6.2+hotfix.3**, pinned exactly. Its two native parts are libwebrtc 150.7871.01 from Maven Central and Twilio's `audioswitch` in David Liu's fork at commit `039a35ae`, which only JitPack publishes, so JitPack serves this build that one module and nothing else. The merged manifest gains `RECORD_AUDIO`, `FOREGROUND_SERVICE_MICROPHONE` and `MODIFY_AUDIO_SETTINGS` and refuses the `BLUETOOTH` permission `audioswitch` merges in, and the `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of ADR-054 hold (2026-09-28) | ADR-077 designed voice on `flutter_webrtc` and left the dependency review to a record of its own; this is it. **The version is the newest because its native parts are 1.6.1's**: the Android build file is byte-for-byte the same, so every fact gathered for 1.6.1 holds, and what came after is fixes to data-channel and camera paths this design never takes, plus two opt-in field trials that stay off. **What it costs is one native library**: an unsigned production release grows from 88,199,375 to 123,703,796 bytes, and 35,263,068 of the 35,504,421 bytes added are `libjingle_peerconnection_so.so` for three ABIs, the emulator's x86_64 copy alone 16,166,352. That library is libwebrtc with third-party code of its own — BoringSSL, libsrtp, Opus, libvpx, libaom, dav1d and more — and it will open a call's sockets itself, outside `dart:io` and outside the provisioned trust store, which is what server ADR-0021 means by DTLS-SRTP between two endpoints; `platform-android.md`'s claim that every byte leaves through `dart:io` is corrected. **JitPack is restricted in both directions, and the restriction was proven**, because JitPack builds whatever public repository a coordinate names and `flutter_webrtc`'s build script adds it, unfiltered, to every project. **`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it**: the package builds `audioswitch`'s `AudioSwitch`, which routes through `AudioManager`, and the one class that checks a Bluetooth permission keys on the target SDK and would check `BLUETOOTH_CONNECT` at 36. No Dart code imports the package, no service is declared and no permission is asked for yet. Found on the way: the Gradle lock writer drops `kotlin-stdlib-common` from both runtime classpaths on the unmodified tree too, while validation still resolves it there, so the committed line is kept; and libwebrtc's third-party notices exist nowhere for this build (F1). |
+
+## ADR-078 in full — the media package, what it links, and the three permissions a call asks for (2026-09-28)
+
+**Status:** Accepted, 2026-09-28. Dependency decision, under the rules ADR-054
+established, for the design ADR-077 recorded; ADR-077 said this review "is its own
+prompt", and it is the second of the ten phase-6 prompts. Adds one direct Dart dependency,
+the four Dart packages and two Android modules it brings, and three permissions to the
+merged manifest, and refuses a fourth. Writes no Dart code that uses the package, declares
+no service, and changes no cryptographic construction, protocol, wire format, state
+format, signing configuration, keystore, release identity or backend file. **Opens no
+production gate.**
+
+**Cites:** ADR-054 (what the artifact takes from outside, and its pins), ADR-059 (the
+precedent for stating a dependency's weight), ADR-077 (the voice design), server
+[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md),
+and `backend/CLIENT_CONTRACT.md` §N rules 6 and 11.
+
+### The question
+
+> Voice needs WebRTC on Android. Which exact release of which package, what does it put
+> into the artifact, where does each part come from, and what does the artifact then ask
+> its users for?
+
+The prompt carried six facts about `flutter_webrtc` 1.6.1, gathered on 2026-09-05, and
+asked for them to be checked against any later release. Four releases followed 1.6.1.
+`livekit_client` is not a candidate: it needs `connectivity_plus` 7, which forces
+`androidx.core` 1.18.0 and `compileSdk` 36.1, the move ADR-054 froze against.
+
+### D1. The version is 1.6.2+hotfix.3, and its native parts are 1.6.1's
+
+`flutter_webrtc` **1.6.2+hotfix.3**, published 2026-09-15 and the newest release on
+2026-09-28, is pinned exactly. Its `android/build.gradle` is byte-for-byte the file 1.6.1
+ships, so every fact recorded for 1.6.1 holds for it, each read from the published archive
+or from pub.dev:
+
+- MIT licence, and the verified publisher `flutter-webrtc.org`;
+- `compileSdkVersion 36` and `minSdkVersion 21`;
+- `io.github.webrtc-sdk:android:150.7871.01`;
+- `com.github.davidliu:audioswitch` at commit `039a35aefab7747c557242fa216c9ea11743b604`,
+  from JitPack;
+- no `androidx.core` dependency, from the plugin or from either native part:
+  `audioswitch`'s POM names only `androidx.annotation` 1.3.0, and libwebrtc's names
+  nothing;
+- `iceTransportPolicy` parsed by `MethodCallHandlerImpl`, and `setConfiguration` and
+  `restartIce` on the Dart `RTCPeerConnection`.
+
+What changed on Android after 1.6.1: 1.6.2 adds two opt-in `initialize()` options,
+`enableWARP` (the `WebRTC-IceHandshakeDtls` field trial, which carries the DTLS handshake
+inside the ICE exchange, plus DSCP marking) and `zeroPlayoutDelay`, both off unless asked
+for; 1.6.2+hotfix.2 releases data-channel handlers and wrappers on close and dispose; and a
+null check guards the camera path. This design uses no data channel and no video, so none
+of the fixes is load-bearing here, and neither option is set — turning either on is a
+decision of its own. The newest release is taken over 1.6.1 because the two link the same
+native code and the newer carries the fixes; 1.6.1 stays the fallback if a later prompt
+finds a regression.
+
+The pin carries a build suffix, which `dependency_policy_test.dart`'s exact-version check
+did not admit. `pub_semver` compares the suffix — `Version.allows` is equality, and
+equality includes the build — so `1.6.2+hotfix.3` still admits nothing else, and the check
+now accepts dot-separated build identifiers.
+
+### D2. What it brings with it, stated in full
+
+Dart, from `pubspec.lock`: `flutter_webrtc` 1.6.2+hotfix.3, `webrtc_interface` 1.5.1,
+`logger` 2.8.0, `synchronized` 3.4.2 and `dart_webrtc` 1.8.2, the browser implementation,
+which no Android build compiles. No version already in the lock moved, and nothing is a
+pre-release or retracted.
+
+Android: the release runtime classpath goes from 91 modules to 93, and nothing already
+there moved.
+
+| Module | What it is | Artifact, checked on 2026-09-28 |
+|---|---|---|
+| `io.github.webrtc-sdk:android:150.7871.01` | libwebrtc and its `org.webrtc` Java bindings, prebuilt by webrtc-sdk, BSD 3-Clause, from Maven Central | AAR of 49,147,033 bytes, SHA-256 `0a1627b1a48c2bc17d9a40d62fc47bd45166f44a311e95917f147c402de379b0`, equal to Central's published `.sha256` and `.sha1`; Central also holds a PGP signature, not verified here |
+| `com.github.davidliu:audioswitch:039a35aefab7747c557242fa216c9ea11743b604` | Twilio's Apache-2.0 audio router in David Liu's fork, commit of 2026-05-18, built by JitPack | AAR of 95,318 bytes, SHA-256 `c8240221daa9a96d4ea01a4dc6f6f6b10b4903d2a71f9b57f838bdfeb6c3fcbc`; its SHA-1 and MD5 equal JitPack's published ones |
+
+Both are on the runtime classpaths only. The requested `androidx.annotation` 1.1.0 and
+1.3.0 resolve to the locked 1.8.1, and `kotlin-stdlib` stays at 2.3.20.
+
+No component arrives. The plugin's manifest is empty, libwebrtc's names only `uses-sdk`,
+and `audioswitch`'s names two permissions (D4), so the verifier still counts five
+components with one exported. What arrives is **`libjingle_peerconnection_so.so`** for each
+of the three ABIs the build keeps. Measured rather than estimated, an unsigned production
+release goes from **88,199,375 to 123,703,796 bytes**, +35,504,421. Of that, 35,263,068 is
+the native library, stored uncompressed — 16,166,352 for x86_64, 12,287,312 for arm64-v8a
+and 6,809,404 for armeabi-v7a — and 237,127 is the compressed `classes.dex`. `libapp.so`
+does not change, because nothing imports the package yet. The x86_64 copy alone is 46 % of
+the cost and runs only on the emulator (F5).
+
+The native library is libwebrtc together with third-party libraries of its own; its
+strings name BoringSSL, libsrtp, Opus, libvpx 1.16.0, libaom, dav1d, dcsctp, libyuv and
+abseil-cpp. **BoringSSL is a second TLS and cryptographic library in the artifact**, beside
+the Rust core. It keys the DTLS-SRTP of each connection, which is what server ADR-0021
+means by a connection keyed between its two endpoints, and nothing in this application
+calls it directly. It is not the reviewed Rust core, and this record does not review it.
+Once a call runs, the library opens its own sockets to the relay, outside `dart:io` and
+outside the provisioned trust store, and the end-to-end authentication of that path is the
+DTLS fingerprint the pairwise session carries (§N rule 6). The dex it brings references
+`java.net` and `javax.net.ssl` types for the first time — `NetworkMonitorAutoDetect`
+enumerates interfaces and `PlatformCertificateVerifier` checks a TLS relay's certificate
+through the platform's trust managers — so the "Nothing in the artifact's Java or Kotlin
+can open a connection" paragraph of `platform-android.md` is corrected here.
+
+### D3. JitPack serves one module, in both directions, and that was proven
+
+`audioswitch` at a commit exists only on JitPack, which builds whatever public repository a
+coordinate names. `flutter_webrtc`'s own build script adds an unfiltered JitPack to every
+project in the build. Two rules answer that:
+
+- `android/build.gradle.kts` declares JitPack inside `exclusiveContent` for
+  `com.github.davidliu:audioswitch`, so that module is looked up nowhere else. Gradle
+  applies the exclusion through `repositories.all`, so it reaches repositories added after
+  it as well.
+- `android/settings.gradle.kts` registers, before any build script runs, a rule on every
+  JitPack declaration — `flutter_webrtc`'s included — that it serves that module and
+  nothing else. Gradle configures a repository before it adds one (Gradle 9.1.0,
+  `DefaultArtifactRepositoryContainer.addRepository`), so the rule sees the URL.
+
+The prompt asked for JitPack in both files. A `dependencyResolutionManagement` block in
+settings would be inert in this build: Gradle's default mode lets project repositories
+override settings ones, and every project here declares its own, Flutter's engine
+repository included. What settings holds instead is the rule over every declaration.
+
+**Proven on 2026-09-28** with a scratch probe that resolved `org.example.probe:not-published:1.0`,
+which no repository publishes, and printed where Gradle looked. With both rules it was
+searched in Google's Maven, Maven Central and Flutter's engine repository and not on
+JitPack, although each project lists two JitPack declarations. With the settings rule
+removed, `https://jitpack.io/…` joined the searched locations through the declaration
+`flutter_webrtc` adds. `dependency_policy_test.dart` pins both rules, and that the only
+`com.github.*` module in the lock is this one.
+
+**Offline.** After the online builds had cached both modules,
+`./gradlew --offline :app:assembleDevelopmentDebug` succeeded in 43 seconds. It compiled
+`:flutter_webrtc`'s Java, which cannot compile without `audioswitch`'s classes, and
+`dependencyInsight --offline` resolved `audioswitch` at the commit. The repository
+documents the need for a mirror (`deployment-and-release.md`, `README.md`) but no mirror,
+so there was none to add the coordinate to; `deployment-and-release.md` now names it.
+
+The checksums above are recorded, not enforced: the build has no Gradle dependency
+verification metadata, and a commit hash pins JitPack's source, not the binary it builds
+(F3).
+
+### D4. The permissions
+
+| Permission | Source | Protection level | Decision |
+|---|---|---|---|
+| `RECORD_AUDIO` | This manifest | Dangerous | **Added.** Asked for at join and at no other time (§N rule 11), through prompt 8's channel. `flutter_webrtc`'s `getUserMedia` asks for it by itself when it is missing, so the join has to have asked first |
+| `FOREGROUND_SERVICE_MICROPHONE` | This manifest | Normal | **Added.** From Android 14 a foreground service of the `microphone` type cannot start without it. The service is prompt 8's |
+| `FOREGROUND_SERVICE` | This manifest, since ADR-051 | Normal | Unchanged |
+| `MODIFY_AUDIO_SETTINGS` | `audioswitch` | Normal | **Kept**, and declared in this manifest too, under ADR-054's rule that every permission in the artifact is stated where a reviewer reads |
+| `BLUETOOTH`, `maxSdkVersion` 30 | `audioswitch` | Normal | **Refused** with `tools:node="remove"` |
+
+`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it.
+`flutter_webrtc` builds `audioswitch`'s `AudioSwitch`, which finds and routes audio devices
+through `AudioManager` callbacks and `startBluetoothSco`. The one class that checks a
+Bluetooth permission, `BluetoothHeadsetManager`, belongs to `LegacyAudioSwitch`, and it
+chooses the permission by the application's `targetSdkVersion` rather than the device's,
+so at target 36 it would check `BLUETOOTH_CONNECT` on every device. No Bluetooth headset
+route is part of the design record either: ADR-077 and `voice-signalling-v1.md` name none,
+and `design-handoff/voice-room-states.md` lists the output-route control (§5.7) under
+"Where the spec is silent" (§9). Whether the platform sends a call's audio to a connected
+Bluetooth headset on its own is not decided by this permission and has not been tried. A
+route that needs `BLUETOOTH_CONNECT` — a runtime permission in the Nearby devices group —
+is a dated record of its own.
+
+The merged manifest of both APKs asks for exactly **12 permissions**: the nine recorded
+before and these three. `tool/verify_release_apk.sh` records the new set, the unsigned
+release passes all seven of its checks, and the same script run on the baseline APK fails
+and names exactly the three. `message_alert_policy_test.dart`, which pinned the manifest's
+foreground-service permissions to two, now records the third.
+
+### D5. The pins ADR-054 made still hold
+
+- **`androidx.core:core:1.16.0`**: unchanged in the lock, and neither the plugin nor its
+  native parts declare `androidx.core`.
+- **`connectivity_plus` 6.0.5**: unchanged in `pubspec.lock`; `flutter_webrtc` does not
+  depend on it.
+- **`compileSdk` 36**: `flutter.compileSdkVersion` is unchanged, and the plugin compiles
+  at 36.
+- `androidx.annotation` stays at 1.8.1 and `kotlin-stdlib` at 2.3.20.
+
+### D6. The lock file, and a writer that disagrees with its validator
+
+`./gradlew :app:writeDependencyLocks --write-locks` recorded the two new modules and also
+dropped `org.jetbrains.kotlin:kotlin-stdlib-common:2.3.20` from both runtime classpaths.
+Validation then refused that lock: `dependencyInsight` reports the module resolved on
+`productionReleaseRuntimeClasspath` "which is not part of the dependency lock state",
+because `kotlinx-coroutines-core` 1.7.3 and `okio` 3.4.0 still request it. The same write
+on the unmodified tree drops the same line, so it is not this change. The committed line
+is kept as it was: the lock differs from its previous state by the two new modules alone,
+all four locked configurations resolve against it with no failure, and both APKs build.
+The comment beside the regeneration command in `android/app/build.gradle.kts` now says so
+(F4).
+
+### What this does not decide
+
+- **Nothing uses the package.** No Dart file imports it (prompts 5 and 7), no service is
+  declared (prompt 8), and no permission is asked for (prompts 8 and 9).
+- **Nothing ran on a device.** No call was placed, and the permission prompt, the audio
+  route and the Bluetooth behaviour are untested.
+- **Neither WARP nor `zeroPlayoutDelay`.**
+- **How a TLS relay's certificate is checked.** The dex now carries libwebrtc's
+  `PlatformCertificateVerifier`. Whether the relay credential names a `turns:` URL, and
+  how its certificate should be checked, belong to prompts 3 and 5; the media path's own
+  authentication is the DTLS fingerprint under the pairwise session either way.
+- No signing configuration, keystore or release identity changed.
+
+### Sources, read on 2026-09-28
+
+| Claim | Source | State on 2026-09-28 |
+|---|---|---|
+| The releases, the publisher and the licence | [pub.dev API](https://pub.dev/api/packages/flutter_webrtc), [publisher](https://pub.dev/api/packages/flutter_webrtc/publisher), [pub.dev](https://pub.dev/packages/flutter_webrtc) | 1.6.2+hotfix.3 newest, published 2026-09-15; 1.6.1 published 2026-09-01; none retracted; publisher `flutter-webrtc.org`; tag `license:mit` |
+| The Android build file, the changelog and the `NOTICE` | The archives [1.6.1](https://pub.dev/api/archives/flutter_webrtc-1.6.1.tar.gz) and [1.6.2+hotfix.3](https://pub.dev/api/archives/flutter_webrtc-1.6.2%2Bhotfix.3.tar.gz) | SHA-256 `a2eb4a45…b733` and `c1d3674f…0fb9`, the second equal to `pubspec.lock`'s; `android/build.gradle` identical; outside the iOS, macOS and desktop trees, the diff between them is the changes D1 lists |
+| `audioswitch`'s manifest, permission check and licence | [davidliu/audioswitch at `039a35ae`](https://github.com/davidliu/audioswitch/tree/039a35aefab7747c557242fa216c9ea11743b604) | `BLUETOOTH` with `maxSdkVersion` 30 and `MODIFY_AUDIO_SETTINGS`; `DefaultPermissionsCheckStrategy` keys on `targetSdkVersion`; `BluetoothHeadsetManager` is used by `LegacyAudioSwitch` only; "Copyright 2020 Twilio, inc." |
+| libwebrtc's POM and checksums | [Maven Central](https://repo1.maven.org/maven2/io/github/webrtc-sdk/android/150.7871.01/) | BSD 3-Clause, no dependencies; `.sha256` and `.sha1` equal to the cached AAR |
+| WebRTC's licence and patent grant | [webrtc-sdk/webrtc `m150_release`](https://github.com/webrtc-sdk/webrtc/tree/m150_release), commit `ba469aa2` | Copied verbatim to `docs/licenses/WebRTC-LICENSE.txt` and `WebRTC-PATENTS.txt` |
+| The publisher's aggregated third-party list | [webrtc-sdk/android `Licenses/WEBRTC.md`](https://github.com/webrtc-sdk/android/blob/main/Licenses/WEBRTC.md) | Last changed for m92 on 2021-09-08, so it is not this build's |
+| `audioswitch`'s published checksums | [JitPack](https://jitpack.io/com/github/davidliu/audioswitch/039a35aefab7747c557242fa216c9ea11743b604/) | `.sha1` and `.md5` equal to the cached AAR |
+| How Gradle adds a repository and applies exclusive content | Gradle 9.1.0 sources in the wrapper distribution | `addRepository` runs the configure action before adding; `exclusiveContent` applies through `repositories.all` |
+| What `NOTICES.Z` is built from | `packages/flutter_tools/lib/src/license_collector.dart`, Flutter 3.44.7 | A package's `NOTICES` file, else its `LICENSE`; never `NOTICE` |
+| That a build suffix is part of an exact pin | `pub_semver` 2.2.0, `lib/src/version.dart` | `allows` is `==`, and `==` compares the build |
+
+### Follow-ups
+
+- **F1.** Generate libwebrtc's third-party notices for this build — WebRTC's
+  `tools_webrtc/libs/generate_licenses.py` over the m150 source the AAR was built from —
+  and bring them into `third-party-notices.md`. Until then the notices for
+  `libjingle_peerconnection_so.so` are incomplete, the state ADR-054 F3 records for the
+  Rust core.
+- **F2.** `flutter_webrtc` applies the Kotlin Gradle Plugin, as `emoji_picker_flutter`
+  does (ADR-059 F2), and the build warns that a future Flutter will fail on it. Watch for a
+  release that moves to built-in Kotlin.
+- **F3.** Nothing enforces the checksums in D2. Gradle dependency verification would make
+  a changed JitPack build fail the build; it is a whole-build decision, not voice's.
+- **F4.** The lock writer's disagreement with its validator (D6), until a toolchain
+  upgrade makes it go away.
+- **F5.** The x86_64 copy of libwebrtc is 16,166,352 of the 35,504,421 bytes and runs only
+  on the emulator. Whether a distributed build keeps x86_64 is a distribution decision.
 
 ## ADR-077 in full — voice is a mesh of pairwise calls, and the room is one more thing the clients agree on (2026-09-20)
 
