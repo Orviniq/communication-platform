@@ -2,13 +2,16 @@
 
 ## Status
 
-**Only the relay credential is implemented, and no call can be placed.**
-`lib/features/voice/` fetches the credential, holds it and builds the relay-only ICE
-configuration from it (phase 6 prompt 3). `/voice-rooms` renders
-`StructuralPlaceholderPage`, `pubspec.yaml` declares `flutter_webrtc` but no Dart file
-imports it ([ADR-078](decisions.md)), no file under `lib/` sends a `signal` frame, and
-`RealtimeGateway.send` has no caller at all. This document is the design phase 6 builds,
-not a description of the artifact.
+**The relay credential and the signalling transport are implemented, and no call can be
+placed.** `lib/features/voice/` fetches the credential, holds it and builds the relay-only
+ICE configuration from it (phase 6 prompt 3), and carries `CPVSV001` messages between
+devices in `signal` frames, each sealed to the pairwise session of the device it goes to
+and paced under the socket limits (prompt 4). That transport is `RealtimeGateway.send`'s
+one caller. `/voice-rooms` renders `StructuralPlaceholderPage`, `pubspec.yaml` declares
+`flutter_webrtc` but no Dart file imports it ([ADR-078](decisions.md)), and nothing yet
+decides who a frame goes to. A `signal` frame never starts a pairwise session:
+[ADR-077](decisions.md) records why, as an open conflict for the owner. This document is
+the design phase 6 builds, not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room
@@ -139,7 +142,10 @@ against REST. A `signal` frame is volatile and expires locally.
 The client obeys the published limits: JSON text objects only, `WS_MAX_FRAME`, 100 frames
 per rolling second, at most 200 ack ids, and a `signal` blob that is base64 of exactly
 1024, 4096 or 16384 bytes. A blob off those buckets is dropped in silence — there is no
-`400 bad_bucket` on this path and no error frame to read. Pacing and a bounded inbound
+`400 bad_bucket` on this path and no error frame to read. So the gateway holds a `signal`
+blob to the published `signal_buckets` in both directions: an off-bucket one is refused
+before it reaches the socket, where the caller hears about it, and one that arrives is
+dropped without closing the socket that carries durable wake-ups. Pacing and a bounded inbound
 queue keep a locally generated burst from reaching close `4008`; the numbers are in
 [`voice-signalling-v1.md`](voice-signalling-v1.md), "The socket limits".
 

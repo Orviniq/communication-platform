@@ -17,9 +17,14 @@ later prompt of the phase. The architecture it implements is
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 disagree, those win.
 
-**Only the credential is built.** `lib/features/voice/` fetches, holds and refreshes the
-relay credential and builds the ICE configuration from it (*The credential*, below, phase 6
-prompt 3). No file under `lib/` implements a byte of either wire format.
+**The credential and the signalling transport are built; no room and no call are.**
+`lib/features/voice/` fetches, holds and refreshes the relay credential and builds the ICE
+configuration from it (*The credential*, below, phase 6 prompt 3). Phase 6 prompt 4 built
+the `CPVSV001` transport of Part 2 — the codec, the volatile seal and open on the pairwise
+session, the pacing, the candidate batching and the bounded inbound queue — carried on the
+delivery session's own socket. Nothing under `lib/` implements `CPVRV001` yet, and nothing
+decides who a frame goes to or when to try again: that is the call's. Where the transport
+departs from what this document decided, the departure is dated beside the decision.
 
 The transport beneath both formats is unchanged and is not restated here:
 [`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
@@ -369,6 +374,16 @@ Three rules follow, and they are the reason the arithmetic is written down:
    set against the bucket the plaintext pads into, never against a server ceiling, because
    there is no longer a server ceiling to read (*Chat — message too long*).
 
+**As built, 2026-09-30.** The native core pads a payload to the smallest bucket that holds
+it, and nothing pads one up. A real SDP is more than the 942 bytes bucket 1024 holds under
+a regular header, so an offer or an answer lands in 4096 by rule 3 alone; one that outgrew
+4096 would land in 16384 rather than off-bucket, because the codec refuses a payload over
+16,302 bytes, which is what 16384 holds under a regular header. The seal compares each
+sealed frame with the published `signal_buckets` before anything is committed, so a frame a
+deployment's buckets cannot carry is refused (`offBucket`) and its ratchet step discarded.
+Rule 2's fallback to 16384 does not arise while a volatile frame never starts a session
+(*Volatile seal and open*, below).
+
 A relay ICE candidate line is roughly 120 to 180 bytes — a foundation, a component, a
 transport, a priority, an address and port, `typ relay`, a `raddr`/`rport` pair and the
 `generation`, `ufrag` and `network-cost` extensions. Eight of them with their `mid` and
@@ -401,6 +416,13 @@ them. Nothing is retained for a retry, and **a retry re-seals rather than resend
 next attempt is a new message number on a chain that already advanced for the first one.
 Re-sending stored bytes would be pointless here anyway, because the frame was not lost in
 transit — it was dropped because nobody was listening.
+
+**As built, 2026-09-30.** `PairwiseVolatileStore` holds the method, beside the durable
+store rather than in it: `commitVolatileSeal` commits the transitions, and
+`PairwiseVolatileSealer` hands the frames back once it has. Its partner
+`commitVolatileOpen` writes the session a received frame advanced and, for an initial
+header, the device state, the consumed one-time prekeys and the replay marker — and no
+inbox row, no opened payload and no application event.
 
 **What a dropped frame costs the skipped-key bound.** A frame the server drops is never
 delivered and is never redelivered, so the sender's chain is one message ahead of the
@@ -437,6 +459,23 @@ classical and one ML-KEM one-time prekey of that device, so a first call into a 
 ten costs nine of each; the ordinary replenishment on
 `GET /me/devices/{device_id}/prekeys/count` covers it and nothing special is needed.
 
+**Suspended on 2026-09-30, phase 6 prompt 4: a volatile frame never starts a session.**
+The native core writes an initial header on a session's first message and never again —
+`ratchet_encrypt` always writes a regular one — so when the relay drops that first frame,
+which is the ordinary fate of a `join` fanned out to a device that is not connected, this
+device commits a session its peer never saw. Every later message on it, durable ones
+included, names a session the peer does not hold; the peer refuses each as unauthenticated
+input and quarantines a durable one, so a text message is lost. When the peer later starts
+a session of its own, the simultaneous-initiation rule can keep the lost one as primary on
+this side and demote the peer's to receive-only, which breaks the pair in both directions.
+A retry cannot help: it is the next message number on the same session. So the seal
+refuses a device with no ready primary session as `noSession`, and the store refuses a
+volatile transition that would create a session. A session begins on the durable path,
+whose queue does not lose a first message short of its TTL. Receiving an initial header
+over a `signal` frame is still accepted, under every check a durable one gets. This is a
+departure from the paragraph above, not a decision: [ADR-077](decisions.md) records it and
+the options, for the owner.
+
 **When a peer's safety number changes.** An expected prekey rotation does not reset
 account-master verification and costs a call nothing
 ([`pairwise-transport-v1.md`](pairwise-transport-v1.md), Simultaneous initiation and
@@ -457,6 +496,17 @@ initial header). The receive path is the existing one — prepare with no mutati
 transaction — and it is the same path whether the ciphertext arrived over `signal` or over
 the durable queue. The channel the blob arrived on is remembered and checked against the
 payload's magic once the plaintext is open, which is the `CPVRV001`/`CPVSV001` rule above.
+
+**As built, 2026-09-30.** A frame is committed only when its payload is `CPVSV001`. Any
+other payload is dropped with its ratchet step uncommitted, so that the channel it belongs
+to can still open it: the relay holds every durable envelope and could replay one as a
+signal. A `CPVSV001` that arrives in a durable envelope is not an application event the
+durable decoder accepts, so it is never applied. A repair control and a repair replacement
+belong to the durable path and are refused here; a frame past the skipped-key bound queues
+the same authenticated repair request the durable path sends, once per session, and is
+dropped. A committed message whose header names a sender other than the device the session
+authenticated is dropped, and a major version this build does not speak is reported with
+its authenticated sender, so the call can say that peer needs a newer build.
 
 ## The socket limits
 
@@ -498,6 +548,14 @@ deliberately generous:
 - **Room control never touches the socket.** A `CPVRV001` payload is a durable envelope on
   `POST /api/v1/envelopes`, so inviting or removing somebody mid-call costs the rate window
   nothing.
+
+**As built, 2026-09-30.** `SignalFramePacer` is the bucket, in whole micro-tokens so it
+never drifts; `VoiceCandidateBatcher` is the batching, at most eight candidates to a frame
+and further frames for more, with `end` on the last; `VoiceSignalTransport` holds the queue
+of 256 and drops its oldest past it. The transport also holds the 32-frame budget of each
+join to each device, which the call releases when it leaves. Signals ride the running
+delivery session's socket, attached when the session starts and detached when it stops, so
+there is one connection and one rolling second to count.
 
 ## Retries, and when a device is unreachable
 
