@@ -2,7 +2,9 @@
 
 ## Status
 
-**Nothing about voice is implemented.** `/voice-rooms` renders
+**Only the relay credential is implemented, and no call can be placed.**
+`lib/features/voice/` fetches the credential, holds it and builds the relay-only ICE
+configuration from it (phase 6 prompt 3). `/voice-rooms` renders
 `StructuralPlaceholderPage`, `pubspec.yaml` declares `flutter_webrtc` but no Dart file
 imports it ([ADR-078](decisions.md)), no file under `lib/` sends a `signal` frame, and
 `RealtimeGateway.send` has no caller at all. This document is the design phase 6 builds,

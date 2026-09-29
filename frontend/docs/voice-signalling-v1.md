@@ -17,7 +17,9 @@ later prompt of the phase. The architecture it implements is
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 disagree, those win.
 
-**Nothing here is built.** No file under `lib/` implements a byte of it.
+**Only the credential is built.** `lib/features/voice/` fetches, holds and refreshes the
+relay credential and builds the ICE configuration from it (*The credential*, below, phase 6
+prompt 3). No file under `lib/` implements a byte of either wire format.
 
 The transport beneath both formats is unchanged and is not restated here:
 [`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
@@ -316,7 +318,7 @@ acknowledged and never retried.
 
 A `signal` blob is standard base64 of **exactly** 1024, 4096 or 16384 bytes — the
 `signal_buckets` of `GET /api/v1/config`, already parsed into
-`ServerConfiguration.signalBuckets`. An off-bucket blob is dropped in silence: there is no
+`ServerConfig.signalBuckets`. An off-bucket blob is dropped in silence: there is no
 `400 bad_bucket` here and no error to read (`realtime/API.md`, server ADR-0022 point 4).
 
 The blob is an `EnvelopeV1` of exactly that length, so the plaintext budget is arithmetic
@@ -575,16 +577,23 @@ because every later frame of theirs fails the roster check.
 [`backend/realtime/API.md`](../../backend/realtime/API.md).
 
 - **Before the button.** `voice_configured` from `GET /api/v1/config` — already parsed into
-  `ServerConfiguration.voiceConfigured` — decides whether the deployment does voice at all.
+  `ServerConfig.voiceConfigured` — decides whether the deployment does voice at all.
   False means no call action is offered anywhere, which is *No voice on this server*. The
   route's `503 voice_unconfigured` is the same fact reached the hard way and is never a
-  backoff.
+  backoff: once a device has seen it, it asks nothing further for the life of the process,
+  and the REST client never replays it, although the route is otherwise safe to repeat.
 - **Fetch at join, not at launch.** One `POST /api/v1/me/relay` when the user joins a call.
   Minting at startup would spend the `relay` scope, 60 a minute per account, on launches
   that place no call, and would hold a six-hour bearer credential for a relay the user may
-  never reach.
+  never reach. Every join mints its own, and the call drops it when it ends.
 - **Refresh under an hour.** Another mint once less than 3,600 seconds of `expires_in`
   remains. The default TTL is 21,600 seconds, so an ordinary call never refreshes.
+  `expires_in` is counted on this device's clock from the moment the request was sent,
+  which is never later than the mint, and the timestamp inside `username` is never read,
+  so a clock that disagrees with the server's cannot delay a refresh.
+  `RELAY_CREDENTIAL_TTL_SECONDS` has no floor, so a lifetime under two hours refreshes at
+  half-life instead: at an hour or less every credential would be inside its final hour
+  when it was minted, and each refresh would mint another that was already due.
 - **Expiry mid-call is an ICE restart, not a teardown.** A fresh credential, then
   `restartIce()` on each connection, which re-gathers against the new allocation and keeps
   the media flowing where it can.
@@ -596,6 +605,14 @@ because every later frame of theirs fails the roster check.
   server, no foreign server and no fallback** (§N rule 2, ADR-0021 point 2): a host or
   server-reflexive candidate would put a participant's own address in front of every other
   participant, which is the property the relay exists to remove.
+- **`turn:` URLs only.** The whole answer is refused, and the mint reported as failed,
+  when `urls` is empty, holds more than 16 entries, or holds anything but `turn:`, a host,
+  an optional port and an optional `?transport=udp` or `?transport=tcp`. `turns:` is
+  refused with the rest. The relay has no TLS listener (`backend/SECURITY.md`, "Voice"),
+  and libwebrtc would check a TLS relay against its compiled-in roots and the platform
+  store, user-installed authorities included, never against the provisioned CA
+  ([ADR-078](decisions.md)). A TLS relay would be a contract change and a trust decision of
+  its own, not something to accept on sight.
 - **A dead relay answers `200`.** The route reads a setting and never reaches coturn, so a
   credential minted against a relay that is down looks perfect and the call simply fails to
   connect. The client tells that apart from a quiet peer by *which* thing failed: when no
@@ -603,7 +620,14 @@ because every later frame of theirs fails the roster check.
   candidate pair failed, the relay is reported unreachable — *The call could not connect* —
   rather than nine people being reported unreachable one at a time.
 - **`429 throttled`** carries `Retry-After`; the join action cools down for exactly that
-  long and says so.
+  long and says so. Nothing is asked during the cooldown, a refresh included, and a held
+  credential stays in force through it. A `429` with no usable `Retry-After` cools down for
+  a minute, the window the `relay` scope counts.
+
+Built in `lib/features/voice/`: `RelayCredential` and `RelayIceConfiguration` in the
+domain, `RelayCredentialService` for the rules above, and `DioRelayCredentialRepository`
+for the route, composed in `lib/app/dependencies/voice_providers.dart`. The ICE restart is
+prompt 5's.
 
 ## The ceiling
 
