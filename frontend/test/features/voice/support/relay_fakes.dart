@@ -7,6 +7,7 @@ import 'package:communication_platform/features/networking/application/ports/tok
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:communication_platform/features/voice/application/ports/relay_credential_ports.dart';
 import 'package:dio/dio.dart';
 
@@ -137,6 +138,26 @@ final class FixedVoiceDeployment implements VoiceDeploymentPort {
   @override
   final bool voiceConfigured;
 }
+
+/// [config] as a deployment that serves voice would publish it.
+ServerConfig withVoice(ServerConfig config) => ServerConfig(
+  envelopeTtlDays: config.envelopeTtlDays,
+  attachmentTtlDays: config.attachmentTtlDays,
+  attachmentDailyBytes: config.attachmentDailyBytes,
+  mailboxMaxBytes: config.mailboxMaxBytes,
+  maxDevicesPerUser: config.maxDevicesPerUser,
+  maxDeviceLogRecords: config.maxDeviceLogRecords,
+  sessionTokenDays: config.sessionTokenDays,
+  sendBatchMax: config.sendBatchMax,
+  ackMax: config.ackMax,
+  drainPageMax: config.drainPageMax,
+  claimMax: config.claimMax,
+  envelopeBuckets: config.envelopeBuckets,
+  attachmentBuckets: config.attachmentBuckets,
+  signalBuckets: config.signalBuckets,
+  voiceConfigured: true,
+  fromDeployment: true,
+);
 
 final class CapturingDiagnostics implements NetworkDiagnostics {
   final events = <NetworkDiagnosticEvent>[];

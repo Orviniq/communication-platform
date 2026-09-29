@@ -85,7 +85,7 @@ void main() {
         final open = serviceOn(
           adapter,
           deployment: PublishedVoiceDeployment(
-            FixedServerConfig(_withVoice(ServerConfig.fallback)),
+            FixedServerConfig(withVoice(ServerConfig.fallback)),
           ),
         );
 
@@ -329,25 +329,6 @@ void main() {
     expect(adapter.requests, hasLength(3));
   });
 }
-
-ServerConfig _withVoice(ServerConfig config) => ServerConfig(
-  envelopeTtlDays: config.envelopeTtlDays,
-  attachmentTtlDays: config.attachmentTtlDays,
-  attachmentDailyBytes: config.attachmentDailyBytes,
-  mailboxMaxBytes: config.mailboxMaxBytes,
-  maxDevicesPerUser: config.maxDevicesPerUser,
-  maxDeviceLogRecords: config.maxDeviceLogRecords,
-  sessionTokenDays: config.sessionTokenDays,
-  sendBatchMax: config.sendBatchMax,
-  ackMax: config.ackMax,
-  drainPageMax: config.drainPageMax,
-  claimMax: config.claimMax,
-  envelopeBuckets: config.envelopeBuckets,
-  attachmentBuckets: config.attachmentBuckets,
-  signalBuckets: config.signalBuckets,
-  voiceConfigured: true,
-  fromDeployment: true,
-);
 
 RelayCredential _credential(DateTime mintedAt) => RelayCredential(
   urls: relayUrls,
