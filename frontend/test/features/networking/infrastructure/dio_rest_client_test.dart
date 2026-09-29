@@ -264,6 +264,48 @@ void main() {
     );
 
     test(
+      'never replays a 503 voice_unconfigured, which no retry can change',
+      () async {
+        final adapter = QueueAdapter([
+          jsonResponse(503, {
+            'code': 'voice_unconfigured',
+            'detail': 'banned raw backend detail',
+          }),
+          jsonResponse(503, {'code': 'unavailable', 'detail': 'later'}),
+          jsonResponse(200, {'status': 'ok'}),
+        ]);
+        final scheduler = ImmediateRetryScheduler();
+        final client = testClient(adapter, retryScheduler: scheduler);
+        ApiRequest<HealthResponseDto> safeToRepeat() =>
+            request<HealthResponseDto>(
+              method: RestMethod.post,
+              decode: HealthResponseDto.fromJson,
+              replaySafety: ReplaySafety.contractIdempotent,
+            );
+
+        final unconfigured = await client.send(safeToRepeat());
+
+        expect(adapter.calls, 1);
+        expect(scheduler.calls, 0);
+        expect(
+          (unconfigured as FailureResult<HealthResponseDto>).failure,
+          isA<BackendFailure>().having(
+            (failure) => failure.code,
+            'code',
+            BackendFailureCode.voiceUnconfigured,
+          ),
+        );
+
+        // The same status with an outage's code is still replayed.
+        final outage = await client.send(safeToRepeat());
+
+        expect(outage, isA<Success<HealthResponseDto>>());
+        expect(adapter.calls, 3);
+        expect(scheduler.calls, 1);
+      },
+    );
+
+    test(
       'performs one authenticated retry only for replay-safe requests',
       () async {
         final adapter = QueueAdapter([
