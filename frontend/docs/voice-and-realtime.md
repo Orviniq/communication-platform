@@ -3,9 +3,10 @@
 ## Status
 
 **Nothing about voice is implemented.** `/voice-rooms` renders
-`StructuralPlaceholderPage`, `pubspec.yaml` declares no media dependency, no file under
-`lib/` sends a `signal` frame, and `RealtimeGateway.send` has no caller at all. This
-document is the design phase 6 builds, not a description of the artifact.
+`StructuralPlaceholderPage`, `pubspec.yaml` declares `flutter_webrtc` but no Dart file
+imports it ([ADR-078](decisions.md)), no file under `lib/` sends a `signal` frame, and
+`RealtimeGateway.send` has no caller at all. This document is the design phase 6 builds,
+not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room

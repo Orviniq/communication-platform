@@ -95,8 +95,9 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 ## Voice rooms and realtime
 
 **Designed, not implemented.** Phase 6 prompt 1 wrote the design and
-[ADR-077](decisions.md) records it, Accepted on 2026-09-20; nothing under `lib/`
-implements a byte of it, and `RealtimeGateway.send` still has no caller.
+[ADR-077](decisions.md) records it, Accepted on 2026-09-20, and prompt 2 added the media
+package ([ADR-078](decisions.md)); nothing under `lib/` implements a byte of it, and
+`RealtimeGateway.send` still has no caller.
 
 [ADR-058](decisions.md)'s P1 to P7 are **superseded and no longer gate anything**. They
 named a granted MLS exporter, that exporter reachable through the native boundary, the
@@ -113,7 +114,7 @@ left is work.
 | Room storage | Not applicable | Pending. `voice_rooms` is deleted; `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` mirror the group's |
 | Call signalling | Ready volatile relay | Pending. `CPVSV001` over `signal` frames: join, leave, offer, answer, candidates, participant query and answer, room text. `room_signal` and `room_presence` were retired by server ADR-0021 and deleted from the client by ADR-069 |
 | Relay credential | Ready, `POST /api/v1/me/relay` | Pending. Fetch at join, refresh under an hour, ICE restart on mid-call expiry. `voice_configured` and `signal_buckets` are already parsed |
-| WebRTC media | Not applicable. No media server exists | Pending. No media dependency is declared, and `dependency_policy_test.dart` fails if one is added without an ADR-054 review. `flutter_webrtc` 1.6.1 is the candidate ADR-0021 evidenced |
+| WebRTC media | Not applicable. No media server exists | Pending. `flutter_webrtc` 1.6.2+hotfix.3 is pinned and reviewed ([ADR-078](decisions.md)), and no Dart file imports it yet; the peer connection is phase 6 prompt 5's |
 | Audio encryption | Server deliberately excluded | **Nothing to distribute.** DTLS-SRTP keys each connection between its two endpoints; there is no application-level media key and none is designed (server ADR-0021 point 3) |
 | Volatile pairwise seal | Not applicable | Pending. The pairwise store has a durable path only; a volatile seal commits the advanced session state without an outbox row |
 | Ephemeral room text | Volatile relay ready | Pending encrypted memory-only UI |
