@@ -531,6 +531,8 @@ final class VolatileDevice {
     required String userId,
     required String deviceId,
   }) async {
+    // Every device of a test has a database of its own, on purpose.
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final database = LocalDatabase(NativeDatabase.memory());
     await database
         .into(database.secureSecrets)

@@ -8,12 +8,15 @@ import 'package:communication_platform/app/dependencies/networking_foundation.da
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/dependencies/sync_providers.dart';
+import 'package:communication_platform/app/dependencies/voice_providers.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/application/sync_lifecycle_supervisor.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/gateway_realtime_sync_adapter.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/platform_deferred_delivery_scheduler.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/sync_platform_adapters.dart';
+import 'package:communication_platform/features/voice/infrastructure/gateway_voice_signal_socket.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -87,9 +90,13 @@ final class MessageDeliverySession {
     required SyncLifecycleSupervisor supervisor,
     required GatewayRealtimeSyncAdapter realtime,
     required DeliveryPlatformPorts platform,
+    required RealtimeGateway gateway,
+    required GatewayVoiceSignalSocket voiceSignals,
   }) : _supervisor = supervisor,
        _realtime = realtime,
-       _platform = platform;
+       _platform = platform,
+       _gateway = gateway,
+       _voiceSignals = voiceSignals;
 
   static Future<MessageDeliverySession> compose(
     Ref ref, {
@@ -110,17 +117,18 @@ final class MessageDeliverySession {
       // the same access token, refreshes through the same single-flight
       // coordinator, and terminates its TLS chain at the same provisioned
       // authority as every REST call the application makes.
-      realtime.attach(
-        ref
-            .read(networkingFoundationProvider)
-            .realtimeGateway(
-              realtime,
-              config: ref.read(serverConfigSnapshotProvider),
-            ),
-      );
+      final gateway = ref
+          .read(networkingFoundationProvider)
+          .realtimeGateway(
+            realtime,
+            config: ref.read(serverConfigSnapshotProvider),
+          );
+      realtime.attach(gateway);
       return MessageDeliverySession._(
         realtime: realtime,
         platform: platform,
+        gateway: gateway,
+        voiceSignals: ref.read(voiceSignalSocketProvider),
         supervisor: SyncLifecycleSupervisor(
           engine: engine,
           store: store,
@@ -149,6 +157,12 @@ final class MessageDeliverySession {
   final SyncLifecycleSupervisor _supervisor;
   final GatewayRealtimeSyncAdapter _realtime;
   final DeliveryPlatformPorts _platform;
+  final RealtimeGateway _gateway;
+
+  /// Call signalling rides this session's connection rather than a socket of
+  /// its own: the same token, the same provisioned trust, and the one
+  /// 100-frame rolling second the server counts per connection.
+  final GatewayVoiceSignalSocket _voiceSignals;
 
   /// Starts the supervisor and arms the deferred catch-up for the whole
   /// session.
@@ -159,6 +173,7 @@ final class MessageDeliverySession {
   /// application more often than the interval never receives one wake-up, and a
   /// process that dies while foregrounded would leave nothing scheduled at all.
   Future<void> start() async {
+    await _voiceSignals.attach(_gateway);
     await _supervisor.start();
     await _platform.polling.schedule(minimumInterval: deferredCatchUpInterval);
   }
@@ -169,6 +184,7 @@ final class MessageDeliverySession {
   /// to, so leaving the job armed would wake the process every interval to
   /// discover exactly that.
   Future<void> dispose() async {
+    await _voiceSignals.detach(_gateway);
     await _supervisor.dispose();
     // Before the platform ports are released, because releasing them takes the
     // channel handler with them.

@@ -12,6 +12,7 @@ import 'package:communication_platform/app/dependencies/local_storage_providers.
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/networking_foundation.dart';
+import 'package:communication_platform/app/dependencies/voice_providers.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
@@ -249,6 +250,50 @@ void main() {
             'not be processed must survive for a later attempt',
       );
       expect((await harness.projection()).inboxDepth, 1);
+    },
+  );
+
+  test(
+    'call signalling rides the session socket, and only while it runs',
+    () async {
+      final harness = await DeliveryHarness.create();
+      addTearDown(harness.dispose);
+      final signals = harness.container.read(voiceSignalSocketProvider);
+      final blob = base64.encode(Uint8List(1024));
+      const peerDevice = '00000000-0000-4000-8000-000000000777';
+
+      expect(
+        await signals.sendSignal(toDeviceId: peerDevice, blob: blob),
+        isA<FailureResult<void>>(),
+        reason: 'no session, so no socket to signal on',
+      );
+
+      await harness.signIn();
+      final sent = await signals.sendSignal(toDeviceId: peerDevice, blob: blob);
+
+      expect(sent, isA<Success<void>>());
+      expect(
+        harness.sockets.connections,
+        hasLength(1),
+        reason: 'the session socket, not a second one',
+      );
+      expect(
+        harness.sockets.connections.single.sent
+            .map((frame) => jsonDecode(frame as String))
+            .where(
+              (frame) => (frame as Map<String, Object?>)['type'] == 'signal',
+            ),
+        [
+          {'type': 'signal', 'to_device': peerDevice, 'blob': blob},
+        ],
+      );
+
+      await harness.signOut();
+      expect(
+        await signals.sendSignal(toDeviceId: peerDevice, blob: blob),
+        isA<FailureResult<void>>(),
+        reason: 'a stopped session takes its socket with it',
+      );
     },
   );
 
