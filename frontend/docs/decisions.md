@@ -299,7 +299,12 @@ The comment beside the regeneration command in `android/app/build.gradle.kts` no
   would not verify over `turns:`, and one from any public or user-installed CA would.
   Whether the relay credential names a `turns:` URL at all, and what should be trusted
   if it does, belong to prompts 3 and 5. The media path's own authentication is the
-  DTLS fingerprint under the pairwise session either way.
+  DTLS fingerprint under the pairwise session either way. **Answered for the client on
+  2026-09-30 by prompt 3:** only `turn:` URLs are configured, and a credential that
+  names a `turns:` URL is refused whole, because the route names `turn:` URLs and the
+  relay has no TLS listener (`backend/SECURITY.md`, "Voice"). How a TLS relay would be
+  trusted stays undecided until the server gains one; the rule is in
+  `voice-signalling-v1.md`, *The credential*.
 - No signing configuration, keystore or release identity changed.
 
 ### Sources, read on 2026-09-28
