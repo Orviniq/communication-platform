@@ -37,11 +37,11 @@ final class PayloadLimits {
 /// have gone: an operator may move any of them between two restarts, and a
 /// client holding a copy would disagree with the deployment it is talking to.
 /// `ServerConfig` is where those live now, read through
-/// `ServerConfigSnapshot`.
+/// `ServerConfigSnapshot`. That includes a `signal` blob, which is held to the
+/// published `signal_buckets` and to no character count.
 abstract final class ApiContractLimits {
   static const maximumDeviceLogRecords = 50;
   static const maximumWebSocketFrameBytes = 524288;
-  static const maximumSignalCharacters = 16384;
 
   static const profileBuckets = {1024, 4096};
   static const labelBuckets = {256, 1024};

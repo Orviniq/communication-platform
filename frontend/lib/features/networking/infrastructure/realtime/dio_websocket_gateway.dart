@@ -154,7 +154,9 @@ final class DioWebSocketGateway implements RealtimeGateway {
     try {
       final decoded = jsonDecode(raw);
       final event = _decodeEvent(decoded);
-      _events.add(event);
+      if (event != null) {
+        _events.add(event);
+      }
     } on FormatException {
       unawaited(_closeForProtocolViolation());
     } on MalformedApiBody {
@@ -162,7 +164,8 @@ final class DioWebSocketGateway implements RealtimeGateway {
     }
   }
 
-  RealtimeEvent _decodeEvent(Object? value) {
+  /// Null for a frame that is dropped without a word.
+  RealtimeEvent? _decodeEvent(Object? value) {
     final json = requireJsonObject(value);
     final type = json['type'];
     if (type is! String) {
@@ -170,9 +173,23 @@ final class DioWebSocketGateway implements RealtimeGateway {
     }
     return switch (type) {
       'envelope' => _decodeEnvelope(json),
-      'signal' => RealtimeSignal(_requiredBlob(json)),
+      'signal' => _decodeSignal(json),
       _ => const UnsupportedRealtimeEvent(),
     };
+  }
+
+  /// A `signal` whose blob is not standard base64 of one `signal_buckets`
+  /// length is dropped, and the socket stays open.
+  ///
+  /// The server relays nothing else, so such a frame is a relay that stopped
+  /// checking or a bucket set this device has not read yet. Neither is worth
+  /// the socket that carries durable wake-ups, and a signal is volatile: what
+  /// the server does with an off-bucket one is drop it, and so does this.
+  RealtimeSignal? _decodeSignal(Map<String, Object?> json) {
+    final value = json['blob'];
+    return value is String && _isSignalBlob(value)
+        ? RealtimeSignal(value)
+        : null;
   }
 
   RealtimeEnvelope _decodeEnvelope(Map<String, Object?> json) {
@@ -191,15 +208,6 @@ final class DioWebSocketGateway implements RealtimeGateway {
     final value = json['blob'];
     if (value is! String ||
         !isCanonicalBase64Bucket(value, _config.current.envelopeBuckets)) {
-      throw const MalformedApiBody();
-    }
-    return value;
-  }
-
-  String _requiredBlob(Map<String, Object?> json) {
-    final value = json['blob'];
-    if (value is! String ||
-        value.length > ApiContractLimits.maximumSignalCharacters) {
       throw const MalformedApiBody();
     }
     return value;
@@ -286,16 +294,26 @@ final class DioWebSocketGateway implements RealtimeGateway {
       'ack' =>
         _hasOnlyKeys(frame, const {'type', 'ids'}) &&
             _isUuidList(frame['ids'], maximum: _config.current.ackMax),
+      // An off-bucket blob is refused here, where the caller hears about it.
+      // The server would drop the frame without a word.
       'signal' =>
         _hasOnlyKeys(frame, const {'type', 'to_device', 'blob'}) &&
             _isUuid(frame['to_device']) &&
-            _isBoundedString(
-              frame['blob'],
-              ApiContractLimits.maximumSignalCharacters,
-            ),
+            _isSignalBlob(frame['blob']),
       _ => false,
     };
   }
+
+  /// Standard base64, canonically padded, of exactly one `signal_buckets`
+  /// length: the rule the relay applies, read from the published
+  /// configuration.
+  ///
+  /// It guards against malformed input and nothing more. A modified server
+  /// relays whatever it is sent, so the rule buys length uniformity and no
+  /// security property.
+  bool _isSignalBlob(Object? value) =>
+      value is String &&
+      isCanonicalBase64Bucket(value, _config.current.signalBuckets);
 
   bool _isUuidList(Object? value, {required int maximum}) {
     if (value is! List<Object?> || value.isEmpty || value.length > maximum) {
@@ -305,9 +323,6 @@ final class DioWebSocketGateway implements RealtimeGateway {
   }
 
   bool _isUuid(Object? value) => value is String && _uuid.hasMatch(value);
-
-  bool _isBoundedString(Object? value, int maximum) =>
-      value is String && value.length <= maximum;
 
   bool _hasOnlyKeys(Map<String, Object?> frame, Set<String> allowed) =>
       frame.keys.every(allowed.contains);
