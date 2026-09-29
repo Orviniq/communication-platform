@@ -190,6 +190,60 @@ final class PairwiseSendCommit {
   final List<PreparedPairwiseSendTarget> targets;
 }
 
+/// What a volatile seal commits: each target's next session state, and
+/// nothing else.
+///
+/// It is a durable send without its outbox row and its local application
+/// marker. The advanced states are written in one transaction before any frame
+/// leaves, because a ratchet key that encrypts two plaintexts is the failure
+/// this transport cannot survive; the ciphertext stays with the caller, and a
+/// retry seals again on the next message number (`voice-signalling-v1.md`,
+/// "Volatile seal and open").
+final class PairwiseVolatileSealCommit {
+  PairwiseVolatileSealCommit({
+    required this.currentDeviceId,
+    required this.expectedDeviceStateVersion,
+    required List<PairwiseSessionTransition> transitions,
+  }) : transitions = List.unmodifiable(transitions);
+
+  final String currentDeviceId;
+  final int expectedDeviceStateVersion;
+  final List<PairwiseSessionTransition> transitions;
+}
+
+/// What a volatile open commits: the session state one `signal` frame
+/// advanced and, for an initial one, the device state, the one-time prekeys
+/// it consumed and its replay marker.
+///
+/// It is a durable receive without its inbox row, its opened payload and its
+/// application event: a call is held in memory, and nothing of it is written.
+final class PairwiseVolatileOpenCommit {
+  PairwiseVolatileOpenCommit({
+    required this.sessionTransition,
+    this.demotedExistingSessionTransition,
+    this.deviceStateTransition,
+    List<ConsumedPairwiseOneTimePrekey> consumedOneTimePrekeys = const [],
+    Uint8List? replayMarker,
+    this.signedPrekeyId,
+    this.pqSignedPrekeyId,
+  }) : consumedOneTimePrekeys = List.unmodifiable(consumedOneTimePrekeys),
+       replayMarker = replayMarker == null
+           ? null
+           : Uint8List.fromList(replayMarker);
+
+  final PairwiseSessionTransition sessionTransition;
+  final PairwiseSessionTransition? demotedExistingSessionTransition;
+  final PairwiseDeviceStateTransition? deviceStateTransition;
+  final List<ConsumedPairwiseOneTimePrekey> consumedOneTimePrekeys;
+
+  /// Present exactly when the frame carried an initial header.
+  final Uint8List? replayMarker;
+  final int? signedPrekeyId;
+  final int? pqSignedPrekeyId;
+
+  bool get isInitial => sessionTransition.expectedStateVersion == null;
+}
+
 /// One send whose event is committed and whose recipients are still owed.
 final class OwedSendPreparation {
   OwedSendPreparation({
