@@ -11,10 +11,13 @@ import 'package:communication_platform/features/pairwise/infrastructure/contact_
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/native_pairwise_outbound_preparation.dart';
 import 'package:communication_platform/features/voice/application/ports/relay_credential_ports.dart';
+import 'package:communication_platform/features/voice/application/ports/voice_peer_ports.dart';
 import 'package:communication_platform/features/voice/application/ports/voice_signalling_ports.dart';
 import 'package:communication_platform/features/voice/application/relay_credential_service.dart';
 import 'package:communication_platform/features/voice/application/voice_signal_transport.dart';
 import 'package:communication_platform/features/voice/infrastructure/dio_relay_credential_repository.dart';
+import 'package:communication_platform/features/voice/infrastructure/flutter_webrtc_local_audio.dart';
+import 'package:communication_platform/features/voice/infrastructure/flutter_webrtc_peer_media.dart';
 import 'package:communication_platform/features/voice/infrastructure/gateway_voice_signal_socket.dart';
 import 'package:communication_platform/features/voice/infrastructure/pairwise_voice_signal_crypto.dart';
 import 'package:communication_platform/features/voice/infrastructure/published_voice_deployment.dart';
@@ -106,3 +109,18 @@ final voiceSignallingProvider =
       ref.onDispose(() => unawaited(transport.dispose()));
       return transport;
     });
+
+/// The platform WebRTC a call's connections are opened on (ADR-078).
+final voicePeerMediaProvider = Provider<VoicePeerMediaPort>(
+  (ref) => const FlutterWebrtcPeerMedia(),
+);
+
+/// The call's microphone: one capture for the process, shared by every
+/// connection of the call in progress.
+///
+/// Composing it captures nothing. The first hold starts the capture, and the
+/// join asks for the microphone permission before any connection takes one
+/// (§N rule 11).
+final voiceLocalAudioProvider = Provider<VoiceLocalAudioPort>(
+  (ref) => FlutterWebrtcLocalAudioSource(),
+);
