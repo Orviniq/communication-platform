@@ -22,6 +22,9 @@ import 'package:communication_platform/features/pairwise/application/ports/pairw
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/voice/application/room_inbound_coordinator.dart';
+import 'package:communication_platform/features/voice/domain/room_model.dart';
+import 'package:communication_platform/features/voice/domain/room_sync_payload.dart';
 
 /// Piece-13 bridge from opaque sync bytes to side-effect-free native pairwise
 /// preparation. Application-event semantics deliberately remain opaque.
@@ -37,6 +40,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required this.currentUserId,
     required this.clock,
     required this.groupInbound,
+    required this.roomInbound,
   });
 
   final String localDeviceId;
@@ -49,6 +53,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   final String currentUserId;
   final TimeSource clock;
   final GroupInboundCoordinator groupInbound;
+  final RoomInboundCoordinator roomInbound;
 
   @override
   Future<Result<OpaqueEnvelopeInspection>> inspect({
@@ -185,6 +190,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
         opaqueEventId: prepared.opaqueEventId,
         dependency: prepared.dependency,
         groupCommit: prepared.groupCommit,
+        roomCommit: prepared.roomCommit,
         pairwiseCommit: PairwiseSyncReceiveCommit(
           envelopeId: envelopeId,
           opaqueEventId: prepared.opaqueEventId,
@@ -376,6 +382,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
         opaqueEventId: prepared.opaqueEventId,
         dependency: prepared.dependency,
         groupCommit: prepared.groupCommit,
+        roomCommit: prepared.roomCommit,
         pairwiseCommit: PairwiseSyncReceiveCommit(
           envelopeId: envelopeId,
           opaqueEventId: prepared.opaqueEventId,
@@ -420,6 +427,14 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required String senderDeviceId,
     required Uint8List openedPayload,
   }) async {
+    if (RoomSyncPayloadCodec.matches(openedPayload)) {
+      return _prepareRoomPayload(
+        envelopeId: envelopeId,
+        senderUserId: senderUserId,
+        senderDeviceId: senderDeviceId,
+        openedPayload: openedPayload,
+      );
+    }
     if (!GroupSyncPayloadCodec.matches(openedPayload)) {
       return _prepareApplication(
         envelopeId: envelopeId,
@@ -448,6 +463,41 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
           groupCommit: commit,
         ),
         GroupInboundNoChange(:final opaqueEventId) => _PreparedApplication(
+          opaqueEventId: opaqueEventId,
+        ),
+      },
+    );
+  }
+
+  /// A voice room's payload arrives the way a group's does, in an ordinary
+  /// durable envelope whose plaintext names the room
+  /// (`voice-signalling-v1.md`, The payload). The voice feature decides what
+  /// it means; this layer commits that decision in the same transaction as
+  /// the receive that carried it. Only a durable envelope reaches here: the
+  /// signal path drops a room payload unopened.
+  Future<Result<_PreparedApplication>> _prepareRoomPayload({
+    required String envelopeId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required Uint8List openedPayload,
+  }) async {
+    final preparedResult = await roomInbound.prepare(
+      envelopeId: envelopeId,
+      senderUserId: senderUserId,
+      senderDeviceId: senderDeviceId,
+      payload: openedPayload,
+    );
+    if (preparedResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return Result.success(
+      switch ((preparedResult as Success<RoomInboundPreparation>).value) {
+        RoomInboundChange(:final commit) => _PreparedApplication(
+          opaqueEventId: commit.opaqueEventId,
+          dependency: EnvelopeDependency.groupState,
+          roomCommit: commit,
+        ),
+        RoomInboundNoChange(:final opaqueEventId) => _PreparedApplication(
           opaqueEventId: opaqueEventId,
         ),
       },
@@ -782,6 +832,7 @@ final class _PreparedApplication {
     required this.opaqueEventId,
     this.dependency = EnvelopeDependency.directOrLocal,
     this.groupCommit,
+    this.roomCommit,
     this.applicationEvent,
     this.unsupportedApplicationEvent,
     this.deviceControlEvent,
@@ -791,6 +842,7 @@ final class _PreparedApplication {
   final String opaqueEventId;
   final EnvelopeDependency dependency;
   final PreparedGroupInboxCommit? groupCommit;
+  final PreparedRoomInboxCommit? roomCommit;
   final ApplicationEventCommit? applicationEvent;
   final UnsupportedApplicationCommit? unsupportedApplicationEvent;
   final DeviceControlEvent? deviceControlEvent;
