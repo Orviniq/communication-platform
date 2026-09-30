@@ -52,7 +52,10 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
 | `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
 | `receipts` | Per-message/device/user delivered/read projection |
-| `voice_rooms` | Local room capability, encrypted metadata, live state |
+| `room_states` | One voice room this device holds: its encrypted projection (the name, and every member with a membership state), the accepted control revision and state hash, its lifecycle, and when this device last checked the room's member devices for a missing pairwise session. A room is client state exactly as a group is; the server holds no room ([ADR-077](decisions.md)) |
+| `room_control_events` | A room's accepted control transcript, one row per signed event in chain order, with the exact canonical bytes and signature, kept so that this device can hand the transcript to a member it adds |
+| `room_outbound_objects` | Exact room payloads owed to other devices — a signed control event, a state request, a transcript, an answer, or a request that starts a missing session — committed with the change or the check that produced them and marked routed once they are in the pairwise outbox |
+| `room_state_requests` | Rooms whose control state this device still has to ask a member for, after a mailbox gap or something that named state it does not hold. A room with a row joins no call, invites nobody and renames nothing |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
 | `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
 | `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, and whether the notification permission prompt has ever been shown. Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
@@ -197,6 +200,19 @@ is recorded in `quarantine` and dropped. An open row in `group_state_requests` m
 active group read as waiting for its state, which withholds sending and group changes until
 a member answers.
 
+### Voice room state
+
+A room is held exactly as a group is, with the same compare-and-swap, the same
+single-transaction receive and the same transcript checks, in its own four tables. It
+writes no conversation row, because a room has no timeline, and a call writes no row at
+all. An open row in `room_state_requests` makes an active room read as waiting for its
+state, which withholds joining a call, inviting and renaming until a member answers; a
+room's gap row does not hold the checkpoint's gap open. A change that gives this device a
+room or adds a member empties `room_states.sessions_checked_at`, which makes the room's
+check for missing pairwise sessions due ([`voice-signalling-v1.md`](voice-signalling-v1.md),
+Starting the sessions a call needs). Rejected room events are recorded in `quarantine`
+under reason codes 48 to 51.
+
 ## Migrations
 
 - Every schema change has forward and rollback/restore tests using representative
@@ -281,6 +297,15 @@ a member answers.
   contact, and the member set lives in the group's own projection now. The conversations
   those groups owned are tombstoned, keeping their history on disk, and envelopes held back
   for an MLS re-admission return to ordinary inspection.
+
+- Schema version 23 deletes `voice_rooms` and creates `room_states`,
+  `room_control_events`, `room_outbound_objects` and `room_state_requests` empty
+  ([ADR-077](decisions.md) D6). `voice_rooms` described a server room — a capability, a name
+  the server stored, a live count it counted — and nothing ever wrote or read it. The drop
+  runs with `secure_delete` on, so the table's pages are zeroed rather than left on the free
+  list with their contents, and the connection's own setting is restored after it. A
+  database this build made and something stamped back loses its room tables to the same drop
+  and gets them back empty.
 
 ## Retention and deletion
 

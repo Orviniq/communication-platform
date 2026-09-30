@@ -746,6 +746,13 @@ it (prompt 7). A durable first message its recipient never fetches expires after
 `envelope_ttl_days` like any other, and leaves the one-sided session prompt 4 described; that
 is the durable path's existing limit, and B does not change it.
 
+**Built on 2026-09-30 by prompt 6, as decided above.** Three choices it made on the way are
+written into `voice-signalling-v1.md` as built, beside the rules they refine: a transcript
+gives a device a room only from a sender who is an active member of the state it leads to;
+a transcript confirms a device's state only when its head is exactly that state, so a copy
+from a member who was behind retires no open request; and a room's mailbox-gap request does
+not hold the checkpoint's gap open, because the room itself waits.
+
 ## ADR-076 in full — production gets a key, and the first install is the part that cannot be taken back (2026-09-14)
 
 **Status:** Accepted, 2026-09-14, on the owner's answers to its four questions, which are

@@ -2,8 +2,8 @@
 
 ## Status
 
-**The relay credential, the signalling transport and one peer connection are
-implemented, and no call can be placed.** `lib/features/voice/` fetches the credential,
+**The relay credential, the signalling transport, one peer connection and the room state
+are implemented, and no call can be placed.** `lib/features/voice/` fetches the credential,
 holds it and builds the relay-only ICE configuration from it (phase 6 prompt 3), and
 carries `CPVSV001` messages between devices in `signal` frames, each sealed to the pairwise
 session of the device it goes to and paced under the socket limits (prompt 4). That
@@ -11,11 +11,13 @@ transport is `RealtimeGateway.send`'s one caller. Prompt 5 built the connection 
 device: one audio track, relay-only ICE, perfect negotiation over that transport and an
 ICE restart that keeps the connection ([`voice-signalling-v1.md`](voice-signalling-v1.md),
 The connection). Two adapters in `lib/features/voice/infrastructure/` are the only code
-that imports `flutter_webrtc` ([ADR-078](decisions.md)). `/voice-rooms` renders
+that imports `flutter_webrtc` ([ADR-078](decisions.md)). Prompt 6 built the room: its
+signed control events, their fan-out and receipt, its four tables, and the durable requests
+that start the pairwise sessions its call will need, because a `signal` frame never starts
+one ([ADR-077](decisions.md), decided B on 2026-09-30). `/voice-rooms` renders
 `StructuralPlaceholderPage`, and nothing yet decides who a frame goes to or opens a
-connection. A `signal` frame never starts a pairwise session: [ADR-077](decisions.md)
-records why, as an open conflict for the owner. This document is the design phase 6
-builds, not a description of the artifact.
+connection. This document is the design phase 6 builds, not a description of the
+artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room
@@ -211,7 +213,7 @@ each:
 | The banner's tap target | `app_shell.dart:649` | **Replace** with the id of the call in progress, alongside the route above |
 | Contacts "New voice room" | `contacts_new_page.dart` | **Keep** |
 | `AppIcons.voiceRooms` | `app_icons.dart` | **Keep**, and add the 22 icons the design canvas draws that `AppIcons` has no mapping for — mic, mic-off, speaker, phone-off, user-plus and the rest |
-| Drift table `voice_rooms` | `local_database.dart:995` | **Delete.** It has no reader and no writer, and its three columns describe a server room: a capability to hold, a name the server stored, a live count the server counted. `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` replace it |
+| Drift table `voice_rooms` | `local_database.dart:995` | **Delete.** It has no reader and no writer, and its three columns describe a server room: a capability to hold, a name the server stored, a live count the server counted. `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` replace it. **Done 2026-09-30** by schema 23, phase 6 prompt 6 |
 | `StructuralPlaceholderKind.voiceRooms`, `.newRoom`, `.room` | `structural_placeholder_page.dart` | **Keep** until prompt 9 replaces each with a real screen |
 | `voiceRoomsPlaceholderTitle` / `Body` | `l10n` | **Keep** until then |
 | `voice_configured`, `signal_buckets` | `server_config_model.dart` | **Keep.** Both are already parsed and both are load-bearing here |

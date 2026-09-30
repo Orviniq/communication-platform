@@ -256,6 +256,17 @@ A removed member is sealed no copy of any message sealed after its removal is ac
 Content it already received cannot be remotely erased, and nothing is re-keyed, because
 there is no shared key to rotate.
 
+A voice room's roster changes the same way, under its own two domains:
+`"chat:v1:room-control"` for the signature and `"chat:v1:room-control-state"` for the state
+hash, so that no event of one kind verifies as the other. The shared core signs and opens
+room events through operations 20 and 21 of the pairwise multiplexer, beside the group's 18
+and 19, and adds no construction: the encoding, the signature, the hash chain and the
+receiver's checks are the group's
+([voice-signalling-v1.md](voice-signalling-v1.md), Part 1). A call inside a room has no
+application-level key at all; each connection is keyed by DTLS-SRTP between its two
+endpoints, and its signalling rides the pairwise sessions above, which the room's durable
+payloads start before a call needs them.
+
 ## Safety numbers and cross-signing
 
 SAS and QR verification commit to both users' stable IDs and exact master-key bytes.

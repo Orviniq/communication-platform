@@ -12,7 +12,8 @@ generated with the shared protocol package before implementation is considered s
 ```text
 logical event
   -> deterministic-CBOR application bytes (a DM, a group, or Saved Messages),
-     or a CPGSV001 group payload (a group's control state; see Groups)
+     or a CPGSV001 group payload (a group's control state; see Groups),
+     or a CPVRV001 room payload (a voice room's control state; see Voice rooms)
   -> TransportPlaintextV1(real length, inner bytes, random padding)
   -> per-recipient Double Ratchet authenticated encryption
   -> EnvelopeV1 outer frame in an allowed backend bucket
@@ -303,6 +304,19 @@ Two payload formats carry it, and both are specified in
 `signal` frame is dropped, and a `CPVSV001` arriving in a durable envelope is dropped.
 Without that rule the volatile channel is a way to write durable state, and the durable
 queue is a way to replay a call's signalling hours later.
+
+**A room starts the sessions its call needs** ([ADR-077](decisions.md), decided B on
+2026-09-30). A volatile frame never starts a pairwise session, because a first frame the
+relay drops would leave a session only its sender holds. So a device sends a `CPVRV001`
+state request, sealed to one device alone, to each live device of each active member it
+has no session with. On accepting a change that gives it the room or adds a member, it
+sends one only to the devices that sort above its own, so a pair starts one session; once
+a day, and before a call joins, it sends one to every device still missing one. The durable
+queue holds that first message until the device fetches it, and the answer is the
+session's second message. A request for a room a device does not hold, or naming a later
+revision than it holds, is answered with a request back, which is how a member's new
+device learns its rooms. The rule is in
+[voice-signalling-v1.md](voice-signalling-v1.md), Starting the sessions a call needs.
 
 ## Multi-device rules
 

@@ -17,16 +17,17 @@ later prompt of the phase. The architecture it implements is
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 disagree, those win.
 
-**The credential, the signalling transport and one peer connection are built; no room
-and no call are.** `lib/features/voice/` fetches, holds and refreshes the relay credential
-and builds the ICE configuration from it (*The credential*, below, phase 6 prompt 3). Phase
-6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the volatile seal and open
-on the pairwise session, the pacing, the candidate batching and the bounded inbound queue —
+**The credential, the signalling transport, one peer connection and the room are built;
+no call is.** `lib/features/voice/` fetches, holds and refreshes the relay credential and
+builds the ICE configuration from it (*The credential*, below, phase 6 prompt 3). Phase 6
+prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the volatile seal and open on
+the pairwise session, the pacing, the candidate batching and the bounded inbound queue —
 carried on the delivery session's own socket. Prompt 5 built the connection between this
-device and one other (*The connection*, below). Nothing under `lib/` implements `CPVRV001`
-yet, and nothing decides who a frame goes to or when to try again: that is the call's.
-Where the build departs from what this document decided, the departure is dated beside
-the decision.
+device and one other (*The connection*, below). Prompt 6 built all of Part 1: the room and
+its signed control events, their fan-out and receipt, the four tables, and the sessions a
+call needs. Nothing yet decides who a frame goes to or when to try again: that is the
+call's. Where the build departs from what this document decided, the departure is dated
+beside the decision.
 
 The transport beneath both formats is unchanged and is not restated here:
 [`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
@@ -113,6 +114,17 @@ event names that hash, so a room's accepted events are one hash chain. An event 
 16,384 bytes, and a decoded event that does not re-encode to exactly the signed bytes is
 refused.
 
+**As built, 2026-09-30.** `native/crypto_core/src/room_control.rs` is the group's module
+under the room's two domains, reached through operations 20 (seal) and 21 (open) of the
+pairwise multiplexer. The canonical event is the group's ten-key map — 0 version,
+1 `event_id`, 2 `room_id`, 3 `revision`, 4 the previous hash or null, 5 and 6 the signer,
+7 `created_ms`, 8 the operation, 9 the body — and the bodies are `{0: name, 1: [user ids]}`
+for a create, `{0: [user ids]}` for an add, `{0: user id}` for a removal and `{0: name}` for
+a rename, account ids strictly ascending; a golden test pins the bytes. Before it signs, the
+core refuses a create of fewer than two members or one that does not name its creator, an
+add of 50 or more, an all-zero account id, and the reserved value 5. A signature made under
+the group's domain never opens a room event, and a room event never opens as a group's.
+
 ## The operations, and who may sign each
 
 | Operation | Value | Body | Who may sign it |
@@ -158,6 +170,15 @@ on, never against its own lifecycle. The six outcomes are the group's, unchanged
 
 A quarantined room joins no call, invites nobody and renames nothing until the fork is
 resolved out of band, which is the *Info — conflicting changes* state.
+
+**As built, 2026-09-30.** `RoomControlStateMachine` and `RoomInboundCoordinator` in
+`lib/features/voice/`. Two rules are stricter than the group's. A transcript that would give
+this device a room is taken only when the sender's account, as well as this one's, is an
+active member of the state it leads to. And a transcript confirms the state this device
+holds, retiring its open request, only when the transcript's head is exactly that state: a
+copy from a member who was itself behind — an answer that came late, or a new member's
+transcript that crossed an event — retires nothing. A removed member's later events are
+recorded in `quarantine` and dropped, and their state requests go unanswered.
 
 ## The payload
 
@@ -229,6 +250,14 @@ own.
 What a missing session costs, and the alternatives this rule was chosen over, are in the
 ADR.
 
+**As built, 2026-09-30.** `RoomSessionStarter` runs in the delivery cycle's post-inbox work,
+after room state recovery and before the room dispatch, four rooms a pass. A payload already
+owed to a member — a create's or an add's own copy, an answer — counts as that member's
+session start, and a member whose live devices cannot be authenticated just now is left out
+and reported. The call's check is `startSessionsForCall`, which refuses a room this device
+may not act in. The call routes the room's outbound work before its `join`, and a peer that
+has not fetched the request yet drops that frame and takes the next attempt.
+
 ## What it replaces in the database
 
 The Drift table `voice_rooms` — `local_room_id`, `capability_ciphertext`,
@@ -247,6 +276,15 @@ name the server stored, and a live count the server counted. None of those exist
 connections, the ICE state and the room's ephemeral text are in memory for the life of the
 call and are gone when it ends. A call has no durable state because it has no state worth
 recovering: a reconnecting device rejoins and re-negotiates from nothing.
+
+**As built, 2026-09-30.** Schema 23. The step drops `voice_rooms` with `secure_delete` on,
+so its pages are zeroed rather than left on the free list, and gives the connection its own
+setting back. A room writes no conversation row. A room's queue-gap request does not hold
+the checkpoint's gap open: the checkpoint closes on the groups' answers as before, and each
+room waits for its own. The rest of the application reads rooms through
+`RoomStateReadPort` — `watchRooms`, `watchRoom` and `readRoom` — and
+`RoomAuthorization.mayAct` says whether this device may sign a change or join a call; a room
+waiting on its state reads as `stateRecoveryRequired`.
 
 ---
 
