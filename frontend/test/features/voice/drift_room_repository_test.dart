@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
