@@ -17,14 +17,16 @@ later prompt of the phase. The architecture it implements is
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 disagree, those win.
 
-**The credential and the signalling transport are built; no room and no call are.**
-`lib/features/voice/` fetches, holds and refreshes the relay credential and builds the ICE
-configuration from it (*The credential*, below, phase 6 prompt 3). Phase 6 prompt 4 built
-the `CPVSV001` transport of Part 2 — the codec, the volatile seal and open on the pairwise
-session, the pacing, the candidate batching and the bounded inbound queue — carried on the
-delivery session's own socket. Nothing under `lib/` implements `CPVRV001` yet, and nothing
-decides who a frame goes to or when to try again: that is the call's. Where the transport
-departs from what this document decided, the departure is dated beside the decision.
+**The credential, the signalling transport and one peer connection are built; no room
+and no call are.** `lib/features/voice/` fetches, holds and refreshes the relay credential
+and builds the ICE configuration from it (*The credential*, below, phase 6 prompt 3). Phase
+6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the volatile seal and open
+on the pairwise session, the pacing, the candidate batching and the bounded inbound queue —
+carried on the delivery session's own socket. Prompt 5 built the connection between this
+device and one other (*The connection*, below). Nothing under `lib/` implements `CPVRV001`
+yet, and nothing decides who a frame goes to or when to try again: that is the call's.
+Where the build departs from what this document decided, the departure is dated beside
+the decision.
 
 The transport beneath both formats is unchanged and is not restated here:
 [`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
@@ -685,7 +687,116 @@ because every later frame of theirs fails the roster check.
 Built in `lib/features/voice/`: `RelayCredential` and `RelayIceConfiguration` in the
 domain, `RelayCredentialService` for the rules above, and `DioRelayCredentialRepository`
 for the route, composed in `lib/app/dependencies/voice_providers.dart`. The ICE restart is
-prompt 5's.
+`VoicePeerConnection.restartIce` (*The connection*, below); when to call it — at
+`refreshDueAt`, with the new credential's configuration — is the call's.
+
+## The connection
+
+§N rules 1, 2, 3, 6 and 9, as phase 6 prompt 5 built them on 2026-09-30:
+`VoicePeerConnection` in `lib/features/voice/application/`, over two ports —
+`VoicePeerMediaPort` for the platform connection and `VoiceLocalAudioPort` for the
+microphone — whose `flutter_webrtc` adapters are the only files that import the package
+(`test/architecture/voice_media_boundary_test.dart`). A connection is to one device in one
+of its joins and knows nothing of a room: whom to negotiate with, when to try again and when
+to give up are the call's.
+
+**One audio track, and nothing that could become a second.** A connection takes a hold on
+the call's one capture — `getUserMedia` with `audio` true and `video` false, shared by every
+connection of the call and stopped when the last hold is given back — and adds its track
+with `addTrack`. No transceiver is added and no data channel is created. Two rules make
+that hold on the far side too:
+
+- **A description that is not exactly one audio section is refused**, whether it was
+  received or created here. A `video` or `application` section, or a second `audio` one, is
+  how a video track or a data channel would come into being on the device that applies it,
+  and a peer that sends one is not a peer of this version.
+- **Offers and answers are created with `OfferToReceiveVideo` false.** `flutter_webrtc`'s
+  own default asks to receive video, and libwebrtc meets that legacy option under Unified
+  Plan by adding a receive-only video transceiver to the offer.
+
+**The configuration is the credential's, whole, every time**: the relay's `turn:` servers
+with the credential, `iceTransportPolicy` `relay`, `max-bundle`, `rtcp-mux` `require`,
+Unified Plan and `gather_once`, at the connection and again at every restart.
+`flutter_webrtc`'s `setConfiguration` builds a fresh `RTCConfiguration` from what it is
+given, and libwebrtc's default for a field left out is `IceTransportsType.ALL`, so a restart
+that sent only the new servers would bring host candidates back.
+
+**Perfect negotiation, with an explicit rollback.** The device that receives a `join` calls
+`negotiate()`, and the joiner answers (§N rule 4). The platform's `onRenegotiationNeeded` is
+not used: adding the track fires it on the joiner too, which would turn every connection
+into a collision. Every step runs in one queue, so a collision is exactly a remote offer
+arriving while this device's own is outstanding. The polite device — the one whose id string
+sorts lower, compared in lowercase — rolls its offer back and answers; the impolite one
+ignores the offer and waits for the answer to its own. The rollback is an explicit
+`setLocalDescription` of type `rollback`, because libwebrtc refuses a remote offer in
+`have-local-offer` unless `enableImplicitRollback` is set, and `flutter_webrtc` has no way
+to set it.
+
+**What the channel is trusted for.** A description or a candidate batch is taken only when
+the device the pairwise session authenticated is this connection's peer, its header names
+the same device, the room is this one, the sender's `join_id` is the join this connection is
+for, and `target_join_id` is this device's own join. Within that:
+
+- a counter already taken is a retry's duplicate and is dropped;
+- an offer whose counter is below the last one applied is superseded;
+- an answer whose `answers_counter` is not the outstanding offer's is discarded.
+
+**Candidates follow their description.** A batch waits until the description it belongs to
+has been handed to the transport, because a device that has not yet seen an offer has no
+connection to hold them. A received candidate that arrives before any remote description is
+held — 32 at most — and applied after it, because libwebrtc drops a candidate it cannot
+place. Local candidates are matched to the local description applied last by the `ufrag`
+extension libwebrtc writes on every candidate line, and not by the platform's gathering
+events, which mark no generation: a new gathering emits no `gathering` while the old one is
+still running, and the session it stops still reports `complete`, late. A completion ends
+the batch only once a candidate of the current generation has arrived, so `end` is best
+effort, and nothing on the receiving side depends on it.
+
+**An ICE restart keeps the connection** (§N rule 9). `restartIce(configuration)` applies the
+new configuration, calls the platform's `restartIce()` and offers again, so the offer carries
+new ICE credentials and gathers against the new allocation while the media keeps its old
+path. Before anything has been negotiated there is nothing to restart, and the configuration
+alone is applied; with an offer outstanding, the restart follows its answer; a restart the
+polite device rolls back in a collision is offered again once the peer's offer is answered.
+It is reported in progress until its own answer is applied.
+
+**Resending** (§N rule 7). `resend()` sends the unanswered offer, or the answer last sent,
+again with the counter it first carried, sealed afresh; a peer that already has it drops
+the copy. The four attempts at 0, 2, 4 and 8 seconds are the call's schedule.
+
+**What it reports**: `connecting`, `connected`, `disconnected`, `failed` and `closed`; that
+its offer was answered; that its ICE restart is, or is no longer, in progress; and each
+frame the transport did not send, with the reason. A device with no pairwise session is
+refused `noSession` by the transport, and the connection reports it rather than starting one
+— option A of [ADR-077](decisions.md)'s open conflict, which the record recommends for this
+prompt. A platform refusal of a step of this device's own negotiation is `failed` for good,
+and the call closes the connection. `close()` closes the platform connection at once and
+gives back its hold, and the capture stays with the call's other connections: libwebrtc's
+`RtpSender.dispose` releases only the sender's own reference to the track.
+
+**The capture must follow the join's permission request.** `getUserMedia` asks for
+`RECORD_AUDIO` by itself when it is missing ([ADR-078](decisions.md)), and nothing here asks
+first, so the call takes its first hold only after the join has asked (§N rule 11, prompts 8
+and 9).
+
+Read on 2026-09-30 from the pinned sources. `flutter_webrtc` 1.6.2+hotfix.3, from the pub
+cache: `MethodCallHandlerImpl.parseRTCConfiguration` and `peerConnectionSetConfiguration`,
+`RTCPeerConnectionNative.defaultSdpConstraints` and `GetUserMediaImpl.getUserMedia`.
+`io.github.webrtc-sdk:android:150.7871.01`, disassembled from the cached AAR: the
+`PeerConnection$RTCConfiguration` constructor's defaults (`ALL`, `BALANCED`, `REQUIRE`,
+`UNIFIED_PLAN`, `GATHER_ONCE`, `enableImplicitRollback` false), `SessionDescription$Type`
+with `ROLLBACK`, and `RtpSender.dispose`, whose `MediaStreamTrack.dispose` is one
+`nativeReleaseRef`. [webrtc-sdk/webrtc at
+`m150_release`](https://github.com/webrtc-sdk/webrtc/tree/m150_release):
+`P2PTransportChannel::MaybeStartGathering`, `OnCandidatesReady` and
+`OnCandidatesAllocationDone` in `p2p/base/p2p_transport_channel.cc`, the last two ignoring
+which session they come from; `BasicPortAllocatorSession::StopGettingPorts` and
+`OnConfigStop` in `p2p/client/basic_port_allocator.cc`; `IceCandidate::ToString` in
+`api/jsep_ice_candidate.cc`, which writes the `ufrag` through `BuildCandidate` in
+`api/candidate.cc`; and, for the rollback's empty description, `CreateSessionDescription`
+in `api/jsep.cc`, which builds a rollback without reading its text, beside
+`JavaToNativeSessionDescription` in `sdk/android/src/jni/pc/session_description.cc`, which
+reads the text whatever the type.
 
 ## The ceiling
 

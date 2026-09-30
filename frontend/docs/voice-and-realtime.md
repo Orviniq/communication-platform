@@ -2,16 +2,20 @@
 
 ## Status
 
-**The relay credential and the signalling transport are implemented, and no call can be
-placed.** `lib/features/voice/` fetches the credential, holds it and builds the relay-only
-ICE configuration from it (phase 6 prompt 3), and carries `CPVSV001` messages between
-devices in `signal` frames, each sealed to the pairwise session of the device it goes to
-and paced under the socket limits (prompt 4). That transport is `RealtimeGateway.send`'s
-one caller. `/voice-rooms` renders `StructuralPlaceholderPage`, `pubspec.yaml` declares
-`flutter_webrtc` but no Dart file imports it ([ADR-078](decisions.md)), and nothing yet
-decides who a frame goes to. A `signal` frame never starts a pairwise session:
-[ADR-077](decisions.md) records why, as an open conflict for the owner. This document is
-the design phase 6 builds, not a description of the artifact.
+**The relay credential, the signalling transport and one peer connection are
+implemented, and no call can be placed.** `lib/features/voice/` fetches the credential,
+holds it and builds the relay-only ICE configuration from it (phase 6 prompt 3), and
+carries `CPVSV001` messages between devices in `signal` frames, each sealed to the pairwise
+session of the device it goes to and paced under the socket limits (prompt 4). That
+transport is `RealtimeGateway.send`'s one caller. Prompt 5 built the connection to one other
+device: one audio track, relay-only ICE, perfect negotiation over that transport and an
+ICE restart that keeps the connection ([`voice-signalling-v1.md`](voice-signalling-v1.md),
+The connection). Two adapters in `lib/features/voice/infrastructure/` are the only code
+that imports `flutter_webrtc` ([ADR-078](decisions.md)). `/voice-rooms` renders
+`StructuralPlaceholderPage`, and nothing yet decides who a frame goes to or opens a
+connection. A `signal` frame never starts a pairwise session: [ADR-077](decisions.md)
+records why, as an open conflict for the owner. This document is the design phase 6
+builds, not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room

@@ -94,10 +94,11 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 ## Voice rooms and realtime
 
-**Designed, and one part built.** Phase 6 prompt 1 wrote the design and
+**Designed, and three parts built.** Phase 6 prompt 1 wrote the design and
 [ADR-077](decisions.md) records it, Accepted on 2026-09-20; prompt 2 added the media
-package ([ADR-078](decisions.md)), and prompt 3 built the relay credential. Nothing under
-`lib/` implements a room or a call yet, and `RealtimeGateway.send` still has no caller.
+package ([ADR-078](decisions.md)); prompt 3 built the relay credential, prompt 4 the
+signalling transport, which is `RealtimeGateway.send`'s one caller, and prompt 5 one peer
+connection. Nothing under `lib/` implements a room or a call yet.
 
 [ADR-058](decisions.md)'s P1 to P7 are **superseded and no longer gate anything**. They
 named a granted MLS exporter, that exporter reachable through the native boundary, the
@@ -112,11 +113,11 @@ left is work.
 |---|---|---|
 | Room create, rename, invite, remove, leave | **Nothing to build.** The server holds no room | Pending. Signed `CPVRV001` control events on the group's own chain machinery ([voice-signalling-v1.md](voice-signalling-v1.md)) |
 | Room storage | Not applicable | Pending. `voice_rooms` is deleted; `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` mirror the group's |
-| Call signalling | Ready volatile relay | Pending. `CPVSV001` over `signal` frames: join, leave, offer, answer, candidates, participant query and answer, room text. `room_signal` and `room_presence` were retired by server ADR-0021 and deleted from the client by ADR-069 |
-| Relay credential | Ready, `POST /api/v1/me/relay` | **Done 2026-09-30, phase 6 prompt 3.** `lib/features/voice/` mints at each join and again once less than an hour is left, holds the credential in memory only, and builds the ICE configuration from it: one server for each `turn:` URL, transport policy `relay`, no STUN server. `voice_configured` false and `503 voice_unconfigured` are one state that fetches nothing further, the REST client never replays that `503`, and a `429` cools down for its `Retry-After`. The ICE restart on a mid-call expiry is prompt 5's |
-| WebRTC media | Not applicable. No media server exists | Pending. `flutter_webrtc` 1.6.2+hotfix.3 is pinned and reviewed ([ADR-078](decisions.md)), and no Dart file imports it yet; the peer connection is phase 6 prompt 5's |
+| Call signalling | Ready volatile relay | **Transport, offers and answers built 2026-09-30.** Phase 6 prompt 4 built the `CPVSV001` codec and transport over `signal` frames, each sealed to the pairwise session and paced under the socket limits; prompt 5 sends and takes offers, answers and candidate batches for one connection. Pending: join, leave, participant query and answer, room text and every retry, which are the call's (prompt 7). `room_signal` and `room_presence` were retired by server ADR-0021 and deleted from the client by ADR-069 |
+| Relay credential | Ready, `POST /api/v1/me/relay` | **Done 2026-09-30, phase 6 prompt 3.** `lib/features/voice/` mints at each join and again once less than an hour is left, holds the credential in memory only, and builds the ICE configuration from it: one server for each `turn:` URL, transport policy `relay`, no STUN server. `voice_configured` false and `503 voice_unconfigured` are one state that fetches nothing further, the REST client never replays that `503`, and a `429` cools down for its `Retry-After`. The ICE restart on a mid-call expiry is built (prompt 5); calling it at `refreshDueAt` is the call's |
+| WebRTC media | Not applicable. No media server exists | **One connection built 2026-09-30, phase 6 prompt 5.** One `RTCPeerConnection` for each device pair, carrying the call's one shared audio track and no video track or data channel, and refusing any description that is not exactly one audio section; the relay-only configuration, whole, at open and at each restart; perfect negotiation with an explicit rollback; an ICE restart that keeps the connection ([voice-signalling-v1.md](voice-signalling-v1.md), The connection). `flutter_webrtc` 1.6.2+hotfix.3 ([ADR-078](decisions.md)) is imported by two adapters and nothing else. Tested on fakes and on the plugin's own Dart half over a faked platform channel; never run on a device. The mesh is the call's (prompt 7) |
 | Audio encryption | Server deliberately excluded | **Nothing to distribute.** DTLS-SRTP keys each connection between its two endpoints; there is no application-level media key and none is designed (server ADR-0021 point 3) |
-| Volatile pairwise seal | Not applicable | Pending. The pairwise store has a durable path only; a volatile seal commits the advanced session state without an outbox row |
+| Volatile pairwise seal | Not applicable | **Built 2026-09-30, phase 6 prompt 4.** `commitVolatileSeal` commits every target's advanced session state without an outbox row, and `commitVolatileOpen` writes what a received frame advanced and no inbox row. A volatile frame never starts a session: [ADR-077](decisions.md) records that as an open conflict for the owner |
 | Ephemeral room text | Volatile relay ready | Pending encrypted memory-only UI |
 | Android active-call service | Not applicable | Pending. ADR-051 records that two foreground services can be armed at once if voice ships; the microphone-type service is required for the life of a call (§N rule 11) |
 
