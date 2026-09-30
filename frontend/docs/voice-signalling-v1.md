@@ -194,6 +194,41 @@ The four delivery rules are the group's, and hold for the same reasons
   reason it blocks a join is that a device which may be missing a removal would otherwise
   offer audio to somebody the room has ejected.
 
+## Starting the sessions a call needs
+
+Decided on 2026-09-30, option B of [ADR-077](decisions.md)'s open conflict. A call's frames
+are volatile, and a volatile frame never starts a pairwise session (Part 2, *Volatile seal
+and open*), so the room starts every session its call will need, on the durable path, before
+the call needs it. No payload is new: this is the kind 2 request above, sent on a rule of its
+own.
+
+- **The payload.** A state request naming the state this device holds, sealed to one device
+  alone as an ordinary durable envelope. With no session to that device, the fan-out claims
+  its bundle and the envelope's initial header starts one, and the queue holds the envelope
+  until the device fetches it. The answer is the session's second message.
+- **Who is sent one.** Each live device of each active member, this account's other devices
+  included, that this device has no pairwise session with at all. A session under repair
+  belongs to the repair path and is left alone.
+- **When.**
+  1. After this device commits a change that gives it the room or adds a member — a create,
+     a transcript that gives it the room, an add — it sends one to each such device whose
+     id sorts above its own, as lowercase strings, the order §N rule 3 uses. The device
+     that sorts lower starts the session, so two devices that accept one change together
+     start one session between them.
+  2. Every 24 hours for each room it holds, and whenever the call asks before a join, it
+     sends one to every such device, whichever sorts lower: that device may be offline, and
+     a member's new device has accepted nothing.
+  3. Never for a room it holds quarantined, is waiting on the state of, or is not an active
+     member of.
+- **Answering it** is the state-request rule above. Two rules extend the group's, for rooms
+  only: a request for a room this device does not hold, and a request naming a later
+  revision than this device holds, each open a state request back to the device that sent
+  it, within the same 64 open requests. The first is how a member's new device learns a room:
+  a member device starts a session with it by asking, and it asks back.
+
+What a missing session costs, and the alternatives this rule was chosen over, are in the
+ADR.
+
 ## What it replaces in the database
 
 The Drift table `voice_rooms` — `local_room_id`, `capability_ciphertext`,
@@ -203,7 +238,7 @@ name the server stored, and a live count the server counted. None of those exist
 
 | Table | Mirrors | Holds |
 |---|---|---|
-| `room_states` | `group_states` | One row per room: the encrypted roster projection, the accepted revision, the state hash, the lifecycle |
+| `room_states` | `group_states` | One row per room: the encrypted roster projection, the accepted revision, the state hash, the lifecycle, and when this device last checked it for missing sessions — empty after a change of rule 1 above, so the check is due |
 | `room_control_events` | `group_control_events` | The accepted chain: one row per signed event, with the exact canonical bytes and signature, so this device can hand a transcript to a new member |
 | `room_outbound_objects` | `group_outbound_objects` | Exact `CPVRV001` payloads owed to other devices, committed with the state change that produced them |
 | `room_state_requests` | `group_state_requests` | Rooms whose state this device still has to ask a member for |
@@ -477,6 +512,12 @@ whose queue does not lose a first message short of its TTL. Receiving an initial
 over a `signal` frame is still accepted, under every check a durable one gets. This is a
 departure from the paragraph above, not a decision: [ADR-077](decisions.md) records it and
 the options, for the owner.
+
+**Decided B on 2026-09-30.** The suspension is the rule: a volatile frame never starts a
+session, so *When no session exists with a device*, above, no longer applies, and nothing
+is ever sealed under an initial header in a `signal` frame. The room's durable payloads start the sessions instead
+(Part 1, *Starting the sessions a call needs*), so a call's first `join` to a peer rides a
+session the durable queue already carried the first message of.
 
 **When a peer's safety number changes.** An expected prekey rotation does not reset
 account-master verification and costs a call nothing
@@ -767,9 +808,10 @@ the copy. The four attempts at 0, 2, 4 and 8 seconds are the call's schedule.
 **What it reports**: `connecting`, `connected`, `disconnected`, `failed` and `closed`; that
 its offer was answered; that its ICE restart is, or is no longer, in progress; and each
 frame the transport did not send, with the reason. A device with no pairwise session is
-refused `noSession` by the transport, and the connection reports it rather than starting one
-— option A of [ADR-077](decisions.md)'s open conflict, which the record recommends for this
-prompt. A platform refusal of a step of this device's own negotiation is `failed` for good,
+refused `noSession` by the transport, and the connection reports it rather than starting one.
+Since [ADR-077](decisions.md)'s open conflict was decided B on 2026-09-30, the room starts
+that session on the durable path (Part 1, *Starting the sessions a call needs*), so
+`noSession` reaching the call means the room has not reached that device yet. A platform refusal of a step of this device's own negotiation is `failed` for good,
 and the call closes the connection. `close()` closes the platform connection at once and
 gives back its hold, and the capture stays with the call's other connections: libwebrtc's
 `RtpSender.dispose` releases only the sender's own reference to the track.
