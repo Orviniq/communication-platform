@@ -20,7 +20,9 @@ enum PairwiseCryptoOperation {
   consumeAuthenticatedRepairRequest(16),
   inspectPublicHeader(17),
   sealGroupControl(18),
-  openGroupControl(19);
+  openGroupControl(19),
+  sealRoomControl(20),
+  openRoomControl(21);
 
   const PairwiseCryptoOperation(this.wireValue);
 
