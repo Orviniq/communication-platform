@@ -1226,6 +1226,176 @@ void main() {
       await upgraded.close();
     },
   );
+
+  test('version-twenty-two upgrade replaces the server room table and leaves '
+      'nothing of it behind', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    // `voice_rooms` is put back the way schema 22 made it, holding a row
+    // nothing in any build ever wrote, and the room tables are taken away.
+    final versionTwentyTwo = sqlite3.open(databaseFile.path)
+      ..execute('DROP TABLE room_outbound_objects')
+      ..execute('DROP TABLE room_control_events')
+      ..execute('DROP TABLE room_state_requests')
+      ..execute('DROP TABLE room_states')
+      ..execute(_voiceRoomsTableV22)
+      ..execute(
+        'INSERT INTO voice_rooms (local_room_id, capability_ciphertext, '
+        'metadata_ciphertext, live_state) VALUES (?, ?, ?, ?)',
+        <Object?>[
+          _voiceRoomMarkerV22,
+          Uint8List.fromList(utf8.encode(_voiceRoomCapabilityV22)),
+          Uint8List.fromList(utf8.encode(_voiceRoomNameV22)),
+          2,
+        ],
+      )
+      ..execute(
+        'INSERT INTO conversations (conversation_id, kind, '
+        "list_projection_ciphertext, sort_key) "
+        "VALUES ('direct-v22', 0, X'01', 1)",
+      )
+      ..execute('PRAGMA user_version = 22');
+    versionTwentyTwo.close();
+    final before = await databaseFile.readAsBytes();
+    expect(
+      _containsBytes(before, utf8.encode(_voiceRoomNameV22)),
+      isTrue,
+      reason: 'the fixture must be on disk for its absence to mean anything',
+    );
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    expect(LocalDatabase.currentSchemaVersion, 23);
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      23,
+    );
+    final objects = await upgraded
+        .customSelect('SELECT name, tbl_name FROM sqlite_master')
+        .map((row) => row.read<String>('tbl_name'))
+        .get();
+    expect(objects, isNot(contains('voice_rooms')));
+    expect(
+      objects,
+      containsAll(<String>[
+        'room_states',
+        'room_control_events',
+        'room_outbound_objects',
+        'room_state_requests',
+      ]),
+    );
+    for (final table in const [
+      'room_states',
+      'room_control_events',
+      'room_outbound_objects',
+      'room_state_requests',
+    ]) {
+      expect(
+        await upgraded.customSelect('SELECT * FROM $table').get(),
+        isEmpty,
+      );
+    }
+    final roomColumns = await upgraded
+        .customSelect('PRAGMA table_info(room_states)')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(roomColumns, contains('sessions_checked_at'));
+    expect(
+      await upgraded
+          .customSelect(
+            "SELECT * FROM conversations WHERE conversation_id = 'direct-v22'",
+          )
+          .get(),
+      hasLength(1),
+    );
+    final fresh = sqlite3.openInMemory();
+    final defaultSecureDelete =
+        fresh.select('PRAGMA secure_delete').single['secure_delete'] as int;
+    fresh.close();
+    expect(
+      await upgraded
+          .customSelect('PRAGMA secure_delete')
+          .map((row) => row.read<int>('secure_delete'))
+          .getSingle(),
+      defaultSecureDelete,
+      reason: 'the connection keeps the setting it had',
+    );
+    await upgraded.close();
+
+    final after = await databaseFile.readAsBytes();
+    for (final marker in const [
+      _voiceRoomMarkerV22,
+      _voiceRoomCapabilityV22,
+      _voiceRoomNameV22,
+    ]) {
+      expect(_containsBytes(after, utf8.encode(marker)), isFalse);
+    }
+  });
+
+  test(
+    'the room table replacement tolerates a database this build made',
+    () async {
+      // A database this build created and something stamped back to 22
+      // already has the room tables and no `voice_rooms`. An upgrade that
+      // failed on either would leave the application unable to open its
+      // storage.
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final stampedBack = sqlite3.open(databaseFile.path)
+        ..execute('PRAGMA user_version = 22');
+      stampedBack.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+      final tables = await upgraded
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(
+        tables,
+        containsAll(<String>['room_states', 'room_state_requests']),
+      );
+      expect(tables, isNot(contains('voice_rooms')));
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
+}
+
+/// `voice_rooms` as schema 22 created it, before schema 23 deleted it.
+const _voiceRoomsTableV22 =
+    'CREATE TABLE "voice_rooms" ("local_room_id" TEXT NOT NULL, '
+    '"capability_ciphertext" BLOB NOT NULL, '
+    '"metadata_ciphertext" BLOB NOT NULL, '
+    '"live_state" INTEGER NOT NULL CHECK ("live_state" BETWEEN 0 AND 4), '
+    'PRIMARY KEY ("local_room_id"))';
+
+const _voiceRoomMarkerV22 = 'voice-room-v22-reference-7c1e';
+const _voiceRoomCapabilityV22 = 'voice-room-v22-capability-4b92';
+const _voiceRoomNameV22 = 'voice-room-v22-name-e0d5';
+
+bool _containsBytes(List<int> haystack, List<int> needle) {
+  outer:
+  for (var start = 0; start + needle.length <= haystack.length; start += 1) {
+    for (var index = 0; index < needle.length; index += 1) {
+      if (haystack[start + index] != needle[index]) continue outer;
+    }
+    return true;
+  }
+  return false;
 }
 
 const _userV19 = '00000000-0000-0000-0000-0000000000a1';

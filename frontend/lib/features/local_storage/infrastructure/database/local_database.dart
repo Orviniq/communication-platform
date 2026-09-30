@@ -992,17 +992,118 @@ class PendingApplicationReceipts extends Table {
   Set<Column<Object>> get primaryKey => {messageId, localDeviceId};
 }
 
-class VoiceRooms extends Table {
+/// One voice room this device holds.
+///
+/// A room is client state exactly as a group is (`backend/CLIENT_CONTRACT.md`
+/// §N, server ADR-0021): the server holds no room, roster or name for it.
+/// [controlProjectionCiphertext] is this device's projection of the room, its
+/// name and roster included, and [RoomControlEvents] holds the signed
+/// transcript that justifies it. [sessionsCheckedAt] is when this device last
+/// checked the room's member devices for a missing pairwise session; it is
+/// empty after a change that gave it the room or added a member, which makes
+/// the check due (`voice-signalling-v1.md`, Starting the sessions a call
+/// needs). A call writes no row anywhere.
+@DataClassName('StoredRoomStateRow')
+class RoomStates extends Table {
   @override
-  String get tableName => 'voice_rooms';
+  String get tableName => 'room_states';
 
-  TextColumn get localRoomId => text()();
-  BlobColumn get capabilityCiphertext => blob()();
-  BlobColumn get metadataCiphertext => blob()();
-  IntColumn get liveState => integer().check(liveState.isBetweenValues(0, 4))();
+  TextColumn get roomId => text()();
+  IntColumn get stateVersion =>
+      integer().check(stateVersion.isBiggerThanValue(0))();
+  BlobColumn get controlProjectionCiphertext => blob()();
+  IntColumn get controlRevision =>
+      integer().check(controlRevision.isBiggerThanValue(0))();
+  BlobColumn get controlStateHash => blob()();
+  IntColumn get lifecycle => integer().check(lifecycle.isBetweenValues(0, 5))();
+  DateTimeColumn get sessionsCheckedAt => dateTime().nullable()();
 
   @override
-  Set<Column<Object>> get primaryKey => {localRoomId};
+  Set<Column<Object>> get primaryKey => {roomId};
+}
+
+/// A room's accepted control transcript: one row per signed event, in chain
+/// order, with the exact bytes its signer's device produced, so that this
+/// device can hand the transcript to a member it adds.
+@DataClassName('StoredRoomControlEventRow')
+class RoomControlEvents extends Table {
+  @override
+  String get tableName => 'room_control_events';
+
+  TextColumn get eventId => text()();
+  TextColumn get roomId =>
+      text().references(RoomStates, #roomId, onDelete: KeyAction.cascade)();
+  IntColumn get revision => integer().check(revision.isBiggerThanValue(0))();
+  BlobColumn get previousControlStateHash => blob().nullable()();
+  BlobColumn get controlStateHash => blob()();
+  TextColumn get signerUserId => text()();
+  TextColumn get signerDeviceId => text()();
+  IntColumn get operationKind =>
+      integer().check(operationKind.isBetweenValues(1, 4))();
+  BlobColumn get canonicalControl => blob()();
+  BlobColumn get signature => blob()();
+  IntColumn get createdMs =>
+      integer().check(createdMs.isBiggerOrEqualValue(0))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {eventId};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {roomId, revision},
+  ];
+}
+
+/// Exact room payloads owed to other devices.
+///
+/// A row commits with the state change or the session check that produced it,
+/// and is routed into the pairwise outbox afterwards. [roomId] names no parent
+/// row, because a request for a room's state can precede the room.
+@DataClassName('StoredRoomOutboundObjectRow')
+class RoomOutboundObjects extends Table {
+  @override
+  String get tableName => 'room_outbound_objects';
+
+  TextColumn get operationId => text()();
+  TextColumn get roomId => text()();
+  TextColumn get eventId => text()();
+  BlobColumn get payload => blob()();
+  TextColumn get recipientUserIdsJson => text()();
+  TextColumn get recipientDeviceId => text().nullable()();
+  BoolColumn get includeOwnDevices =>
+      boolean().withDefault(const Constant(false))();
+  // 1 committed and awaiting recipient-bound pairwise fan-out, 2 routed into
+  // the durable pairwise outbox.
+  IntColumn get deliveryState =>
+      integer().check(deliveryState.isBetweenValues(1, 2))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {operationId};
+}
+
+/// Rooms whose control state this device still has to ask a member for.
+///
+/// Reason 0 is a mailbox gap that may have carried a control event. Reason 1
+/// is something that named state this device does not hold: an event built on
+/// it, or a state request. Unlike a group's, a room's gap row does not hold
+/// the checkpoint's gap open; the room itself waits.
+@DataClassName('StoredRoomStateRequestRow')
+class RoomStateRequests extends Table {
+  @override
+  String get tableName => 'room_state_requests';
+
+  TextColumn get roomId => text()();
+  IntColumn get reason => integer().check(reason.isBetweenValues(0, 1))();
+  TextColumn get peerUserId => text().nullable()();
+  IntColumn get attempts => integer()
+      .withDefault(const Constant(0))
+      .check(attempts.isBiggerOrEqualValue(0))();
+  DateTimeColumn get requestedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {roomId};
 }
 
 class HistoryTransfers extends Table {
@@ -1164,7 +1265,10 @@ class StorageMigrationHooks {
     StaleDeviceRefreshRequests,
     Receipts,
     PendingApplicationReceipts,
-    VoiceRooms,
+    RoomStates,
+    RoomControlEvents,
+    RoomOutboundObjects,
+    RoomStateRequests,
     HistoryTransfers,
     HistoryTransferBatches,
     SyncCheckpoints,
@@ -1176,7 +1280,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 22;
+  static const currentSchemaVersion = 23;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1822,6 +1926,43 @@ final class LocalDatabase extends _$LocalDatabase {
             'UPDATE inbox_envelopes SET processing_state = 0 '
             'WHERE processing_state = 5',
           );
+        }
+        if (from < 23) {
+          // `voice_rooms` described a server room: a capability to hold, a
+          // name the server stored and a live count the server counted. None
+          // of those exists (server ADR-0021), and nothing ever wrote the table
+          // or read it. A room is client state now, held the way a group is,
+          // and four tables that mirror the group's take its place (ADR-077
+          // D6).
+          //
+          // `deleteTable` issues `DROP TABLE IF EXISTS`, children first. A
+          // database this build created and something stamped back loses its
+          // room tables to the same drop and gets them back empty, as the
+          // schema-22 step does with the group's.
+          //
+          // SQLite keeps a dropped table's pages, contents and all, on the
+          // free list until something reuses them, so the drop runs with
+          // `secure_delete` on and zeroes them instead: a table this build
+          // no longer reads leaves nothing of itself in the file. The
+          // connection's own setting is put back afterwards.
+          final secureDelete = await customSelect(
+            'PRAGMA secure_delete',
+          ).map((row) => row.read<int>('secure_delete')).getSingle();
+          await customStatement('PRAGMA secure_delete = 1');
+          for (final table in const [
+            'room_outbound_objects',
+            'room_control_events',
+            'room_state_requests',
+            'room_states',
+            'voice_rooms',
+          ]) {
+            await migrator.deleteTable(table);
+          }
+          await customStatement('PRAGMA secure_delete = $secureDelete');
+          await migrator.createTable(roomStates);
+          await migrator.createTable(roomControlEvents);
+          await migrator.createTable(roomOutboundObjects);
+          await migrator.createTable(roomStateRequests);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

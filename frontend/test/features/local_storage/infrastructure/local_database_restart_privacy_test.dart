@@ -54,14 +54,17 @@ void main() {
               verificationState: 1,
             ),
           );
+      // A room's name and roster live inside its control projection.
       await database
-          .into(database.voiceRooms)
+          .into(database.roomStates)
           .insert(
-            VoiceRoomsCompanion.insert(
-              localRoomId: 'opaque-local-room-reference',
-              capabilityCiphertext: opaqueCiphertext,
-              metadataCiphertext: opaqueCiphertext,
-              liveState: 0,
+            RoomStatesCompanion.insert(
+              roomId: 'opaque-room-reference',
+              stateVersion: 1,
+              controlProjectionCiphertext: opaqueCiphertext,
+              controlRevision: 1,
+              controlStateHash: opaqueCiphertext,
+              lifecycle: 0,
             ),
           );
       await database
@@ -78,9 +81,9 @@ void main() {
 
       database = LocalDatabase(NativeDatabase(file));
       final profile = await database.select(database.profiles).getSingle();
-      final room = await database.select(database.voiceRooms).getSingle();
+      final room = await database.select(database.roomStates).getSingle();
       expect(profile.profileCiphertext, opaqueCiphertext);
-      expect(room.metadataCiphertext, opaqueCiphertext);
+      expect(room.controlProjectionCiphertext, opaqueCiphertext);
       await database.close();
 
       final persistentBytes = await file.readAsBytes();
@@ -110,7 +113,7 @@ void main() {
       expect(source, isNot(contains('get $prohibitedColumn')));
     }
     expect(source, contains('profileCiphertext'));
-    expect(source, contains('metadataCiphertext'));
+    expect(source, contains('controlProjectionCiphertext'));
     expect(source, contains('encryptedDescriptor'));
     expect(source, contains('projectionCiphertext'));
   });
