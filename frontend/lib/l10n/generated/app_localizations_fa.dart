@@ -1805,4 +1805,599 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get linkedDevicesAddBody =>
       'برنامه را روی دستگاه دیگر نصب کنید، همانجا وارد شوید و وقتی پرسید، رمز بازیابی خود را وارد کنید. پس از امضا شدن، در این فهرست دیده می‌شود. پس از آن این گوشی را متصل نگه دارید تا تاریخچه را بفرستد؛ سرور نسخه‌ای برای فرستادن ندارد.';
+
+  @override
+  String get voiceRoomsLoadingTitle => 'در حال بارگیری اتاق‌ها';
+
+  @override
+  String get voiceRoomsLoadingBody =>
+      'اتاق‌های ذخیره‌شده روی این دستگاه خوانده می‌شوند.';
+
+  @override
+  String get voiceRoomsEmptyTitle => 'هنوز اتاق صوتی ندارید';
+
+  @override
+  String get voiceRoomsEmptyBody =>
+      'اتاق صوتی فضایی مستقل برای تماس است. فقط روی دستگاه‌های اعضایش نگه داشته می‌شود و سرور هرگز آن را در اختیار ندارد.';
+
+  @override
+  String get voiceRoomsCreateAction => 'ساخت اتاق';
+
+  @override
+  String get voiceRoomsOfflineNotice =>
+      'آفلاین — اتاق‌های ذخیره‌شده روی این دستگاه نمایش داده می‌شوند. تا وقتی سرور در دسترس نباشد تماسی شروع نمی‌شود.';
+
+  @override
+  String get voiceRoomsNoVoiceTitle => 'این سرور تماس صوتی ارائه نمی‌کند';
+
+  @override
+  String get voiceRoomsNoVoiceBody =>
+      'این سرور رله‌ای برای برقراری تماس ندارد، پس اینجا نمی‌توان اتاق ساخت یا به تماس پیوست. هیچ سرویس دیگری به جای آن به کار نمی‌رود.';
+
+  @override
+  String get voiceRoomsErrorBody => 'اتاق‌های این دستگاه خوانده نشدند.';
+
+  @override
+  String voiceRoomStateLive(int count) {
+    return 'در حال تماس · $count';
+  }
+
+  @override
+  String get voiceRoomStateEmpty => 'خالی';
+
+  @override
+  String get voiceRoomStateWaiting => 'در انتظار وضعیت اتاق از یکی از اعضا';
+
+  @override
+  String get voiceRoomStateConflict => 'متوقف به‌خاطر تغییرهای ناسازگار';
+
+  @override
+  String get voiceRoomStateLeft => 'این اتاق را ترک کرده‌اید';
+
+  @override
+  String get voiceRoomStateRemoved => 'از این اتاق حذف شده‌اید';
+
+  @override
+  String get voiceRoomCreateTitle => 'اتاق صوتی جدید';
+
+  @override
+  String voiceRoomCreateStep(int step) {
+    return 'مرحلهٔ $step از ۳';
+  }
+
+  @override
+  String get voiceRoomNameLabel => 'نام اتاق';
+
+  @override
+  String get voiceRoomNamePrivacyNote =>
+      'روی این دستگاه رمزنگاری می‌شود. سرور هرگز آن را نمی‌بیند.';
+
+  @override
+  String get voiceRoomStandaloneNote =>
+      'اتاق صوتی مستقل است. به هیچ گفت‌وگو یا گروهی وابسته نیست و هر کس را دعوت کنید هم‌تراز وارد می‌شود: هر عضوی می‌تواند دعوت کند، حذف کند یا نام اتاق را تغییر دهد.';
+
+  @override
+  String get voiceRoomNameEmpty => 'برای اتاق نامی بگذارید.';
+
+  @override
+  String get voiceRoomNameTooLong =>
+      'این نام بیش از حد طولانی است. آن را به ۱۰۰ نویسه یا کمتر کوتاه کنید.';
+
+  @override
+  String get voiceRoomContinueAction => 'ادامه';
+
+  @override
+  String get voiceRoomInviteStepTitle => 'چه کسانی دعوت شوند';
+
+  @override
+  String voiceRoomSelectedCount(int count) {
+    return '$count انتخاب‌شده';
+  }
+
+  @override
+  String get voiceRoomNoVerifiedTitle => 'هنوز کسی برای دعوت نیست';
+
+  @override
+  String get voiceRoomNoVerifiedBody =>
+      'فقط مخاطبانی را می‌توانید دعوت کنید که شمارهٔ امنیتی‌شان را بررسی کرده‌اید، و هنوز هیچ‌کدام تأیید نشده‌اند.';
+
+  @override
+  String get voiceRoomVerifyContactAction => 'تأیید یک مخاطب';
+
+  @override
+  String get voiceRoomSelectAtLeastOne =>
+      'دست‌کم یک نفر را برای دعوت انتخاب کنید.';
+
+  @override
+  String get voiceRoomMemberLimit =>
+      'هر اتاق با احتساب شما حداکثر ۵۰ عضو دارد.';
+
+  @override
+  String get voiceRoomReviewTitle => 'آمادهٔ ساخت';
+
+  @override
+  String get voiceRoomReviewBody =>
+      'با ساخت، اتاق روی این دستگاه امضا می‌شود و به‌صورت رمزنگاری‌شده برای همهٔ کسانی که انتخاب کرده‌اید فرستاده می‌شود. هر کدام وقتی دستگاهش آن را دریافت کند اتاق را خواهد داشت، و سرور هرگز آن را در اختیار ندارد.';
+
+  @override
+  String voiceRoomReviewMembers(int count) {
+    return 'افراد دعوت‌شده: $count';
+  }
+
+  @override
+  String get voiceRoomCreateAction => 'ساخت اتاق';
+
+  @override
+  String get voiceRoomCreatingState =>
+      'در حال امضای اتاق و فرستادن آن برای افرادی که انتخاب کرده‌اید…';
+
+  @override
+  String get voiceRoomCreateFailed => 'اتاق ساخته نشد. چیزی ارسال نشد.';
+
+  @override
+  String get voiceRoomInfoTitle => 'اطلاعات اتاق';
+
+  @override
+  String get voiceRoomRenameAction => 'تغییر نام';
+
+  @override
+  String get voiceRoomRenameTitle => 'تغییر نام اتاق';
+
+  @override
+  String get voiceRoomRenameBody =>
+      'نام تازه روی این دستگاه امضا و برای همهٔ اعضا فرستاده می‌شود؛ هر کس وقتی دستگاهش پیام بعدی را دریافت کند آن را می‌بیند.';
+
+  @override
+  String get voiceRoomSaveAction => 'ذخیره';
+
+  @override
+  String get voiceRoomCancelAction => 'انصراف';
+
+  @override
+  String get voiceRoomRenameFailed => 'نام اتاق تغییر نکرد. چیزی ارسال نشد.';
+
+  @override
+  String get voiceRoomStartCallAction => 'شروع تماس';
+
+  @override
+  String get voiceRoomReturnToCallAction => 'بازگشت به تماس';
+
+  @override
+  String get voiceRoomJoinOffline =>
+      'تا وقتی سرور در دسترس نیست تماسی شروع نمی‌شود.';
+
+  @override
+  String get voiceRoomJoinWaits => 'پیوستن تا رسیدن وضعیت اتاق منتظر می‌ماند.';
+
+  @override
+  String get voiceRoomJoinPaused =>
+      'تا وقتی این ناسازگاری برقرار است پیوستن متوقف است.';
+
+  @override
+  String get voiceRoomJoinOtherCall =>
+      'در اتاق دیگری در تماس هستید. پیش از شروع تماس در اینجا آن را ترک کنید.';
+
+  @override
+  String voiceRoomMembersCount(int count) {
+    return '$count عضو';
+  }
+
+  @override
+  String get voiceRoomYou => 'شما';
+
+  @override
+  String get voiceRoomInviteAction => 'دعوت از دیگران';
+
+  @override
+  String get voiceRoomLeaveAction => 'ترک اتاق';
+
+  @override
+  String get voiceRoomLeaveTitle => 'این اتاق را ترک می‌کنید؟';
+
+  @override
+  String get voiceRoomLeaveBody =>
+      'ترک اتاق تغییری امضاشده است که دیگر اعضا اعمالش می‌کنند. عضویت شما و دسترسی‌تان به تماس‌های این اتاق را پایان می‌دهد. اتاق را پاک نمی‌کند: دیگران آن را نگه می‌دارند و سرور چیزی برای پاک کردن ندارد. برای بازگشت باید یکی از آن‌ها دوباره دعوتتان کند.';
+
+  @override
+  String get voiceRoomChangeFailed => 'تغییر ثبت نشد. اتاق بدون تغییر ماند.';
+
+  @override
+  String get voiceRoomWaitingNotice =>
+      'ممکن است هنگام دور بودن این دستگاه تغییرهایی در این اتاق از دست رفته باشد. وضعیت فعلی اتاق از یکی از اعضا خواسته شده است و پیوستن، دعوت و تغییر نام پس از رسیدن آن ادامه می‌یابد.';
+
+  @override
+  String get voiceRoomConflictNotice =>
+      'دو عضو در یک لحظه این اتاق را تغییر دادند. اتاق متوقف شده است و برنامه میان آن دو انتخاب نمی‌کند: پیوستن، دعوت و تغییر نام تا حل شدن موضوع بیرون از برنامه منتظر می‌ماند، و در صورت نیاز با ساختن اتاقی تازه.';
+
+  @override
+  String get voiceRoomControlQuarantineNotice =>
+      'تغییری در این اتاق پذیرفته نشد و اتاق متوقف شده است. پیوستن، دعوت و تغییر نام تا حل شدن موضوع بیرون از برنامه منتظر می‌ماند.';
+
+  @override
+  String voiceRoomRemovedByNotice(String name) {
+    return '$name شما را از این اتاق حذف کرد. آنچه دیده‌اید روی این دستگاه می‌ماند، اما به تماس‌هایش دسترسی ندارید. برای بازگشت دعوتی تازه لازم است.';
+  }
+
+  @override
+  String get voiceRoomRemovedNotice =>
+      'یکی از اعضا شما را از این اتاق حذف کرد. آنچه دیده‌اید روی این دستگاه می‌ماند، اما به تماس‌هایش دسترسی ندارید. برای بازگشت دعوتی تازه لازم است.';
+
+  @override
+  String get voiceRoomLeftNotice =>
+      'این اتاق را ترک کرده‌اید. برای بازگشت باید یکی از اعضا دوباره دعوتتان کند.';
+
+  @override
+  String get voiceRoomNoVoiceNotice =>
+      'این سرور تماس صوتی ارائه نمی‌کند، پس در این اتاق تماسی شروع نمی‌شود.';
+
+  @override
+  String get voiceRoomPrivacyNote =>
+      'نام و اعضای اتاق فقط روی دستگاه‌های اعضا وجود دارد. سرور هیچ‌کدام را نگه نمی‌دارد و نمی‌تواند بخواند.';
+
+  @override
+  String get voiceRoomNotFoundTitle => 'این اتاق روی این دستگاه نیست';
+
+  @override
+  String get voiceRoomNotFoundBody => 'این دستگاه اتاقی با این نشانی ندارد.';
+
+  @override
+  String get voiceRoomVerified => 'تأییدشده';
+
+  @override
+  String get voiceRoomNotVerified => 'تأییدنشده';
+
+  @override
+  String get voiceRoomVerifyAction => 'تأیید شمارهٔ امنیتی';
+
+  @override
+  String get voiceRoomNotVerifiedNote =>
+      'شمارهٔ امنیتی این فرد را بررسی نکرده‌اید، پس چیزی ثابت نمی‌کند که کلید واقعاً متعلق به اوست.';
+
+  @override
+  String get voiceRoomRemoveMemberAction => 'حذف از اتاق';
+
+  @override
+  String voiceRoomRemoveMemberTitle(String name) {
+    return '$name حذف شود؟';
+  }
+
+  @override
+  String voiceRoomRemoveMemberBody(String name) {
+    return 'حذف تغییری امضاشده است که همهٔ اعضا اعمالش می‌کنند. ارتباط $name با تماس‌های این اتاق قطع می‌شود و برای بازگشت دعوتی تازه لازم است. هر عضوی می‌تواند هر عضو دیگری را حذف کند و تنها راه جبران آن، اتاقی تازه است.';
+  }
+
+  @override
+  String voiceRoomInviteTitle(String roomName) {
+    return 'دعوت به $roomName';
+  }
+
+  @override
+  String get voiceRoomInviteNoneLeftTitle => 'کسی برای دعوت نمانده است';
+
+  @override
+  String get voiceRoomInviteNoneLeftBody =>
+      'همهٔ کسانی که شمارهٔ امنیتی‌شان را بررسی کرده‌اید از پیش در این اتاق هستند.';
+
+  @override
+  String voiceRoomInviteSubmit(int count) {
+    return 'دعوت از افراد انتخاب‌شده ($count)';
+  }
+
+  @override
+  String get voiceRoomInvitingState => 'در حال امضای دعوت و فرستادن آن…';
+
+  @override
+  String get voiceRoomInviteFailed => 'کسی افزوده نشد. اتاق بدون تغییر ماند.';
+
+  @override
+  String get voiceRoomInviteTooLong =>
+      'تاریخچهٔ امضاشدهٔ این اتاق برای سپردن به عضو تازه در یک پیام بیش از حد طولانی است، پس کسی افزوده نشد.';
+
+  @override
+  String get voiceRoomInviteNote =>
+      'برای هر کسی که دعوت کنید کل تاریخچهٔ امضاشدهٔ اتاق فرستاده می‌شود تا دستگاهش خودش آن را بررسی کند.';
+
+  @override
+  String get voiceRoomInviteRoomFull =>
+      'این اتاق ۵۰ عضو دارد که بیشترین تعداد ممکن است.';
+
+  @override
+  String voiceCallCount(int count) {
+    return '$count نفر در تماس';
+  }
+
+  @override
+  String voiceCallCountStale(int count) {
+    return '$count نفر در تماس · آخرین وضعیت شناخته‌شده';
+  }
+
+  @override
+  String get voiceCallMinimizeAction => 'نگه داشتن تماس و بازگشت';
+
+  @override
+  String get voiceCallPreJoinTitle => 'به تماس می‌پیوندید؟';
+
+  @override
+  String get voiceCallPreJoinBody =>
+      'با پیوستن، صدای میکروفون شما برای هر فرد در این تماس فرستاده می‌شود. اگر گوشی پیش‌تر اجازهٔ میکروفون را نگرفته باشد، در گام بعد آن را می‌پرسد.';
+
+  @override
+  String get voiceCallJoinAction => 'پیوستن';
+
+  @override
+  String get voiceCallNotNowAction => 'اکنون نه';
+
+  @override
+  String get voiceCallAskingMicrophone =>
+      'در انتظار پاسخ شما دربارهٔ میکروفون…';
+
+  @override
+  String get voiceCallStartingService => 'در حال آماده کردن تماس…';
+
+  @override
+  String get voiceCallConnectingTitle => 'در حال اتصال به تماس';
+
+  @override
+  String get voiceCallConnectingBody =>
+      'تا وقتی ارتباطی برقرار نشود چیزی از میکروفون شما فرستاده نمی‌شود.';
+
+  @override
+  String get voiceCallMicDeniedTitle => 'دسترسی به میکروفون خاموش است';
+
+  @override
+  String get voiceCallMicDeniedBody =>
+      'این اتاق فقط صوتی است، پس بدون میکروفون چیزی برای پیوستن نیست. چیزی ارسال نشد.';
+
+  @override
+  String get voiceCallMicDeniedPermanentlyBody =>
+      'این اتاق فقط صوتی است، پس بدون میکروفون چیزی برای پیوستن نیست. اندروید دیگر اینجا نمی‌پرسد: می‌توانید در تنظیمات سیستم اجازهٔ میکروفون را به این برنامه بدهید.';
+
+  @override
+  String get voiceCallOpenSettingsAction => 'باز کردن تنظیمات';
+
+  @override
+  String get voiceCallTryAgainAction => 'تلاش دوباره';
+
+  @override
+  String get voiceCallBackToRoomsAction => 'بازگشت به اتاق‌ها';
+
+  @override
+  String get voiceCallServiceRefusedTitle => 'تماس شروع نشد';
+
+  @override
+  String get voiceCallServiceNotInForegroundBody =>
+      'تماس فقط وقتی شروع می‌شود که این برنامه روی صفحه باشد. چیزی ارسال نشد.';
+
+  @override
+  String get voiceCallServiceRefusedBody =>
+      'گوشی شما اجازه نداد تماس هنگام استفاده از برنامه‌های دیگر میکروفون را نگه دارد، پس تماس شروع نشد و چیزی ارسال نشد.';
+
+  @override
+  String get voiceCallFullTitle => 'این تماس پر است';
+
+  @override
+  String get voiceCallFullBody =>
+      'ده نفر در آن هستند و هر تماس حداکثر ده نفر را جا می‌دهد، چون هر گوشی صدایش را برای همهٔ گوشی‌های دیگر می‌فرستد. وقتی کسی بیرون رفت می‌توانید دوباره تلاش کنید.';
+
+  @override
+  String get voiceCallNoVoiceTitle =>
+      'تماس صوتی روی این سرور راه‌اندازی نشده است';
+
+  @override
+  String get voiceCallNoVoiceBody =>
+      'سرور شما رلهٔ صوتی پیکربندی‌شده‌ای ندارد. هیچ چیز دیگری نمی‌تواند تماس را برقرار کند و جایگزینی هم به کار نمی‌رود.';
+
+  @override
+  String get voiceCallThrottledTitle => 'تلاش‌های بیش از حد';
+
+  @override
+  String get voiceCallThrottledBody =>
+      'سرور از این دستگاه خواست پیش از پیوستن دوباره کمی صبر کند.';
+
+  @override
+  String voiceCallTryAgainIn(int seconds) {
+    return 'تلاش دوباره تا $seconds ثانیهٔ دیگر';
+  }
+
+  @override
+  String get voiceCallOfflineTitle => 'ارتباط با سرور برقرار نیست';
+
+  @override
+  String get voiceCallOfflineBody =>
+      'تا وقتی سرور در دسترس نیست تماسی شروع نمی‌شود. هیچ راه دیگری به جای آن امتحان نمی‌شود.';
+
+  @override
+  String get voiceCallWaitingTitle => 'در انتظار وضعیت این اتاق';
+
+  @override
+  String get voiceCallWaitingBody =>
+      'ممکن است تغییری از این اتاق به این دستگاه نرسیده باشد، پس تماس تا پاسخ یکی از اعضا منتظر می‌ماند.';
+
+  @override
+  String get voiceCallConflictTitle => 'پیوستن متوقف است';
+
+  @override
+  String get voiceCallConflictBody =>
+      'دو تغییر ناسازگار در این اتاق رسیده است و برنامه میان آن‌ها انتخاب نمی‌کند.';
+
+  @override
+  String get voiceCallRemovedTitle => 'از این اتاق حذف شدید';
+
+  @override
+  String get voiceCallLeftRoomTitle => 'این اتاق را ترک کردید';
+
+  @override
+  String get voiceCallEndedChatDropped =>
+      'تماس پایان یافت و گفت‌وگوی آن پاک شد.';
+
+  @override
+  String get voiceCallLocalFailureTitle =>
+      'این گوشی نتوانست میکروفون یا ارتباطی را باز کند';
+
+  @override
+  String get voiceCallLocalFailureBody =>
+      'تماس پایان یافت. چیز دیگری ارسال نشد.';
+
+  @override
+  String get voiceCallAlreadyInCallTitle => 'در حال حاضر در تماس هستید';
+
+  @override
+  String get voiceCallAlreadyInCallBody =>
+      'پیش از پیوستن به تماسی دیگر آن را ترک کنید.';
+
+  @override
+  String get voiceCallRelayNote =>
+      'صدای شما به‌جای رفتن مستقیم میان گوشی‌ها از رلهٔ این سرور می‌گذرد، پس مسیرش از یک ارتباط مستقیم طولانی‌تر است. رله آن را عبور می‌دهد و نمی‌تواند بشنود.';
+
+  @override
+  String get voiceCallSocketDegraded =>
+      'صدا مشکلی ندارد. تا برگشتن ارتباط با سرور، گفت‌وگوی اتاق و ورود و خروج افراد به‌روز نمی‌شود.';
+
+  @override
+  String get voiceCallNotificationHidden =>
+      'اعلان‌های این برنامه خاموش است، پس اعلان تماس در فهرست اعلان‌ها دیده نمی‌شود. اندروید همچنان تماس را در بخش برنامه‌های فعالِ تنظیمات سریع نشان می‌دهد.';
+
+  @override
+  String get voiceCallAloneTitle => 'فقط شما اینجا هستید';
+
+  @override
+  String get voiceCallAloneBody =>
+      'تماس باز می‌ماند. کسی را دعوت کنید یا منتظر بمانید تا عضوی بپیوندد.';
+
+  @override
+  String get voiceCallWaitingForOthers => 'در انتظار پاسخ دیگران…';
+
+  @override
+  String get voiceCallMuteAction => 'بی‌صدا';
+
+  @override
+  String get voiceCallUnmuteAction => 'صدادار';
+
+  @override
+  String get voiceCallInviteAction => 'دعوت';
+
+  @override
+  String get voiceCallLeaveAction => 'خروج';
+
+  @override
+  String get voiceCallMicOn => 'میکروفون شما روشن است';
+
+  @override
+  String get voiceCallMicMuted => 'صدای شما قطع است';
+
+  @override
+  String get voiceCallPeopleTab => 'افراد';
+
+  @override
+  String get voiceCallChatTab => 'گفت‌وگوی اتاق';
+
+  @override
+  String get voiceCallReturnBanner => 'بازگشت به تماس';
+
+  @override
+  String voiceTileAnotherDevice(String name) {
+    return '$name (دستگاهی دیگر)';
+  }
+
+  @override
+  String get voiceTileMuted => 'بی‌صدا';
+
+  @override
+  String get voiceTileMicOn => 'میکروفون روشن';
+
+  @override
+  String get voiceTileConnecting => 'در حال اتصال';
+
+  @override
+  String get voiceTileConnected => 'متصل';
+
+  @override
+  String get voiceTileReconnecting => 'در حال اتصال دوباره';
+
+  @override
+  String get voiceTileNotReachable => 'در دسترس نیست';
+
+  @override
+  String get voiceTileIdentityBlocked => 'شمارهٔ امنیتی تغییر کرده';
+
+  @override
+  String get voiceTileIncompatible => 'به نسخهٔ تازه‌تر برنامه نیاز دارد';
+
+  @override
+  String get voiceTileRestartingIce => 'در حال تمدید ارتباط';
+
+  @override
+  String voiceTileConnectingBody(String name) {
+    return 'ارتباطی رمزنگاری‌شده با $name در حال برقراری است.';
+  }
+
+  @override
+  String voiceTileConnectedBody(String name) {
+    return 'صدای میان شما و $name را گوشی‌های شما از این سر تا آن سر رمزنگاری می‌کنند.';
+  }
+
+  @override
+  String voiceTileReconnectingBody(String name) {
+    return 'مسیر ارتباط با $name قطع شده است. تا برگشتن آن، صدایی میان شما رد و بدل نمی‌شود.';
+  }
+
+  @override
+  String voiceTileNotReachableBody(String name) {
+    return 'دستگاه $name پس از چند بار تلاش پاسخ نداد، پس صدایی میان شما نیست. صدای شما با دیگران ادامه دارد.';
+  }
+
+  @override
+  String voiceTileIdentityBlockedBody(String name) {
+    return 'شمارهٔ امنیتی $name تغییر کرده است. صدای میان شما تا بررسی شمارهٔ تازه قطع است. صدای شما با دیگران ادامه دارد.';
+  }
+
+  @override
+  String voiceTileIncompatibleBody(String name) {
+    return 'برنامهٔ $name نسخه‌ای از تماس را به کار می‌برد که این برنامه نمی‌شناسد، پس صدایی میان شما نیست. یکی از شما باید برنامه را به‌روز کند.';
+  }
+
+  @override
+  String voiceTileRestartingIceBody(String name) {
+    return 'ارتباط رله با $name در حال تمدید است. در این مدت صدا از همان مسیر قبلی می‌گذرد.';
+  }
+
+  @override
+  String get voiceChatNote =>
+      'موقت و بدون تضمین. با پایان تماس پاک می‌شود؛ دیگران ممکن است آنچه خوانده‌اند را نگه دارند.';
+
+  @override
+  String get voiceChatEmpty =>
+      'هنوز چیزی گفته نشده. پیام‌های اینجا با پایان تماس از بین می‌روند.';
+
+  @override
+  String get voiceChatStale =>
+      'این گفت‌وگو به‌روز نمی‌شود. پیام‌های شما نمی‌رسد و پیام‌های تازه نمایش داده نمی‌شود.';
+
+  @override
+  String get voiceChatHint => 'پیام به تماس';
+
+  @override
+  String get voiceChatSendAction => 'ارسال';
+
+  @override
+  String voiceChatTooLong(int count) {
+    return 'این پیام برای ارسال بیش از حد طولانی است. $count نویسه از آن کم کنید.';
+  }
+
+  @override
+  String get voiceChatUnsendable =>
+      'این پیام نویسه‌هایی دارد که نمی‌توان فرستاد.';
+
+  @override
+  String get voiceChatNotSent => 'این پیام ارسال نشد.';
+
+  @override
+  String get voiceChatUnavailable => 'گفت‌وگو در دسترس نیست';
+
+  @override
+  String get contactsNewVoiceRoomUnavailable =>
+      'این سرور تماس صوتی ارائه نمی‌کند.';
+
+  @override
+  String get voiceRoomsErrorTitle => 'اتاق‌ها در دسترس نیستند';
 }

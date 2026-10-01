@@ -3241,6 +3241,996 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Install the app on the other device, sign in there, and enter your recovery secret when it asks. It appears in this list once it is signed. Keep this phone online afterwards so it can send your history across; the server has no copy to send.'**
   String get linkedDevicesAddBody;
+
+  /// No description provided for @voiceRoomsLoadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your rooms'**
+  String get voiceRoomsLoadingTitle;
+
+  /// No description provided for @voiceRoomsLoadingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the rooms stored on this device.'**
+  String get voiceRoomsLoadingBody;
+
+  /// No description provided for @voiceRoomsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No voice rooms yet'**
+  String get voiceRoomsEmptyTitle;
+
+  /// No description provided for @voiceRoomsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A voice room is a standalone room for calls. It lives on its members\' devices, and the server never holds it.'**
+  String get voiceRoomsEmptyBody;
+
+  /// No description provided for @voiceRoomsCreateAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a room'**
+  String get voiceRoomsCreateAction;
+
+  /// No description provided for @voiceRoomsOfflineNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline — showing the rooms saved on this device. A call cannot start until the server is reachable.'**
+  String get voiceRoomsOfflineNotice;
+
+  /// No description provided for @voiceRoomsNoVoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This server does not offer voice'**
+  String get voiceRoomsNoVoiceTitle;
+
+  /// voice_configured is false. The compose button is hidden as well (ui-specification.md §13.0).
+  ///
+  /// In en, this message translates to:
+  /// **'It has no relay to carry a call, so rooms cannot be created or joined here. No other service is used in its place.'**
+  String get voiceRoomsNoVoiceBody;
+
+  /// No description provided for @voiceRoomsErrorBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The rooms on this device could not be read.'**
+  String get voiceRoomsErrorBody;
+
+  /// The room of the call this device is in, with the devices it counts in it. No other room can read as live: a device not in a call is told about none.
+  ///
+  /// In en, this message translates to:
+  /// **'Live now · {count}'**
+  String voiceRoomStateLive(int count);
+
+  /// Means this device has not been told about a call, not that nobody is talking (ui-specification.md §13.0).
+  ///
+  /// In en, this message translates to:
+  /// **'Empty'**
+  String get voiceRoomStateEmpty;
+
+  /// No description provided for @voiceRoomStateWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Asking a member for its state'**
+  String get voiceRoomStateWaiting;
+
+  /// No description provided for @voiceRoomStateConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused by conflicting changes'**
+  String get voiceRoomStateConflict;
+
+  /// No description provided for @voiceRoomStateLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'You left this room'**
+  String get voiceRoomStateLeft;
+
+  /// No description provided for @voiceRoomStateRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'You were removed from this room'**
+  String get voiceRoomStateRemoved;
+
+  /// No description provided for @voiceRoomCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New voice room'**
+  String get voiceRoomCreateTitle;
+
+  /// No description provided for @voiceRoomCreateStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {step} of 3'**
+  String voiceRoomCreateStep(int step);
+
+  /// No description provided for @voiceRoomNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Room name'**
+  String get voiceRoomNameLabel;
+
+  /// No description provided for @voiceRoomNamePrivacyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted on this device. The server never sees it.'**
+  String get voiceRoomNamePrivacyNote;
+
+  /// No description provided for @voiceRoomStandaloneNote.
+  ///
+  /// In en, this message translates to:
+  /// **'A voice room stands on its own. It is not attached to a chat or a group, and everyone you invite joins as an equal: any member can invite, remove or rename.'**
+  String get voiceRoomStandaloneNote;
+
+  /// No description provided for @voiceRoomNameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Give the room a name.'**
+  String get voiceRoomNameEmpty;
+
+  /// No description provided for @voiceRoomNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'This name is too long. Shorten it to 100 characters or fewer.'**
+  String get voiceRoomNameTooLong;
+
+  /// No description provided for @voiceRoomContinueAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get voiceRoomContinueAction;
+
+  /// No description provided for @voiceRoomInviteStepTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Who to invite'**
+  String get voiceRoomInviteStepTitle;
+
+  /// No description provided for @voiceRoomSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String voiceRoomSelectedCount(int count);
+
+  /// No description provided for @voiceRoomNoVerifiedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody to invite yet'**
+  String get voiceRoomNoVerifiedTitle;
+
+  /// Verification precedes inviting (ui-specification.md, core rules).
+  ///
+  /// In en, this message translates to:
+  /// **'You can invite only contacts whose safety number you have checked, and none are verified yet.'**
+  String get voiceRoomNoVerifiedBody;
+
+  /// No description provided for @voiceRoomVerifyContactAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify a contact'**
+  String get voiceRoomVerifyContactAction;
+
+  /// No description provided for @voiceRoomSelectAtLeastOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose at least one person to invite.'**
+  String get voiceRoomSelectAtLeastOne;
+
+  /// No description provided for @voiceRoomMemberLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'A room holds at most 50 members, you included.'**
+  String get voiceRoomMemberLimit;
+
+  /// No description provided for @voiceRoomReviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to create'**
+  String get voiceRoomReviewTitle;
+
+  /// No description provided for @voiceRoomReviewBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating signs the room on this device and sends it, encrypted, to everyone you chose. Each of them has the room once their device receives it, and the server never holds it.'**
+  String get voiceRoomReviewBody;
+
+  /// No description provided for @voiceRoomReviewMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'People invited: {count}'**
+  String voiceRoomReviewMembers(int count);
+
+  /// No description provided for @voiceRoomCreateAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create room'**
+  String get voiceRoomCreateAction;
+
+  /// No description provided for @voiceRoomCreatingState.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing the room and queueing it for the people you chose…'**
+  String get voiceRoomCreatingState;
+
+  /// No description provided for @voiceRoomCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The room could not be created. Nothing was sent.'**
+  String get voiceRoomCreateFailed;
+
+  /// No description provided for @voiceRoomInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Room info'**
+  String get voiceRoomInfoTitle;
+
+  /// No description provided for @voiceRoomRenameAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get voiceRoomRenameAction;
+
+  /// No description provided for @voiceRoomRenameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename this room'**
+  String get voiceRoomRenameTitle;
+
+  /// No description provided for @voiceRoomRenameBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The new name is signed on this device and sent to every member, who see it when their device next receives messages.'**
+  String get voiceRoomRenameBody;
+
+  /// No description provided for @voiceRoomSaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get voiceRoomSaveAction;
+
+  /// No description provided for @voiceRoomCancelAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get voiceRoomCancelAction;
+
+  /// No description provided for @voiceRoomRenameFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The room was not renamed. Nothing was sent.'**
+  String get voiceRoomRenameFailed;
+
+  /// No description provided for @voiceRoomStartCallAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a call'**
+  String get voiceRoomStartCallAction;
+
+  /// No description provided for @voiceRoomReturnToCallAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to the call'**
+  String get voiceRoomReturnToCallAction;
+
+  /// No description provided for @voiceRoomJoinOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'A call cannot start while the server is unreachable.'**
+  String get voiceRoomJoinOffline;
+
+  /// No description provided for @voiceRoomJoinWaits.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining waits for the room\'s state.'**
+  String get voiceRoomJoinWaits;
+
+  /// No description provided for @voiceRoomJoinPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining is paused while the conflict lasts.'**
+  String get voiceRoomJoinPaused;
+
+  /// No description provided for @voiceRoomJoinOtherCall.
+  ///
+  /// In en, this message translates to:
+  /// **'You are in a call in another room. Leave it before you start one here.'**
+  String get voiceRoomJoinOtherCall;
+
+  /// No description provided for @voiceRoomMembersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} members'**
+  String voiceRoomMembersCount(int count);
+
+  /// No description provided for @voiceRoomYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get voiceRoomYou;
+
+  /// No description provided for @voiceRoomInviteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite people'**
+  String get voiceRoomInviteAction;
+
+  /// No description provided for @voiceRoomLeaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave room'**
+  String get voiceRoomLeaveAction;
+
+  /// No description provided for @voiceRoomLeaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave this room?'**
+  String get voiceRoomLeaveTitle;
+
+  /// Honest wording is a release rule (voice-room-states.md §4): a signed event the others apply, no deletion, and a fresh invitation to return.
+  ///
+  /// In en, this message translates to:
+  /// **'Leaving is a signed change that the other members apply. It ends your membership and your access to this room\'s calls. It does not delete the room: the others keep it, and the server holds nothing to delete. Coming back needs a fresh invitation from one of them.'**
+  String get voiceRoomLeaveBody;
+
+  /// No description provided for @voiceRoomChangeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The change could not be committed. The room is unchanged.'**
+  String get voiceRoomChangeFailed;
+
+  /// No description provided for @voiceRoomWaitingNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting and renaming resume when it arrives.'**
+  String get voiceRoomWaitingNotice;
+
+  /// No description provided for @voiceRoomConflictNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting and renaming wait until it is settled outside the app, if need be with a new room.'**
+  String get voiceRoomConflictNotice;
+
+  /// No description provided for @voiceRoomControlQuarantineNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'A change to this room could not be accepted, so the room is paused. Joining, inviting and renaming wait until it is settled outside the app.'**
+  String get voiceRoomControlQuarantineNotice;
+
+  /// No description provided for @voiceRoomRemovedByNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.'**
+  String voiceRoomRemovedByNotice(String name);
+
+  /// No description provided for @voiceRoomRemovedNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'A member removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.'**
+  String get voiceRoomRemovedNotice;
+
+  /// No description provided for @voiceRoomLeftNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'You left this room. Coming back needs a fresh invitation from a member.'**
+  String get voiceRoomLeftNotice;
+
+  /// No description provided for @voiceRoomNoVoiceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'This server does not offer voice, so no call can start in this room.'**
+  String get voiceRoomNoVoiceNotice;
+
+  /// No description provided for @voiceRoomPrivacyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'The room\'s name and members exist only on its members\' devices. The server stores neither and could not read either.'**
+  String get voiceRoomPrivacyNote;
+
+  /// No description provided for @voiceRoomNotFoundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This room is not on this device'**
+  String get voiceRoomNotFoundTitle;
+
+  /// No description provided for @voiceRoomNotFoundBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This device holds no room with this link.'**
+  String get voiceRoomNotFoundBody;
+
+  /// No description provided for @voiceRoomVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get voiceRoomVerified;
+
+  /// No description provided for @voiceRoomNotVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Not verified'**
+  String get voiceRoomNotVerified;
+
+  /// No description provided for @voiceRoomVerifyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify safety number'**
+  String get voiceRoomVerifyAction;
+
+  /// No description provided for @voiceRoomNotVerifiedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'You have not checked this person\'s safety number, so nothing proves the key belongs to them.'**
+  String get voiceRoomNotVerifiedNote;
+
+  /// No description provided for @voiceRoomRemoveMemberAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from room'**
+  String get voiceRoomRemoveMemberAction;
+
+  /// No description provided for @voiceRoomRemoveMemberTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name}?'**
+  String voiceRoomRemoveMemberTitle(String name);
+
+  /// All peers are equal (ADR-077 D1): the cost is stated, not designed away.
+  ///
+  /// In en, this message translates to:
+  /// **'Removing is a signed change every member applies. {name}\'s connections to this room\'s calls close, and coming back needs a fresh invitation. Any member can remove any other, and the only remedy for a removal is a new room.'**
+  String voiceRoomRemoveMemberBody(String name);
+
+  /// No description provided for @voiceRoomInviteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite to {roomName}'**
+  String voiceRoomInviteTitle(String roomName);
+
+  /// No description provided for @voiceRoomInviteNoneLeftTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No one left to invite'**
+  String get voiceRoomInviteNoneLeftTitle;
+
+  /// No description provided for @voiceRoomInviteNoneLeftBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Everyone whose safety number you have checked is already in this room.'**
+  String get voiceRoomInviteNoneLeftBody;
+
+  /// No description provided for @voiceRoomInviteSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite the people chosen ({count})'**
+  String voiceRoomInviteSubmit(int count);
+
+  /// No description provided for @voiceRoomInvitingState.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing the invitation and queueing it…'**
+  String get voiceRoomInvitingState;
+
+  /// No description provided for @voiceRoomInviteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody was added. The room is unchanged.'**
+  String get voiceRoomInviteFailed;
+
+  /// No description provided for @voiceRoomInviteTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'This room\'s signed history is too long to hand to a new member in one message, so nobody was added.'**
+  String get voiceRoomInviteTooLong;
+
+  /// No description provided for @voiceRoomInviteNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Each person you invite is sent the room\'s whole signed history, so their device can check it for itself.'**
+  String get voiceRoomInviteNote;
+
+  /// No description provided for @voiceRoomInviteRoomFull.
+  ///
+  /// In en, this message translates to:
+  /// **'This room has 50 members, the most it can hold.'**
+  String get voiceRoomInviteRoomFull;
+
+  /// Devices this device counts in the call, itself included: what it has been told, and no more.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} in the call'**
+  String voiceCallCount(int count);
+
+  /// Shown while the signalling connection is down: joins and leaves are not reaching this device.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} in the call · last known'**
+  String voiceCallCountStale(int count);
+
+  /// No description provided for @voiceCallMinimizeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the call and go back'**
+  String get voiceCallMinimizeAction;
+
+  /// No description provided for @voiceCallPreJoinTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Join the call?'**
+  String get voiceCallPreJoinTitle;
+
+  /// No description provided for @voiceCallPreJoinBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining sends your microphone to each person in this call. Your phone asks for the microphone next, if it has not already.'**
+  String get voiceCallPreJoinBody;
+
+  /// No description provided for @voiceCallJoinAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get voiceCallJoinAction;
+
+  /// No description provided for @voiceCallNotNowAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get voiceCallNotNowAction;
+
+  /// No description provided for @voiceCallAskingMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for your answer about the microphone…'**
+  String get voiceCallAskingMicrophone;
+
+  /// No description provided for @voiceCallStartingService.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting the call ready…'**
+  String get voiceCallStartingService;
+
+  /// No description provided for @voiceCallConnectingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to the call'**
+  String get voiceCallConnectingTitle;
+
+  /// No description provided for @voiceCallConnectingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing from your microphone is sent until a connection is up.'**
+  String get voiceCallConnectingBody;
+
+  /// No description provided for @voiceCallMicDeniedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access is off'**
+  String get voiceCallMicDeniedTitle;
+
+  /// No description provided for @voiceCallMicDeniedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This room is audio only, so there is nothing to join without a microphone. Nothing was sent.'**
+  String get voiceCallMicDeniedBody;
+
+  /// No description provided for @voiceCallMicDeniedPermanentlyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This room is audio only, so there is nothing to join without a microphone. Android will not ask again here: you can allow the microphone for this app in the system settings.'**
+  String get voiceCallMicDeniedPermanentlyBody;
+
+  /// No description provided for @voiceCallOpenSettingsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get voiceCallOpenSettingsAction;
+
+  /// No description provided for @voiceCallTryAgainAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get voiceCallTryAgainAction;
+
+  /// No description provided for @voiceCallBackToRoomsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to rooms'**
+  String get voiceCallBackToRoomsAction;
+
+  /// No description provided for @voiceCallServiceRefusedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The call could not start'**
+  String get voiceCallServiceRefusedTitle;
+
+  /// No description provided for @voiceCallServiceNotInForegroundBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A call can start only while this app is on screen. Nothing was sent.'**
+  String get voiceCallServiceNotInForegroundBody;
+
+  /// No description provided for @voiceCallServiceRefusedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone did not let the call keep the microphone while you use other apps, so the call was not started and nothing was sent.'**
+  String get voiceCallServiceRefusedBody;
+
+  /// No description provided for @voiceCallFullTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This call is full'**
+  String get voiceCallFullTitle;
+
+  /// The ceiling and its reason (§N rule 10, ADR-077 D2).
+  ///
+  /// In en, this message translates to:
+  /// **'Ten people are already in it, and a call holds ten at most, because every phone sends its audio to every other phone. You can try again when someone leaves.'**
+  String get voiceCallFullBody;
+
+  /// No description provided for @voiceCallNoVoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice is not set up on this server'**
+  String get voiceCallNoVoiceTitle;
+
+  /// No description provided for @voiceCallNoVoiceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server has no voice relay configured. Nothing else can carry the call, and nothing will be substituted.'**
+  String get voiceCallNoVoiceBody;
+
+  /// No description provided for @voiceCallThrottledTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts'**
+  String get voiceCallThrottledTitle;
+
+  /// No description provided for @voiceCallThrottledBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The server asked this device to wait before joining again.'**
+  String get voiceCallThrottledBody;
+
+  /// No description provided for @voiceCallTryAgainIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again in {seconds}s'**
+  String voiceCallTryAgainIn(int seconds);
+
+  /// No description provided for @voiceCallOfflineTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection to the server'**
+  String get voiceCallOfflineTitle;
+
+  /// No description provided for @voiceCallOfflineBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A call cannot start while the server is unreachable. Nothing else will be tried in its place.'**
+  String get voiceCallOfflineBody;
+
+  /// No description provided for @voiceCallWaitingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for this room\'s state'**
+  String get voiceCallWaitingTitle;
+
+  /// No description provided for @voiceCallWaitingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This device may be missing a change to the room, so a call waits until a member answers.'**
+  String get voiceCallWaitingBody;
+
+  /// No description provided for @voiceCallConflictTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining is paused'**
+  String get voiceCallConflictTitle;
+
+  /// No description provided for @voiceCallConflictBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Two conflicting changes to this room arrived, and the app will not choose between them.'**
+  String get voiceCallConflictBody;
+
+  /// No description provided for @voiceCallRemovedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You were removed from this room'**
+  String get voiceCallRemovedTitle;
+
+  /// No description provided for @voiceCallLeftRoomTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You left this room'**
+  String get voiceCallLeftRoomTitle;
+
+  /// No description provided for @voiceCallEndedChatDropped.
+  ///
+  /// In en, this message translates to:
+  /// **'The call ended, and its chat was dropped.'**
+  String get voiceCallEndedChatDropped;
+
+  /// No description provided for @voiceCallLocalFailureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not open its microphone or a connection'**
+  String get voiceCallLocalFailureTitle;
+
+  /// No description provided for @voiceCallLocalFailureBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The call ended. Nothing more was sent.'**
+  String get voiceCallLocalFailureBody;
+
+  /// No description provided for @voiceCallAlreadyInCallTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You are already in a call'**
+  String get voiceCallAlreadyInCallTitle;
+
+  /// No description provided for @voiceCallAlreadyInCallBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave it before you join another.'**
+  String get voiceCallAlreadyInCallBody;
+
+  /// Every path crosses the self-hosted relay, which forwards packets it cannot open (ui-specification.md §10).
+  ///
+  /// In en, this message translates to:
+  /// **'Your audio crosses this server\'s relay rather than going straight between phones, so its path is longer than a direct one. The relay passes it on and cannot hear it.'**
+  String get voiceCallRelayNote;
+
+  /// Deliberately calm: the audio is unaffected (voice-room-states.md §5.4).
+  ///
+  /// In en, this message translates to:
+  /// **'Audio is fine. Room chat, joins and leaves are not updating until the connection to the server returns.'**
+  String get voiceCallSocketDegraded;
+
+  /// A stated outcome, never a retry loop (voice-room-states.md §5.1).
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are off for this app, so the call\'s notice is not in your notifications. Android still lists the call among the active apps in quick settings.'**
+  String get voiceCallNotificationHidden;
+
+  /// No description provided for @voiceCallAloneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You are the only one here'**
+  String get voiceCallAloneTitle;
+
+  /// No description provided for @voiceCallAloneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The call stays open. Invite someone, or wait for a member to join.'**
+  String get voiceCallAloneBody;
+
+  /// No description provided for @voiceCallWaitingForOthers.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the others to answer…'**
+  String get voiceCallWaitingForOthers;
+
+  /// No description provided for @voiceCallMuteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get voiceCallMuteAction;
+
+  /// No description provided for @voiceCallUnmuteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get voiceCallUnmuteAction;
+
+  /// No description provided for @voiceCallInviteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite'**
+  String get voiceCallInviteAction;
+
+  /// No description provided for @voiceCallLeaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave'**
+  String get voiceCallLeaveAction;
+
+  /// No description provided for @voiceCallMicOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Your microphone is on'**
+  String get voiceCallMicOn;
+
+  /// No description provided for @voiceCallMicMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'You are muted'**
+  String get voiceCallMicMuted;
+
+  /// No description provided for @voiceCallPeopleTab.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get voiceCallPeopleTab;
+
+  /// No description provided for @voiceCallChatTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Room chat'**
+  String get voiceCallChatTab;
+
+  /// No description provided for @voiceCallReturnBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to the call'**
+  String get voiceCallReturnBanner;
+
+  /// No description provided for @voiceTileAnotherDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} (another device)'**
+  String voiceTileAnotherDevice(String name);
+
+  /// No description provided for @voiceTileMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get voiceTileMuted;
+
+  /// No description provided for @voiceTileMicOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone on'**
+  String get voiceTileMicOn;
+
+  /// No description provided for @voiceTileConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting'**
+  String get voiceTileConnecting;
+
+  /// No description provided for @voiceTileConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get voiceTileConnected;
+
+  /// No description provided for @voiceTileReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting'**
+  String get voiceTileReconnecting;
+
+  /// No description provided for @voiceTileNotReachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reachable'**
+  String get voiceTileNotReachable;
+
+  /// No description provided for @voiceTileIdentityBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety number changed'**
+  String get voiceTileIdentityBlocked;
+
+  /// No description provided for @voiceTileIncompatible.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a newer app'**
+  String get voiceTileIncompatible;
+
+  /// No description provided for @voiceTileRestartingIce.
+  ///
+  /// In en, this message translates to:
+  /// **'Renewing its connection'**
+  String get voiceTileRestartingIce;
+
+  /// No description provided for @voiceTileConnectingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'An encrypted connection with {name} is being set up.'**
+  String voiceTileConnectingBody(String name);
+
+  /// No description provided for @voiceTileConnectedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio between you and {name} is encrypted end to end by your two phones.'**
+  String voiceTileConnectedBody(String name);
+
+  /// No description provided for @voiceTileReconnectingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The path to {name} dropped. Audio with them stops until it comes back.'**
+  String voiceTileReconnectingBody(String name);
+
+  /// No description provided for @voiceTileNotReachableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s device did not answer after several tries, so there is no audio between you. Your audio with the others carries on.'**
+  String voiceTileNotReachableBody(String name);
+
+  /// No description provided for @voiceTileIdentityBlockedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s safety number changed. Audio between you has stopped until you check the new number. Your audio with the others carries on.'**
+  String voiceTileIdentityBlockedBody(String name);
+
+  /// No description provided for @voiceTileIncompatibleBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s app speaks a version of calls this one does not, so there is no audio between you. One of you needs to update.'**
+  String voiceTileIncompatibleBody(String name);
+
+  /// An ICE restart in progress, after the relay credential was refreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'The relay connection to {name} is being renewed. The audio keeps its old path meanwhile.'**
+  String voiceTileRestartingIceBody(String name);
+
+  /// Ephemeral text is best-effort; copy never says it disappears forever (voice-room-states.md §1).
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary and best-effort. Cleared when the call ends; others may keep what they read.'**
+  String get voiceChatNote;
+
+  /// No description provided for @voiceChatEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing said yet. Messages here are gone when the call ends.'**
+  String get voiceChatEmpty;
+
+  /// No description provided for @voiceChatStale.
+  ///
+  /// In en, this message translates to:
+  /// **'This chat is not updating. Your messages are not being delivered, and new ones will not appear.'**
+  String get voiceChatStale;
+
+  /// No description provided for @voiceChatHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message the call'**
+  String get voiceChatHint;
+
+  /// No description provided for @voiceChatSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get voiceChatSendAction;
+
+  /// The limit is the largest published signal bucket under a regular header, or the record's 2,000 scalar values and 8,000 bytes, whichever is smaller.
+  ///
+  /// In en, this message translates to:
+  /// **'That message is too long to send. Shorten it by {count} characters.'**
+  String voiceChatTooLong(int count);
+
+  /// No description provided for @voiceChatUnsendable.
+  ///
+  /// In en, this message translates to:
+  /// **'That message holds characters that cannot be sent.'**
+  String get voiceChatUnsendable;
+
+  /// No description provided for @voiceChatNotSent.
+  ///
+  /// In en, this message translates to:
+  /// **'That message was not sent.'**
+  String get voiceChatNotSent;
+
+  /// No description provided for @voiceChatUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat unavailable'**
+  String get voiceChatUnavailable;
+
+  /// No description provided for @contactsNewVoiceRoomUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This server does not offer voice.'**
+  String get contactsNewVoiceRoomUnavailable;
+
+  /// No description provided for @voiceRoomsErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rooms are unavailable'**
+  String get voiceRoomsErrorTitle;
 }
 
 class _AppLocalizationsDelegate
