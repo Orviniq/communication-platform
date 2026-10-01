@@ -960,8 +960,10 @@ says so. A microphone or a platform connection that cannot be opened ends the ca
 
 Not built: the relay-unreachable state of *The credential* — no connection connected within
 15 seconds and every candidate pair failed — which the call would report in place of nine
-peers one at a time; the microphone request, the foreground service and every screen, which
-are prompts 8 and 9.
+peers one at a time; and every screen, which is prompt 9's. The microphone request and the
+foreground service are built behind two ports, which nothing calls yet (phase 6 prompt 8,
+[`platform-android.md`](platform-android.md), A call's microphone): the join asks, starts
+the service and then joins, and the service stops when the call ends.
 
 ## The ceiling
 

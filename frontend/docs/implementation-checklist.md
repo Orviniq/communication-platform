@@ -98,8 +98,9 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 [ADR-077](decisions.md) records it, Accepted on 2026-09-20; prompt 2 added the media
 package ([ADR-078](decisions.md)); prompt 3 built the relay credential, prompt 4 the
 signalling transport, which is `RealtimeGateway.send`'s one caller, prompt 5 one peer
-connection, prompt 6 the room state, and prompt 7 the call. No screen, microphone request
-or foreground service places a call yet (prompts 8 and 9).
+connection, prompt 6 the room state, prompt 7 the call, and prompt 8 the microphone
+permission and the call's foreground service behind two ports. No screen calls them or
+places a call yet (prompt 9).
 
 [ADR-058](decisions.md)'s P1 to P7 are **superseded and no longer gate anything**. They
 named a granted MLS exporter, that exporter reachable through the native boundary, the
@@ -120,7 +121,7 @@ left is work.
 | Audio encryption | Server deliberately excluded | **Nothing to distribute.** DTLS-SRTP keys each connection between its two endpoints; there is no application-level media key and none is designed (server ADR-0021 point 3) |
 | Volatile pairwise seal | Not applicable | **Built 2026-09-30, phase 6 prompt 4.** `commitVolatileSeal` commits every target's advanced session state without an outbox row, and `commitVolatileOpen` writes what a received frame advanced and no inbox row. A volatile frame never starts a session: [ADR-077](decisions.md) records that as an open conflict for the owner |
 | Ephemeral room text | Volatile relay ready | **Built 2026-10-01 in the call, phase 6 prompt 7; no panel.** Sent once to each device in the call, held in memory, at most 200 lines, dropped when the call ends. Each line spends the per-peer frame budget the signalling draws on ([ADR-077](decisions.md), open question of 2026-10-01). The panel is prompt 9's |
-| Android active-call service | Not applicable | Pending. ADR-051 records that two foreground services can be armed at once if voice ships; the microphone-type service is required for the life of a call (§N rule 11) |
+| Android active-call service | Not applicable | **Built 2026-10-01, phase 6 prompt 8; nothing calls it yet.** `RECORD_AUDIO` is asked through `MicrophonePermissionPort`, which answers granted, denied or denied permanently and adds no permission plugin. `VoiceCallService` is `microphone`-type and unexported; `VoiceCallServicePort` starts it only after a grant and only from a visible activity, every refusal a typed one, and it stops when the call ends, when the Dart side detaches, and when the engine or the task goes, and is never restarted. Its entry says *Call in progress* and names nobody. The two foreground services are independent, and production withholds sustained delivery's while ADR-053's gate is closed ([platform-android.md](platform-android.md), A call's microphone). Tested on a faked platform channel and pinned in source; never run on a device |
 
 ## UI
 

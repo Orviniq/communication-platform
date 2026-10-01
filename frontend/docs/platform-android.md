@@ -469,6 +469,9 @@ sketch on evidence. What ships:
   alert: low importance, silent, `VISIBILITY_SECRET`, no badge and no timestamp, so it is
   absent from a locked screen entirely. Its channel id is `sustained-delivery` and is frozen
   for the life of the installation, because the id keys the user's own settings for it.
+- A call's foreground-service entry is a third channel, `voice-call`, frozen the same way,
+  with its own notification id (3). It says that a call is in progress and nothing else;
+  where it differs from the sustained entry, and why, is in *A call's microphone* below.
 - **Group messages produce no alert**, because the piece-18 group projection writes neither
   `messages.unread` nor `conversations.unread_count`. The alert path needs no change when
   that is fixed; the group projection and `GroupChatPage` do.
@@ -503,7 +506,9 @@ Request only at point of use:
   `PowerManager.isIgnoringBatteryOptimizations()` and never inferred from the dialog
   returning, which reports refusal and dismissal identically. Losing it stops the Layer 2
   service and is surfaced on its own screen, never hidden;
-- microphone for joining voice;
+- the microphone (`RECORD_AUDIO`, dangerous) at the join and at no other time
+  (`CLIENT_CONTRACT.md` §N rule 11), with the call's foreground service — see *A call's
+  microphone* below;
 - camera for capture/optional safety QR;
 - media/files through system pickers without broad storage permission.
 
@@ -553,6 +558,114 @@ statement covers Android 14 and above only, so roughly half this fleet by versio
 covered by no vendor statement at all, and the manufacturer half stays **unresolved**.
 
 Denial has a functional fallback and never blocks unrelated messaging.
+
+## A call's microphone
+
+Built by phase 6 prompt 8 on 2026-10-01 for `CLIENT_CONTRACT.md` §N rule 11: ask for the
+microphone at the join and at no other time, and run a microphone-type foreground service
+for as long as the call lasts, because a call outlives the moment the user opens another
+screen. Two application ports in
+`lib/features/voice/application/ports/voice_call_platform_ports.dart`,
+`MicrophonePermissionPort` and `VoiceCallServicePort`, are implemented by two adapters on
+one method channel, `communication_platform/voice_call`
+(`lib/features/voice/infrastructure/platform_voice_call_channel.dart`), whose native half
+is `VoiceCall.kt`. The channel is attached to the activity's engine and to no headless one.
+No permission plugin is added (ADR-054). Nothing calls either port yet: the join, phase 6
+prompt 9's, is the one place that may.
+
+**The permission** answers `granted`, `denied` or `deniedPermanently`.
+
+- A grant already held shows nothing and answers `granted`. Otherwise the activity asks with
+  `ActivityCompat.requestPermissions` (request code 9102), and the answer is read from the
+  platform once the dialog closes: `granted` from `checkSelfPermission`; `denied` when the
+  request was interrupted (empty result arrays, "treated as a cancellation") or refused
+  with `shouldShowRequestPermissionRationale` true — refused once, flagged `USER_SET`, and
+  Android asks again; `deniedPermanently` when refused with no rationale — `USER_FIXED`,
+  after which "the user will no longer see the system permissions dialog".
+- **The one misreading.** A first dialog dismissed without an answer, if Android reports it
+  as a refusal, has no rationale either and reads as `deniedPermanently`; the platform
+  documents no way to tell the two apart, the limit the message alert's model records for
+  notifications. The system settings allow the microphone in both cases, and the next join
+  shows the dialog again.
+- Android's guidance is not to link to the system settings "in an effort to convince the
+  user to change their decision". How the join points a permanent refusal to them is prompt
+  9's to decide, and no native method opens them.
+- `isGranted()` is a check and shows nothing. A second request while one is in flight shares
+  its dialog and its answer. A dialog left unanswered for five minutes is a refusal on the
+  Dart side, and an answer the Dart side does not understand is a refusal too, never a grant.
+
+**The service** is `VoiceCallService`: `android:foregroundServiceType="microphone"`,
+`android:exported="false"`, no intent filter, promoted with
+`FOREGROUND_SERVICE_TYPE_MICROPHONE` from Android 11 and with no type below it, where the
+type does not exist, and `START_NOT_STICKY`, so the platform never restarts it.
+
+- **It starts after the join's grant and before the join**, through
+  `VoiceCallServicePort.start()`. The Dart adapter checks the permission first and starts
+  nothing without it. The native side then refuses by name, before the platform is asked,
+  what the platform refuses: no `RECORD_AUDIO` (`microphoneNotGranted`), or no visible
+  activity between `onStart` and `onStop` (`notInForeground`). From Android 14 a
+  `microphone` service created without the permission or from the background is a
+  `SecurityException`; below Android 14 it is created and holds no microphone. Whatever the
+  platform refuses anyway comes back as `notInForeground`
+  (`ForegroundServiceStartNotAllowedException`, or from Android 14 a `SecurityException`
+  with the permission held) or as `platformRefused`. Every refusal is a
+  `VoiceCallServiceRefused`, never a throw and never a start that did not happen.
+- **A start is answered when it lands.** `onStartCommand` runs later on the same looper, so
+  the answer waits for the service to reach the foreground: ten seconds at most natively and
+  fifteen on the Dart side, and a start given up on stops the moment it lands. With it comes
+  `notificationVisible`: with notifications off, Android 13 and above shows the service's
+  notice in the Task Manager and not in the shade, and the call runs all the same, so only
+  the screen can say a call is running.
+- **It stops when the call ends.** `VoiceCallServiceGuard`, composed as
+  `voiceCallServiceProvider(scope)` in `lib/app/dependencies/voice_call_service_providers.dart`,
+  stops it when the call `VoiceCallEngine.states` publishes goes from active to ended,
+  whatever ended it, and when the guard is disposed, which is the Dart side detaching. The
+  native side stops it when `MainActivity.cleanUpFlutterEngine` detaches the channel —
+  the call lives in that engine's isolate, and nothing is left to end it — and when the user
+  removes the task. One join publishes nothing, one whose room id cannot be read, so a
+  caller that started the service for it stops it.
+- **A stop never lands before the start it follows.** The platform ends the process of an
+  application that brings down a service started for the foreground before that service
+  called `startForeground` (`ActiveServices.bringDownServiceLocked`), so a stop that arrives
+  while the service is on its way waits for it. Starts and stops reach the platform one at a
+  time, so a leave followed at once by another join has stopped before it starts again.
+
+**The entry** is channel `voice-call`, notification id 3: `IMPORTANCE_LOW`, silent, no
+vibration, no badge, no timestamp, ongoing, and shown at once
+(`FOREGROUND_SERVICE_IMMEDIATE`, since Android 12 may otherwise defer a foreground
+service's entry by ten seconds). Its whole content is *Call in progress*
+(`voiceCallNotificationTitle`), and the channel's name and description come from the same
+catalogues; it names no participant and no room. Unlike the sustained entry it is
+`VISIBILITY_PRIVATE` with the same sentence as its public version, so a locked screen and a
+screen being shared show it: whoever holds the phone learns that its microphone is live,
+which a live microphone owes them. Its status-bar icon is a plain microphone,
+`ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. **Not
+built**: the controls the design canvas puts in this notification
+([`voice-room-states.md`](design-handoff/voice-room-states.md) §5.8). A leave or a mute
+there needs the call, and the call has no mute yet.
+
+**Two foreground services.** ADR-046, ADR-048 and ADR-051 each asked for the interaction
+between sustained delivery's service and a call's to be decided rather than discovered. As
+built they are independent: two services, two channels, two ids and two lifetimes, and
+neither starts, stops or waits for the other. While ADR-053's gate stays closed it
+withholds sustained delivery from production, so only the call service can run there; in
+development, and in production once the gate opens, both can, each with its own entry.
+Delivery ownership does not move: a call needs the activity's engine, which already
+outranks the sustained run.
+
+**What was read, and what was not run.** Read on 2026-10-01 from developer.android.com:
+the foreground-service types (`microphone`: `FOREGROUND_SERVICE_MICROPHONE`, `RECORD_AUDIO`
+as its runtime prerequisite, subject to while-in-use restrictions; updated 2026-09-21), the
+restrictions on starting a foreground service from the background (updated 2026-09-16), the
+launch sample for a typed service (2026-09-16), requesting runtime permissions (2026-09-16:
+the two-refusal rule, `USER_SET` and `USER_FIXED`, and that a foreground service started
+while the activity is visible keeps a one-time permission until it stops), the notification
+permission's exemption for foreground services (2026-09-16), the Android 12 deferral of a
+service's entry (2026-09-21), and `NotificationCompat.Builder.setForegroundServiceBehavior`;
+from AOSP, `ActiveServices.java` at `main`. **Nothing here ran on a device**: the dialog,
+the start, the entry, the capture in the background and the stop are source shape and host
+tests, and phase 6 prompt 10's call is where they are proved.
+`test/architecture/voice_call_service_policy_test.dart` pins the Kotlin and the manifest.
 
 ## Lifecycle and reliability
 
@@ -618,10 +731,12 @@ application sends still leaves through `dart:io` inside `libflutter.so`, on the 
 reviewed transport with the provisioned trust store. A call will not:
 `libjingle_peerconnection_so.so` opens its own sockets to the relay, and what
 authenticates that path end to end is the DTLS fingerprint the pairwise session carries
-(`CLIENT_CONTRACT.md` §N rule 6), not that trust store. No Dart code reaches the package
-yet. `tool/verify_release_apk.sh` additionally reads the packaged manifest's permissions
-and components back out of the artifact and fails on anything ADR-054 and ADR-078 did not
-record.
+(`CLIENT_CONTRACT.md` §N rule 6), not that trust store. Since phase 6 prompt 5 two adapters
+in `lib/features/voice/infrastructure/` reach the package, and nothing else does
+(`voice_media_boundary_test.dart`). `tool/verify_release_apk.sh` additionally reads the
+packaged manifest's permissions and components back out of the artifact and fails on
+anything ADR-054 and ADR-078 did not record, or that voice did not add: the call service
+joined its component set with prompt 8.
 
 Third-party licence obligations are listed in
 [third-party-notices.md](third-party-notices.md), which travels with the handover.

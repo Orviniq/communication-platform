@@ -19,10 +19,11 @@ one ([ADR-077](decisions.md), decided B on 2026-09-30). Prompt 7 built the call:
 in the call, fans its `join` out, keeps one connection to each device in the call, retries
 and gives up on the schedule, refuses an eleventh device, closes a removed member's
 connections, carries room text, and hands the application layer the call's state as a
-stream ([`voice-signalling-v1.md`](voice-signalling-v1.md), The call). `/voice-rooms`
-still renders `StructuralPlaceholderPage`: nothing asks for the microphone, runs the
-foreground service or shows a call, which are prompts 8 and 9. This document is the design
-phase 6 builds, not a description of the artifact.
+stream ([`voice-signalling-v1.md`](voice-signalling-v1.md), The call). Prompt 8 added the
+microphone permission and the call's microphone-type foreground service behind two ports
+([`platform-android.md`](platform-android.md), A call's microphone). `/voice-rooms` still
+renders `StructuralPlaceholderPage`: nothing calls those ports or shows a call yet, which is
+prompt 9. This document is the design phase 6 builds, not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room
