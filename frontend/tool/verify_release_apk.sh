@@ -275,16 +275,19 @@ components="$(printf '%s' "$manifest_tree" | awk '
   END { flush() }
 ' | sort)"
 
+# The call's microphone service joined the set ADR-054 recorded with phase 6
+# prompt 8 (CLIENT_CONTRACT.md §N rule 11; ADR-078 left it to that prompt).
 expected_components="$(printf '%s\n' \
   "activity|com.example.communication_platform.MainActivity|true" \
   "provider|androidx.core.content.FileProvider|false" \
   "provider|androidx.startup.InitializationProvider|false" \
   "service|com.example.communication_platform.DeferredDeliveryJobService|false" \
-  "service|com.example.communication_platform.SustainedDeliveryService|false" |
+  "service|com.example.communication_platform.SustainedDeliveryService|false" \
+  "service|com.example.communication_platform.VoiceCallService|false" |
   sort)"
 
 if [[ "$components" != "$expected_components" ]]; then
-  fail "The packaged artifact does not declare the components ADR-054 recorded.
+  fail "The packaged artifact does not declare the components ADR-054 recorded and voice added.
 $(diff <(printf '%s\n' "$expected_components") <(printf '%s\n' "$components") |
     sed 's/^</       expected only: /; s/^>/       present but unrecorded: /' | grep -E 'expected only|unrecorded')
        An entry point this project did not declare is reachable in the
@@ -292,7 +295,7 @@ $(diff <(printf '%s\n' "$expected_components") <(printf '%s\n' "$components") |
        the one this happened with before, and it is refused in the manifest
        with tools:node=\"remove\"."
 fi
-pass "declares exactly the 5 recorded components"
+pass "declares exactly the 6 recorded components"
 
 exported_components="$(printf '%s\n' "$components" | awk -F'|' '$3 == "true" { print $2 }')"
 [[ "$exported_components" == "com.example.communication_platform.MainActivity" ]] ||

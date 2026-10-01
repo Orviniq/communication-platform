@@ -138,6 +138,25 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps this application's process out of the cached state so that its authenticated connection to the user's own self-hosted messaging server survives, and end-to-end encrypted messages can be received while the application is not in use. No push transport is reachable in this deployment, so there is no messaging service to be woken by instead. Started only after the user explicitly turns the capability on, and stopped as soon as they turn it off." />
         </service>
+        <!-- A call's microphone (CLIENT_CONTRACT.md §N rule 11, ADR-078).
+             Started only by this application, from a join, after the user
+             granted RECORD_AUDIO and while the activity is visible - the
+             platform refuses a `microphone` service otherwise - and stopped
+             when the call ends, when the engine holding the call goes away,
+             or when the user removes the task. It is never restarted. It holds
+             no audio and no connection: it exists so that the call keeps the
+             microphone while the user looks at another screen or another
+             application, which a while-in-use permission does not otherwise
+             allow.
+
+             `microphone` because that is what it keeps, and because it is the
+             type the platform defines for "continue microphone capture from
+             the background, such as voice recorders or communication apps".
+             Unexported, so nothing outside this application can start it. -->
+        <service
+            android:name=".VoiceCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <!-- Refused, not inherited (ADR-054). androidx.profileinstaller
              arrives transitively behind androidx.core and the Flutter
              embedding, and its manifest contributes an *exported* receiver with

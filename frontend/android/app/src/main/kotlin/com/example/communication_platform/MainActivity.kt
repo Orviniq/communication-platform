@@ -21,6 +21,7 @@ class MainActivity : FlutterActivity() {
     private val notificationPermissionRequestCode = 9101
     private var pendingNotificationPermission: MethodChannel.Result? = null
     private var deliveryChannel: MethodChannel? = null
+    private var voiceCallChannel: MethodChannel? = null
 
     // The two boundaries this application owns are Context-bound and shared with
     // the headless engine a deferred catch-up runs in, so there is exactly one
@@ -82,6 +83,11 @@ class MainActivity : FlutterActivity() {
         deliveryChannel = BackgroundDelivery.attach(applicationContext, messenger).also {
             BackgroundDelivery.attachForeground(it)
         }
+        // A call's microphone and its service (§N rule 11). Attached with this
+        // activity and never on a headless engine: the permission dialog needs
+        // a window, and the platform starts a `microphone` service only from a
+        // visible activity.
+        voiceCallChannel = VoiceCall.attach(applicationContext, messenger, activity = this)
         MethodChannel(messenger, "communication_platform/attachments")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -132,7 +138,23 @@ class MainActivity : FlutterActivity() {
         // notices it has gone quiet.
         deliveryChannel?.let(BackgroundDelivery::detachForeground)
         deliveryChannel = null
+        // A call lives in this engine's isolate too. Nothing is left to end it
+        // once the engine goes, so its service ends here rather than outlive it.
+        voiceCallChannel?.let(VoiceCall::detach)
+        voiceCallChannel = null
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    // Whether this activity is visible, which is what the platform asks before
+    // it lets a `microphone` service start.
+    override fun onStart() {
+        super.onStart()
+        VoiceCall.onHostVisible(this, visible = true)
+    }
+
+    override fun onStop() {
+        VoiceCall.onHostVisible(this, visible = false)
+        super.onStop()
     }
 
     private fun requestNotificationPermission(result: MethodChannel.Result) {
@@ -166,6 +188,9 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (VoiceCall.onRequestPermissionsResult(this, requestCode, grantResults)) {
+            return
+        }
         if (requestCode != notificationPermissionRequestCode) {
             return
         }
