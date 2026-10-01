@@ -206,7 +206,7 @@ A room is held exactly as a group is, with the same compare-and-swap, the same
 single-transaction receive and the same transcript checks, in its own four tables. It
 writes no conversation row, because a room has no timeline, and a call writes no row at
 all. An open row in `room_state_requests` makes an active room read as waiting for its
-state, which withholds joining a call, inviting and renaming until a member answers; a
+state, which withholds joining a call, inviting, renaming and leaving until a member answers; a
 room's gap row does not hold the checkpoint's gap open. A change that gives this device a
 room or adds a member empties `room_states.sessions_checked_at`, which makes the room's
 check for missing pairwise sessions due ([`voice-signalling-v1.md`](voice-signalling-v1.md),

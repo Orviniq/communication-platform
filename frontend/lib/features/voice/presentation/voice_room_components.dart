@@ -170,7 +170,8 @@ class VoiceRoomStateLine extends StatelessWidget {
 }
 
 /// What a room that is not active says, on its info and in its call: why
-/// joining, inviting or renaming waits, or why it has ended for this device.
+/// joining, inviting, renaming or leaving waits, or why it has ended for this
+/// device.
 class VoiceRoomLifecycleNotice extends StatelessWidget {
   const VoiceRoomLifecycleNotice({
     required this.room,

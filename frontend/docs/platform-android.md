@@ -570,8 +570,12 @@ screen. Two application ports in
 one method channel, `communication_platform/voice_call`
 (`lib/features/voice/infrastructure/platform_voice_call_channel.dart`), whose native half
 is `VoiceCall.kt`. The channel is attached to the activity's engine and to no headless one.
-No permission plugin is added (ADR-054). Nothing calls either port yet: the join, phase 6
-prompt 9's, is the one place that may.
+No permission plugin is added (ADR-054). Since phase 6 prompt 9 (2026-10-02) the join is
+the one caller of either port, pinned in source: `VoiceCallController` asks for the
+microphone, starts the service and only then joins. A refused microphone or a service that
+does not start ends the attempt with nothing sent, a refused join stops the service again,
+and a leave stops it once the call has left. A call also ends with its session: a logout,
+an erasure or a revocation leaves it, and the service stops with it.
 
 **The permission** answers `granted`, `denied` or `deniedPermanently`.
 
@@ -588,8 +592,11 @@ prompt 9's, is the one place that may.
   notifications. The system settings allow the microphone in both cases, and the next join
   shows the dialog again.
 - Android's guidance is not to link to the system settings "in an effort to convince the
-  user to change their decision". How the join points a permanent refusal to them is prompt
-  9's to decide, and no native method opens them.
+  user to change their decision". Since prompt 9 a permanent refusal is answered only
+  after a join the user asked for: the screen says the microphone can be allowed for this
+  app in the system settings and offers **Open settings**, whose `openMicrophoneSettings`
+  starts `ACTION_APPLICATION_DETAILS_SETTINGS` for this package and nothing else, and reads
+  nothing back. A plain refusal offers only *Try again*, which asks again when tapped.
 - `isGranted()` is a check and shows nothing. A second request while one is in flight shares
   its dialog and its answer. A dialog left unanswered for five minutes is a refusal on the
   Dart side, and an answer the Dart side does not understand is a refusal too, never a grant.

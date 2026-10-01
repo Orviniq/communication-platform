@@ -2,8 +2,9 @@
 
 ## Status
 
-**The relay credential, the signalling transport, one peer connection, the room state and
-the call are implemented, and no screen places one.** `lib/features/voice/` fetches the
+**The relay credential, the signalling transport, one peer connection, the room state, the
+call and its screens are implemented; no call has run on a device.** `lib/features/voice/`
+fetches the
 credential, holds it and builds the relay-only ICE configuration from it (phase 6 prompt
 3), and carries `CPVSV001` messages between devices in `signal` frames, each sealed to the
 pairwise session of the device it goes to and paced under the socket limits (prompt 4). That
@@ -21,9 +22,12 @@ and gives up on the schedule, refuses an eleventh device, closes a removed membe
 connections, carries room text, and hands the application layer the call's state as a
 stream ([`voice-signalling-v1.md`](voice-signalling-v1.md), The call). Prompt 8 added the
 microphone permission and the call's microphone-type foreground service behind two ports
-([`platform-android.md`](platform-android.md), A call's microphone). `/voice-rooms` still
-renders `StructuralPlaceholderPage`: nothing calls those ports or shows a call yet, which is
-prompt 9. This document is the design phase 6 builds, not a description of the artifact.
+([`platform-android.md`](platform-android.md), A call's microphone). Prompt 9 built the
+screens on 2026-10-02 — the room list, Create, Room Info, the invite picker and the live
+room ([`ui-specification.md`](ui-specification.md) §10 and §13) — and the join, the one
+caller of those ports, which asks for the microphone, starts the service and only then
+joins. Prompt 10 runs a call on two devices. This document is the design phase 6 builds,
+not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room
@@ -206,22 +210,22 @@ decrypted, and because a frame published for a device that is mid-reconnect is g
 
 ## The existing surfaces
 
-Every voice surface in the tree today was built for the removed design. What happens to
-each:
+Every voice surface in the tree before phase 6 was built for the removed design. What
+happens to each, and when it happened:
 
 | Surface | Where | Decision |
 |---|---|---|
-| `/voice-rooms` route | `app_router.dart` | **Keep.** The placeholder stands until prompt 9 builds the list |
-| `/voice-rooms/new` route | `app_router.dart` | **Keep.** Same |
-| `/voice-rooms/sample-room` route | `app_router.dart` | **Replace** with `/voice-rooms/:roomId`, whose id is the room's 32-byte id in hex. A fixed path cannot name a room |
+| `/voice-rooms` route | `app_router.dart` | **Keep.** The placeholder stands until prompt 9 builds the list. **Done 2026-10-02**: the room list |
+| `/voice-rooms/new` route | `app_router.dart` | **Keep.** Same. **Done 2026-10-02**: the create flow |
+| `/voice-rooms/sample-room` route | `app_router.dart` | **Replace** with `/voice-rooms/:roomId`, whose id is the room's 32-byte id in hex. A fixed path cannot name a room. **Done 2026-10-02**: `/voice-rooms/:roomId` is Room Info, with `call` and `invite` below it, and an id that is not 64 hexadecimal characters shows a missing room |
 | Shell compose action | `app_shell.dart` | **Keep.** It routes to `/voice-rooms/new` and still should |
-| `activeVoiceRoomName`, which nothing sets | `app_shell.dart`, `app_router.dart` | **Keep.** It is the minimised banner's input and the call controller is what will set it |
-| The banner's tap target | `app_shell.dart:649` | **Replace** with the id of the call in progress, alongside the route above |
-| Contacts "New voice room" | `contacts_new_page.dart` | **Keep** |
-| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep**, and add the 22 icons the design canvas draws that `AppIcons` has no mapping for — mic, mic-off, speaker, phone-off, user-plus and the rest |
+| `activeVoiceRoomName`, which nothing sets | `app_shell.dart`, `app_router.dart` | **Keep.** It is the minimised banner's input and the call controller is what will set it. **Done 2026-10-02**: `LiveShellStatus` sets it from the call in progress, with the room's id and this device's mute |
+| The banner's tap target | `app_shell.dart:649` | **Replace** with the id of the call in progress, alongside the route above. **Done 2026-10-02**: it opens `/voice-rooms/:roomId/call`, and the call's own screen does not show it |
+| Contacts "New voice room" | `contacts_new_page.dart` | **Keep.** Since 2026-10-02 it opens the create flow, and on a server with no voice it is disabled with the reason |
+| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep**, and add the 22 icons the design canvas draws that `AppIcons` has no mapping for — mic, mic-off, speaker, phone-off, user-plus and the rest. **Partly done 2026-10-02**: the 14 the built screens draw, mic, mic-off, phone-off and user-plus among them; speaker and the rest wait for the surfaces that draw them |
 | Drift table `voice_rooms` | `local_database.dart:995` | **Delete.** It has no reader and no writer, and its three columns describe a server room: a capability to hold, a name the server stored, a live count the server counted. `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` replace it. **Done 2026-09-30** by schema 23, phase 6 prompt 6 |
-| `StructuralPlaceholderKind.voiceRooms`, `.newRoom`, `.room` | `structural_placeholder_page.dart` | **Keep** until prompt 9 replaces each with a real screen |
-| `voiceRoomsPlaceholderTitle` / `Body` | `l10n` | **Keep** until then |
+| `StructuralPlaceholderKind.voiceRooms`, `.newRoom`, `.room` | `structural_placeholder_page.dart` | **Keep** until prompt 9 replaces each with a real screen. **Done 2026-10-02**: all three are deleted |
+| `voiceRoomsPlaceholderTitle` / `Body` | `l10n` | **Keep** until then. **Done 2026-10-02**: deleted, with `roomPlaceholderTitle` and `newRoomPlaceholderTitle` |
 | `voice_configured`, `signal_buckets` | `server_config_model.dart` | **Keep.** Both are already parsed and both are load-bearing here |
 
 ## The testing path

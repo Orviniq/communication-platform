@@ -108,7 +108,9 @@ The destination set is identical across form factors; only the container differs
   sits above the bottom tab bar (mobile) or atop the left rail (desktop): room name, a
   live mic-state icon, and a "return to room" tap target. It stays on every screen until
   the user leaves the call; tapping it opens the Live Voice Room (§10). Membership of a
-  room does not raise it — only a call in progress does.
+  room does not raise it — only a call in progress does. As built (2026-10-02), the
+  call's own screen does not show it, because there it would only point at itself, and
+  its microphone icon reads muted or on, in words for a screen reader as well.
 - **Connection status strip.** When the client can't reach the server, a strip appears at
   the top of the current screen: "Connecting…" / "No connection to server". It clears only
   when the connection returns, not by user dismissal.
@@ -597,57 +599,119 @@ accepted. A failed send offers a retry of the same message.
 **Purpose.** The active audio call inside a **standalone, audio-only** voice room with an
 **ephemeral** alongside text chat. All members are equal peers — no admin hierarchy.
 
+**As built, 2026-10-02** (phase 6 prompt 9): `VoiceCallPage` at
+`/voice-rooms/:roomId/call`, where `:roomId` is the room's 32-byte id in lowercase hex. It
+reads the call through `VoiceCallController`, which owns the join below, and asks for
+nothing when it opens.
+
 **Layout (top → bottom).**
-1. **Top bar:** room name; a **participant count**; a **Room info** affordance (§13.2); a
-   **minimize** control that collapses to the persistent banner (§0.2) while keeping the
-   user in the call.
-2. **Participants area (main):** one tile for each participant — avatar + name + a **live
-   speaking/mic indicator** (speaking, muted). **[PRIVACY]** Each tile is its own
-   connection, encrypted end to end between the two devices by DTLS-SRTP. **There is no
-   media server.** Every path crosses the self-hosted relay, which forwards packets it
-   cannot open and which sees only who is talking to whom, at what size and at what time.
-   A call holds at most **ten joined devices**, because every phone sends its audio to
-   every other phone.
-3. **Ephemeral text chat panel** (a toggle/tab on mobile, a side panel on desktop):
-   messages here **disappear when the call empties** and are never stored on the server.
-   The panel must plainly indicate it's ephemeral and best-effort. Simplified input
-   (text + send); no persistent features like pin/star here.
-4. **Bottom control bar:** **Mute/Unmute** self, **Speaker/output** where applicable,
-   **Invite** (§13.3), **Leave** (leaves the call; the room stays and anyone can start
-   another).
+1. **Top bar:** a **minimize** control that keeps the call and returns to the previous
+   screen, where the persistent banner (§0.2) leads back; the room name; the **count of
+   devices this device knows in the call**, itself included ("3 in the call"); and a
+   **Room info** affordance (§13.2). The bar grows with the text rather than truncating the
+   count.
+2. **Participants area (main):** this device's own tile first, then one tile for each other
+   device of the call — avatar, name, and a status line that is always an icon and a word,
+   never colour alone. **[PRIVACY]** Each tile is its own connection, encrypted end to end
+   between the two devices by DTLS-SRTP. **There is no media server.** Every path crosses
+   the self-hosted relay, which forwards packets it cannot open and which sees only who is
+   talking to whom, at what size and at what time. The screen says that the audio crosses
+   the relay, so its path is longer than a direct one, in one quiet line below the tiles,
+   and before the join as well. A call holds at most **ten joined devices**, because every
+   phone sends its audio to every other phone. A person on two devices is two tiles, and
+   the second reads "(another device)": no device id is ever shown.
+3. **Room chat:** a **People | Room chat** tab on a narrow page, and a 360-pixel side panel
+   once the page is at least 720 pixels wide. Messages here **disappear when the call ends**
+   and are never stored on the server; the panel says plainly that it is temporary and
+   best-effort and that others may keep what they read. Simplified input (text + send); no
+   pin, star, reply, edit or receipts. The draft survives a resize that moves the panel.
+4. **Bottom control bar:** **Mute/Unmute**, **Invite** (§13.3) and **Leave** (leaves the
+   call; the room stays and anyone can start another). Each control is an icon and a word
+   at one shared height, and the words wrap at a large text size rather than truncate, so
+   Mute and Leave stay on screen.
+
+**Joining.** The pre-join panel says that joining sends the microphone to each person in the
+call and that the phone asks for the microphone next, with **Join** and **Not now**; Room
+Info's **Start a call** starts the same join. A join asks for the microphone, and nothing
+else does: not start-up, not the room list, not a screen opening. On a grant it starts the
+call's foreground service, and it joins only once that service runs.
+- *Microphone denied* — says so, and that nothing was sent; **Try again** asks again only
+  when tapped.
+- *Microphone denied for good* — Android shows no dialog any more, so the screen says the
+  microphone can be allowed for this app in the system settings and offers **Open
+  settings**, which opens this app's own settings page and reads nothing back. It is offered
+  only after a join the user asked for, never on its own and never to change a mind.
+- *The call could not start* — the service did not start (the app was not on screen, or the
+  phone refused it), so the call did not either: without the service Android takes the
+  microphone away when the user opens another app, and the others would hear silence with
+  nothing to tell them why.
+- *Notifications off* — a stated outcome inside the call, never a retry loop: the call's
+  notice is not in the notification shade, and Android still lists the call among the
+  active apps. The join does not ask for the notification permission.
 
 **Interactions.**
-- Tapping a participant tile → a small sheet with their name and, if not yet verified, a
-  link to verify their safety number (§11.1).
-- **Leave** returns to the previous screen; the persistent banner disappears.
+- Tapping a participant tile → a sheet on a narrow page and a dialog on a wider one, with
+  the name, whether the safety number is verified, what the tile's state means, **Verify
+  safety number** (§11.1) when it is not verified or has changed, and *Try again* for a
+  device that is not reachable.
+- **Leave** stops the call service and returns to the previous screen; the banner goes.
+- **Mute** silences this device's one capture, so every connection sends silence and nothing
+  is renegotiated. Only this device's own mute is shown: no frame carries a peer's mute in
+  this version, so a peer's tile shows its connection, never its microphone.
 
-**Trouble is per person.** One tile can be unreachable, or stopped by a changed safety
-number, while everybody else keeps talking. Nothing pauses when one connection fails and
-nothing pauses when somebody leaves: a connection's keys die with it, so there is no
-shared key to rotate and no *negotiating encryption* step to show.
+**Trouble is per person.** One tile can be unreachable, stopped by a changed safety number
+or on another version, while everybody else keeps talking. Nothing pauses when one
+connection fails and nothing pauses when somebody leaves: a connection's keys die with it,
+so there is no shared key to rotate and no *negotiating encryption* step to show.
 
-**States.**
-- *Connecting* — announcing, then exchanging offers; connecting indicators on tiles.
-- *Connected* — normal.
-- *Reconnecting* — a network blip; audio drops with a reconnecting indicator, speaking
-  indicators stop, and the text panel shows its volatile state.
-- *Alone in the call* — a single-tile state inviting others.
+**States as built.**
+- *Connecting* — asking for the microphone, getting the call ready, then announcing: a
+  progress bar, and the statement that nothing from the microphone is sent until a
+  connection is up.
+- *Connected* — the tile reads *Connected*, and the count follows the tiles.
+- *Reconnecting* — that tile reads *Reconnecting*.
+- *Alone in the call* — the own tile, "You are the only one here", and **Invite people**;
+  while this device's announcement is still being retried it reads "Waiting for the others
+  to answer" instead.
 - *Participant not reachable* — that device did not answer after four tries over about
-  twenty seconds. **That tile only**, with *Try again*; the rest of the call carries on.
-- *Participant's safety number changed* — audio with that one person stops until the user
-  checks the new number. **That tile only**; the rest of the call carries on.
+  twenty seconds. **That tile only** reads *Not reachable*, with *Try again*; the rest of
+  the call carries on.
+- *Participant's safety number changed* — **that tile only**, with **Verify safety
+  number**; audio with that one person stays stopped until the user checks the new number.
+- *Participant on another version* — that tile only, *Needs a newer app*.
+- *Renewing its connection* — an ICE restart after the relay credential's refresh, on that
+  tile; the audio keeps its old path meanwhile.
 - *Socket degraded* — the server connection dropped while the audio is fine. Deliberately
-  quiet: audio unaffected, the text panel says loudly that it has stopped updating, and
-  the count reads *last known*.
-- *Everyone has left* — ephemeral text is dropped; the room stays and any member can start
-  a call in it again.
-- *Call full* — ten joined devices already; the reason is stated and *Try again* works
-  when somebody leaves.
-- *Voice not set up on this server* — the deployment configures no relay. Honest and
-  **not retryable**; no foreign fallback is substituted.
-- *Relay not answering* — the server answered and its relay did not, so no connection came
-  up. Retryable.
-- *Offline / can't reach the server* — an honest error; no foreign fallback is attempted.
+  quiet: one calm line says the audio is fine and that room chat, joins and leaves are not
+  updating; the count reads *last known*; the chat panel says loudly that it has stopped
+  updating and takes no line.
+- *Everyone has left* — the alone state; the call's text goes when the call ends.
+- *Call full* — ten joined devices already, or this device sorted outside the ten: the
+  ceiling, its reason, and *Try again*.
+- *Voice not set up on this server* — `voice_configured` false, or `503
+  voice_unconfigured`. Honest and **not retryable**: no call control is offered at all, and
+  no foreign fallback is substituted.
+- *Too many attempts* — `429` on the relay route: *Try again in N s* counts down to the
+  `Retry-After` moment.
+- *Offline / can't reach the server* — a session that started offline shows Join disabled,
+  with the reason; a join whose credential could not be fetched says no connection to the
+  server was reached, that nothing else will be tried in its place, and offers *Try again*.
+- *Waiting for its state*, *Joining is paused*, *You were removed*, *You left this room* —
+  the room cannot hold a call: no Join, and the room's own reason (§13.2).
+
+**Live regions.** Announced: a tile becoming not reachable, blocked by a changed safety
+number or on another version, and a tile's ICE restart; the socket-degraded line and the
+chat's stale notice; every pre-join, refusal and ended panel. Not announced: joins, leaves
+and the count, which change too often for a screen reader to stay usable. Speaking is not
+shown, so it is not announced either.
+
+**Not built.** Speaking indicators, because nothing measures a stream's audio level; a
+peer's mute, which no frame carries; output selection (`voice-room-states.md` §5.7);
+*Relay not answering*, which the call does not report (it reports each peer instead);
+controls in the call's notification (§5.8); the notification permission request at the
+join; and a screen of its own for a device revoked mid-call (§5.4). A call ends with its
+session: a logout, an erasure or a revocation leaves the call, closing every connection and
+stopping the service, and the user lands where the session's end sends them.
 
 Every state above is drawn in [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md)
 §5, which is the tie-breaker for these screens.
@@ -745,59 +809,107 @@ makes a server call to create, rename, invite or leave. Each of those is a signe
 fanned out as envelopes, and the only server answer any of them can produce is a `429`
 on the fan-out.
 
+**As built, 2026-10-02** (phase 6 prompt 9): `lib/features/voice/presentation/`. Every
+screen reads rooms through `RoomStateReadPort` and signs a change through the room use
+cases; none calls the server and none asks for the microphone. A room's route is
+`/voice-rooms/:roomId`, its 32-byte id in lowercase hex, with `/call` (§10) and `/invite`
+(§13.3) below it. The Chats list (§6) does not pin a room in a call: the banner (§0.2) is
+the way back to it.
+
 ### 13.0 Voice Rooms list (Voice Rooms tab)
-- **Layout.** A list of the user's voice rooms. Each row: room name (held locally) and a
-  state line (**Live now** with the participant count this device knows of / **Empty**).
-  Any room the user is currently in also drives the persistent banner (§0.2).
-- **Interactions.** Tap → Voice Room Info (§13.2) or straight into the Live Room (§10) if
-  already live — your call which; be consistent. Compose (§7.3) → Create Voice Room.
-- **States.** loading, empty ("No voice rooms yet"), offline (cached list), a room
-  *waiting for its state* after a queue gap, a room *quarantined* by conflicting changes,
-  and *no voice on this server* when `voice_configured` is false — which also hides the
-  compose button.
+- **Layout.** A list of the rooms this device holds. Each row: avatar, room name (held
+  locally) and a state line that is an icon and words — **Live now · N** for the room of
+  the call this device is in, with the devices it counts in that call; **Empty** for any
+  other room; *Asking a member for its state*; *Paused by conflicting changes*; *You left
+  this room*; *You were removed from this room*. Any room the user is currently in also
+  drives the persistent banner (§0.2).
+- **Ordering (new).** The call's room first, then the rooms this device may act in, then
+  the paused ones, then the rooms it left or was removed from, each by name.
+- **Interactions.** Tap → Voice Room Info (§13.2), whatever the room's state: a tap never
+  joins, so only an explicit join ever asks for the microphone. Compose (§7.3) → Create
+  Voice Room.
+- **States.** loading, empty ("No voice rooms yet", with **Create a room**), offline (the
+  saved rooms, and a notice that a call waits for the server), a room *waiting for its
+  state* after a queue gap, a room *quarantined* by conflicting changes, and *no voice on
+  this server* when `voice_configured` is false or a join has met `503 voice_unconfigured`
+  — which also hides the compose button and **Create a room**.
 
 *Empty* means this device has not been told about a call, not that nobody is talking.
-Nothing on the server counts participants, so a row never claims more than the device
-knows.
+Nothing on the server counts participants, and a device that is not in a call is told
+about none, so a row never claims more than the device knows: only the room of this
+device's own call can read as live.
 
 ### 13.1 Create Voice Room flow
-Reached from Contacts (§7) or the Voice Rooms tab compose. Multi-step:
-1. **Room details** — set **room name**, at most 100 Unicode scalar values. Voice rooms
-   are standalone, not tied to any DM or group.
-2. **Invite members** — searchable contact multi-select (all invited are equal peers).
-3. **Create** — signs the create event, fans it out, and opens the room (or its info
-   card). A member whose devices are not reached yet is named on the info card; the room
-   works regardless.
+Reached from Contacts (§7) or the Voice Rooms tab compose. Three steps, each marked
+"Step N of 3":
+1. **Room details** — the **room name**, at most 100 Unicode scalar values; a longer name
+   is refused in the field and **Continue** waits for a valid one. Voice rooms are
+   standalone, not tied to any DM or group, and every member is an equal peer who may
+   invite, remove and rename.
+2. **Invite members** — a searchable multi-select of **verified** contacts only, because
+   verification precedes inviting; at most 49 besides the creator. With nobody verified,
+   *Nobody to invite yet* routes to Contacts, where a contact is verified.
+3. **Create** — names the room and the number invited, and says the room is signed on this
+   device and sent encrypted; **Create room** signs the create event, fans it out and opens
+   the room's info. A create that fails says that nothing was sent.
+
+On a server with no voice the flow offers no room to create.
 
 ### 13.2 Voice Room Info screen
 **Purpose.** View and manage a room outside a call.
 
 **Layout (top → bottom).**
-1. **Top bar:** back; **Edit** (rename / manage invites — no admin gating, all peers).
-2. **Header:** room name; a state line (**Live now** + count / **Empty**).
-3. **Primary action:** **Join** a call this device knows of, or **Start a call**.
-4. **Members list:** each row — avatar + name; an **Invite** action → picker (§13.3). No
-   role tags: every active member may add a member, remove a member and rename the room.
-5. **Leave room** as applicable. The confirmation explains that leaving is a signed event
-   the other members apply; that it ends this account's membership and its access to
+1. **Top bar:** back; **Rename** for every active member, with no admin gating — a sheet on
+   a narrow page and a dialog on a wider one, the same 100-scalar limit refused in the
+   field.
+2. **Header:** avatar, room name, and a state line (**Live now · N** in this device's call,
+   **Empty**, or the room's paused or ended state).
+3. **Primary action:** **Return to the call** in this room's call; otherwise **Start a
+   call**, which starts the join (§10) and opens the call. When a call cannot start here
+   the button is disabled and the reason is stated beside it: the room is waiting for its
+   state, the room is paused until it is settled, the session started offline, or a call
+   runs in another room.
+   With no voice on the server there is no button, only that statement.
+4. **Members list:** "N members", this account as *You*, then each member by name with
+   *Verified* or *Not verified* as an icon and a word; **Invite people** → picker (§13.3)
+   while the room holds fewer than 50. No role tags: every active member may add a member,
+   remove a member and rename the room. Tapping a member → a sheet or dialog with the
+   verification state, **Verify safety number** (§11.1) and **Remove from room**, whose
+   confirmation states that removing is a signed change every member applies and that any
+   member can remove any other, the only remedy for a removal being a new room.
+5. **Leave room** for an active member. The confirmation explains that leaving is a signed
+   event the other members apply; that it ends this account's membership and its access to
    calls; that it does **not** delete the room, which the remaining members keep, and
    deletes nothing on the server because the server holds nothing; and that returning
-   requires a fresh invite.
+   requires a fresh invitation.
 
 **States** additionally include *waiting for its state* — changes may have been lost while
-this device was away, a member has been asked, and joining resumes when the answer
-arrives — and *conflicting changes*, where two members changed the room at the same
-revision and the app will not choose between them: joining, inviting and renaming are
-paused until it is resolved out of band.
+this device was away, a member has been asked, and joining, inviting, renaming and leaving
+resume when the answer arrives; *conflicting changes*, where two members changed the room
+at the same revision and the app will not choose between them; *a change that could not
+be accepted*; and *removed*, which names the member who signed the removal and says that
+returning needs a fresh invitation. A conflict or a refused change pauses joining,
+inviting, renaming and leaving until it is settled out of band, and a paused room offers
+none of the four, because it takes no signed change from this device until then. Each
+state is announced as it appears.
+
+**Not built.** The conflict names neither the two changes nor their signers, because the
+room's read port carries the quarantine and not the two events. A change's envelopes in
+flight, a `429` on their fan-out, and which members' devices a change has not reached are
+not shown: they surface in the pairwise outbox after the change is signed and committed,
+not at the screen that signed it.
 
 **[PRIVACY]** The room's name and roster exist only on its members' devices. The server
 stores neither and could not decrypt either. The alongside text chat exists only during a
-call and is dropped when the call empties.
+call and is dropped when the call ends.
 
 ### 13.3 Voice Room invite picker
-- Searchable contact multi-select + **Invite** confirm. Inviting signs an `add members`
-  event and sends the new member the whole signed transcript, so a room holds at most 50
-  members and a member whose transcript would not fit one payload is not added.
+- `/voice-rooms/:roomId/invite`: a searchable multi-select of **verified** contacts who
+  are not members, and **Invite** confirm. Inviting signs one `add members` event and sends
+  each new member the whole signed transcript, so a room holds at most 50 members, and a
+  member whose transcript would not fit one payload is not added — the picker says that
+  nobody was added and why. With nobody left to invite it routes to Contacts. Per-contact
+  delivery status is not built, for the reason §13.2 gives.
 
 ---
 

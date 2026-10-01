@@ -17,8 +17,9 @@ later prompt of the phase. The architecture it implements is
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 disagree, those win.
 
-**The credential, the signalling transport, one peer connection, the room and the call are
-built; no screen is.** `lib/features/voice/` fetches, holds and refreshes the relay
+**The credential, the signalling transport, one peer connection, the room, the call and
+its screens are built; none has run on a device.** `lib/features/voice/` fetches, holds
+and refreshes the relay
 credential and builds the ICE configuration from it (*The credential*, below, phase 6
 prompt 3). Phase 6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the
 volatile seal and open on the pairwise session, the pacing, the candidate batching and the
@@ -26,8 +27,10 @@ bounded inbound queue — carried on the delivery session's own socket. Prompt 5
 connection between this device and one other (*The connection*, below). Prompt 6 built all
 of Part 1: the room and its signed control events, their fan-out and receipt, the four
 tables, and the sessions a call needs. Prompt 7 built the call (*The call*, below): who each
-frame goes to, when to try again, the ceiling and the removal. Where the build departs from
-what this document decided, the departure is dated beside the decision.
+frame goes to, when to try again, the ceiling and the removal. Prompt 8 built the microphone
+request and the call's foreground service, and prompt 9 the screens and the join that calls
+both (*The call*, below). Where the build departs from what this document decided, the
+departure is dated beside the decision.
 
 The transport beneath both formats is unchanged and is not restated here:
 [`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
@@ -947,6 +950,15 @@ line spends one of the 32 frames this join may seal to each peer, the budget the
 announcements and the negotiation draw on too — see ADR-077, *Open question, dated
 2026-10-01*.
 
+**As built, 2026-10-02 (prompt 9): the composer's limit.** The panel takes only a line that
+one frame of the largest published bucket carries: the smaller of the record's 2,000 scalar
+values and 8,000 bytes and what that bucket holds under a regular ratchet header, measured
+by the codec with the largest header a line can travel under (`VoiceRoomTextBudget`). A
+deployment whose largest `signal_buckets` entry is under 16384 lowers it, because the seal
+refuses a frame no published bucket holds and the relay drops an off-bucket frame without a
+word, so a longer line would look sent and reach nobody. The limit bounds one frame; the
+32-frame budget of the open question is unchanged.
+
 **The refresh.** At the credential's `refreshDueAt` the call asks for another, and a new one
 restarts ICE on each connection with its configuration. The restart's offer is retried like
 any other, but a restart nobody answers leaves the connection on its old path rather than
@@ -958,12 +970,21 @@ tile says so; every other refusal is retried by the next attempt. A peer that se
 version this build does not speak, or offers media this version has none of, is closed and
 says so. A microphone or a platform connection that cannot be opened ends the call.
 
+**As built, 2026-10-02 (prompt 9): the join from the screens, mute and the session's
+end.** `VoiceCallController` in `lib/features/voice/application/` is the one caller of the
+two ports of phase 6 prompt 8 ([`platform-android.md`](platform-android.md), A call's
+microphone). A join refuses a second call and a server with no voice before it asks for
+anything, then asks for the microphone, starts the call's foreground service, and only then
+joins. A refused microphone or a service that does not start ends the attempt with nothing
+sent, a refused join stops the service again, and a leave leaves the call and then stops
+the service. **Mute** disables this device's one capture track, so every connection sends
+silence and nothing is renegotiated; a join starts unmuted, and no frame carries a mute, so
+a peer's mute is not shown. **A session that ends** — a logout, an erasure or a revocation
+— leaves the call, which closes every connection and stops the capture and the service.
+
 Not built: the relay-unreachable state of *The credential* — no connection connected within
 15 seconds and every candidate pair failed — which the call would report in place of nine
-peers one at a time; and every screen, which is prompt 9's. The microphone request and the
-foreground service are built behind two ports, which nothing calls yet (phase 6 prompt 8,
-[`platform-android.md`](platform-android.md), A call's microphone): the join asks, starts
-the service and then joins, and the service stops when the call ends.
+peers one at a time.
 
 ## The ceiling
 

@@ -9,11 +9,12 @@ Reconciled from [`ui-specification.md`](../ui-specification.md) §0.2, §10, §1
 [`backend/realtime/API.md`](../../../backend/realtime/API.md). Where they disagree, those
 files win. Read alongside [`DESIGN.md`](DESIGN.md).
 
-**Implementation is not gated.** `/voice-rooms` currently renders
-`StructuralPlaceholderPage`, and phase 6 replaces it. [ADR-058](../decisions.md)'s seven
-prerequisites named an MLS exporter, a per-ABI permit and a LiveKit deployment, none of
-which exists to be met; [ADR-077](../decisions.md) supersedes them with the design this
-document draws. What is left between here and a call is work rather than a gate.
+**Implementation is not gated, and the screens are built.** Phase 6 prompt 9 replaced the
+`/voice-rooms` placeholder on 2026-10-02; [`ui-specification.md`](../ui-specification.md)
+§10 and §13 say, as built, which states below are drawn and which are not built.
+[ADR-058](../decisions.md)'s seven prerequisites named an MLS exporter, a per-ABI permit
+and a LiveKit deployment, none of which exists to be met; [ADR-077](../decisions.md)
+supersedes them with the design this document draws.
 
 **The design canvas** at `Desktop\voice-rooms-design\artboards\` draws every state below
 as a `.dc.html` file with each value inline. It binds nothing: where an artboard and this
@@ -88,7 +89,7 @@ Row: locally decrypted name + state line. The shell owns the tab bar and FAB.
 | Empty | No rooms | `AppStatePanel.empty` — one title, one sentence, one action |
 | Offline | Server unreachable | Cached list, shell connection strip above, rows still tappable |
 | Room waiting for its state | A queue gap may have carried a control event, or an event arrived building on state this device does not hold | Row state line **Asking a member for its state**. The room is visible and tappable; joining waits |
-| Room quarantined | Two valid events at one revision — a fork | Row state line names the conflict and routes to info; joining, inviting and renaming are paused |
+| Room quarantined | Two valid events at one revision — a fork | Row state line names the conflict and routes to info; joining, inviting, renaming and leaving are paused |
 | No voice on this server | `voice_configured` is false | Destination visible, content explains, the compose button is hidden as well |
 | Not built yet | Current shipping reality | `SurfaceMaturity` badge, exact wording **"Not built yet"** |
 
@@ -118,7 +119,7 @@ server: the create event is signed locally and fanned out as envelopes.
 | Empty | No call this device knows of | State line **Empty**, primary action **Start a call** |
 | Live | A call this device has been told about | **Live now · N**, primary action **Join** |
 | Waiting for its state | Queue gap, or an event on state this device does not hold | Explains that changes may have been lost, that a member has been asked, and that joining resumes when the answer arrives |
-| Conflicting changes | Two valid events at one revision | Names both changes and both signers; states that the app will not choose; joining, inviting and renaming are paused |
+| Conflicting changes | Two valid events at one revision | Names both changes and both signers; states that the app will not choose; joining, inviting, renaming and leaving are paused |
 | Rename in flight | Event signed, envelopes in flight | Progress on the field, same 100-scalar limit as create |
 | Rename rate limited | `429` on the fan-out | Field-level cooldown, not a toast |
 | Removed from this room | A member signed an event removing you | Room is read-only history; explains who signed it and that returning needs a fresh invite |
