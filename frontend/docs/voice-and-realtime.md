@@ -2,11 +2,11 @@
 
 ## Status
 
-**The relay credential, the signalling transport, one peer connection and the room state
-are implemented, and no call can be placed.** `lib/features/voice/` fetches the credential,
-holds it and builds the relay-only ICE configuration from it (phase 6 prompt 3), and
-carries `CPVSV001` messages between devices in `signal` frames, each sealed to the pairwise
-session of the device it goes to and paced under the socket limits (prompt 4). That
+**The relay credential, the signalling transport, one peer connection, the room state and
+the call are implemented, and no screen places one.** `lib/features/voice/` fetches the
+credential, holds it and builds the relay-only ICE configuration from it (phase 6 prompt
+3), and carries `CPVSV001` messages between devices in `signal` frames, each sealed to the
+pairwise session of the device it goes to and paced under the socket limits (prompt 4). That
 transport is `RealtimeGateway.send`'s one caller. Prompt 5 built the connection to one other
 device: one audio track, relay-only ICE, perfect negotiation over that transport and an
 ICE restart that keeps the connection ([`voice-signalling-v1.md`](voice-signalling-v1.md),
@@ -14,10 +14,15 @@ The connection). Two adapters in `lib/features/voice/infrastructure/` are the on
 that imports `flutter_webrtc` ([ADR-078](decisions.md)). Prompt 6 built the room: its
 signed control events, their fan-out and receipt, its four tables, and the durable requests
 that start the pairwise sessions its call will need, because a `signal` frame never starts
-one ([ADR-077](decisions.md), decided B on 2026-09-30). `/voice-rooms` renders
-`StructuralPlaceholderPage`, and nothing yet decides who a frame goes to or opens a
-connection. This document is the design phase 6 builds, not a description of the
-artifact.
+one ([ADR-077](decisions.md), decided B on 2026-09-30). Prompt 7 built the call:
+`VoiceCallEngine` joins after minting the credential and starting the sessions, asks who is
+in the call, fans its `join` out, keeps one connection to each device in the call, retries
+and gives up on the schedule, refuses an eleventh device, closes a removed member's
+connections, carries room text, and hands the application layer the call's state as a
+stream ([`voice-signalling-v1.md`](voice-signalling-v1.md), The call). `/voice-rooms`
+still renders `StructuralPlaceholderPage`: nothing asks for the microphone, runs the
+foreground service or shows a call, which are prompts 8 and 9. This document is the design
+phase 6 builds, not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
 validates and routes `envelope` and `signal` frames, and nothing else. The four room

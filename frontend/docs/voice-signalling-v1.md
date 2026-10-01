@@ -17,17 +17,17 @@ later prompt of the phase. The architecture it implements is
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 disagree, those win.
 
-**The credential, the signalling transport, one peer connection and the room are built;
-no call is.** `lib/features/voice/` fetches, holds and refreshes the relay credential and
-builds the ICE configuration from it (*The credential*, below, phase 6 prompt 3). Phase 6
-prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the volatile seal and open on
-the pairwise session, the pacing, the candidate batching and the bounded inbound queue —
-carried on the delivery session's own socket. Prompt 5 built the connection between this
-device and one other (*The connection*, below). Prompt 6 built all of Part 1: the room and
-its signed control events, their fan-out and receipt, the four tables, and the sessions a
-call needs. Nothing yet decides who a frame goes to or when to try again: that is the
-call's. Where the build departs from what this document decided, the departure is dated
-beside the decision.
+**The credential, the signalling transport, one peer connection, the room and the call are
+built; no screen is.** `lib/features/voice/` fetches, holds and refreshes the relay
+credential and builds the ICE configuration from it (*The credential*, below, phase 6
+prompt 3). Phase 6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the
+volatile seal and open on the pairwise session, the pacing, the candidate batching and the
+bounded inbound queue — carried on the delivery session's own socket. Prompt 5 built the
+connection between this device and one other (*The connection*, below). Prompt 6 built all
+of Part 1: the room and its signed control events, their fan-out and receipt, the four
+tables, and the sessions a call needs. Prompt 7 built the call (*The call*, below): who each
+frame goes to, when to try again, the ceiling and the removal. Where the build departs from
+what this document decided, the departure is dated beside the decision.
 
 The transport beneath both formats is unchanged and is not restated here:
 [`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
@@ -710,6 +710,19 @@ lands moments later and closes everything. The reverse order, the event first, i
 common case and is clean. What cannot happen is a removed member reconnecting afterwards,
 because every later frame of theirs fails the roster check.
 
+**As built, 2026-10-01, and a departure from the order above.** The call reads the room only
+through `RoomStateReadPort`, so it learns of a removal from the committed room state, not
+from the event: the order is commit, then close, then drop. The close happens as the changed
+state reaches the call, ahead of whatever else the call is doing — a send it is waiting on
+included — and each frame is checked against the room as committed when that frame arrives,
+so nothing from the removed member is applied after the commit. What the order gives up is
+the moment between the roster's commit and the change reaching the call, during which the
+removed member's connection is still open; closing first would need the room's inbound path
+and its own signed removals to call into the call before they commit. The same path ends this
+device's call when its own account is removed or leaves, or when the room starts waiting for
+its state or forks: its connections close, a `leave` with reason 2 goes to the devices that
+were in the call, and the room text goes.
+
 ## The credential
 
 §N rule 9, and `POST /api/v1/me/relay` in
@@ -878,6 +891,78 @@ in `api/jsep.cc`, which builds a rollback without reading its text, beside
 `JavaToNativeSessionDescription` in `sdk/android/src/jni/pc/session_description.cc`, which
 reads the text whatever the type.
 
+## The call
+
+§N rules 4, 5, 7, 8 and 10, as phase 6 prompt 7 built them on 2026-10-01:
+`VoiceCallEngine` in `lib/features/voice/application/`, one for the process, over the
+room's read port, the signalling transport, *The connection* and the credential service,
+composed in `lib/app/dependencies/voice_call_providers.dart`. It holds one call at a time
+and writes no row. The application layer reads it as a stream of `VoiceCallState`: the
+phase, each peer's status, the room text and, when the call ended or a join was refused, the
+reason.
+
+**A join**, in this order, and nothing is sent before step 4:
+
+1. The room must be one this device may act in. One waiting for its state, forked, left,
+   removed or not held refuses the join with that reason, before anything is minted.
+2. The relay credential is minted (§N rule 9). No voice on the server, `429` with its retry
+   time, and a mint that failed each refuse the join and say which.
+3. The room starts every pairwise session the call will need and routes those requests
+   into the outbox (*Starting the sessions a call needs*), and a 16-byte join id is drawn
+   from the native core's CSPRNG.
+4. A `participants_query` goes to every live device of every active member, this account's
+   other devices included. After the first answer window — the schedule's first wait, 2
+   seconds within 25 % — the `join` goes to the same devices, unless the answers name ten
+   devices already in the call: then no `join` goes out (*The ceiling*).
+
+**Presence.** A participant answers every copy of a query it receives, since a copy means
+its answer was lost, naming itself and the devices it is connected or negotiating with. A
+device not in a call answers nothing. An answer is a hint and opens or closes nothing: each
+device it names that this device does not know, and that is a live device of an active
+member as this device resolved them, becomes a peer it expects an offer from, shown as
+connecting. The sender's own entry must name the account and the join the pairwise session
+and the header gave it.
+
+**The mesh.** A participant that receives a `join` opens a connection and offers; the joiner
+answers each offer with a connection of its own (§N rule 4), and two devices that join at
+once both offer and the polite one rolls back. A frame from a join id this device has not
+seen, from a device it knows, tears the old connection down first. A `leave` of the current
+join, a connection that closes, and one that fails after it connected each drop the device;
+one that fails before it ever connected stays, *not reachable*.
+
+**Retries** (§N rule 7, on the schedule of *Retries, and when a device is unreachable*). The
+`join` and the query go again to each device that has not replied — an offer replies to a
+`join`, and an answer or an offer to a query — and each negotiation is sent again by the
+connection's `resend()` until it has connected. A copy of an offer this device already
+answered means the answer was lost, and is answered again at once. A peer this device
+expected, named by an answer or heard joining before its own `join` went out, that never
+negotiated is *not reachable* once the `join`'s fourth attempt and answer window are over;
+a negotiation that never connected is *not reachable* six seconds after its fourth attempt.
+Nothing more is sealed to it until it sends a `join` again or the user asks to try again,
+which sends this device's `join` to that one device four more times.
+
+**Room text** goes once to every device this one is connected or negotiating with, and shows
+here because it was sent from here. A call keeps 200 lines and drops them when it ends. Each
+line spends one of the 32 frames this join may seal to each peer, the budget the
+announcements and the negotiation draw on too — see ADR-077, *Open question, dated
+2026-10-01*.
+
+**The refresh.** At the credential's `refreshDueAt` the call asks for another, and a new one
+restarts ICE on each connection with its configuration. The restart's offer is retried like
+any other, but a restart nobody answers leaves the connection on its old path rather than
+calling the peer unreachable.
+
+**A refused frame.** A target the transport refuses as not live, or as past its 32 frames,
+is sent nothing more in this call. One refused for a changed safety number is closed, and its
+tile says so; every other refusal is retried by the next attempt. A peer that sends a major
+version this build does not speak, or offers media this version has none of, is closed and
+says so. A microphone or a platform connection that cannot be opened ends the call.
+
+Not built: the relay-unreachable state of *The credential* — no connection connected within
+15 seconds and every candidate pair failed — which the call would report in place of nine
+peers one at a time; the microphone request, the foreground service and every screen, which
+are prompts 8 and 9.
+
 ## The ceiling
 
 §N rule 10 refuses an eleventh participant and states the reason to the user. The ceiling
@@ -905,3 +990,15 @@ device ids sort lowest and offers nothing to the rest. Every participant reaches
 from the same join announcements, so they converge without agreeing on anything, and the
 eleventh device receives no offer from anybody, exhausts its retry bound and shows *Call
 full* — which is exactly what it would see if the call had been full when it asked.
+
+**As built, 2026-10-01.** A device's participant set before it joins is the answers to its
+own `participants_query`, heard over the first answer window: at ten it sends no `join`, and
+its call ends *Call full*. Each participant then applies the ten lowest against every device
+it knows of, another participant's answer included: a newcomer outside them is offered and
+answered nothing, and a device that finds itself outside them ends its call *Call full* the
+moment it learns so, rather than when its retries run out. A connection to a device outside
+them is closed, which is the rule taken literally and has a consequence the paragraph above
+leaves unstated: a device that joins a full call without having heard its answers, and two
+that join a nine-device call at once, take the seats of the participants whose ids sort
+highest, and those leave the call *Call full*. The query before the join makes the first case
+rare; the second is the race the rule exists for.
