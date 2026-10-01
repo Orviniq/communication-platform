@@ -16,6 +16,14 @@ abstract interface class MicrophonePermissionPort implements Port {
   /// Whether the microphone is granted now. A check: it shows nothing and
   /// asks nobody.
   Future<bool> isGranted();
+
+  /// Opens this application's page in the system settings: the one place
+  /// left to allow a microphone that Android no longer asks for.
+  ///
+  /// Only in answer to the user, after a join they asked for was refused for
+  /// good, and never to change a mind. Nothing is read back: the next join
+  /// asks again.
+  Future<void> openSettings();
 }
 
 /// The microphone-type foreground service that keeps a call's capture alive

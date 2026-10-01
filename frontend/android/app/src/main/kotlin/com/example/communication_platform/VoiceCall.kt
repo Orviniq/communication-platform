@@ -10,10 +10,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
@@ -199,6 +201,7 @@ internal object VoiceCall {
             "requestMicrophone" -> requestMicrophone(context, result)
             // A check, never a request: nothing is shown.
             "microphoneGranted" -> result.success(isGranted(context))
+            "openMicrophoneSettings" -> openMicrophoneSettings(context, result)
             "start" -> start(requester, context, call, result)
             "stop" -> stop(context, result)
             else -> result.notImplemented()
@@ -294,6 +297,30 @@ internal object VoiceCall {
         val waiting = permissionWaiters.toList()
         permissionWaiters.clear()
         waiting.forEach { it.success(answer) }
+    }
+
+    /**
+     * Opens this application's own page in the system settings, which is the
+     * one place left to allow a microphone Android no longer asks for.
+     *
+     * Only ever in answer to the user: a join they asked for was refused for
+     * good, and the screen offers this beside the reason. It is never opened on
+     * its own, on a schedule or to change a mind - Android's guidance is not to
+     * link there "in an effort to convince the user"
+     * (developer.android.com/training/permissions/requesting, read 2026-10-01) -
+     * and nothing is read back: the next join asks the platform again.
+     */
+    private fun openMicrophoneSettings(context: Context, result: MethodChannel.Result) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            (host ?: context).startActivity(intent)
+        } catch (_: Exception) {
+            // A device with no application-details screen leaves the user
+            // where they were rather than ending the application.
+        }
+        result.success(null)
     }
 
     // ---------------------------------------------------------------------

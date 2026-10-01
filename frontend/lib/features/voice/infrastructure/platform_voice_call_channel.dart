@@ -71,6 +71,13 @@ final class PlatformMicrophonePermission implements MicrophonePermissionPort {
   @override
   Future<bool> isGranted() async =>
       await _invoke(_channel, 'microphoneGranted') == true;
+
+  /// A page that cannot be opened leaves the user where they were: there is
+  /// nothing to report, because nothing is read back from the settings.
+  @override
+  Future<void> openSettings() async {
+    await _invoke(_channel, 'openMicrophoneSettings');
+  }
 }
 
 /// The call's microphone-type foreground service.

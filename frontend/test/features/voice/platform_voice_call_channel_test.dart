@@ -110,6 +110,31 @@ void main() {
         reason: 'a check is never a request',
       );
     });
+
+    test('opens the settings when asked, carries nothing, and reads nothing '
+        'back', () async {
+      await permission.openSettings();
+      expect(methods(), ['openMicrophoneSettings']);
+      expect(calls.single.arguments, isNull);
+
+      for (final reply in <Object? Function(MethodCall)>[
+        (_) => throw PlatformException(code: 'boom'),
+        (_) => throw MissingPluginException(),
+      ]) {
+        replies['openMicrophoneSettings'] = reply;
+        await expectLater(permission.openSettings(), completes);
+      }
+      expect(
+        methods(),
+        isNot(contains('requestMicrophone')),
+        reason: 'opening the settings is not a request for the microphone',
+      );
+
+      calls.clear();
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      await permission.openSettings();
+      expect(calls, isEmpty);
+    });
   });
 
   group('the service adapter', () {
@@ -385,4 +410,7 @@ final class _Microphone implements MicrophonePermissionPort {
     requests += 1;
     return MicrophonePermission.denied;
   }
+
+  @override
+  Future<void> openSettings() async {}
 }

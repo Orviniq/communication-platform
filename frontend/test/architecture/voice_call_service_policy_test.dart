@@ -294,6 +294,7 @@ void main() {
       for (final method in const [
         'requestMicrophone',
         'microphoneGranted',
+        'openMicrophoneSettings',
         'start',
         'stop',
       ]) {
@@ -334,6 +335,19 @@ void main() {
           'VoiceCall.onRequestPermissionsResult(this, requestCode, grantResults)',
         ),
       );
+    });
+
+    test('the settings a refusal points to are this application\'s own page, '
+        'and opening them asks nothing', () {
+      final open = _between(
+        voiceCall,
+        'private fun openMicrophoneSettings(',
+        'private fun start(',
+      );
+      expect(open, contains('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'));
+      expect(open, contains('context.packageName'));
+      expect(open, isNot(contains('requestPermissions')));
+      expect(open, isNot(contains('RECORD_AUDIO')));
     });
 
     test('no permission plugin', () {

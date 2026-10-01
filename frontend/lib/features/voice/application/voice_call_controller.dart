@@ -242,6 +242,10 @@ final class VoiceCallController {
     await service.stop();
   }
 
+  /// Opens the system settings, where a microphone Android no longer asks
+  /// for can be allowed. Only after a join was refused for good.
+  Future<void> openMicrophoneSettings() => microphone.openSettings();
+
   Future<void> setMuted(bool muted) => call.setMuted(muted);
 
   Future<Result<void>> sendRoomText(String text) => call.sendRoomText(text);

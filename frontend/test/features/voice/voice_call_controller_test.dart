@@ -203,6 +203,21 @@ void main() {
     expect(log, isEmpty, reason: 'the running call keeps its service');
   });
 
+  test('the settings open only when asked, and ask for nothing', () async {
+    microphone.answer = MicrophonePermission.deniedPermanently;
+    await controller.join(callRoomId);
+    log.clear();
+
+    await controller.openMicrophoneSettings();
+
+    expect(log, ['settings']);
+    expect(
+      controller.status.outcome,
+      isA<VoiceJoinMicrophoneRefused>(),
+      reason: 'the refusal stands until the next join asks again',
+    );
+  });
+
   test('the controller passes mute, room text and trying again to the '
       'call', () async {
     await controller.setMuted(true);
@@ -267,6 +282,9 @@ final class _Microphone implements MicrophonePermissionPort {
 
   @override
   Future<bool> isGranted() async => answer == MicrophonePermission.granted;
+
+  @override
+  Future<void> openSettings() async => log.add('settings');
 }
 
 final class _Service implements VoiceCallServicePort {
