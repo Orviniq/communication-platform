@@ -389,15 +389,19 @@ void main() {
         find.textContaining('Changes to this room may have been lost'),
         findsOneWidget,
       );
+      expect(
+        find.textContaining('inviting, renaming and leaving resume'),
+        findsOneWidget,
+      );
       expect(_button(tester, 'voice-room-start-call').onPressed, isNull);
       expect(find.text("Joining waits for the room's state."), findsOneWidget);
       expect(_key('voice-room-rename'), findsNothing);
       expect(_key('voice-room-invite'), findsNothing);
+      expect(_key('voice-room-leave'), findsNothing);
     });
 
-    testWidgets('conflicting changes pause joining, inviting and renaming', (
-      tester,
-    ) async {
+    testWidgets('conflicting changes pause joining, inviting, renaming and '
+        'leaving, and say so', (tester) async {
       await pumpInfo(
         tester,
         room: voiceRoom(lifecycle: RoomLifecycle.forkQuarantined),
@@ -407,7 +411,36 @@ void main() {
         find.textContaining('the app will not choose between them'),
         findsOneWidget,
       );
+      expect(
+        find.textContaining('inviting, renaming and leaving wait'),
+        findsOneWidget,
+      );
       expect(_button(tester, 'voice-room-start-call').onPressed, isNull);
+      expect(_key('voice-room-rename'), findsNothing);
+      expect(_key('voice-room-invite'), findsNothing);
+      expect(_key('voice-room-leave'), findsNothing);
+    });
+
+    testWidgets('a change that could not be accepted pauses the room, and '
+        'says what waits', (tester) async {
+      await pumpInfo(
+        tester,
+        room: voiceRoom(lifecycle: RoomLifecycle.controlQuarantined),
+      );
+
+      expect(
+        find.textContaining('A change to this room could not be accepted'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('inviting, renaming and leaving wait'),
+        findsOneWidget,
+      );
+      expect(_button(tester, 'voice-room-start-call').onPressed, isNull);
+      expect(
+        find.text('Joining is paused until the room is settled.'),
+        findsOneWidget,
+      );
       expect(_key('voice-room-rename'), findsNothing);
       expect(_key('voice-room-invite'), findsNothing);
       expect(_key('voice-room-leave'), findsNothing);

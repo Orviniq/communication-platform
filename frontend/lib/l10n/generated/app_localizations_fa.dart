@@ -1957,8 +1957,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get voiceRoomJoinWaits => 'پیوستن تا رسیدن وضعیت اتاق منتظر می‌ماند.';
 
   @override
-  String get voiceRoomJoinPaused =>
-      'تا وقتی این ناسازگاری برقرار است پیوستن متوقف است.';
+  String get voiceRoomJoinPaused => 'پیوستن تا حل شدن وضعیت اتاق متوقف است.';
 
   @override
   String get voiceRoomJoinOtherCall =>
@@ -1990,15 +1989,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get voiceRoomWaitingNotice =>
-      'ممکن است هنگام دور بودن این دستگاه تغییرهایی در این اتاق از دست رفته باشد. وضعیت فعلی اتاق از یکی از اعضا خواسته شده است و پیوستن، دعوت و تغییر نام پس از رسیدن آن ادامه می‌یابد.';
+      'ممکن است هنگام دور بودن این دستگاه تغییرهایی در این اتاق از دست رفته باشد. وضعیت فعلی اتاق از یکی از اعضا خواسته شده است و پیوستن، دعوت، تغییر نام و ترک اتاق پس از رسیدن آن ادامه می‌یابد.';
 
   @override
   String get voiceRoomConflictNotice =>
-      'دو عضو در یک لحظه این اتاق را تغییر دادند. اتاق متوقف شده است و برنامه میان آن دو انتخاب نمی‌کند: پیوستن، دعوت و تغییر نام تا حل شدن موضوع بیرون از برنامه منتظر می‌ماند، و در صورت نیاز با ساختن اتاقی تازه.';
+      'دو عضو در یک لحظه این اتاق را تغییر دادند. اتاق متوقف شده است و برنامه میان آن دو انتخاب نمی‌کند: پیوستن، دعوت، تغییر نام و ترک اتاق تا حل شدن موضوع بیرون از برنامه منتظر می‌ماند، و در صورت نیاز با ساختن اتاقی تازه.';
 
   @override
   String get voiceRoomControlQuarantineNotice =>
-      'تغییری در این اتاق پذیرفته نشد و اتاق متوقف شده است. پیوستن، دعوت و تغییر نام تا حل شدن موضوع بیرون از برنامه منتظر می‌ماند.';
+      'تغییری در این اتاق پذیرفته نشد و اتاق متوقف شده است. پیوستن، دعوت، تغییر نام و ترک اتاق تا حل شدن موضوع بیرون از برنامه منتظر می‌ماند.';
 
   @override
   String voiceRoomRemovedByNotice(String name) {
@@ -2205,7 +2204,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get voiceCallConflictBody =>
-      'دو تغییر ناسازگار در این اتاق رسیده است و برنامه میان آن‌ها انتخاب نمی‌کند.';
+      'این اتاق متوقف است تا اعضایش تغییری در آن را بیرون از برنامه حل کنند.';
 
   @override
   String get voiceCallRemovedTitle => 'از این اتاق حذف شدید';

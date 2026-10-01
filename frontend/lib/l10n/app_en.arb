@@ -767,7 +767,7 @@
   "voiceRoomReturnToCallAction": "Return to the call",
   "voiceRoomJoinOffline": "A call cannot start while the server is unreachable.",
   "voiceRoomJoinWaits": "Joining waits for the room's state.",
-  "voiceRoomJoinPaused": "Joining is paused while the conflict lasts.",
+  "voiceRoomJoinPaused": "Joining is paused until the room is settled.",
   "voiceRoomJoinOtherCall": "You are in a call in another room. Leave it before you start one here.",
   "voiceRoomMembersCount": "{count} members",
   "@voiceRoomMembersCount": {
@@ -784,9 +784,9 @@
     "description": "Honest wording is a release rule (voice-room-states.md §4): a signed event the others apply, no deletion, and a fresh invitation to return."
   },
   "voiceRoomChangeFailed": "The change could not be committed. The room is unchanged.",
-  "voiceRoomWaitingNotice": "Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting and renaming resume when it arrives.",
-  "voiceRoomConflictNotice": "Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting and renaming wait until it is settled outside the app, if need be with a new room.",
-  "voiceRoomControlQuarantineNotice": "A change to this room could not be accepted, so the room is paused. Joining, inviting and renaming wait until it is settled outside the app.",
+  "voiceRoomWaitingNotice": "Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting, renaming and leaving resume when it arrives.",
+  "voiceRoomConflictNotice": "Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting, renaming and leaving wait until it is settled outside the app, if need be with a new room.",
+  "voiceRoomControlQuarantineNotice": "A change to this room could not be accepted, so the room is paused. Joining, inviting, renaming and leaving wait until it is settled outside the app.",
   "voiceRoomRemovedByNotice": "{name} removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.",
   "@voiceRoomRemovedByNotice": {
     "placeholders": {
@@ -888,7 +888,7 @@
   "voiceCallWaitingTitle": "Waiting for this room's state",
   "voiceCallWaitingBody": "This device may be missing a change to the room, so a call waits until a member answers.",
   "voiceCallConflictTitle": "Joining is paused",
-  "voiceCallConflictBody": "Two conflicting changes to this room arrived, and the app will not choose between them.",
+  "voiceCallConflictBody": "This room is paused until its members settle a change to it outside the app.",
   "voiceCallRemovedTitle": "You were removed from this room",
   "voiceCallLeftRoomTitle": "You left this room",
   "voiceCallEndedChatDropped": "The call ended, and its chat was dropped.",

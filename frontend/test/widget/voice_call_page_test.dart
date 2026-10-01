@@ -481,6 +481,45 @@ void main() {
     });
   });
 
+  group('a room that cannot hold a call', () {
+    testWidgets('a paused room offers no join and says what waits, without '
+        'naming a conflict it does not have', (tester) async {
+      final controller = controllerWith();
+      await pumpCall(
+        tester,
+        controller,
+        room: voiceRoom(lifecycle: RoomLifecycle.controlQuarantined),
+      );
+
+      expect(key('voice-call-room-paused'), findsOneWidget);
+      expect(find.text('Joining is paused'), findsOneWidget);
+      expect(
+        find.textContaining('A change to this room could not be accepted'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('conflicting'), findsNothing);
+      expect(key('voice-call-join'), findsNothing);
+      expect(log, isEmpty);
+    });
+
+    testWidgets('a join the room refuses stops the service and offers no '
+        'retry', (tester) async {
+      call.answer = const VoiceJoinRefused(VoiceCallEndReason.roomQuarantined);
+      final controller = controllerWith();
+      await pumpCall(tester, controller);
+
+      await tapVisible(tester, key('voice-call-join'));
+
+      expect(find.text('Joining is paused'), findsOneWidget);
+      expect(
+        find.textContaining('until its members settle a change'),
+        findsOneWidget,
+      );
+      expect(key('voice-call-try-again'), findsNothing);
+      expect(log, ['microphone', 'start', 'join', 'stop']);
+    });
+  });
+
   group('room text', () {
     testWidgets('the composer refuses a line the largest bucket cannot carry', (
       tester,

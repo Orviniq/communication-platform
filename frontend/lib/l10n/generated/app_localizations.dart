@@ -3503,7 +3503,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceRoomJoinPaused.
   ///
   /// In en, this message translates to:
-  /// **'Joining is paused while the conflict lasts.'**
+  /// **'Joining is paused until the room is settled.'**
   String get voiceRoomJoinPaused;
 
   /// No description provided for @voiceRoomJoinOtherCall.
@@ -3557,19 +3557,19 @@ abstract class AppLocalizations {
   /// No description provided for @voiceRoomWaitingNotice.
   ///
   /// In en, this message translates to:
-  /// **'Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting and renaming resume when it arrives.'**
+  /// **'Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting, renaming and leaving resume when it arrives.'**
   String get voiceRoomWaitingNotice;
 
   /// No description provided for @voiceRoomConflictNotice.
   ///
   /// In en, this message translates to:
-  /// **'Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting and renaming wait until it is settled outside the app, if need be with a new room.'**
+  /// **'Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting, renaming and leaving wait until it is settled outside the app, if need be with a new room.'**
   String get voiceRoomConflictNotice;
 
   /// No description provided for @voiceRoomControlQuarantineNotice.
   ///
   /// In en, this message translates to:
-  /// **'A change to this room could not be accepted, so the room is paused. Joining, inviting and renaming wait until it is settled outside the app.'**
+  /// **'A change to this room could not be accepted, so the room is paused. Joining, inviting, renaming and leaving wait until it is settled outside the app.'**
   String get voiceRoomControlQuarantineNotice;
 
   /// No description provided for @voiceRoomRemovedByNotice.
@@ -3905,7 +3905,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceCallConflictBody.
   ///
   /// In en, this message translates to:
-  /// **'Two conflicting changes to this room arrived, and the app will not choose between them.'**
+  /// **'This room is paused until its members settle a change to it outside the app.'**
   String get voiceCallConflictBody;
 
   /// No description provided for @voiceCallRemovedTitle.

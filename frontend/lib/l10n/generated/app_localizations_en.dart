@@ -1962,7 +1962,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceRoomJoinPaused =>
-      'Joining is paused while the conflict lasts.';
+      'Joining is paused until the room is settled.';
 
   @override
   String get voiceRoomJoinOtherCall =>
@@ -1995,15 +1995,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceRoomWaitingNotice =>
-      'Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting and renaming resume when it arrives.';
+      'Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting, renaming and leaving resume when it arrives.';
 
   @override
   String get voiceRoomConflictNotice =>
-      'Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting and renaming wait until it is settled outside the app, if need be with a new room.';
+      'Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting, renaming and leaving wait until it is settled outside the app, if need be with a new room.';
 
   @override
   String get voiceRoomControlQuarantineNotice =>
-      'A change to this room could not be accepted, so the room is paused. Joining, inviting and renaming wait until it is settled outside the app.';
+      'A change to this room could not be accepted, so the room is paused. Joining, inviting, renaming and leaving wait until it is settled outside the app.';
 
   @override
   String voiceRoomRemovedByNotice(String name) {
@@ -2212,7 +2212,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceCallConflictBody =>
-      'Two conflicting changes to this room arrived, and the app will not choose between them.';
+      'This room is paused until its members settle a change to it outside the app.';
 
   @override
   String get voiceCallRemovedTitle => 'You were removed from this room';
