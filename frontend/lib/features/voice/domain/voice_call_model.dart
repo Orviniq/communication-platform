@@ -146,6 +146,26 @@ final class VoiceRoomTextEntry {
   String toString() => 'VoiceRoomTextEntry(isOwn: $isOwn, <redacted>)';
 }
 
+/// What asking to join came to.
+sealed class VoiceJoinOutcome {
+  const VoiceJoinOutcome();
+}
+
+/// This device's `join` has gone out to the room's member devices.
+final class VoiceJoinAnnounced extends VoiceJoinOutcome {
+  const VoiceJoinAnnounced();
+}
+
+/// No `join` went out, or the call ended before one could.
+final class VoiceJoinRefused extends VoiceJoinOutcome {
+  const VoiceJoinRefused(this.reason, {this.retryAt});
+
+  final VoiceCallEndReason reason;
+
+  /// For [VoiceCallEndReason.throttled]: when a join may ask again.
+  final DateTime? retryAt;
+}
+
 /// The call as the application layer sees it.
 ///
 /// [participants] are this device's peers, itself excluded, in device-id
@@ -159,6 +179,7 @@ final class VoiceCallState {
     Iterable<VoiceCallParticipant> participants = const [],
     Iterable<VoiceRoomTextEntry> roomText = const [],
     this.announcing = false,
+    this.muted = false,
     this.endReason,
     this.retryAt,
   }) : participants = List.unmodifiable(participants),
@@ -178,6 +199,10 @@ final class VoiceCallState {
   /// empty.
   final bool announcing;
 
+  /// Whether this device's microphone is muted: every connection sends
+  /// silence. Known only for this device; a peer's mute crosses no frame.
+  final bool muted;
+
   /// Set when [phase] is [VoiceCallPhase.ended].
   final VoiceCallEndReason? endReason;
 
@@ -192,7 +217,8 @@ final class VoiceCallState {
   @override
   String toString() =>
       'VoiceCallState(${phase.name}, participants: ${participants.length}, '
-      'roomText: ${roomText.length}, endReason: ${endReason?.name})';
+      'roomText: ${roomText.length}, muted: $muted, '
+      'endReason: ${endReason?.name})';
 }
 
 /// The ten-device ceiling of §N rule 10, as ADR-077 D2 decides it.

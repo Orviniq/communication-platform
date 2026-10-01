@@ -18,26 +18,6 @@ import 'package:communication_platform/features/voice/domain/voice_call_model.da
 import 'package:communication_platform/features/voice/domain/voice_peer_model.dart';
 import 'package:communication_platform/features/voice/domain/voice_signal_model.dart';
 
-/// What asking to join came to.
-sealed class VoiceJoinOutcome {
-  const VoiceJoinOutcome();
-}
-
-/// This device's `join` has gone out to the room's member devices.
-final class VoiceJoinAnnounced extends VoiceJoinOutcome {
-  const VoiceJoinAnnounced();
-}
-
-/// No `join` went out, or the call ended before one could.
-final class VoiceJoinRefused extends VoiceJoinOutcome {
-  const VoiceJoinRefused(this.reason, {this.retryAt});
-
-  final VoiceCallEndReason reason;
-
-  /// For [VoiceCallEndReason.throttled]: when a join may ask again.
-  final DateTime? retryAt;
-}
-
 /// This device's call: one at a time, in one room, as a full mesh of the
 /// connections of `VoicePeerConnection` (`backend/CLIENT_CONTRACT.md` §N,
 /// `voice-signalling-v1.md` Part 2).
@@ -77,9 +57,13 @@ final class VoiceJoinRefused extends VoiceJoinOutcome {
 /// no longer hold a call, this device's own connections close and the call
 /// ends.
 ///
+/// **Mute** silences this device's one capture, so every connection sends
+/// silence; the capture keeps running and nothing is renegotiated. Each call
+/// starts unmuted.
+///
 /// A call writes no row and logs nothing: who is connected, the room text and
 /// the credential live here for the life of the call.
-final class VoiceCallEngine {
+final class VoiceCallEngine implements VoiceCallPort {
   VoiceCallEngine({
     required String currentUserId,
     required String currentDeviceId,
@@ -131,9 +115,11 @@ final class VoiceCallEngine {
   var _disposed = false;
   Future<void> _turn = Future<void>.value();
 
+  @override
   VoiceCallState get state => _state;
 
   /// The state now, then every change.
+  @override
   Stream<VoiceCallState> get states =>
       Stream<VoiceCallState>.multi((controller) {
         controller.add(_state);
@@ -160,6 +146,7 @@ final class VoiceCallEngine {
   /// The microphone permission must already have been asked for: the first
   /// connection takes a hold on the call's capture, which on Android asks for
   /// the permission itself when it is missing (§N rule 11).
+  @override
   Future<VoiceJoinOutcome> join(String roomId) async {
     final normalized = roomId.toLowerCase();
     if (_disposed || _joining || _call != null) {
@@ -223,6 +210,9 @@ final class VoiceCallEngine {
         credentials.release();
         return _refuse(normalized, VoiceCallEndReason.left);
       }
+      // Each call starts unmuted, whatever the last one ended as. Nothing
+      // holds the capture yet: the first connection takes the first hold.
+      await localAudio.setMuted(false);
       call = _Call(
         roomId: normalized,
         roomIdBytes: roomIdBytes,
@@ -258,6 +248,7 @@ final class VoiceCallEngine {
 
   /// Leaves the call: every connection closes, and a `leave` goes to each
   /// device that was in it. Nothing is retried.
+  @override
   Future<void> leave() async {
     if (_call == null) {
       if (_joining) {
@@ -280,6 +271,7 @@ final class VoiceCallEngine {
   /// Sends one line of room text to every device in the call. Best effort: it
   /// is not retried, and a device that is not connected at that instant never
   /// gets it.
+  @override
   Future<Result<void>> sendRoomText(String text) => _serially(() async {
     final call = _call;
     if (call == null || call.ended || !call.joined) {
@@ -316,8 +308,24 @@ final class VoiceCallEngine {
     return const Result.success(null);
   });
 
+  /// Mutes or unmutes this device's microphone for the call in progress. The
+  /// capture keeps running and every connection keeps its track, which sends
+  /// silence while it is muted, so nothing is renegotiated and no peer is
+  /// told: a peer's mute crosses no frame in this version.
+  @override
+  Future<void> setMuted(bool muted) => _serially(() async {
+    final call = _call;
+    if (call == null || call.ended || call.muted == muted) {
+      return;
+    }
+    call.muted = muted;
+    await localAudio.setMuted(muted);
+    _emitCall(call);
+  });
+
   /// Re-arms the four attempts for a peer that is not reachable: this device
   /// announces itself to that device again.
+  @override
   Future<void> tryAgain(String deviceId) => _serially(() async {
     final call = _call;
     final key = deviceId.toLowerCase();
@@ -1282,6 +1290,7 @@ final class VoiceCallEngine {
         ]..sort((left, right) => left.deviceId.compareTo(right.deviceId)),
         roomText: call.text,
         announcing: call.announcing,
+        muted: call.muted,
       ),
     );
   }
@@ -1359,6 +1368,7 @@ final class _Call {
   int? queryCounter;
   var joined = false;
   var announcing = true;
+  var muted = false;
   var ended = false;
   VoiceCallEndReason? endReason;
   StreamSubscription<RoomState?>? roomWatch;

@@ -451,6 +451,44 @@ void main() {
       },
     );
 
+    test('mute disables the one track, and a capture made while muted starts '
+        'silent', () async {
+      final source = FlutterWebrtcLocalAudioSource();
+      final first = (await source.acquire() as Success<VoiceLocalAudio>).value;
+      List<(Object?, Object?)> enables() => [
+        for (final arguments in platform.argumentsOf(
+          'mediaStreamTrackSetEnable',
+        ))
+          (arguments['trackId'], arguments['enabled']),
+      ];
+
+      await source.setMuted(true);
+      await source.setMuted(false);
+      await pumpEventQueue();
+      expect(enables(), [('track-1', false), ('track-1', true)]);
+
+      await source.setMuted(true);
+      await first.release();
+      final second = (await source.acquire() as Success<VoiceLocalAudio>).value;
+      await pumpEventQueue();
+      expect(
+        platform.methods.where((method) => method == 'getUserMedia'),
+        hasLength(2),
+      );
+      expect(enables(), hasLength(4));
+      expect(enables().last, ('track-1', false));
+      await second.release();
+    });
+
+    test('mute with no capture asks the platform for nothing', () async {
+      final source = FlutterWebrtcLocalAudioSource();
+
+      await source.setMuted(true);
+      await pumpEventQueue();
+
+      expect(platform.methods, isEmpty);
+    });
+
     test('a released hold is never added to a connection', () async {
       final source = FlutterWebrtcLocalAudioSource();
       final hold = (await source.acquire() as Success<VoiceLocalAudio>).value;

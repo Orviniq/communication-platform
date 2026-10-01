@@ -117,6 +117,11 @@ abstract interface class VoiceLocalAudioPort implements Port {
   /// it is missing (ADR-078), so a hold taken before the join's own request
   /// would put the system prompt in front of the user from here.
   Future<Result<VoiceLocalAudio>> acquire();
+
+  /// Silences the call's track, or lets it carry the microphone again. The
+  /// capture keeps running and every connection keeps the track, so nothing is
+  /// renegotiated; a capture started while muted starts silent.
+  Future<void> setMuted(bool muted);
 }
 
 /// One hold on the call's local audio track.

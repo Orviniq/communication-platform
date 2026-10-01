@@ -1,5 +1,6 @@
 import 'package:communication_platform/core/application/ports/port.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/voice/domain/voice_call_model.dart';
 
 /// Starts, on the durable path, the pairwise sessions a call will need, and
 /// routes the requests that start them into the pairwise outbox
@@ -16,4 +17,26 @@ abstract interface class VoiceCallSessionsPort implements Port {
 /// spreads the retries of devices that joined together; it is not a secret.
 abstract interface class VoiceRetryJitterPort implements Port {
   double next();
+}
+
+/// This device's call, one at a time for the process: what the join and the
+/// screens drive. `VoiceCallEngine` is the implementation.
+abstract interface class VoiceCallPort implements Port {
+  VoiceCallState get state;
+
+  /// The state now, then every change.
+  Stream<VoiceCallState> get states;
+
+  /// Joins a call in the room whose hex id is [roomId]. The microphone
+  /// permission must already have been asked for.
+  Future<VoiceJoinOutcome> join(String roomId);
+
+  Future<void> leave();
+
+  Future<Result<void>> sendRoomText(String text);
+
+  /// Announces this device again to one peer that is not reachable.
+  Future<void> tryAgain(String deviceId);
+
+  Future<void> setMuted(bool muted);
 }

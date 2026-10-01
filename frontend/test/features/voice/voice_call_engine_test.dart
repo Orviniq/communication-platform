@@ -5,7 +5,6 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/voice/application/ports/voice_peer_ports.dart';
 import 'package:communication_platform/features/voice/application/ports/voice_signalling_ports.dart';
-import 'package:communication_platform/features/voice/application/voice_call_engine.dart';
 import 'package:communication_platform/features/voice/domain/room_model.dart';
 import 'package:communication_platform/features/voice/domain/voice_call_model.dart';
 import 'package:communication_platform/features/voice/domain/voice_peer_model.dart';
@@ -513,6 +512,57 @@ void main() {
         isA<FailureResult<void>>(),
       );
     });
+  });
+
+  group('mute', () {
+    test(
+      'mute silences the capture and says so, and no peer is told',
+      () async {
+        final a = mesh.device(0);
+        final b = mesh.device(1);
+        await mesh.joinAll([a, b]);
+        final sent = mesh.network.frames.length;
+
+        await a.engine.setMuted(true);
+
+        expect(a.state.muted, isTrue);
+        expect(a.audio.muted, isTrue);
+        // The connection keeps its track: nothing is renegotiated, and a
+        // peer's view of the call does not move.
+        expect(a.openConnections, hasLength(1));
+        expect(mesh.network.frames, hasLength(sent));
+        expect(b.state.muted, isFalse);
+        expect(b.statusOf(a), VoiceParticipantStatus.connected);
+
+        await a.engine.setMuted(false);
+
+        expect(a.state.muted, isFalse);
+        expect(a.audio.muted, isFalse);
+        expect(mesh.network.frames, hasLength(sent));
+      },
+    );
+
+    test(
+      'each call starts unmuted, and nothing is muted outside a call',
+      () async {
+        final a = mesh.device(0);
+        final b = mesh.device(1);
+
+        await a.engine.setMuted(true);
+        expect(a.audio.mutes, isEmpty);
+        expect(a.state.muted, isFalse);
+
+        await mesh.joinAll([a, b]);
+        await a.engine.setMuted(true);
+        await a.engine.leave();
+        expect(a.state.muted, isFalse, reason: 'an ended call holds no mute');
+
+        await mesh.joinAll([a]);
+        expect(a.state.phase, VoiceCallPhase.inCall);
+        expect(a.state.muted, isFalse);
+        expect(a.audio.muted, isFalse);
+      },
+    );
   });
 
   group('the ceiling', () {

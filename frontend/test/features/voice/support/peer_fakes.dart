@@ -367,12 +367,19 @@ final class FakePeerMediaPort implements VoicePeerMediaPort {
   }
 }
 
-/// The microphone: every hold it gave, and whether each was given back.
+/// The microphone: every hold it gave, whether each was given back, and every
+/// change of mute in order.
 final class FakeLocalAudioPort implements VoiceLocalAudioPort {
   final holds = <FakeLocalAudio>[];
+  final mutes = <bool>[];
   var refuse = false;
 
   int get live => holds.where((hold) => !hold.released).length;
+
+  bool get muted => mutes.isNotEmpty && mutes.last;
+
+  @override
+  Future<void> setMuted(bool muted) async => mutes.add(muted);
 
   @override
   Future<Result<VoiceLocalAudio>> acquire() async {

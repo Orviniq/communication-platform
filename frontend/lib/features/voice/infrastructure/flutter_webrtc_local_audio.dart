@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/voice/application/ports/voice_peer_ports.dart';
@@ -18,6 +20,12 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 /// so no camera is opened and no video track exists; the platform's default
 /// audio constraints — echo cancellation, noise suppression and gain control
 /// — apply unchanged.
+///
+/// Mute is the track's `enabled` flag, which libwebrtc reads at its source:
+/// a disabled local audio track sends silence on every sender that carries
+/// it, so one flag mutes every connection of the call and none renegotiates
+/// (`MethodCallHandlerImpl.mediaStreamTrackSetEnabled` finds a local track by
+/// its id and calls `MediaStreamTrack.setEnabled`).
 final class FlutterWebrtcLocalAudioSource implements VoiceLocalAudioPort {
   FlutterWebrtcLocalAudioSource();
 
@@ -26,6 +34,7 @@ final class FlutterWebrtcLocalAudioSource implements VoiceLocalAudioPort {
   MediaStream? _stream;
   MediaStreamTrack? _track;
   var _holds = 0;
+  var _muted = false;
   Future<void> _turn = Future<void>.value();
 
   @override
@@ -52,10 +61,31 @@ final class FlutterWebrtcLocalAudioSource implements VoiceLocalAudioPort {
       }
       stream = _stream = captured;
       track = _track = audio.single;
+      if (_muted) {
+        // A capture that starts during a muted call starts silent.
+        _setEnabled(track, enabled: false);
+      }
     }
     _holds += 1;
     return Result.success(FlutterWebrtcLocalAudio._(this, stream, track));
   });
+
+  @override
+  Future<void> setMuted(bool muted) => _serially(() async {
+    _muted = muted;
+    final track = _track;
+    if (track != null) {
+      _setEnabled(track, enabled: !muted);
+    }
+  });
+
+  /// The plugin's setter sends the change and does not wait for it, so a
+  /// platform that refuses it is caught here rather than left unhandled.
+  static void _setEnabled(MediaStreamTrack track, {required bool enabled}) {
+    runZonedGuarded(() => track.enabled = enabled, (_, _) {
+      // The track is gone on the platform side, and so is its sound.
+    });
+  }
 
   Future<void> _release() => _serially(() async {
     _holds -= 1;
