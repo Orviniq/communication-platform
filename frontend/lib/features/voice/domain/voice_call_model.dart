@@ -115,6 +115,14 @@ final class VoiceCallParticipant {
   /// waiting for its answer. The audio keeps its old path meanwhile.
   final bool restartingIce;
 
+  /// Counts as in the call: connecting, connected or reconnecting. A peer
+  /// that is not reachable, blocked by a changed safety number or on another
+  /// version keeps its tile and takes no seat.
+  bool get isSeated =>
+      status == VoiceParticipantStatus.connecting ||
+      status == VoiceParticipantStatus.connected ||
+      status == VoiceParticipantStatus.reconnecting;
+
   @override
   String toString() =>
       'VoiceCallParticipant(${status.name}, restartingIce: $restartingIce)';
@@ -213,6 +221,12 @@ final class VoiceCallState {
       phase == VoiceCallPhase.preparing ||
       phase == VoiceCallPhase.announcing ||
       phase == VoiceCallPhase.inCall;
+
+  /// The devices this one counts in the call, itself included, or zero when
+  /// no call runs. It is what this device has been told, and no more:
+  /// nothing on the server counts participants.
+  int get devicesInCall =>
+      isActive ? 1 + participants.where((peer) => peer.isSeated).length : 0;
 
   @override
   String toString() =>

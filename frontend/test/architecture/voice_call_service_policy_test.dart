@@ -361,11 +361,12 @@ void main() {
       }
     });
 
-    test('nothing in lib asks for the microphone until a join does', () {
-      // §N rule 11: at the join and at no other time. The join is the port's
-      // one caller to come (phase 6 prompt 9); until it exists nothing reads
-      // the provider, and nothing but the adapter sends the request.
+    test('nothing in lib asks for the microphone but the join', () {
+      // §N rule 11: at the join and at no other time. The join controller is
+      // the port's one caller, composed beside the port; no screen reads the
+      // provider, and nothing but the adapter sends the request.
       final readers = <String>[];
+      final requesters = <String>[];
       final senders = <String>[];
       for (final entry in Directory('lib').listSync(recursive: true)) {
         if (entry is! File || !entry.path.endsWith('.dart')) {
@@ -377,14 +378,30 @@ void main() {
             path != 'lib/app/dependencies/voice_call_service_providers.dart') {
           readers.add(path);
         }
+        if (source.contains('.request()')) {
+          requesters.add(path);
+        }
         if (source.contains("'requestMicrophone'")) {
           senders.add(path);
         }
       }
       expect(readers, isEmpty);
+      expect(requesters, [
+        'lib/features/voice/application/voice_call_controller.dart',
+      ]);
       expect(senders, [
         'lib/features/voice/infrastructure/platform_voice_call_channel.dart',
       ]);
+      // The composition hands the port to the join and to the service's own
+      // check before a start, which never asks.
+      final composition = File(
+        'lib/app/dependencies/voice_call_service_providers.dart',
+      ).readAsStringSync();
+      expect(
+        'ref.watch(microphonePermissionProvider)'.allMatches(composition),
+        hasLength(2),
+      );
+      expect(composition, contains('VoiceCallController('));
     });
   });
 }

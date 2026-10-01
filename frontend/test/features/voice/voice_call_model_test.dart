@@ -77,6 +77,51 @@ void main() {
     });
   });
 
+  test('a call counts this device and every peer that takes a seat', () {
+    VoiceCallParticipant peer(int index, VoiceParticipantStatus status) =>
+        VoiceCallParticipant(
+          userId: 'a000000$index-0000-4000-8000-00000000a00$index',
+          deviceId: 'd000000$index-0000-4000-8000-00000000d00$index',
+          status: status,
+        );
+    final peers = [
+      peer(1, VoiceParticipantStatus.connected),
+      peer(2, VoiceParticipantStatus.connecting),
+      peer(3, VoiceParticipantStatus.reconnecting),
+      peer(4, VoiceParticipantStatus.notReachable),
+      peer(5, VoiceParticipantStatus.identityBlocked),
+      peer(6, VoiceParticipantStatus.incompatibleVersion),
+    ];
+
+    expect(
+      [for (final p in peers) p.isSeated],
+      [true, true, true, false, false, false],
+    );
+    expect(
+      VoiceCallState(
+        phase: VoiceCallPhase.inCall,
+        roomId: 'ab' * 32,
+        participants: peers,
+      ).devicesInCall,
+      4,
+    );
+    expect(
+      VoiceCallState(
+        phase: VoiceCallPhase.announcing,
+        roomId: 'ab' * 32,
+      ).devicesInCall,
+      1,
+    );
+    expect(
+      VoiceCallState(
+        phase: VoiceCallPhase.ended,
+        roomId: 'ab' * 32,
+        endReason: VoiceCallEndReason.left,
+      ).devicesInCall,
+      0,
+    );
+  });
+
   test('no string form names a device, an account, a room or a line of '
       'text', () {
     const userId = 'a0000001-0000-4000-8000-00000000a001';
