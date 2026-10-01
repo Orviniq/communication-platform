@@ -2,6 +2,7 @@ import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/voice/application/ports/relay_credential_ports.dart';
+import 'package:communication_platform/features/voice/application/ports/voice_call_ports.dart';
 import 'package:communication_platform/features/voice/domain/relay_credential_model.dart';
 
 /// Holds the relay credential of the call in progress, and decides when to
@@ -27,7 +28,7 @@ import 'package:communication_platform/features/voice/domain/relay_credential_mo
 /// life of this object: the relay list is empty, and a retry cannot fill it.
 /// `429 throttled` is a cooldown of exactly `Retry-After`, during which nothing
 /// is asked either.
-final class RelayCredentialService {
+final class RelayCredentialService implements VoiceAvailabilityPort {
   RelayCredentialService({
     required this.remote,
     required this.deployment,
@@ -53,6 +54,7 @@ final class RelayCredentialService {
 
   /// Whether a call may be offered: the deployment says it serves voice, and
   /// the route has not said otherwise.
+  @override
   bool get isVoiceAvailable => deployment.voiceConfigured && !_refusedByServer;
 
   /// When the held credential enters its final hour, or null when none is held.

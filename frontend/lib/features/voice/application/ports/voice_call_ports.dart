@@ -40,3 +40,10 @@ abstract interface class VoiceCallPort implements Port {
 
   Future<void> setMuted(bool muted);
 }
+
+/// Whether a call may be offered at all: the deployment publishes
+/// `voice_configured` true, and the relay route has not answered
+/// `503 voice_unconfigured` since this process started.
+abstract interface class VoiceAvailabilityPort implements Port {
+  bool get isVoiceAvailable;
+}
