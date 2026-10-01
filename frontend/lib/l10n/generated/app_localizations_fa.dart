@@ -140,13 +140,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'فهرست مسیریابی‌شدهٔ گفت‌وگوها و ناحیهٔ جزئیات برای بخش‌های بعدی آماده است.';
 
   @override
-  String get voiceRoomsPlaceholderTitle => 'اتاق‌های صوتی';
-
-  @override
-  String get voiceRoomsPlaceholderBody =>
-      'اتاق‌های صوتی هنوز ساخته نشده‌اند. این نسخه هیچ صدایی نمی‌فرستد و دریافت نمی‌کند.';
-
-  @override
   String get settingsPlaceholderTitle => 'ساختار تنظیمات';
 
   @override
@@ -157,13 +150,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get threadPlaceholderTitle => 'جزئیات گفت‌وگو';
 
   @override
-  String get roomPlaceholderTitle => 'جزئیات اتاق صوتی';
-
-  @override
   String get newChatPlaceholderTitle => 'گفت‌وگوی جدید';
-
-  @override
-  String get newRoomPlaceholderTitle => 'ساخت اتاق صوتی';
 
   @override
   String get placeholderBody => 'این بخش از برنامه هنوز ساخته نشده است.';

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
-import 'package:communication_platform/features/app_shell/presentation/structural_placeholder_page.dart';
+import 'package:communication_platform/features/app_shell/presentation/live_shell_status.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
 import 'package:communication_platform/features/authentication/presentation/login_page.dart';
 import 'package:communication_platform/features/authentication/presentation/pending_activation_page.dart';
@@ -34,6 +34,11 @@ import 'package:communication_platform/features/settings/presentation/safety_num
 import 'package:communication_platform/features/settings/presentation/security_settings_page.dart';
 import 'package:communication_platform/features/settings/presentation/settings_page.dart';
 import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
+import 'package:communication_platform/features/voice/presentation/create_voice_room_page.dart';
+import 'package:communication_platform/features/voice/presentation/voice_call_page.dart';
+import 'package:communication_platform/features/voice/presentation/voice_room_info_page.dart';
+import 'package:communication_platform/features/voice/presentation/voice_room_invite_page.dart';
+import 'package:communication_platform/features/voice/presentation/voice_rooms_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -209,16 +214,17 @@ GoRouter createAppRouter({
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         final bootstrapOffline = state.uri.queryParameters['offline'] == 'true';
-        return AppShell(
-          environment: environment,
-          navigationShell: navigationShell,
-          location: state.uri.path,
-          status: bootstrapOffline
-              ? AppShellStatus(
-                  connection: AppConnectionState.offline,
-                  activeVoiceRoomName: status.activeVoiceRoomName,
-                )
+        return LiveShellStatus(
+          base: bootstrapOffline
+              ? status.copyWith(connection: AppConnectionState.offline)
               : status,
+          location: state.uri.path,
+          builder: (status) => AppShell(
+            environment: environment,
+            navigationShell: navigationShell,
+            location: state.uri.path,
+            status: status,
+          ),
         );
       },
       branches: [
@@ -262,33 +268,44 @@ GoRouter createAppRouter({
           routes: [
             GoRoute(
               path: '/voice-rooms',
-              pageBuilder: (context, state) => _page(
-                context,
-                state,
-                const StructuralPlaceholderPage(
-                  kind: StructuralPlaceholderKind.voiceRooms,
-                ),
-              ),
+              pageBuilder: (context, state) =>
+                  _page(context, state, const VoiceRoomsPage()),
               routes: [
+                // Before `:roomId`, which would otherwise take `new` as an id.
                 GoRoute(
                   path: 'new',
-                  pageBuilder: (context, state) => _page(
-                    context,
-                    state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.newRoom,
-                    ),
-                  ),
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const CreateVoiceRoomPage()),
                 ),
+                // The room's 32-byte id in hex: a fixed path cannot name a
+                // room (ADR-077 D12).
                 GoRoute(
-                  path: 'sample-room',
+                  path: ':roomId',
                   pageBuilder: (context, state) => _page(
                     context,
                     state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.room,
-                    ),
+                    VoiceRoomInfoPage(roomId: state.pathParameters['roomId']!),
                   ),
+                  routes: [
+                    GoRoute(
+                      path: 'call',
+                      pageBuilder: (context, state) => _page(
+                        context,
+                        state,
+                        VoiceCallPage(roomId: state.pathParameters['roomId']!),
+                      ),
+                    ),
+                    GoRoute(
+                      path: 'invite',
+                      pageBuilder: (context, state) => _page(
+                        context,
+                        state,
+                        VoiceRoomInvitePage(
+                          roomId: state.pathParameters['roomId']!,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

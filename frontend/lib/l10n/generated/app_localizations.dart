@@ -338,18 +338,6 @@ abstract class AppLocalizations {
   /// **'The routed conversation list and detail regions are ready for later feature pieces.'**
   String get chatsPlaceholderBody;
 
-  /// No description provided for @voiceRoomsPlaceholderTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Voice rooms'**
-  String get voiceRoomsPlaceholderTitle;
-
-  /// No description provided for @voiceRoomsPlaceholderBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Voice rooms are not built yet. This build sends and receives no audio.'**
-  String get voiceRoomsPlaceholderBody;
-
   /// No description provided for @settingsPlaceholderTitle.
   ///
   /// In en, this message translates to:
@@ -368,23 +356,11 @@ abstract class AppLocalizations {
   /// **'Conversation detail'**
   String get threadPlaceholderTitle;
 
-  /// No description provided for @roomPlaceholderTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Voice room detail'**
-  String get roomPlaceholderTitle;
-
   /// No description provided for @newChatPlaceholderTitle.
   ///
   /// In en, this message translates to:
   /// **'New conversation'**
   String get newChatPlaceholderTitle;
-
-  /// No description provided for @newRoomPlaceholderTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Create voice room'**
-  String get newRoomPlaceholderTitle;
 
   /// No description provided for @placeholderBody.
   ///

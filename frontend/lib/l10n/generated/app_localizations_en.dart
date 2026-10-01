@@ -140,13 +140,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'The routed conversation list and detail regions are ready for later feature pieces.';
 
   @override
-  String get voiceRoomsPlaceholderTitle => 'Voice rooms';
-
-  @override
-  String get voiceRoomsPlaceholderBody =>
-      'Voice rooms are not built yet. This build sends and receives no audio.';
-
-  @override
   String get settingsPlaceholderTitle => 'Settings structure';
 
   @override
@@ -157,13 +150,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get threadPlaceholderTitle => 'Conversation detail';
 
   @override
-  String get roomPlaceholderTitle => 'Voice room detail';
-
-  @override
   String get newChatPlaceholderTitle => 'New conversation';
-
-  @override
-  String get newRoomPlaceholderTitle => 'Create voice room';
 
   @override
   String get placeholderBody => 'This part of the app is not built yet.';
