@@ -1319,6 +1319,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Shown while the app is kept open so that messages can arrive.';
 
   @override
+  String get voiceCallNotificationTitle => 'Call in progress';
+
+  @override
+  String get voiceCallChannelName => 'Voice calls';
+
+  @override
+  String get voiceCallChannelDescription =>
+      'Shown while you are in a call, so that the call keeps your microphone when you open another app. It never names anyone in the call.';
+
+  @override
   String get settingsSustainedTitle => 'Receiving while closed';
 
   @override

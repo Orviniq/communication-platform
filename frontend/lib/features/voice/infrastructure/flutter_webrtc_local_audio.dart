@@ -10,9 +10,9 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 /// **It must follow the join's own permission request.** `getUserMedia` asks
 /// for `RECORD_AUDIO` by itself when it is missing (ADR-078,
 /// `GetUserMediaImpl.getUserMedia` in `flutter_webrtc` 1.6.2+hotfix.3), and
-/// nothing here checks first: there is no permission port yet, and a check
-/// would be a second place that decides when the microphone may be asked for
-/// (§N rule 11).
+/// nothing here checks first: the join asks through `MicrophonePermissionPort`
+/// before any hold is taken, and a check here would be a second place that
+/// decides when the microphone may be asked for (§N rule 11).
 ///
 /// It asks for audio and nothing else. [constraints] sets `video` to false,
 /// so no camera is opened and no video track exists; the platform's default

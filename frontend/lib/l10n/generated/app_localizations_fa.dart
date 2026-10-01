@@ -1317,6 +1317,16 @@ class AppLocalizationsFa extends AppLocalizations {
       'تا وقتی برنامه برای دریافت پیام باز نگه داشته می‌شود نمایش داده می‌شود.';
 
   @override
+  String get voiceCallNotificationTitle => 'تماس در جریان است';
+
+  @override
+  String get voiceCallChannelName => 'تماس‌های صوتی';
+
+  @override
+  String get voiceCallChannelDescription =>
+      'وقتی در تماس هستید نمایش داده می‌شود، تا تماس حتی وقتی برنامه‌ای دیگر را باز می‌کنید میکروفون شما را داشته باشد. نام هیچ‌کس را در تماس نشان نمی‌دهد.';
+
+  @override
   String get settingsSustainedTitle => 'دریافت هنگام بسته بودن';
 
   @override

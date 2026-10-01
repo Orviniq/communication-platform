@@ -2420,6 +2420,24 @@ abstract class AppLocalizations {
   /// **'Shown while the app is kept open so that messages can arrive.'**
   String get sustainedChannelDescription;
 
+  /// The whole content of the entry Android shows while a call keeps the microphone. It names nobody in the call and no room, because it shows in the shade, on a locked screen and while the screen is being shared.
+  ///
+  /// In en, this message translates to:
+  /// **'Call in progress'**
+  String get voiceCallNotificationTitle;
+
+  /// Names the notification category in Android system settings for this app. The user adjusts it there, so the name has to be recognisable out of context.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice calls'**
+  String get voiceCallChannelName;
+
+  /// No description provided for @voiceCallChannelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown while you are in a call, so that the call keeps your microphone when you open another app. It never names anyone in the call.'**
+  String get voiceCallChannelDescription;
+
   /// No description provided for @settingsSustainedTitle.
   ///
   /// In en, this message translates to:
