@@ -308,10 +308,13 @@ belongs to one checkout and `flutter clean` deletes it, so the script's refusal 
 convenience. Android refuses a downgrade by itself, and the numbers are recorded here. A
 number is never reused, even for a build nobody installed.
 
-- **Last installed build:** 2, made on 2026-09-14 from `f85196d` and installed that day on
-  the owner's phone and emulator
-  ([run record](validation/production-release/2026-09-14-build-2/README.md)). The next
-  build is 3 or higher.
+- **Last installed build:** 3, made on 2026-10-04 from `ab2ecb8` and installed that day on
+  the owner's phone and emulator with `adb install -r`, in place over build 2
+  ([run record](validation/voice-mesh/2026-10-04/README.md)). The next build is 4 or
+  higher.
+- **Installed before it:** 2, made on 2026-09-14 from `f85196d` and installed that day on
+  the same two devices
+  ([run record](validation/production-release/2026-09-14-build-2/README.md)).
 - **Built and never installed:** 1, made on 2026-09-14 from `e0fe4a2` to prove
   `tool/build_production_release.sh`.
 
