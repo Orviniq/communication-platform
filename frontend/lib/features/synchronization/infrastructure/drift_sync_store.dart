@@ -70,6 +70,10 @@ SELECT
     SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
     UNION
     SELECT operation_id FROM pending_send_preparations WHERE state = 0
+    UNION
+    SELECT operation_id FROM group_outbound_objects WHERE delivery_state = 1
+    UNION
+    SELECT operation_id FROM room_outbound_objects WHERE delivery_state = 1
   )) AS outbox_depth,
   (SELECT MIN(candidate) FROM (
     SELECT next_attempt_at AS candidate FROM inbox_envelopes
@@ -87,11 +91,18 @@ SELECT
 FROM sync_checkpoint c
 WHERE c.singleton_id = 1
 ''',
+      // A signed group or room change is owed work as well. It waits in its
+      // own table until the post-inbox dispatch routes it into the pairwise
+      // outbox, and that dispatch runs only inside a cycle, so a change made on
+      // this device needs the depth to rise or it waits for an unrelated
+      // wake-up before it leaves.
       readsFrom: {
         database.syncCheckpoints,
         database.inboxEnvelopes,
         database.outboxOperations,
         database.pendingSendPreparations,
+        database.groupOutboundObjects,
+        database.roomOutboundObjects,
       },
     );
     yield* _conflated(
@@ -220,6 +231,10 @@ SELECT
     SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
     UNION
     SELECT operation_id FROM pending_send_preparations WHERE state = 0
+    UNION
+    SELECT operation_id FROM group_outbound_objects WHERE delivery_state = 1
+    UNION
+    SELECT operation_id FROM room_outbound_objects WHERE delivery_state = 1
   )) AS outbox_depth,
   (SELECT MIN(candidate) FROM (
     SELECT next_attempt_at AS candidate FROM inbox_envelopes
