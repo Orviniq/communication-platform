@@ -90,6 +90,141 @@ is not silently edited out of history.
 | ADR-077 | Accepted (2026-09-20), on the owner's answers to D1, D2, D3 and D5; its open conflict decided B (2026-09-30); one open question (2026-10-01) | Client-side record of server ADR-0021 and ADR-0022: voice is a relayed WebRTC mesh with no server room, so a room becomes client state on the group's own signed-control machinery and a call becomes volatile `signal` frames between devices. Two wire formats, split by the channel each needs — `CPVRV001` for the room's control events over durable envelopes, `CPVSV001` for the call's signalling over `signal` frames — and a payload is refused from the other channel. A volatile frame rides the durable pairwise session's own Double Ratchet rather than a second session or a new key schedule, and pays for it in dead skipped keys that the retry bound caps. Supersedes the voice prerequisites P1 to P7 of ADR-058, which name three things that no longer exist, and deletes the `voice_rooms` table (2026-09-20) | Server ADR-0021 decides the architecture and stops at the edge of the client: a room is client state "carried by client-signed control events over ordinary envelopes, exactly as a group is", and ephemeral room text and join and leave announcements are `signal` frames. No source defines the room model or the signalling payload, and `CLIENT_CONTRACT.md` §N says so in as many words — "Everything below is therefore yours to build, and none of it is checked by anything upstream." **The split by channel is the load-bearing decision.** A roster has to survive a device being offline and an offer must not: a durable offer is a call invitation that arrives an hour late, and a volatile roster is a room that forgets who was removed. So membership is durable and signalling is volatile, and each is refused from the other's channel, because without that rule the volatile path is a way to write durable state and the durable queue is a way to replay a call's signalling hours later. **The room reuses the group's machinery down to the byte.** The same hash chain, the same six apply outcomes, the same transcript, state-request and queue-gap rules, under its own two signing domains so that no event of one kind can be replayed as the other. That machinery is built, reviewed and tested; inventing a second one for the same problem would be a defect, not a design. **The volatile seal is the one place this costs something real, and the cost is stated rather than engineered away.** §N rule 6 binds the signalling to the pairwise session of §F, and `pairwise-transport-v1.md` is frozen and under independent review, so there is no second session and no signalling-only key schedule. A frame the server drops is never redelivered, so it leaves a hole the receiver fills with a dead skipped key on the next message that does arrive — and at 2,000 per pair the bound's failure mode is a repair that interrupts the *text* conversation with that device too. The retry bound is therefore the budget: 32 sealed frames per peer per call, 62 wholly undelivered calls before a pair reaches the bound, and a peer already reported unreachable is sealed nothing further until it announces itself again. **What was measured rather than assumed**: an audio-only, relay-only, max-bundle offer from libwebrtc is 1,363 bytes over 46 lines (Chromium 152.0.7977.76, 2026-09-20). With this framing an offer is about 1,516 bytes, which clears bucket 4096's regular-header budget of 4,014 by 2,498 and its worst-case initial-header budget of 1,554 by 38 — so an SDP is never the first message to a peer, and a device with no session sends its small `join` first. A margin of 38 bytes is one `a=extmap` line from a frame that goes off-bucket and is dropped without a word. Adds no dependency, changes no `backend/` file, and opens no production gate: nothing under `lib/` implements a byte of it. **Four questions went to the owner** and were answered A on 2026-09-20, as written out under "Owner questions": every member may remove every other, the ceiling counts devices, no group or DM hosts a call, and the volatile seal shares the durable ratchet. **Open conflict, dated 2026-09-30 by prompt 4, decided B by the owner the same day:** a volatile frame cannot start a session, because the core writes an initial header on a session's first message only and a first frame the relay drops leaves a session only the sender holds, on which its later messages, durable ones included, are refused. So a volatile frame still never starts one, and the room's own durable payloads start every session a call needs: a `CPVRV001` state request, the room's existing kind 2, sent to each live device of each active member this device has no session with, which the durable queue holds until that device fetches it. No new wire format; the choice of payload and moment, and its costs, are written under *Decided 2026-09-30* at the end of the record. |
 | ADR-078 | Accepted (2026-09-28) | Voice's media package is `flutter_webrtc` **1.6.2+hotfix.3**, pinned exactly. Its two native parts are libwebrtc 150.7871.01 from Maven Central and Twilio's `audioswitch` in David Liu's fork at commit `039a35ae`, which only JitPack publishes, so JitPack serves this build that one module and nothing else. The merged manifest gains `RECORD_AUDIO`, `FOREGROUND_SERVICE_MICROPHONE` and `MODIFY_AUDIO_SETTINGS` and refuses the `BLUETOOTH` permission `audioswitch` merges in, and the `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of ADR-054 hold (2026-09-28) | ADR-077 designed voice on `flutter_webrtc` and left the dependency review to a record of its own; this is it. **The version is the newest because its native parts are 1.6.1's**: the Android build file is byte-for-byte the same, so every fact gathered for 1.6.1 holds, and what came after is fixes to data-channel and camera paths this design never takes, plus two opt-in field trials that stay off. **What it costs is one native library**: an unsigned production release grows from 88,199,375 to 123,703,796 bytes, and 35,263,068 of the 35,504,421 bytes added are `libjingle_peerconnection_so.so` for three ABIs, the emulator's x86_64 copy alone 16,166,352. That library is libwebrtc with third-party code of its own — BoringSSL, libsrtp, Opus, libvpx, libaom, dav1d and more — and it will open a call's sockets itself, outside `dart:io` and outside the provisioned trust store, which is what server ADR-0021 means by DTLS-SRTP between two endpoints; `platform-android.md`'s claim that every byte leaves through `dart:io` is corrected. **JitPack is restricted in both directions, and the restriction was proven**, because JitPack builds whatever public repository a coordinate names and `flutter_webrtc`'s build script adds it, unfiltered, to every project. **`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it**: the package builds `audioswitch`'s `AudioSwitch`, which routes through `AudioManager`, and the one class that checks a Bluetooth permission keys on the target SDK and would check `BLUETOOTH_CONNECT` at 36. No Dart code imports the package, no service is declared and no permission is asked for yet. Found on the way: the Gradle lock writer drops `kotlin-stdlib-common` from both runtime classpaths on the unmodified tree too, while validation still resolves it there, so the committed line is kept; and libwebrtc's third-party notices exist nowhere for this build (F1). |
 | ADR-079 | Accepted (2026-10-05) | Phase 6 closes on a call between two real devices: on signed production build 5, APK SHA-256 `20a010b41eb43c5eb5a34d1c007d58fa84548408e707e20685043b68010a37dd`, each of the seven call steps of phase 6 prompt 10 passed — a room made on one device reached the other, both joined and connected through the relay, audio crossed both ways, mute silenced one side, the call ran on with a device out of view, a leave stopped that device's call service and was dropped by the other, and a rejoin carried audio again. Two corrections came first: a signed group or room change counts in the outbox depth until it is routed, so creating one starts a delivery cycle (D2); and a leave stops the call service only when no join has started since (D3) | Every voice test so far ran between fakes. On the owner's phone and emulator, build 3 found that a room reached the invited device only when something unrelated woke the creator's delivery cycle, more than six minutes after it was signed, and build 4 found that a rejoin made while a leave was still finishing lost its call service, so the new call lost its microphone and its network the moment the app left the screen. Build 4 corrected the first and build 5 the second, and the owner confirmed every audio step by ear against the devices' own audio levels ([`docs/validation/voice-mesh/2026-10-05/`](validation/voice-mesh/2026-10-05/README.md)). |
+| ADR-080 | Accepted (2026-10-06) | A send verifies its recipients with one `POST /api/v1/peers` for each 64 users instead of up to three per-user reads for each. Every answer goes through the same `_refresh` checks the per-user answers feed; `unchanged` is a shape decided by its presence; a user the route leaves out is blocked as the identity read's `404` is; and the batched tag is stored and sent apart from the device list's `ETag`. The round-trip cache passes the batched read through and forgets every peer it found moved | A send read the identity, the device list and, when its head had moved, the device log of every recipient before it sealed one copy, against a round trip ADR-060 and ADR-065 measured at 107-137 ms: a group of fifty was up to a hundred and fifty round trips. ADR-065's cache stopped a cycle asking twice, never the first time. The server answers up to 64 peers in four queries, and `CLIENT_CONTRACT.md` §L names that route the one to poll on. Counted on the composed send path: a send is one call where it was four, a send and its gossip two where they were four, and a first contact with its gossip stays at six. Adds one call to a route the server already serves; changes no cryptographic construction, protocol, local schema or backend file. |
+
+## ADR-080 in full — a fan-out verified in one call (2026-10-06)
+
+**Status:** Accepted, 2026-10-06. Client-side cost decision, phase 7 prompt 1. Adds one call to
+`POST /api/v1/peers`, a route the server already serves (devices API, "Peer state for a set of
+users"), and changes no cryptographic construction, protocol, wire format or backend file.
+**The local schema does not move:** the batched tag is one more optional key in the trust
+record's JSON value. **Opens no production gate.**
+
+**Cites:** ADR-060 and ADR-065 (the round trip and the cache), ADR-075 (a group message is one
+copy for each device of each member),
+[`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §L, and the
+[devices API](../../backend/devices/API.md).
+
+### The question
+
+> A send reads three things about every recipient before it seals one copy: the identity, the
+> device list and the device log. What may one call replace, and what may it not?
+
+`PairwiseFanoutCoordinator` resolved each recipient in turn, then this account, and each
+resolution read `GET /api/v1/users/{user_id}/identity`, `GET /api/v1/users/{user_id}/devices`
+and, when the head had moved, pages of `GET /api/v1/users/{user_id}/devicelog`. A group of fifty
+was up to a hundred and fifty round trips before its first copy, against a round trip ADR-060
+measured at 107 to 137 ms. ADR-065's cache stopped one cycle asking the same question twice; it
+never stopped the first ask.
+
+### D1. One read, the same checks
+
+`ClientAuthenticationService.resolveLiveDevicesForUsers` reads every user through
+`PeerIdentityRemotePort.fetchPeerStates` and hands each answer to `_refresh`, the method the
+per-user reads have always fed. `_refresh` takes the identity and the device list either from
+the two per-user reads, made where they always were, or from the batched answer. Everything
+between and after the two reads is one code path: the identity signature, the own-identity
+comparison, the confirmed master key, the unsigned-device rule, the device transition rule, the
+same-head pending window, the hash chain, `requireCurrentLiveSet`, the attestation and the
+persisted trust states. There is no second verifier, and the answer's identity and devices are
+read by the parsers the per-user answers are read by.
+
+The device log is not in the batched answer. A peer whose head moved still has its new records
+read page by page and verified before anything is stored.
+
+Order and failure are kept. The fan-out asks for its peers sorted and then this account, which
+is the order the per-user loop ran. Each user is verified behind the global fork gate that
+`resolveLiveDevices` puts in front of one user, so a fork found in one withholds every user
+after it. The fan-out fails with the first failure in that order, as the loop did. One
+difference is deliberate: users after a failing one are still verified and stored, where the
+loop never asked about them.
+
+### D2. The answer's two shapes, and the user it leaves out
+
+- **`unchanged` is decided by its presence.** It marks the short shape — `user_id`, `etag`,
+  `unchanged` — and its value is always `true`. Any other value, a body field beside it, or a
+  tag other than the one the request sent for that user is a malformed answer rather than the
+  other shape. It stands for the stored identity, device list and head, exactly as a `304` from
+  the device-list read stands for the stored list, and they are verified again.
+- **Items are matched to the request by `user_id`**, ignoring case because the server writes
+  ids in lower case, and never by position or count. An item about a user nobody asked about,
+  or a second item about one user, is malformed.
+- **A user the route leaves out** does not exist, is not activated or was deactivated, and the
+  route does not say which. That is what the per-user identity read answers `404 not_found` for,
+  together with a user who has published no identity, which the batched read says with
+  `identity: null`. All of them become that `404` and are blocked as it is: the record goes to
+  `identityUnavailable` and the failure is `BackendFailure(notFound)`, a settled failure that
+  retires the send. A send to such a member ends as it did before; it is reached in one call
+  instead of three.
+
+### D3. Three tags, kept apart
+
+The identity read's `ETag` is never sent. The device list's is the record's `etag`, sent as
+`If-None-Match` to that route alone. The batched read's is the new `peerStateEtag`, stored under
+`peer_etag` and sent in the request body to that route alone. The routes derive their tags from
+different inputs, so a tag sent to the wrong route costs a full answer and never a wrong `304`.
+The rule here is about the client's own state.
+
+A tag vouches for the state stored beside it. When one route answers, its tag is written. The
+other route's tag survives only if this answer left the stored identity, device list and head
+exactly as they were and the record was not blocked. Kept past a change, it would name a state
+the client no longer holds, and an answer confirming that state would then stand for bytes the
+route never sent. Nothing an honest server does brings an old state back, since heads only grow
+and identity versions only rise, so the rule costs at most one full answer and buys a guarantee
+that does not rest on the server: `unchanged` and `304` only ever stand for the bytes stored
+beside their tag. A refused record sends neither tag, and `_persistBlocked` drops both, for the
+reason it already dropped the device list's.
+
+A verified record used to require the device list's tag when it was decoded. It now requires the
+tag of either route, because a batched read that moved the stored state drops the device list's.
+
+### D4. The cache passes the batched read through
+
+`PeerIdentityRoundTripCache` neither remembers nor joins `fetchPeerStates`. One call answers for
+everybody a fan-out names, and what is worth keeping from it is already kept, as a tag, in each
+record.
+
+What it changes is the rest of the cache. ADR-065 relied on every answer that becomes stored
+state passing through the cache, so that nothing older than the stored state could be served.
+A batched answer becomes stored state without passing through it. A remembered per-user answer
+from before it, served afterwards, would hand `_refresh` a head below the one just stored, which
+is read as a fork and withholds every send to everybody. So a peer the batched read found moved
+is forgotten, and no per-user answer asked before the batched answer landed, one still in
+flight included, is remembered for that peer. A peer found `unchanged` stored nothing new and
+keeps what is remembered about it, which is what holds the first-contact shape below at six.
+
+Round trips, counted on the composed send path in `peer_resolution_cache_test.dart`:
+
+| Shape | ADR-065 | Now |
+|---|---|---|
+| One send | 4 | 1 |
+| A send and its gossip | 4 | 2 |
+| Two sends to one peer | 4 | 2 |
+| A first contact and its gossip | 6 | 6 |
+| A group of fifty, first send | up to 150 | 1, plus log pages for moved heads and the claim path for each new session |
+
+### D5. What stays per user
+
+`refreshPeer` and `confirmOutOfBand` (the safety number and the `stale_devices` refresh),
+`refreshPeerForDevices` (the prekey claim, which is per user anyway) and `resolveLiveDevices`
+for the single-peer paths (the sender of an inbound envelope, session repair and voice) still
+read the per-user routes, which the contract keeps and does not deprecate. So does
+`PairwiseVolatileSealer`, which resolves each target user of a voice signal on its own: it needs
+an outcome for each device, to refuse one and seal the rest, where the batched resolution fails
+a fan-out as a whole. Moving it is a separate change.
+
+### What is not done, and what was found
+
+- **No run against the live server.** Every check is a fake, or a mock-adapter test against
+  `backend/openapi.json`, and the counts above are requests, not timings.
+- **Found, not changed.** Both device parsers require `bundle_version` to be null when
+  `cross_sig` is, but the server serves an unsigned device as `cross_sig: null,
+  bundle_version: 0` (`backend/devices/tests/test_cross_signing.py` and `test_peer_state.py`).
+  A peer with a device between its registration and its cross-signature therefore makes its
+  device-list answer malformed, `malformedServerResponse` rather than a list refused as
+  `invalidDevice`: on the per-user read as before, and on the batched read now, where it fails
+  the whole call. Either way the send fails as it did. This change shares the parsers and
+  leaves that rule to a change of its own.
 
 ## ADR-079 in full — a call on two devices, and the two things it took (2026-10-05)
 

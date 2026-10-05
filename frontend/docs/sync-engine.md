@@ -216,8 +216,9 @@ work; until it is built, no user-facing text may imply the client will name what
 A send arrives at the engine as a row in `pending_send_preparations`: its event is
 committed and projected, and its per-recipient ciphertext is owed. The engine decides when
 that work runs and what a failure costs; it owns none of what the work does, which is
-resolving the peer's verified live devices, claiming prekeys where a session must be
-started, and running the ratchet once per recipient device.
+resolving every recipient's verified live devices from one `POST /api/v1/peers`
+([ADR-080](decisions.md)), claiming prekeys where a session must be started, and running
+the ratchet once per recipient device.
 
 - The oldest due row is handed out; nothing is marked in flight, because nothing is. A
   preparation either commits — in the same transaction that deletes the row — or it does
@@ -324,10 +325,12 @@ with the backend/proxy configuration and a REST health probe only when necessary
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.
-- Peer identity, device and device-log answers are remembered in memory for 30 seconds so that
-  one cycle asks about each person once instead of two to four times; the cache sits below
-  every authentication gate, never holds a prekey claim, and is emptied by every staleness
-  signal. See [authentication-and-devices.md](authentication-and-devices.md).
+- A send's fan-out verifies all its recipients with one `POST /api/v1/peers`, at most 64 to a
+  call, which answers `unchanged` for each peer whose stored tag still holds
+  ([ADR-080](decisions.md)). The per-user identity, device and device-log answers the
+  single-peer paths read are remembered in memory for 30 seconds; the cache sits below every
+  authentication gate, never holds a prekey claim or a batched answer, and is emptied by every
+  staleness signal. See [authentication-and-devices.md](authentication-and-devices.md).
 - `stale_devices` responses immediately invalidate matching outbox targets, drop that peer from
   the resolution cache, and trigger one ETag refresh. Newly discovered eligible replacement devices receive independently
   encrypted target rows with the same logical event ID; already accepted targets do not.
