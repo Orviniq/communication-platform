@@ -48,6 +48,15 @@ abstract interface class PairwiseLiveDeviceResolverPort implements Port {
   Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
     String userId,
   );
+
+  /// [resolveVerifiedLiveDevices] for every user in [userIds] at once, which
+  /// is how a fan-out verifies its recipients: one read of all of them, then
+  /// the same checks for each.
+  ///
+  /// Succeeds only if every user does, keyed as asked. Otherwise the answer is
+  /// the failure of the first user, in the order of [userIds], that failed.
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds);
 }
 
 /// Names who an owed send is for, from the event it carries.

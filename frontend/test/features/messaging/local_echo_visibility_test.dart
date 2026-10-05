@@ -183,13 +183,28 @@ final class _HeldLiveDevices implements PairwiseLiveDeviceResolverPort {
       entered.complete();
     }
     await _gate.future;
-    return Result.success([
-      if (userId == peerUserId)
-        _live(peerUserId, peerDeviceId, 1)
-      else
-        _live(localUserId, localDeviceId, 2),
-    ]);
+    return Result.success(_devicesOf(userId));
   }
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async {
+    calls.addAll(userIds);
+    if (!entered.isCompleted) {
+      entered.complete();
+    }
+    await _gate.future;
+    return Result.success({
+      for (final userId in userIds) userId: _devicesOf(userId),
+    });
+  }
+
+  List<VerifiedPairwiseLiveDevice> _devicesOf(String userId) => [
+    if (userId == peerUserId)
+      _live(peerUserId, peerDeviceId, 1)
+    else
+      _live(localUserId, localDeviceId, 2),
+  ];
 }
 
 VerifiedPairwiseLiveDevice _live(String userId, String deviceId, int seed) =>

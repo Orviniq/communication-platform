@@ -36,88 +36,105 @@ const _peerSecondDeviceId = '00000000-0000-4000-8000-0000000000b3';
 /// service, and the recipients handed to `prepareOutbound` are the answer.
 void main() {
   group('what one delivery cycle asks the network', () {
-    test('preparing one send resolves each user once', () async {
+    test('preparing one send reads every recipient in one call', () async {
       final harness = _Harness()..establishedSession();
 
       final prepared = await harness.send('application:aa');
 
       expect(prepared, isA<Success<DurablePairwiseOperation>>());
-      // Two resolutions of two distinct users. Before the cache this was two
-      // identity fetches and two device fetches for the peer alone, because the
-      // peer is resolved by the fan-out and again by nothing else in this
-      // shape; the equalities below are what stop that returning.
-      expect(harness.remote.identityCalls, {_peerUserId: 1, _ownUserId: 1});
-      expect(harness.remote.deviceCalls, {_peerUserId: 1, _ownUserId: 1});
+      // The peer and this account, both named in one `POST /api/v1/peers`.
+      // Before it, this was an identity and a device answer for each of them,
+      // and three reads for every member of a group.
+      expect(harness.remote.batches, [
+        [_peerUserId, _ownUserId],
+      ]);
+      expect(harness.remote.identityCalls, <String, int>{});
+      expect(harness.remote.deviceCalls, <String, int>{});
       expect(harness.remote.logCalls, <String, int>{});
       expect(harness.encryptedTo, [_peerDeviceId]);
     });
 
-    test('a send that must start a session still asks once', () async {
-      // The claim path is a third full `_refresh` of the same peer inside one
-      // preparation: identity, devices, log, and only then the claim. Only the
-      // claim is unavoidable.
+    test('a send that must start a session asks the claim path once', () async {
+      // The claim re-resolves the peer through the per-user reads, which is
+      // the one path where a single peer still costs an identity and a device
+      // answer: the claim itself is per user, and only the claim is
+      // unavoidable.
       final harness = _Harness()..noSession();
 
       final prepared = await harness.send('application:bb');
 
       expect(prepared, isA<Success<DurablePairwiseOperation>>());
-      expect(harness.remote.identityCalls, {_peerUserId: 1, _ownUserId: 1});
-      expect(harness.remote.deviceCalls, {_peerUserId: 1, _ownUserId: 1});
+      expect(harness.remote.batches, hasLength(1));
+      expect(harness.remote.identityCalls, {_peerUserId: 1});
+      expect(harness.remote.deviceCalls, {_peerUserId: 1});
       expect(harness.remote.claimCalls, {_peerUserId: 1});
       expect(harness.encryptedTo, [_peerDeviceId]);
     });
 
-    test('the gossip that follows reuses the send resolution', () async {
+    test('the gossip that follows is answered unchanged', () async {
       final harness = _Harness()..establishedSession();
 
       await harness.send('application:cc');
       await harness.gossip('device-head-gossip:cc');
 
-      // Gossip is a fan-out of its own, with its own two device lookups. It
-      // asks the same questions about the same two people moments after the
-      // send did, and now hears the same answers without a round trip.
-      expect(harness.remote.identityCalls, {_peerUserId: 1, _ownUserId: 1});
-      expect(harness.remote.deviceCalls, {_peerUserId: 1, _ownUserId: 1});
+      // Gossip is a fan-out of its own, so it makes its own read. It carries
+      // the tags the send's read stored, so both people come back `unchanged`
+      // with no body, and nothing about them is read again.
+      expect(harness.remote.batches, hasLength(2));
+      expect(
+        harness.remote.answered.last.values,
+        everyElement(isA<PeerStateUnchanged>()),
+      );
+      expect(harness.remote.identityCalls, <String, int>{});
+      expect(harness.remote.deviceCalls, <String, int>{});
       expect(harness.remote.logCalls, <String, int>{});
     });
 
-    test('a first contact and its gossip ask once each', () async {
+    test('a first contact and its gossip still ask six times', () async {
       // The worst shape the RCA named: a send that must establish a session,
-      // followed by the gossip it owes, which must establish one too. Fourteen
-      // round trips became six, and the four that remain beyond the two claims
-      // are one identity and one device answer per distinct user.
+      // followed by the gossip it owes, which must establish one too. ADR-065
+      // took it from fourteen round trips to six, and it stays at six: two
+      // batched reads, the first claim's identity and device answers, and the
+      // two claims. The second claim's answers come from the cache because the
+      // gossip's read found the peer unchanged and so forgot nothing.
       final harness = _Harness()..noSession();
 
       await harness.send('application:25');
       await harness.gossip('device-head-gossip:25');
 
-      expect(harness.remote.identityCalls, {_peerUserId: 1, _ownUserId: 1});
-      expect(harness.remote.deviceCalls, {_peerUserId: 1, _ownUserId: 1});
+      expect(harness.remote.batches, hasLength(2));
+      expect(harness.remote.identityCalls, {_peerUserId: 1});
+      expect(harness.remote.deviceCalls, {_peerUserId: 1});
       expect(harness.remote.logCalls, <String, int>{});
       expect(harness.remote.claimCalls, {_peerUserId: 2});
     });
 
-    test('two sends to the same peer in quick succession ask once', () async {
+    test('two sends to the same peer read once each', () async {
       final harness = _Harness()..establishedSession();
 
       await harness.send('application:dd');
       harness.clock.advance(const Duration(seconds: 1));
       await harness.send('application:ee');
 
-      expect(harness.remote.identityCalls, {_peerUserId: 1, _ownUserId: 1});
-      expect(harness.remote.deviceCalls, {_peerUserId: 1, _ownUserId: 1});
+      expect(harness.remote.batches, hasLength(2));
+      expect(
+        harness.remote.answered.last.values,
+        everyElement(isA<PeerStateUnchanged>()),
+      );
+      expect(harness.remote.identityCalls, <String, int>{});
+      expect(harness.remote.deviceCalls, <String, int>{});
       expect(harness.encryptedTo, [_peerDeviceId, _peerDeviceId]);
     });
 
-    test('a send past the window asks again', () async {
+    test('a resolution past the window asks again', () async {
       final harness = _Harness()..establishedSession();
 
-      await harness.send('application:ff');
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
       harness.clock.advance(defaultPeerResolutionTtl);
-      await harness.send('application:00');
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
 
-      expect(harness.remote.identityCalls, {_peerUserId: 2, _ownUserId: 2});
-      expect(harness.remote.deviceCalls, {_peerUserId: 2, _ownUserId: 2});
+      expect(harness.remote.identityCalls, {_peerUserId: 2});
+      expect(harness.remote.deviceCalls, {_peerUserId: 2});
     });
 
     test('concurrent resolutions of one user share one round trip', () async {
@@ -172,49 +189,56 @@ void main() {
     });
   });
 
-  group('what the same cycle asked before', () {
-    // The other half of every equality above. These are the numbers this phase
-    // measured and removed, pinned here so the removal cannot quietly undo
-    // itself.
-    test('a send that starts a session asked three times', () async {
+  group('what the same cycle asks without the cache', () {
+    // The other half of every equality above. ADR-065 measured fourteen, eight
+    // and eight round trips for these shapes before the cache. A send is now
+    // one batched read whether or not the cache is there, so most of what the
+    // cache saved is now saved by the route itself; what it still saves is the
+    // claim path's second re-resolution of a peer, pinned here so that cannot
+    // quietly undo itself.
+    test('a send that starts a session asks the same', () async {
       final harness = _Harness(cached: false)..noSession();
 
       await harness.send('application:21');
 
-      expect(harness.remote.identityCalls, {_peerUserId: 2, _ownUserId: 1});
-      expect(harness.remote.deviceCalls, {_peerUserId: 2, _ownUserId: 1});
+      expect(harness.remote.batches, hasLength(1));
+      expect(harness.remote.identityCalls, {_peerUserId: 1});
+      expect(harness.remote.deviceCalls, {_peerUserId: 1});
       expect(harness.remote.claimCalls, {_peerUserId: 1});
     });
 
-    test('a send and its gossip asked twice over', () async {
+    test('a send and its gossip ask the same', () async {
       final harness = _Harness(cached: false)..establishedSession();
 
       await harness.send('application:22');
       await harness.gossip('device-head-gossip:22');
 
-      expect(harness.remote.identityCalls, {_peerUserId: 2, _ownUserId: 2});
-      expect(harness.remote.deviceCalls, {_peerUserId: 2, _ownUserId: 2});
+      expect(harness.remote.batches, hasLength(2));
+      expect(harness.remote.identityCalls, <String, int>{});
+      expect(harness.remote.deviceCalls, <String, int>{});
     });
 
-    test('a first contact and its gossip asked fourteen times', () async {
+    test('a first contact and its gossip ask eight times', () async {
       final harness = _Harness(cached: false)..noSession();
 
       await harness.send('application:26');
       await harness.gossip('device-head-gossip:26');
 
-      expect(harness.remote.identityCalls, {_peerUserId: 4, _ownUserId: 2});
-      expect(harness.remote.deviceCalls, {_peerUserId: 4, _ownUserId: 2});
+      expect(harness.remote.batches, hasLength(2));
+      expect(harness.remote.identityCalls, {_peerUserId: 2});
+      expect(harness.remote.deviceCalls, {_peerUserId: 2});
       expect(harness.remote.claimCalls, {_peerUserId: 2});
     });
 
-    test('two sends to one peer asked twice over', () async {
+    test('two sends to one peer ask the same', () async {
       final harness = _Harness(cached: false)..establishedSession();
 
       await harness.send('application:23');
       await harness.send('application:24');
 
-      expect(harness.remote.identityCalls, {_peerUserId: 2, _ownUserId: 2});
-      expect(harness.remote.deviceCalls, {_peerUserId: 2, _ownUserId: 2});
+      expect(harness.remote.batches, hasLength(2));
+      expect(harness.remote.identityCalls, <String, int>{});
+      expect(harness.remote.deviceCalls, <String, int>{});
     });
   });
 
@@ -241,13 +265,14 @@ void main() {
     test('a stale refresh forces a live resolution', () async {
       final harness = _Harness()..establishedSession();
 
-      await harness.send('application:13');
-      final before = harness.remote.identityCalls[_peerUserId];
+      // A send remembers nothing per user any more, so a resolution of the
+      // peer's own is what puts its answers in the cache.
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
       await ContactStaleDeviceRefreshAdapter(
         harness.service,
       ).refreshUserDevices(_peerUserId);
 
-      expect(harness.remote.identityCalls[_peerUserId], before! + 1);
+      expect(harness.remote.identityCalls[_peerUserId], 2);
       expect(harness.remote.deviceCalls[_peerUserId], 2);
     });
 
@@ -306,14 +331,13 @@ void main() {
     test('user verification is never served a remembered answer', () async {
       final harness = _Harness()..establishedSession();
 
-      await harness.send('application:1a');
-      final before = harness.remote.identityCalls[_peerUserId];
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
       await harness.service.confirmOutOfBand(
         userId: _peerUserId,
         exactMasterPublic: harness.remote.identityOf(_peerUserId).masterPublic,
       );
 
-      expect(harness.remote.identityCalls[_peerUserId], before! + 1);
+      expect(harness.remote.identityCalls[_peerUserId], 2);
     });
 
     test('a live resolution is live for its whole length', () async {
@@ -455,6 +479,32 @@ void main() {
   });
 
   group('the batched read', () {
+    test('a peer it moved is not served what was remembered before', () async {
+      final harness = _Harness()..establishedSession();
+      // Remembered: the peer at log head 0.
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
+
+      // The peer adds a device and appends to its log. A send's read finds
+      // it, verifies the new record and stores head 1.
+      harness.remote.addSecondPeerDevice();
+      await harness.send('application:30');
+      expect(harness.encryptedTo, [_peerDeviceId, _peerSecondDeviceId]);
+
+      // Served the remembered answer now, this resolution would see the head
+      // go back to 0 and record a fork, which withholds every send.
+      final resolved = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      expect(resolved, isA<Success<AuthenticatedPeer>>());
+      expect(
+        harness.local.trustOf(_peerUserId)?.state,
+        ContactTrustState.verified,
+      );
+      expect(harness.local.trustOf(_peerUserId)?.logHeadSequence, 1);
+      expect(harness.remote.deviceCalls[_peerUserId], 2);
+    });
+
     test('an answer asked before it landed is not remembered', () async {
       final harness = _Harness()..establishedSession();
       harness.remote.hold = true;

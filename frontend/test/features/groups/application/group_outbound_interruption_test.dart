@@ -518,6 +518,15 @@ final class _Resolver implements PairwiseLiveDeviceResolverPort {
   ) async => userId == failFor
       ? const Result.failure(TransportFailure(TransportFailureKind.timeout))
       : Result.success(devices[userId]!);
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async =>
+      userIds.contains(failFor)
+      ? const Result.failure(TransportFailure(TransportFailureKind.timeout))
+      : Result.success({
+          for (final userId in userIds) userId: devices[userId]!,
+        });
 }
 
 final class _Claims implements PairwiseSelectiveClaimPort {

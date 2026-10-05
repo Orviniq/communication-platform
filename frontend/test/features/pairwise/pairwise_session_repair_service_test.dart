@@ -261,6 +261,16 @@ final class _Resolver implements PairwiseLiveDeviceResolverPort {
   Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
     String userId,
   ) async => result;
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async =>
+      switch (result) {
+        FailureResult(:final failure) => Result.failure(failure),
+        Success(:final value) => Result.success({
+          for (final userId in userIds) userId: value,
+        }),
+      };
 }
 
 final class _Clock implements TimeSource {
