@@ -108,6 +108,14 @@ abstract interface class VerifiedLiveDeviceResolverPort implements Port {
   Future<Result<AuthenticatedPeer>> resolveLiveDevices({
     required String userId,
   });
+
+  /// [resolveLiveDevices] for each of [userIds], from one read of all of them.
+  ///
+  /// A failure belongs to the read itself, and nobody was verified. Otherwise
+  /// every user has a result of its own, keyed as it was asked, reached in the
+  /// order asked by the same checks [resolveLiveDevices] applies.
+  Future<Result<Map<String, Result<AuthenticatedPeer>>>>
+  resolveLiveDevicesForUsers({required List<String> userIds});
 }
 
 /// Control over whatever remembers a peer's server answers for a short while.

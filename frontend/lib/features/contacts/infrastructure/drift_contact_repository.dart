@@ -376,6 +376,7 @@ ORDER BY u.directory_entry_ciphertext ASC
         if (trust.attestation != null)
           'attestation': base64Encode(trust.attestation!.signature),
         if (trust.etag != null) 'etag': trust.etag,
+        if (trust.peerStateEtag != null) 'peer_etag': trust.peerStateEtag,
         if (trust.logHeadSequence != null) 'head_seq': trust.logHeadSequence,
         if (trust.logHeadHash != null)
           'head_hash': base64Encode(trust.logHeadHash!),
@@ -422,12 +423,22 @@ ORDER BY u.directory_entry_ciphertext ASC
             masterSignature: masterSig!,
             version: identityVersion! as int,
           );
+    final etag = json['etag'];
+    final peerStateEtag = json['peer_etag'];
+    if ((etag != null && etag is! String) ||
+        (peerStateEtag != null && peerStateEtag is! String)) {
+      throw const FormatException();
+    }
+    // A verified record is the product of an answer this client accepted, so
+    // it holds the tag of the route that gave it. Which route that was is not
+    // part of the claim: a batched read keeps the device list's tag only when
+    // nothing it vouched for moved.
     if (state == ContactTrustState.verified &&
         (identity == null ||
             confirmedMaster == null ||
             !_same(identity.masterPublic, confirmedMaster) ||
             attestation == null ||
-            json['etag'] is! String ||
+            (etag == null && peerStateEtag == null) ||
             json['head_seq'] is! int ||
             headHash == null)) {
       throw const FormatException();
@@ -440,7 +451,8 @@ ORDER BY u.directory_entry_ciphertext ASC
       attestation: attestation == null
           ? null
           : UserSigningAttestation(attestation),
-      etag: json['etag'] as String?,
+      etag: etag as String?,
+      peerStateEtag: peerStateEtag as String?,
       logHeadSequence: json['head_seq'] as int?,
       logHeadHash: headHash,
     );

@@ -906,6 +906,7 @@ final class _Local implements ContactLocalPort {
           confirmedMasterPublic ?? held.confirmedMasterPublic,
       attestation: held.attestation,
       etag: etag ?? held.etag,
+      peerStateEtag: held.peerStateEtag,
       logHeadSequence: logHeadSequence ?? held.logHeadSequence,
       logHeadHash: held.logHeadHash,
     );

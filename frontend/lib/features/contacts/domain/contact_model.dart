@@ -92,6 +92,7 @@ final class ContactTrustRecord {
     Uint8List? confirmedMasterPublic,
     this.attestation,
     this.etag,
+    this.peerStateEtag,
     this.logHeadSequence,
     Uint8List? logHeadHash,
   }) : confirmedMasterPublic = confirmedMasterPublic == null
@@ -106,7 +107,16 @@ final class ContactTrustRecord {
   final PeerIdentityPublic? identity;
   final Uint8List? confirmedMasterPublic;
   final UserSigningAttestation? attestation;
+
+  /// The device-list route's `ETag` for the stored devices and log head.
   final String? etag;
+
+  /// `POST /api/v1/peers`'s tag for the stored identity, devices and log head.
+  ///
+  /// Not the device list's [etag] and not the identity read's: each route
+  /// derives its own tag from its own inputs, so each tag goes back only to the
+  /// route that issued it.
+  final String? peerStateEtag;
   final int? logHeadSequence;
   final Uint8List? logHeadHash;
 
@@ -118,6 +128,7 @@ final class ContactTrustRecord {
     Uint8List? confirmedMasterPublic,
     UserSigningAttestation? attestation,
     String? etag,
+    String? peerStateEtag,
     int? logHeadSequence,
     Uint8List? logHeadHash,
   }) => ContactTrustRecord(
@@ -127,6 +138,7 @@ final class ContactTrustRecord {
     confirmedMasterPublic: confirmedMasterPublic ?? this.confirmedMasterPublic,
     attestation: attestation ?? this.attestation,
     etag: etag ?? this.etag,
+    peerStateEtag: peerStateEtag ?? this.peerStateEtag,
     logHeadSequence: logHeadSequence ?? this.logHeadSequence,
     logHeadHash: logHeadHash ?? this.logHeadHash,
   );
