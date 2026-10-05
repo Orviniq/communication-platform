@@ -179,6 +179,25 @@ void main() {
     expect(controller.status.outcome, isNull);
   });
 
+  test('a join made while a leave finishes keeps its service', () async {
+    // The leave ends the call at once but tells the peers afterwards, and on
+    // two devices on 2026-10-05 that took two seconds. A rejoin started the
+    // service in that time, the leave's stop then took it away, and the new
+    // call lost its microphone and its network when the app left the screen.
+    await controller.join(callRoomId);
+    final leaving = Completer<void>();
+    call.leaving = leaving;
+    log.clear();
+
+    final left = controller.leave();
+    await pumpEventQueue();
+    expect(await controller.join(callRoomId), isA<VoiceJoinStarted>());
+    leaving.complete();
+    await left;
+
+    expect(log, ['leave', 'microphone', 'start', 'join $callRoomId']);
+  });
+
   test('a join while a call runs, or while one is asking, asks for '
       'nothing', () async {
     final answer = Completer<MicrophonePermission>();
@@ -312,6 +331,9 @@ final class _Call implements VoiceCallPort {
   VoiceJoinOutcome answer = const VoiceJoinAnnounced();
   var active = false;
 
+  /// Holds a leave open, as telling every peer can, until it completes.
+  Completer<void>? leaving;
+
   @override
   VoiceCallState get state => active
       ? VoiceCallState(phase: VoiceCallPhase.inCall, roomId: callRoomId)
@@ -327,7 +349,10 @@ final class _Call implements VoiceCallPort {
   }
 
   @override
-  Future<void> leave() async => log.add('leave');
+  Future<void> leave() async {
+    log.add('leave');
+    await leaving?.future;
+  }
 
   @override
   Future<Result<void>> sendRoomText(String text) async {

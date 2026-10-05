@@ -236,10 +236,16 @@ final class VoiceCallController {
 
   /// Leaves the call, or abandons a join still asking.
   Future<void> leave() async {
-    _attempt += 1;
+    final attempt = ++_attempt;
     _publish(const VoiceJoinStatus());
     await call.leave();
-    await service.stop();
+    // The call has ended by now, but telling its peers takes a while, and a
+    // join made meanwhile has started the service for the next call. That
+    // service is the new call's to stop: stopping it here would leave the new
+    // call without its microphone and its network once the app is out of view.
+    if (attempt == _attempt) {
+      await service.stop();
+    }
   }
 
   /// Opens the system settings, where a microphone Android no longer asks
