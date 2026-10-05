@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
@@ -8,6 +9,12 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/application/client_authentication_service.dart';
 import 'package:communication_platform/features/contacts/application/ports/contact_ports.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
+import 'package:communication_platform/features/contacts/infrastructure/dio_contact_repository.dart';
+import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
+import 'package:communication_platform/features/networking/domain/session_tokens.dart';
+import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -813,6 +820,99 @@ void main() {
       expect(harness.remote.peerStateQueries, isEmpty);
     });
   });
+
+  // These answers go through the application's own REST client and parsers,
+  // so the device is the one the server's JSON makes. The parsers used to
+  // refuse that JSON, and the read failed as a malformed answer before this
+  // service could judge the device.
+  group('an unsigned device in a server answer', () {
+    test('blocks its peer on the per-user read', () async {
+      final server = _Server()
+        ..answers['GET /api/v1/users/$_peerUserId/identity'] = _identityJson
+        ..answers['GET /api/v1/users/$_peerUserId/devices'] = {
+          'devices': [_deviceJson, _unsignedDeviceJson],
+          'etag': '"devices-v1"',
+          'log_head_seq': 0,
+        };
+      final local = _Local();
+      final service = ClientAuthenticationService(
+        remote: server.repository(),
+        local: local,
+        crypto: _Crypto(),
+      );
+
+      final result = await service.resolveLiveDevices(userId: _peerUserId);
+
+      expect(
+        _failureOf(result),
+        const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+      expect(local.trust?.state, ContactTrustState.invalidDevice);
+      expect(local.devices, isEmpty);
+      // Refused on the list, so neither the log nor a prekey is asked for.
+      expect(server.requests, [
+        'GET /api/v1/users/$_peerUserId/identity',
+        'GET /api/v1/users/$_peerUserId/devices',
+      ]);
+    });
+
+    test('blocks only its own peer on the batched read', () async {
+      final server = _Server()
+        ..answers['POST /api/v1/peers'] = {
+          'peers': [
+            {
+              'user_id': _peerUserId,
+              'etag': '"peers-v1"',
+              'identity': _identityJson,
+              'devices': [_deviceJson, _unsignedDeviceJson],
+              'log_head_seq': 0,
+            },
+            {
+              'user_id': _otherUserId,
+              'etag': '"peers-v1"',
+              'identity': _identityJson,
+              'devices': [
+                {..._deviceJson, 'device_id': _otherDeviceId},
+              ],
+              'log_head_seq': 0,
+            },
+          ],
+        }
+        ..answers['GET /api/v1/users/$_otherUserId/devicelog'] = {
+          'records': [
+            {'seq': 0, 'blob': base64Encode(Uint8List(256))},
+          ],
+          'has_more': false,
+          'head_seq': 0,
+        };
+      final local = _Local();
+      final service = ClientAuthenticationService(
+        remote: server.repository(),
+        local: local,
+        crypto: _Crypto(),
+      );
+
+      final result = await service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId, _otherUserId],
+      );
+
+      // The answer is read, so the call itself succeeds.
+      expect(result, isA<Success<Map<String, Result<AuthenticatedPeer>>>>());
+      final peers = _resolved(result);
+      expect(
+        _failureOf(peers[_peerUserId]),
+        const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+      expect(local.trust?.state, ContactTrustState.invalidDevice);
+      // The other peer in the same answer is verified and stored.
+      expect(peers[_otherUserId], isA<Success<AuthenticatedPeer>>());
+      expect(local.trusts[_otherUserId]?.state, ContactTrustState.unverified);
+      expect(server.requests, [
+        'POST /api/v1/peers',
+        'GET /api/v1/users/$_otherUserId/devicelog',
+      ]);
+    });
+  });
 }
 
 const _peerUserId = '11111111-1111-4111-8111-111111111111';
@@ -820,6 +920,7 @@ const _otherUserId = '66666666-6666-4666-8666-666666666666';
 const _peerDeviceId = '22222222-2222-4222-8222-222222222222';
 const _localUserId = '33333333-3333-4333-8333-333333333333';
 const _localDeviceId = '44444444-4444-4444-8444-444444444444';
+const _otherDeviceId = '77777777-7777-4777-8777-777777777777';
 
 Uint8List _bytes(int length, int value) =>
     Uint8List.fromList(List<int>.filled(length, value));
@@ -868,6 +969,35 @@ ClaimedPrekeyBundle _bundle() => ClaimedPrekeyBundle(
   pqSignedPrekeyPublic: _bytes(1184, 10),
   pqSignedPrekeySignature: _bytes(64, 11),
 );
+
+/// [_identity] as the server serves it, with the identity route's own tag.
+final _identityJson = <String, Object?>{
+  'master_pub': base64Encode(_bytes(32, 1)),
+  'self_signing_pub': base64Encode(_bytes(32, 2)),
+  'user_signing_pub': base64Encode(_bytes(32, 3)),
+  'master_sig': base64Encode(_bytes(64, 4)),
+  'version': 1,
+  'etag': '"identity-v1"',
+};
+
+/// [_device] as the server lists it.
+final _deviceJson = <String, Object?>{
+  'device_id': _peerDeviceId,
+  'ik_pub': base64Encode(_bytes(64, 7)),
+  'registration_id': 9,
+  'cross_sig': base64Encode(_bytes(64, 4)),
+  'bundle_version': 1,
+};
+
+/// A device between its registration and its cross-signature, as the server
+/// lists it: it stores 0 until the follow-up `PUT` names a version.
+final _unsignedDeviceJson = <String, Object?>{
+  'device_id': '55555555-5555-4555-8555-555555555555',
+  'ik_pub': base64Encode(_bytes(64, 8)),
+  'registration_id': 10,
+  'cross_sig': null,
+  'bundle_version': 0,
+};
 
 final class _Harness {
   _Harness() {
@@ -1164,6 +1294,70 @@ final class _Crypto implements IdentityCryptoPort {
     required Uint8List peerUserId,
     required Uint8List peerMasterPublic,
   }) async => Result.success(SafetyFingerprint(_bytes(32, 42)));
+}
+
+/// The server, as far as these reads reach it: each route answers the JSON it
+/// was given, and anything else is a `404`.
+final class _Server implements HttpClientAdapter {
+  final answers = <String, Object?>{};
+  final requests = <String>[];
+
+  PeerIdentityRemotePort repository() {
+    final client = DioRestClient(
+      serverOrigin: Uri.parse('https://chat.example.test'),
+      dio: Dio()..httpClientAdapter = this,
+    )..bindTokenCoordinator(const _TokenCoordinator());
+    return DioContactRepository(client, const FixedServerConfig.fallback());
+  }
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final route = '${options.method} ${options.path}';
+    requests.add(route);
+    final answered = answers.containsKey(route);
+    return ResponseBody.fromString(
+      jsonEncode(
+        answered
+            ? answers[route]
+            : {'code': 'not_found', 'detail': 'Not found.'},
+      ),
+      answered ? 200 : 404,
+      headers: {
+        'content-type': ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+final class _TokenCoordinator implements AccessTokenCoordinator {
+  const _TokenCoordinator();
+
+  @override
+  Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async =>
+      Result.success(
+        AccessToken(
+          value: 'access-token',
+          expiresAt: DateTime.utc(2100),
+          scope: SessionScope.full,
+        ),
+      );
+
+  @override
+  Future<void> handleRevocation() async {}
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<Result<AccessToken>> recoverAfterUnauthorized(String rejectedToken) =>
+      accessToken(forceRefresh: true);
 }
 
 Uint8List _identityPackage() {

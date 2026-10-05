@@ -207,6 +207,85 @@ void main() {
       }
     });
   });
+
+  group('a device that has not cross-signed itself', () {
+    test('is read as unsigned from the pair the server lists it with', () {
+      final devices = [
+        {..._deviceJson, 'bundle_version': 1},
+        _unsignedDeviceJson,
+      ];
+      final listed =
+          PeerDevicesResponseDto.fromJson({
+                'devices': devices,
+                'etag': _secondTag,
+                'log_head_seq': 4,
+              }).refresh
+              as PeerDevicesUpdated;
+      final batched =
+          PeerStatesResponseDto.fromJson(
+                {
+                  'peers': [
+                    {..._full(_second), 'devices': devices},
+                  ],
+                },
+                requested: const [PeerStateQuery(userId: _second)],
+              ).peers[_second]!
+              as PeerStateUpdated;
+
+      for (final read in [listed.devices, batched.devices]) {
+        // 1 is the first version a signature can cover.
+        expect(read.first.isUnsigned, isFalse);
+        expect(read.first.bundleVersion, 1);
+        // The 0 beside no signature is no version at all to the domain.
+        expect(read.last.isUnsigned, isTrue);
+        expect(read.last.crossSignature, isNull);
+        expect(read.last.bundleVersion, isNull);
+      }
+    });
+
+    test('refuses every other pairing of signature and version', () {
+      for (final device in <Map<String, Object?>>[
+        // A signature covers the version beside it, which starts at 1.
+        {..._deviceJson, 'bundle_version': 0},
+        {..._deviceJson, 'bundle_version': -1},
+        {..._deviceJson, 'bundle_version': null},
+        // No signature at a version past 0, which is how a device that
+        // withdrew its signature is listed, is not read as unsigned.
+        {..._unsignedDeviceJson, 'bundle_version': 1},
+        {..._unsignedDeviceJson, 'bundle_version': 3},
+        // The version is always there, a number and never a negative one.
+        {..._unsignedDeviceJson, 'bundle_version': -1},
+        {..._unsignedDeviceJson, 'bundle_version': null},
+        {..._unsignedDeviceJson, 'bundle_version': '0'},
+        {..._unsignedDeviceJson}..remove('bundle_version'),
+      ]) {
+        expect(
+          () => PeerDevicesResponseDto.fromJson({
+            'devices': [device],
+            'etag': _secondTag,
+            'log_head_seq': 4,
+          }),
+          throwsA(isA<MalformedApiBody>()),
+          reason: '$device',
+        );
+        expect(
+          () => PeerStatesResponseDto.fromJson(
+            {
+              'peers': [
+                {
+                  ..._full(_second),
+                  'devices': [device],
+                },
+              ],
+            },
+            requested: const [PeerStateQuery(userId: _second)],
+          ),
+          throwsA(isA<MalformedApiBody>()),
+          reason: '$device',
+        );
+      }
+    });
+  });
 }
 
 const _first = '11111111-1111-4111-8111-111111111111';
@@ -232,6 +311,17 @@ final _deviceJson = <String, Object?>{
   'registration_id': 7,
   'cross_sig': base64Encode(Uint8List(64)),
   'bundle_version': 2,
+};
+
+/// A device between its registration and its cross-signature, as both device
+/// routes serve it: the server stores 0 until the follow-up `PUT` names a
+/// version, and lists the column verbatim.
+final _unsignedDeviceJson = <String, Object?>{
+  'device_id': '66666666-6666-4666-8666-666666666666',
+  'ik_pub': base64Encode(Uint8List(64)),
+  'registration_id': 8,
+  'cross_sig': null,
+  'bundle_version': 0,
 };
 
 Map<String, Object?> _full(String userId) => {

@@ -225,6 +225,13 @@ final class PeerStatesResponseDto {
 
 /// The items of `GET /api/v1/users/{user_id}/devices`, wherever they are
 /// served.
+///
+/// The server stores a device's `bundle_version` as 0 until the device
+/// cross-signs itself, and lists it verbatim, so an unsigned device arrives as
+/// `cross_sig: null, bundle_version: 0`. That pair, and only that pair, is read
+/// as unsigned, which the domain holds as no version at all. A signature covers
+/// a version of 1 or more, and every other pair is malformed, a version past 0
+/// with no signature included (ADR-081).
 List<PeerPublicDevice> _devices(Object? values) {
   if (values is! List<Object?> || values.length > 100) {
     throw const MalformedApiBody();
@@ -246,8 +253,8 @@ List<PeerPublicDevice> _devices(Object? values) {
             registration is! int ||
             registration < 0 ||
             (crossValue != null && cross == null) ||
-            (cross == null) != (version == null) ||
-            (version != null && (version is! int || version <= 0))) {
+            version is! int ||
+            (cross == null ? version != 0 : version <= 0)) {
           throw const MalformedApiBody();
         }
         return PeerPublicDevice(
@@ -255,7 +262,7 @@ List<PeerPublicDevice> _devices(Object? values) {
           identityPublic: ik,
           registrationId: registration,
           crossSignature: cross,
-          bundleVersion: version as int?,
+          bundleVersion: cross == null ? null : version,
         );
       })
       .toList(growable: false);
