@@ -91,6 +91,7 @@ is not silently edited out of history.
 | ADR-078 | Accepted (2026-09-28) | Voice's media package is `flutter_webrtc` **1.6.2+hotfix.3**, pinned exactly. Its two native parts are libwebrtc 150.7871.01 from Maven Central and Twilio's `audioswitch` in David Liu's fork at commit `039a35ae`, which only JitPack publishes, so JitPack serves this build that one module and nothing else. The merged manifest gains `RECORD_AUDIO`, `FOREGROUND_SERVICE_MICROPHONE` and `MODIFY_AUDIO_SETTINGS` and refuses the `BLUETOOTH` permission `audioswitch` merges in, and the `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of ADR-054 hold (2026-09-28) | ADR-077 designed voice on `flutter_webrtc` and left the dependency review to a record of its own; this is it. **The version is the newest because its native parts are 1.6.1's**: the Android build file is byte-for-byte the same, so every fact gathered for 1.6.1 holds, and what came after is fixes to data-channel and camera paths this design never takes, plus two opt-in field trials that stay off. **What it costs is one native library**: an unsigned production release grows from 88,199,375 to 123,703,796 bytes, and 35,263,068 of the 35,504,421 bytes added are `libjingle_peerconnection_so.so` for three ABIs, the emulator's x86_64 copy alone 16,166,352. That library is libwebrtc with third-party code of its own — BoringSSL, libsrtp, Opus, libvpx, libaom, dav1d and more — and it will open a call's sockets itself, outside `dart:io` and outside the provisioned trust store, which is what server ADR-0021 means by DTLS-SRTP between two endpoints; `platform-android.md`'s claim that every byte leaves through `dart:io` is corrected. **JitPack is restricted in both directions, and the restriction was proven**, because JitPack builds whatever public repository a coordinate names and `flutter_webrtc`'s build script adds it, unfiltered, to every project. **`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it**: the package builds `audioswitch`'s `AudioSwitch`, which routes through `AudioManager`, and the one class that checks a Bluetooth permission keys on the target SDK and would check `BLUETOOTH_CONNECT` at 36. No Dart code imports the package, no service is declared and no permission is asked for yet. Found on the way: the Gradle lock writer drops `kotlin-stdlib-common` from both runtime classpaths on the unmodified tree too, while validation still resolves it there, so the committed line is kept; and libwebrtc's third-party notices exist nowhere for this build (F1). |
 | ADR-079 | Accepted (2026-10-05) | Phase 6 closes on a call between two real devices: on signed production build 5, APK SHA-256 `20a010b41eb43c5eb5a34d1c007d58fa84548408e707e20685043b68010a37dd`, each of the seven call steps of phase 6 prompt 10 passed — a room made on one device reached the other, both joined and connected through the relay, audio crossed both ways, mute silenced one side, the call ran on with a device out of view, a leave stopped that device's call service and was dropped by the other, and a rejoin carried audio again. Two corrections came first: a signed group or room change counts in the outbox depth until it is routed, so creating one starts a delivery cycle (D2); and a leave stops the call service only when no join has started since (D3) | Every voice test so far ran between fakes. On the owner's phone and emulator, build 3 found that a room reached the invited device only when something unrelated woke the creator's delivery cycle, more than six minutes after it was signed, and build 4 found that a rejoin made while a leave was still finishing lost its call service, so the new call lost its microphone and its network the moment the app left the screen. Build 4 corrected the first and build 5 the second, and the owner confirmed every audio step by ear against the devices' own audio levels ([`docs/validation/voice-mesh/2026-10-05/`](validation/voice-mesh/2026-10-05/README.md)). |
 | ADR-080 | Accepted (2026-10-06); the identity tag of D3 and the cache of D4 amended by ADR-082 (2026-10-06) | A send verifies its recipients with one `POST /api/v1/peers` for each 64 users instead of up to three per-user reads for each. Every answer goes through the same `_refresh` checks the per-user answers feed; `unchanged` is a shape decided by its presence; a user the route leaves out is blocked as the identity read's `404` is; and the batched tag is stored and sent apart from the device list's `ETag`. The round-trip cache passes the batched read through and forgets every peer it found moved | A send read the identity, the device list and, when its head had moved, the device log of every recipient before it sealed one copy, against a round trip ADR-060 and ADR-065 measured at 107-137 ms: a group of fifty was up to a hundred and fifty round trips. ADR-065's cache stopped a cycle asking twice, never the first time. The server answers up to 64 peers in four queries, and `CLIENT_CONTRACT.md` §L names that route the one to poll on. Counted on the composed send path: a send is one call where it was four, a send and its gossip two where they were four, and a first contact with its gossip stays at six. Adds one call to a route the server already serves; changes no cryptographic construction, protocol, local schema or backend file. |
+| ADR-081 | Accepted (2026-10-06) | The peer device parser reads `cross_sig: null, bundle_version: 0`, the pair the server lists a device with until it cross-signs itself, as an unsigned device with no version, so `_refresh` refuses the list as `invalidDevice` instead of the read failing as malformed and, on the batched read, failing every peer in the call. Every other pair stays malformed: a signature below version 1, no signature past version 0, and a negative, null or missing version. `PublicDeviceDto`, this account's own list, is left refusing the server's pair until the own live-set checks treat a device that is not in the log yet as pending | The server stores `bundle_version` as 0 until a device cross-signs itself and serves it verbatim, and `PeerDeviceOut.bundle_version` is a required integer. The parsers wanted null, so a peer with a device mid-enrollment made the whole answer malformed. Correcting the own parser as well would let Linked Devices and the own device log compare a live set their head record does not cover yet, for the whole of another device's recovery-secret step, and that mismatch latches a global `deviceLogFork` that nothing clears. Changes one parser and no wire format, protocol, cryptographic construction, local schema or backend file. |
 | ADR-082 | Accepted (2026-10-06) | Every resolution asks the server: ADR-065's thirty-second peer cache is deleted, so a send is verified against the state its recipients hold when it is made. The per-user identity read becomes conditional on its own `ETag`; a `304` stands for the stored identity and is verified again, an identity never published stays `404 not_found` whatever tag is sent, and the three tags stay on three routes. Supersedes ADR-065's cache and amends ADR-080 D3 and D4 | The cache existed because a fan-out cost three reads for each recipient. ADR-080 made a fan-out one call, the `accounts` scope allows 300 calls a minute, and `/identity` serves a tag now, so all the cache still bought was the second re-read of a peer on the claim path, at the price of a send sealed to state nobody had checked again for up to thirty seconds. Counted on the composed send path: a first contact and its gossip go from six requests to eight, five of them answered with no body. Changes no wire format, local schema or backend file. |
 | ADR-083 | Accepted (2026-10-07) | A download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped: the next attempt for the same capability sends `Range: bytes=<bytes already written>-` and `If-Range` with the first answer's strong `ETag`, accepts `206` beside `200` only as an exact continuation, counts from the offset, and ends with exactly one bucket on disk. A `200` to a range starts the file again, a tag that moved reports the attachment gone, and the bytes are kept only after a dropped connection, a cancellation or a refusal, one partial at a time and in memory. The token coordinator's single flight is kept as a contention control and documented as one, and `SessionTokenStore.readDurable` is deleted | A dropped 64 MiB download cost the whole bucket again, although nginx serves a range of the stored file and `backend/attachments/API.md` now documents it. Phase 7 answers server ADR-0024's contract cost; these are the last two items `CLIENT_WORK.md` left optional, which ADR-0024 itself did not decide: the resume rests on what the attachments API published in the run of server ADR-0025, and the coordinator on server ADR-0023, after which nothing retires a token. The single flight protects nothing now, but it still turns every caller in the renewal window into one renewal on the `accounts` scope, and deleting it would leave the zone marker and the session generation beside it as they are. `readDurable` had no caller after ADR-068 deleted the rotation repair, under a contract that said session-ending decisions were made against it. Below 16 MiB the bookkeeping costs more than the bytes. Changes no wire format, local schema, cryptographic construction or backend file. |
 
@@ -417,6 +418,128 @@ minute; the two claims count against the `claim` scope, as they always did.
 - **ADR-060 is unchanged.** Its 107 to 137 ms is still what one request costs, and it describes
   no cache.
 
+## ADR-081 in full — an unsigned peer device, as the server lists it (2026-10-06)
+
+**Status:** Accepted, 2026-10-06. Corrects, for the peer routes, the disagreement ADR-080 found
+and left. Changes one parser, `_devices` in `contact_api_dtos.dart`, and no wire format,
+protocol, cryptographic construction, local schema or backend file. Leaves this account's own
+list as it was, on purpose (D3). **Opens no production gate.**
+
+**Cites:** ADR-080, [`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §D, §E and §M, the
+[devices API](../../backend/devices/API.md) ("List a user's devices", "Peer state for a set of
+users" and "Replenish prekeys"), and `PeerDeviceOut` in
+[`backend/openapi.json`](../../backend/openapi.json).
+
+### The question
+
+> The server lists a device that has not cross-signed itself as `cross_sig: null,
+> bundle_version: 0`. The client's device parsers wanted `bundle_version: null` beside a null
+> signature, and refused the whole answer otherwise. Which pairs are an unsigned device, and
+> which are a broken answer?
+
+### What the server serves
+
+`Device.bundle_version` is `PositiveIntegerField(default=0)`, as it has been since cross-signing
+arrived in `b0fe936`, and it has never been nullable. Registration refuses a signature and a
+version alike, so every device starts at 0 and stays there until its follow-up
+`PUT /me/devices/{id}/prekeys` names one (§M). `_peer_device_body` in
+`backend/devices/services.py` serves the column verbatim to
+`GET /api/v1/users/{user_id}/devices` and to `POST /api/v1/peers`. `PeerDeviceOut.bundle_version`
+is a required integer that is never null, the devices API names `cross_sig` and `log_head_seq`
+as the only fields of the list that may be null, and `test_cross_signing.py` and
+`test_peer_state.py` assert the 0.
+
+### D1. `cross_sig: null` beside `bundle_version: 0` is an unsigned device
+
+`_devices` reads every device list a send resolves: both peer routes, for this account as well
+as its peers. It now reads that pair as unsigned and hands the domain no version for it.
+`PeerPublicDevice` already holds an unsigned device as `bundleVersion: null`, and its rule that a
+signature and a version come together is unchanged. So is everything downstream: the canonical
+device set and the native device-log inputs already write an unsigned device's version as 0
+([cryptographic protocol](cryptographic-protocol.md), "zero only while unsigned"), so the decode
+now agrees with the encode.
+
+What moves is where the device is judged. `_refresh` refuses a list holding an unsigned device:
+it records `invalidDevice` and fails with `unauthenticatedInput`, which is §E's "unverified
+device — messages withheld". Before, the read itself failed with `malformedServerResponse` and
+nothing was recorded. On the batched read the change reaches past that peer. A malformed item
+failed the whole call, so no peer in it was verified; now the others are verified and stored,
+and only that peer is refused. A send to it is withheld either way, and the fan-out still stops
+at the first recipient that fails (ADR-080 D1).
+
+### D2. Every other pair stays malformed
+
+- A signature beside a version below 1: a signature covers the version beside it, and §M's
+  first is 1.
+- No signature beside a version past 0.
+- A version that is negative, null, missing or not an integer. This is the one rule that
+  tightened: the parser used to read `bundle_version: null` as unsigned, a form the server has
+  never served.
+
+The native core draws the same line: `inspect_peer_device_log_record` refuses a device with no
+signature at a version other than 0, or with a signature at 0, as malformed input.
+
+The second rule refuses something the server can serve. `PUT /me/devices/{id}/prekeys` accepts
+`cross_sig: null` beside a version, and the server's
+`test_a_replenish_may_still_retract_a_signature_against_a_new_version` calls that a legitimate
+write, so a device that withdrew its signature is listed with none at a version past 0. Only
+that device's own token can make the write, and no client in this repository makes it: the
+enrollment follow-up and the prekey rotation always send a signature. It stays malformed because
+a withdrawn signature is not a device that was never signed. It is a change of cross-signature,
+which §D answers with a block and re-verification, and whether to read it as unsigned is a
+decision this change does not make. Until one is made, it costs the call it arrives in, as an
+unsigned device did before.
+
+### D3. This account's own list is left as it was
+
+`PublicDeviceDto.fromJson` reads this account's own list for enrollment (the reconcile of an
+ambiguous registration and the device-log record), a prekey rotation's log append, the Linked
+Devices screen, revocation and the own device-log coordinator. It has the same disagreement, and
+it still refuses the server's pair, because two of those readers would otherwise reach a check
+the malformed read stops today:
+
+- `LinkedDeviceManager._verifyPublicList` runs when the Linked Devices screen opens and after a
+  revocation, and `OwnDeviceLogCoordinator._authenticateCurrentLiveSet` runs before an own
+  device-set change. Both require the live set the server lists for this account to be the one
+  its head log record covers, and set the global posture to `deviceLogFork` (`liveSetMismatch`)
+  when it is not.
+- A device mid-enrollment is in the listed set and in no record until its own append, which
+  follows its recovery-secret step and its cross-signature. Read as unsigned, it would reach
+  that comparison and fail it.
+- The posture returns to `normal` only when an own device-log mutation confirms, and every one
+  of them refuses to start unless it already is. Opening Linked Devices on one device while
+  another waited for its recovery secret would withhold every send from the first, with nothing
+  to clear it.
+
+The same latch is reachable today only in the gap between a new device's cross-signature and its
+log append, which the enrollment crosses without waiting for the user; reading the unsigned
+device would stretch it over the whole recovery-secret step. The own parser is corrected after
+those two checks treat a device that is not in the log yet as pending, as `_refresh` already
+does for a peer whose list changed at the same head. Until then the own reads keep failing with
+`malformedServerResponse` while any device of this account sits between its registration and
+its signature, and the reconcile of an ambiguous registration that did land cannot find the
+device it looks for, which is unsigned by definition.
+
+### What is not done, and what was found
+
+- **The own list (D3).** `PublicDeviceDto` still disagrees with the server, and the own live-set
+  checks have no pending window, which already misfires in the gap after a cross-signature. A
+  change of its own has to add the window before it corrects the parser.
+- **No run against the live server.** The parser is checked by parser tests for
+  `PeerDevicesResponseDto` and `PeerStatesResponseDto`, and by two service tests that put the
+  server's JSON through the application's own REST client and contact repository over a mock
+  adapter. On the per-user read the peer ends in `invalidDevice`; on the batched read the other
+  peer in the same answer is verified. Against the old parser the first ended in
+  `malformedServerResponse` with no record written, and the second failed as a whole.
+- **The claim parser** still requires a signature and a version of 1 or more, although
+  `ClaimedBundleOut` can carry `cross_sig: null` as well. A claim names only devices `_refresh`
+  has just accepted, all of them signed, so an unsigned bundle there is a device that changed
+  between the two reads, and refusing that answer withholds the send as it should.
+- **Why the tests passed.** Every test of an unsigned device built the domain value directly,
+  with `bundleVersion: null`, and the one parser test of it, in
+  `device_enrollment_dtos_test.dart`, fed the own parser `bundle_version: null`, a form the
+  server never serves. That test stands, and describes the own parser as D3 leaves it.
+
 ## ADR-080 in full — a fan-out verified in one call (2026-10-06)
 
 **Status:** Accepted, 2026-10-06. Client-side cost decision, phase 7 prompt 1. Adds one call to
@@ -562,7 +685,8 @@ a fan-out as a whole. Moving it is a separate change.
   device-list answer malformed, `malformedServerResponse` rather than a list refused as
   `invalidDevice`: on the per-user read as before, and on the batched read now, where it fails
   the whole call. Either way the send fails as it did. This change shares the parsers and
-  leaves that rule to a change of its own.
+  leaves that rule to a change of its own. **Done 2026-10-06 for the peer routes — ADR-081.**
+  This account's own list waits for a pending window in its live-set checks (ADR-081 D3).
 
 ## ADR-079 in full — a call on two devices, and the two things it took (2026-10-05)
 
