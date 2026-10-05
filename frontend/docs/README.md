@@ -58,7 +58,8 @@ change.
 - [External design-tool brief](design-handoff/DESIGN.md) — design system, from
   `visual-design-system.md` and `app_tokens.dart`
 - [Voice-room screen and state inventory](design-handoff/voice-room-states.md) — from
-  `ui-specification.md` §10/§13, `voice-and-realtime.md`, and `voicerooms/API.md`
+  `ui-specification.md` §10/§13, `voice-and-realtime.md`, `voice-signalling-v1.md`, and
+  `CLIENT_CONTRACT.md` §N
 
 ## Authority and change control
 

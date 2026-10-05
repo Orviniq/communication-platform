@@ -24,3 +24,16 @@ plugins {
 }
 
 include(":app")
+
+// ADR-078. JitPack builds whatever public repository a coordinate names, so this build
+// takes exactly one module from it. build.gradle.kts declares JitPack for that module,
+// but flutter_webrtc's build script also adds an unfiltered JitPack to every project.
+// This rule is registered before any build script runs and reaches every JitPack
+// declaration, whichever script makes it, so none of them can serve another module.
+gradle.allprojects {
+    repositories.withType<MavenArtifactRepository>().configureEach {
+        if (url.host == "jitpack.io") {
+            content { includeModule("com.github.davidliu", "audioswitch") }
+        }
+    }
+}

@@ -34,6 +34,7 @@ use crate::{
         CryptoProvider, ED25519_SIGNATURE_BYTES, MLKEM768_CIPHERTEXT_BYTES, MLKEM768_PUBLIC_BYTES,
         RustCryptoProvider, X25519_PUBLIC_BYTES, X25519_SECRET_BYTES, XCHACHA_ABYTES,
     },
+    room_control,
     secret::{SecretBytes, SecretVec},
 };
 
@@ -52,6 +53,8 @@ pub(crate) const OP_CONSUME_REPAIR: u32 = 16;
 pub(crate) const OP_INSPECT_PUBLIC_HEADER: u32 = 17;
 pub(crate) const OP_SEAL_GROUP_CONTROL: u32 = 18;
 pub(crate) const OP_OPEN_GROUP_CONTROL: u32 = 19;
+pub(crate) const OP_SEAL_ROOM_CONTROL: u32 = 20;
+pub(crate) const OP_OPEN_ROOM_CONTROL: u32 = 21;
 pub(crate) const PAIRWISE_MAX_IO_BYTES: usize = 2 * 1024 * 1024;
 
 const REQUEST_MAGIC: &[u8; 8] = b"CPPWR001";
@@ -1654,6 +1657,8 @@ pub(crate) fn operation_with_provider<P: CryptoProvider>(
         OP_INSPECT_PUBLIC_HEADER => operation_inspect_public_header(operation, &mut reader),
         OP_SEAL_GROUP_CONTROL => operation_seal_group_control(provider, operation, &mut reader),
         OP_OPEN_GROUP_CONTROL => operation_open_group_control(provider, operation, &mut reader),
+        OP_SEAL_ROOM_CONTROL => operation_seal_room_control(provider, operation, &mut reader),
+        OP_OPEN_ROOM_CONTROL => operation_open_room_control(provider, operation, &mut reader),
         _ => Err(CryptoError::UnsupportedOperation),
     }
 }
@@ -1692,6 +1697,46 @@ fn operation_open_group_control<P: CryptoProvider>(
     let signature: [u8; ED25519_SIGNATURE_BYTES] = reader.array()?;
     finish(reader)?;
     let opened = group_control::open(provider, &signing_public, canonical, &signature)?;
+    let mut output = output_prefix(operation, OUTCOME_OK)?;
+    push_frame(&mut output, &opened.projection)?;
+    output.extend_from_slice(&opened.state_hash);
+    Ok(output)
+}
+
+/// Signs one voice-room control event with this device's signing key.
+///
+/// The frames are the group operation's, and the event is the room's: its own
+/// encoding under its own signing and state-hash domains.
+fn operation_seal_room_control<P: CryptoProvider>(
+    provider: &P,
+    operation: u32,
+    reader: &mut Reader<'_>,
+) -> CryptoResult<Vec<u8>> {
+    let device_bytes = reader.framed()?;
+    let migration_day = reader.u32()?;
+    let projection = reader.framed()?;
+    finish(reader)?;
+    let device = decode_device_state(provider, device_bytes, migration_day)?;
+    let sealed = room_control::seal(provider, &device, projection)?;
+    let mut output = output_prefix(operation, OUTCOME_OK)?;
+    push_frame(&mut output, &sealed.canonical)?;
+    output.extend_from_slice(&sealed.signature);
+    output.extend_from_slice(&sealed.state_hash);
+    Ok(output)
+}
+
+/// Verifies one voice-room control event under the device signing key its
+/// caller authenticated for the claimed signer, then returns its projection.
+fn operation_open_room_control<P: CryptoProvider>(
+    provider: &P,
+    operation: u32,
+    reader: &mut Reader<'_>,
+) -> CryptoResult<Vec<u8>> {
+    let signing_public = reader.array()?;
+    let canonical = reader.framed()?;
+    let signature: [u8; ED25519_SIGNATURE_BYTES] = reader.array()?;
+    finish(reader)?;
+    let opened = room_control::open(provider, &signing_public, canonical, &signature)?;
     let mut output = output_prefix(operation, OUTCOME_OK)?;
     push_frame(&mut output, &opened.projection)?;
     output.extend_from_slice(&opened.state_hash);

@@ -46,6 +46,38 @@
          Android's own acceptable-use table sanctions asking for exactly this
          case - a chat application that cannot use FCM. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Voice rooms (ADR-077, ADR-078). Dangerous protection level, so nothing
+         is granted at install. It is asked for when the user joins a call and
+         at no other time - never at start-up and never from another screen
+         (CLIENT_CONTRACT.md §N rule 11). flutter_webrtc's getUserMedia asks for
+         it on its own when it is missing, so a join has to have asked first. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Lets a call keep the microphone after the user turns to another screen
+         or another application: from Android 14 (API 34) a foreground service
+         of the `microphone` type cannot start without it (§N rule 11). Normal
+         protection level, granted at install with no prompt, and it opens no
+         microphone by itself - RECORD_AUDIO still decides that. The generic
+         FOREGROUND_SERVICE it builds on is declared above, for sustained
+         delivery. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Arrives from audioswitch, through flutter_webrtc, whether it is written
+         here or not, and is declared here for the reason ACCESS_NETWORK_STATE is
+         (ADR-054). A call puts the platform into its communication audio mode
+         and moves the sound between earpiece, speaker and headset, which are
+         changes to global audio settings. Normal protection level, granted at
+         install with no prompt; it changes where audio goes and reads nothing. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Refused, not inherited (ADR-078). audioswitch merges in BLUETOOTH for
+         Android 11 and below, and nothing on the path flutter_webrtc takes ever
+         checks it. flutter_webrtc builds audioswitch's AudioSwitch, which finds
+         and routes audio devices through AudioManager; the one class that checks
+         a Bluetooth permission belongs to LegacyAudioSwitch, and even that one
+         keys on this application's targetSdkVersion, so it would check
+         BLUETOOTH_CONNECT instead. The voice design ships no Bluetooth headset
+         route; one that needs a Bluetooth permission is a dated record. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        tools:node="remove" />
 
     <application
         android:allowBackup="false"
@@ -106,6 +138,25 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps this application's process out of the cached state so that its authenticated connection to the user's own self-hosted messaging server survives, and end-to-end encrypted messages can be received while the application is not in use. No push transport is reachable in this deployment, so there is no messaging service to be woken by instead. Started only after the user explicitly turns the capability on, and stopped as soon as they turn it off." />
         </service>
+        <!-- A call's microphone (CLIENT_CONTRACT.md §N rule 11, ADR-078).
+             Started only by this application, from a join, after the user
+             granted RECORD_AUDIO and while the activity is visible - the
+             platform refuses a `microphone` service otherwise - and stopped
+             when the call ends, when the engine holding the call goes away,
+             or when the user removes the task. It is never restarted. It holds
+             no audio and no connection: it exists so that the call keeps the
+             microphone while the user looks at another screen or another
+             application, which a while-in-use permission does not otherwise
+             allow.
+
+             `microphone` because that is what it keeps, and because it is the
+             type the platform defines for "continue microphone capture from
+             the background, such as voice recorders or communication apps".
+             Unexported, so nothing outside this application can start it. -->
+        <service
+            android:name=".VoiceCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <!-- Refused, not inherited (ADR-054). androidx.profileinstaller
              arrives transitively behind androidx.core and the Flutter
              embedding, and its manifest contributes an *exported* receiver with

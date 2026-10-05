@@ -5,6 +5,7 @@ import 'package:communication_platform/app/dependencies/linked_device_providers.
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/app/dependencies/voice_room_providers.dart';
 import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
@@ -26,6 +27,9 @@ import 'package:communication_platform/features/synchronization/infrastructure/h
 import 'package:communication_platform/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/stale_device_refresh_adapter.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/sync_platform_adapters.dart';
+import 'package:communication_platform/features/voice/application/room_outbound_dispatcher.dart';
+import 'package:communication_platform/features/voice/application/room_session_starter.dart';
+import 'package:communication_platform/features/voice/application/room_state_recovery_service.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/pairwise_session_crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -117,6 +121,9 @@ final durableSyncEngineProvider =
         groupInbound: await ref.watch(
           groupInboundCoordinatorProvider(groupScope).future,
         ),
+        roomInbound: await ref.watch(
+          roomInboundCoordinatorProvider(groupScope).future,
+        ),
       );
       final gossip = await ref.watch(
         deviceLogGossipCoordinatorProvider((
@@ -166,6 +173,21 @@ final durableSyncEngineProvider =
             currentUserId: scope.userId,
             currentDeviceId: scope.deviceId,
           ),
+          // A room's requests are queued before the dispatch, as a group's
+          // are, so that what this drain found reaches the outbox in it.
+          _RoomStateRecoveryPostInboxWork(
+            await ref.watch(
+              roomStateRecoveryServiceProvider(groupScope).future,
+            ),
+          ),
+          _RoomSessionStartPostInboxWork(
+            await ref.watch(roomSessionStarterProvider(groupScope).future),
+          ),
+          _RoomOutboundPostInboxWork(
+            await ref.watch(roomOutboundDispatcherProvider(groupScope).future),
+            currentUserId: scope.userId,
+            currentDeviceId: scope.deviceId,
+          ),
           PendingReceiptPostInboxWork(
             FlushPendingDeliveredReceipts(
               repository: await ref.watch(
@@ -205,6 +227,52 @@ final class _GroupOutboundPostInboxWork implements PostInboxCommitWorkPort {
   });
 
   final GroupOutboundDispatcher dispatcher;
+  final String currentUserId;
+  final String currentDeviceId;
+
+  @override
+  Future<void> run() async {
+    // Work remains durable when authentication, crypto, or storage is
+    // temporarily unavailable; the next sync run retries the exact payload.
+    await dispatcher.dispatchPending(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+    );
+  }
+}
+
+final class _RoomStateRecoveryPostInboxWork implements PostInboxCommitWorkPort {
+  const _RoomStateRecoveryPostInboxWork(this.recovery);
+
+  final RoomStateRecoveryService recovery;
+
+  @override
+  Future<void> run() async {
+    await recovery.requestDueStates();
+  }
+}
+
+final class _RoomSessionStartPostInboxWork implements PostInboxCommitWorkPort {
+  const _RoomSessionStartPostInboxWork(this.starter);
+
+  final RoomSessionStarter starter;
+
+  @override
+  Future<void> run() async {
+    // Missing sessions are started on the durable path before any call needs
+    // them (ADR-077, decided B). A check that fails is due again next pass.
+    await starter.startDueSessions();
+  }
+}
+
+final class _RoomOutboundPostInboxWork implements PostInboxCommitWorkPort {
+  const _RoomOutboundPostInboxWork(
+    this.dispatcher, {
+    required this.currentUserId,
+    required this.currentDeviceId,
+  });
+
+  final RoomOutboundDispatcher dispatcher;
   final String currentUserId;
   final String currentDeviceId;
 

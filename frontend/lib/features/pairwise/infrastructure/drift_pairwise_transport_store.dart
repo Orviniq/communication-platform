@@ -5,12 +5,14 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_transport_store.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_volatile_store.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
 
-final class DriftPairwiseTransportStore implements PairwiseTransportStore {
+final class DriftPairwiseTransportStore
+    implements PairwiseTransportStore, PairwiseVolatileStore {
   const DriftPairwiseTransportStore(
     this.database, {
     this.config = const FixedServerConfig.fallback(),
@@ -36,6 +38,11 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
   static const int maximumSkippedKeysPerAccount = 20000;
   static const Duration replayRetention = Duration(days: 16);
   static const String _deviceStateSecretId = 'current-device-key-state-v1';
+
+  /// Where a replay marker or a consumed-prekey tombstone written by a
+  /// `signal` frame says it came from. A volatile frame has no envelope id to
+  /// name, and nothing reads the column back.
+  static const String volatileOrigin = 'volatile-signal';
 
   /// The persisted ordinals of `pending_send_preparations.state`.
   static const int preparationOwedState = 0;
@@ -620,65 +627,16 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
         }
         final deviceTransition = commit.deviceStateTransition;
         if (deviceTransition != null) {
-          final pendingMaintenance =
-              await (database.select(database.prekeyMaintenancePlans)..where(
-                    (row) => row.deviceId.equals(
-                      commit.sessionTransition.localDeviceId.toLowerCase(),
-                    ),
-                  ))
-                  .getSingleOrNull();
-          if (pendingMaintenance != null) {
-            // A pending plan owns a candidate native device state. Accepting an
-            // initial concurrently could otherwise let completion resurrect a
-            // one-time private key consumed by this envelope.
-            throw const _PairwiseConflict();
-          }
-          final updated =
-              await (database.update(database.secureSecrets)..where(
-                    (row) =>
-                        row.secretId.equals(_deviceStateSecretId) &
-                        row.stateRevision.equals(
-                          deviceTransition.expectedStateVersion,
-                        ),
-                  ))
-                  .write(
-                    SecureSecretsCompanion(
-                      wrappedCiphertextOrOpaqueHandle: Value(
-                        deviceTransition.nextOpaqueState,
-                      ),
-                      formatVersion: const Value(2),
-                      stateRevision: Value(deviceTransition.nextStateVersion),
-                    ),
-                  );
-          if (updated != 1) {
-            throw const _PairwiseConflict();
-          }
+          await _applyDeviceStateTransition(
+            localDeviceId: commit.sessionTransition.localDeviceId,
+            transition: deviceTransition,
+          );
         }
-
-        for (final consumed in commit.consumedOneTimePrekeys) {
-          await database
-              .into(database.pairwiseConsumedPrekeys)
-              .insert(
-                PairwiseConsumedPrekeysCompanion.insert(
-                  localDeviceId: commit.sessionTransition.localDeviceId,
-                  algorithm: consumed.kind.index,
-                  keyId: consumed.keyId,
-                  firstEnvelopeId: commit.envelopeId,
-                ),
-              );
-          final storageKind = switch (consumed.kind) {
-            PairwiseOneTimePrekeyKind.classicalX25519 =>
-              _classicalOneTimePrekeyKind,
-            PairwiseOneTimePrekeyKind.postQuantumMlKem768 =>
-              _postQuantumOneTimePrekeyKind,
-          };
-          await (database.delete(database.prekeys)..where(
-                (row) =>
-                    row.kind.equals(storageKind) &
-                    row.keyId.equals(consumed.keyId),
-              ))
-              .go();
-        }
+        await _consumeOneTimePrekeys(
+          localDeviceId: commit.sessionTransition.localDeviceId,
+          consumed: commit.consumedOneTimePrekeys,
+          firstEnvelopeId: commit.envelopeId,
+        );
 
         await database
             .into(database.pairwiseReplayMarkers)
@@ -745,6 +703,131 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
         return eventInserted > 0;
       });
       return Result.success(applied);
+    } on _PairwiseReplay {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    } on _PairwiseConflict {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.conflict),
+      );
+    } on _PairwiseCapacity {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.capacityExceeded),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> commitVolatileSeal(
+    PairwiseVolatileSealCommit commit,
+  ) async {
+    if (!_validVolatileSeal(commit)) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      await database.writeTransaction(() async {
+        final deviceState =
+            await (database.select(database.secureSecrets)
+                  ..where((row) => row.secretId.equals(_deviceStateSecretId)))
+                .getSingleOrNull();
+        if (deviceState == null ||
+            deviceState.stateRevision != commit.expectedDeviceStateVersion) {
+          throw const _PairwiseConflict();
+        }
+        for (final transition in commit.transitions) {
+          await _applySessionTransition(transition);
+        }
+        if (await _skippedKeyTotal() > maximumSkippedKeysPerAccount) {
+          throw const _PairwiseCapacity();
+        }
+      });
+      return const Result.success(null);
+    } on _PairwiseConflict {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.conflict),
+      );
+    } on _PairwiseCapacity {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.capacityExceeded),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> commitVolatileOpen(
+    PairwiseVolatileOpenCommit commit,
+  ) async {
+    if (!_validVolatileOpen(commit)) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final localDeviceId = commit.sessionTransition.localDeviceId;
+    try {
+      await database.writeTransaction(() async {
+        final replayMarker = commit.replayMarker;
+        if (replayMarker != null) {
+          final replay =
+              await (database.select(database.pairwiseReplayMarkers)
+                    ..where((row) => row.replayMarker.equals(replayMarker)))
+                  .getSingleOrNull();
+          if (replay != null) {
+            throw const _PairwiseReplay();
+          }
+          if (await _tableCount(database.pairwiseReplayMarkers) >=
+                  maximumReplayMarkers ||
+              await _tableCount(database.pairwiseConsumedPrekeys) +
+                      commit.consumedOneTimePrekeys.length >
+                  maximumConsumedPrekeyTombstones) {
+            throw const _PairwiseCapacity();
+          }
+        }
+        final demoted = commit.demotedExistingSessionTransition;
+        if (demoted != null) {
+          await _applyDemotedExistingTransition(demoted);
+        }
+        await _applySessionTransition(commit.sessionTransition);
+        if (await _skippedKeyTotal() > maximumSkippedKeysPerAccount) {
+          throw const _PairwiseCapacity();
+        }
+        final deviceTransition = commit.deviceStateTransition;
+        if (deviceTransition != null) {
+          await _applyDeviceStateTransition(
+            localDeviceId: localDeviceId,
+            transition: deviceTransition,
+          );
+        }
+        await _consumeOneTimePrekeys(
+          localDeviceId: localDeviceId,
+          consumed: commit.consumedOneTimePrekeys,
+          firstEnvelopeId: volatileOrigin,
+        );
+        if (replayMarker != null) {
+          await database
+              .into(database.pairwiseReplayMarkers)
+              .insert(
+                PairwiseReplayMarkersCompanion.insert(
+                  replayMarker: replayMarker,
+                  sessionId: commit.sessionTransition.sessionId,
+                  signedPrekeyId: Value(commit.signedPrekeyId),
+                  pqSignedPrekeyId: Value(commit.pqSignedPrekeyId),
+                  firstEnvelopeId: volatileOrigin,
+                ),
+              );
+        }
+      });
+      return const Result.success(null);
     } on _PairwiseReplay {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.integrityCheckFailed),
@@ -1127,6 +1210,70 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
             terminalAt: Value(DateTime.now().toUtc()),
           ),
         );
+  }
+
+  Future<void> _applyDeviceStateTransition({
+    required String localDeviceId,
+    required PairwiseDeviceStateTransition transition,
+  }) async {
+    final pendingMaintenance =
+        await (database.select(
+              database.prekeyMaintenancePlans,
+            )..where((row) => row.deviceId.equals(localDeviceId.toLowerCase())))
+            .getSingleOrNull();
+    if (pendingMaintenance != null) {
+      // A pending plan owns a candidate native device state. Accepting an
+      // initial concurrently could otherwise let completion resurrect a
+      // one-time private key consumed by this envelope.
+      throw const _PairwiseConflict();
+    }
+    final updated =
+        await (database.update(database.secureSecrets)..where(
+              (row) =>
+                  row.secretId.equals(_deviceStateSecretId) &
+                  row.stateRevision.equals(transition.expectedStateVersion),
+            ))
+            .write(
+              SecureSecretsCompanion(
+                wrappedCiphertextOrOpaqueHandle: Value(
+                  transition.nextOpaqueState,
+                ),
+                formatVersion: const Value(2),
+                stateRevision: Value(transition.nextStateVersion),
+              ),
+            );
+    if (updated != 1) {
+      throw const _PairwiseConflict();
+    }
+  }
+
+  Future<void> _consumeOneTimePrekeys({
+    required String localDeviceId,
+    required List<ConsumedPairwiseOneTimePrekey> consumed,
+    required String firstEnvelopeId,
+  }) async {
+    for (final key in consumed) {
+      await database
+          .into(database.pairwiseConsumedPrekeys)
+          .insert(
+            PairwiseConsumedPrekeysCompanion.insert(
+              localDeviceId: localDeviceId,
+              algorithm: key.kind.index,
+              keyId: key.keyId,
+              firstEnvelopeId: firstEnvelopeId,
+            ),
+          );
+      final storageKind = switch (key.kind) {
+        PairwiseOneTimePrekeyKind.classicalX25519 =>
+          _classicalOneTimePrekeyKind,
+        PairwiseOneTimePrekeyKind.postQuantumMlKem768 =>
+          _postQuantumOneTimePrekeyKind,
+      };
+      await (database.delete(database.prekeys)..where(
+            (row) => row.kind.equals(storageKind) & row.keyId.equals(key.keyId),
+          ))
+          .go();
+    }
   }
 
   Future<void> _applySessionTransition(
@@ -1659,6 +1806,75 @@ SELECT
         ) &&
         (commit.consumedOneTimePrekeys.isEmpty ||
             commit.deviceStateTransition != null);
+  }
+
+  bool _validVolatileSeal(PairwiseVolatileSealCommit commit) {
+    if (!_isUuid(commit.currentDeviceId) ||
+        commit.expectedDeviceStateVersion <= 0 ||
+        commit.transitions.isEmpty) {
+      return false;
+    }
+    final current = commit.currentDeviceId.toLowerCase();
+    final remotes = <String>{};
+    for (final transition in commit.transitions) {
+      final remote = transition.remoteDeviceId.toLowerCase();
+      if (!_validTransition(transition) ||
+          transition.localDeviceId.toLowerCase() != current ||
+          remote == current ||
+          !remotes.add(remote) ||
+          // A volatile seal advances a ready primary session and nothing else:
+          // it never starts one, because a first message that is dropped
+          // would leave this device holding a session its peer never saw.
+          transition.expectedStateVersion == null ||
+          transition.disposition !=
+              PairwiseSessionDisposition.primaryBidirectional ||
+          transition.repairState != PairwiseRepairState.ready) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _validVolatileOpen(PairwiseVolatileOpenCommit commit) {
+    final transition = commit.sessionTransition;
+    if (!_validTransition(transition)) {
+      return false;
+    }
+    final signedPrekeyId = commit.signedPrekeyId;
+    final pqSignedPrekeyId = commit.pqSignedPrekeyId;
+    if (!commit.isInitial) {
+      // A regular header advances one primary session and touches nothing
+      // else: no prekey, no device state, and no marker, because the ratchet
+      // already refuses a message number it has used.
+      return transition.disposition ==
+              PairwiseSessionDisposition.primaryBidirectional &&
+          commit.demotedExistingSessionTransition == null &&
+          commit.deviceStateTransition == null &&
+          commit.consumedOneTimePrekeys.isEmpty &&
+          commit.replayMarker == null &&
+          signedPrekeyId == null &&
+          pqSignedPrekeyId == null;
+    }
+    final deviceTransition = commit.deviceStateTransition;
+    final demoted = commit.demotedExistingSessionTransition;
+    final consumed = <String>{};
+    return commit.replayMarker?.length == 32 &&
+        deviceTransition != null &&
+        _validDeviceTransition(deviceTransition) &&
+        signedPrekeyId != null &&
+        signedPrekeyId >= 0 &&
+        signedPrekeyId <= 0x7fffffff &&
+        pqSignedPrekeyId != null &&
+        pqSignedPrekeyId >= 0 &&
+        pqSignedPrekeyId <= 0x7fffffff &&
+        transition.repairState == PairwiseRepairState.ready &&
+        (demoted == null || _validDemotedTransition(demoted, transition)) &&
+        commit.consumedOneTimePrekeys.every(
+          (key) =>
+              key.keyId >= 0 &&
+              key.keyId <= 0x7fffffff &&
+              consumed.add('${key.kind.index}:${key.keyId}'),
+        );
   }
 
   bool _validTransition(PairwiseSessionTransition transition) {

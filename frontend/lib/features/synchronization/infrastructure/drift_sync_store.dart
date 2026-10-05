@@ -11,6 +11,8 @@ import 'package:communication_platform/features/pairwise/infrastructure/drift_pa
 import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/voice/domain/room_model.dart';
+import 'package:communication_platform/features/voice/infrastructure/drift_room_repository.dart';
 import 'package:drift/drift.dart';
 
 /// The persisted ordinals of `pending_send_preparations.state`.
@@ -68,6 +70,10 @@ SELECT
     SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
     UNION
     SELECT operation_id FROM pending_send_preparations WHERE state = 0
+    UNION
+    SELECT operation_id FROM group_outbound_objects WHERE delivery_state = 1
+    UNION
+    SELECT operation_id FROM room_outbound_objects WHERE delivery_state = 1
   )) AS outbox_depth,
   (SELECT MIN(candidate) FROM (
     SELECT next_attempt_at AS candidate FROM inbox_envelopes
@@ -85,11 +91,18 @@ SELECT
 FROM sync_checkpoint c
 WHERE c.singleton_id = 1
 ''',
+      // A signed group or room change is owed work as well. It waits in its
+      // own table until the post-inbox dispatch routes it into the pairwise
+      // outbox, and that dispatch runs only inside a cycle, so a change made on
+      // this device needs the depth to rise or it waits for an unrelated
+      // wake-up before it leaves.
       readsFrom: {
         database.syncCheckpoints,
         database.inboxEnvelopes,
         database.outboxOperations,
         database.pendingSendPreparations,
+        database.groupOutboundObjects,
+        database.roomOutboundObjects,
       },
     );
     yield* _conflated(
@@ -218,6 +231,10 @@ SELECT
     SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
     UNION
     SELECT operation_id FROM pending_send_preparations WHERE state = 0
+    UNION
+    SELECT operation_id FROM group_outbound_objects WHERE delivery_state = 1
+    UNION
+    SELECT operation_id FROM room_outbound_objects WHERE delivery_state = 1
   )) AS outbox_depth,
   (SELECT MIN(candidate) FROM (
     SELECT next_attempt_at AS candidate FROM inbox_envelopes
@@ -454,6 +471,10 @@ WHERE c.singleton_id = 1
           await DriftGroupRepository(
             database,
           ).recordQueueGapInsideTransaction();
+          // Or any room's, a removal included: every active room waits for a
+          // member's answer before it joins a call, invites or renames. Each
+          // room waits on its own answer and holds no part of the gap open.
+          await DriftRoomRepository(database).recordQueueGapInsideTransaction();
         }
       });
       return const Result.success(null);
@@ -556,13 +577,33 @@ WHERE c.singleton_id = 1
     }
     final pairwise = inspection.pairwiseCommit;
     final rawGroup = inspection.groupCommit;
-    if (rawGroup != null && rawGroup is! PreparedGroupInboxCommit) {
+    final rawRoom = inspection.roomCommit;
+    if ((rawGroup != null && rawGroup is! PreparedGroupInboxCommit) ||
+        (rawRoom != null && rawRoom is! PreparedRoomInboxCommit) ||
+        (rawGroup != null && rawRoom != null)) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.malformedServerResponse),
       );
     }
     final group = rawGroup as PreparedGroupInboxCommit?;
-    if ((group != null) !=
+    final room = rawRoom as PreparedRoomInboxCommit?;
+    // A group's change and a room's are the same class of dependency: signed
+    // control state, committed with the receive that carried it.
+    final ({String opaqueEventId, String senderUserId, String senderDeviceId})?
+    control = group != null
+        ? (
+            opaqueEventId: group.opaqueEventId,
+            senderUserId: group.senderUserId,
+            senderDeviceId: group.senderDeviceId,
+          )
+        : room != null
+        ? (
+            opaqueEventId: room.opaqueEventId,
+            senderUserId: room.senderUserId,
+            senderDeviceId: room.senderDeviceId,
+          )
+        : null;
+    if ((control != null) !=
         (pairwise != null &&
             inspection.dependency == EnvelopeDependency.groupState)) {
       return const Result.failure(
@@ -570,16 +611,16 @@ WHERE c.singleton_id = 1
       );
     }
     if (pairwise != null) {
-      final expectedDependency = group == null
+      final expectedDependency = control == null
           ? EnvelopeDependency.directOrLocal
           : EnvelopeDependency.groupState;
       if (inspection.dependency != expectedDependency ||
           pairwise.envelopeId != envelopeId ||
           pairwise.opaqueEventId != inspection.opaqueEventId ||
-          (group != null &&
-              (group.opaqueEventId != inspection.opaqueEventId ||
-                  group.senderUserId != pairwise.senderUserId ||
-                  group.senderDeviceId != pairwise.senderDeviceId)) ||
+          (control != null &&
+              (control.opaqueEventId != inspection.opaqueEventId ||
+                  control.senderUserId != pairwise.senderUserId ||
+                  control.senderDeviceId != pairwise.senderDeviceId)) ||
           pairwise.sessionTransition.disposition < 0 ||
           pairwise.sessionTransition.disposition >=
               PairwiseSessionDisposition.values.length ||
@@ -679,6 +720,52 @@ WHERE c.singleton_id = 1
         database,
         config: config,
       );
+      if (room != null) {
+        final roomRepository = DriftRoomRepository(database);
+        return pairwiseStore.commitPreparedReceiveWithAdditionalTransaction(
+          commit: receiveCommit,
+          dependency: EnvelopeDependency.groupState,
+          additionalCommit: () => switch (room) {
+            PreparedRoomInboxTransition(
+              :final expectedPrevious,
+              :final next,
+              :final prepared,
+            ) =>
+              roomRepository.commitTransitionInsideTransaction(
+                expectedPrevious: expectedPrevious,
+                next: next,
+                prepared: prepared,
+              ),
+            PreparedRoomInboxQuarantine(
+              :final record,
+              :final retainLifecycle,
+              :final completesStateRequest,
+            ) =>
+              roomRepository.quarantineInsideTransaction(
+                record,
+                retainLifecycle: retainLifecycle,
+                completesStateRequest: completesStateRequest,
+              ),
+            PreparedRoomInboxStateRequest(:final roomId, :final peerUserId) =>
+              roomRepository.recordStateRequestInsideTransaction(
+                roomId: roomId,
+                peerUserId: peerUserId,
+              ),
+            PreparedRoomInboxOutbound(:final work) =>
+              roomRepository.queueOutboundInsideTransaction(work),
+            PreparedRoomInboxStateCurrent(
+              :final roomId,
+              :final controlRevision,
+              :final controlStateHash,
+            ) =>
+              roomRepository.confirmStateCurrentInsideTransaction(
+                roomId: roomId,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+              ),
+          },
+        );
+      }
       if (group == null) {
         return pairwiseStore.commitPreparedReceive(receiveCommit);
       }

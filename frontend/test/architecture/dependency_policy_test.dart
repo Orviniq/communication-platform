@@ -43,6 +43,7 @@ void main() {
         'flutter': _fromSdk,
         'flutter_localizations': _fromSdk,
         'flutter_riverpod': '3.3.2',
+        'flutter_webrtc': '1.6.2+hotfix.3',
         'forui': '0.24.3',
         'go_router': '17.3.0',
         'intl': '0.20.2',
@@ -66,14 +67,18 @@ void main() {
       // A caret range is not a pin. `pubspec.lock` would still hold the
       // resolution, but the declared intent would be "whatever is compatible",
       // and the next person to regenerate the lock would get something nobody
-      // reviewed.
+      // reviewed. A build suffix is part of one exact version rather than a
+      // range - pub compares it, so `1.6.2+hotfix.3` admits nothing else - and
+      // `flutter_webrtc` publishes its fixes that way (ADR-078).
       for (final section in const ['dependencies', 'dev_dependencies']) {
         for (final entry in _declaredDependencies(pubspec, section).entries) {
           if (entry.value == _fromSdk) {
             continue;
           }
           expect(
-            RegExp(r'^\d+\.\d+\.\d+(\+\d+)?$').hasMatch(entry.value),
+            RegExp(
+              r'^\d+\.\d+\.\d+(\+[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$',
+            ).hasMatch(entry.value),
             isTrue,
             reason:
                 '${entry.key} is declared as "${entry.value}", which is a '
@@ -145,6 +150,34 @@ void main() {
             .toList();
         expect(matches, isEmpty, reason: '${entry.key}: $matches');
       }
+    });
+
+    test('JitPack serves this build one module and nothing else', () {
+      // ADR-078. JitPack builds whatever public repository a coordinate names.
+      // audioswitch is linked at a git commit, which only JitPack publishes, so
+      // it is declared for that one module and in both directions:
+      // `exclusiveContent` keeps the module off every other repository, and the
+      // settings rule keeps every JitPack declaration - flutter_webrtc's own
+      // included - off every other module.
+      const module = 'includeModule("com.github.davidliu", "audioswitch")';
+      expect('jitpack.io'.allMatches(rootGradle), hasLength(1));
+      expect(rootGradle, contains('exclusiveContent {'));
+      expect(
+        rootGradle,
+        contains('forRepository { maven("https://jitpack.io") }'),
+      );
+      expect(module.allMatches(rootGradle), hasLength(1));
+      expect(settingsGradle, contains('if (url.host == "jitpack.io")'));
+      expect(module.allMatches(settingsGradle), hasLength(1));
+      expect(
+        _lockedModules(
+          gradleLock,
+        ).keys.where((coordinate) => coordinate.startsWith('com.github.')),
+        [
+          'com.github.davidliu:audioswitch:'
+              '039a35aefab7747c557242fa216c9ea11743b604',
+        ],
+      );
     });
 
     test('the lock covers every configuration a built artifact resolves', () {
@@ -241,16 +274,36 @@ void main() {
       // names it or not. Declaring it locally is what keeps the manifest a
       // complete, justified statement of what the application asks for, rather
       // than a partial one a reviewer has to reconcile against a package.
+      // `MODIFY_AUDIO_SETTINGS` is the same case since ADR-078: audioswitch
+      // merges it in through flutter_webrtc, and it is declared here as well.
       expect(_declaredPermissions(manifest), <String>{
         'android.permission.ACCESS_NETWORK_STATE',
         'android.permission.FOREGROUND_SERVICE',
+        'android.permission.FOREGROUND_SERVICE_MICROPHONE',
         'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
         'android.permission.INTERNET',
+        'android.permission.MODIFY_AUDIO_SETTINGS',
         'android.permission.POST_NOTIFICATIONS',
         'android.permission.RECEIVE_BOOT_COMPLETED',
+        'android.permission.RECORD_AUDIO',
         'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
         'android.permission.VIBRATE',
       });
+    });
+
+    test('the Bluetooth permission audioswitch contributes is refused', () {
+      // audioswitch merges in `BLUETOOTH` for Android 11 and below. Nothing on
+      // the path flutter_webrtc takes checks it, and no Bluetooth headset route
+      // is part of the voice design, so the manifest deletes it (ADR-078).
+      expect(_refusedPermissions(manifest), <String>{
+        'android.permission.BLUETOOTH',
+      });
+      expect(
+        _declaredPermissions(
+          manifest,
+        ).where((permission) => permission.contains('BLUETOOTH')),
+        isEmpty,
+      );
     });
 
     test('the receiver androidx.profileinstaller contributes is refused', () {
@@ -355,6 +408,9 @@ const _reviewedReleaseModules = <String>{
   'androidx.window:window-java:1.2.0',
   'androidx.window:window:1.2.0',
   'com.getkeepsafe.relinker:relinker:1.4.5',
+  // flutter_webrtc's two native parts (ADR-078): the audio router, built by
+  // JitPack from a git commit, and libwebrtc with its Java bindings.
+  'com.github.davidliu:audioswitch:039a35aefab7747c557242fa216c9ea11743b604',
   'com.google.guava:listenablefuture:1.0',
   'com.squareup.okio:okio-jvm:3.4.0',
   'com.squareup.okio:okio:3.4.0',
@@ -362,6 +418,7 @@ const _reviewedReleaseModules = <String>{
   'io.flutter:armeabi_v7a_release:<engine>',
   'io.flutter:flutter_embedding_release:<engine>',
   'io.flutter:x86_64_release:<engine>',
+  'io.github.webrtc-sdk:android:150.7871.01',
   'org.jetbrains.kotlin:kotlin-android-extensions-runtime:1.9.22',
   'org.jetbrains.kotlin:kotlin-parcelize-runtime:1.9.22',
   'org.jetbrains.kotlin:kotlin-stdlib-common:2.3.20',
@@ -468,11 +525,27 @@ Set<String> _withoutEngineRevision(Set<String> modules) => modules
     )
     .toSet();
 
-/// Every permission `uses-permission` names in this project's own manifest.
-Set<String> _declaredPermissions(String manifest) =>
-    RegExp(r'<uses-permission\s+android:name="([^"]+)"')
+/// Every permission `uses-permission` asks for in this project's own manifest.
+///
+/// An element carrying `tools:node="remove"` deletes a permission a dependency
+/// merges in, which is the opposite of asking for it, so it is left out here
+/// and read by [_refusedPermissions] instead.
+Set<String> _declaredPermissions(String manifest) => _usesPermissions(
+  manifest,
+).where((element) => !_refuses(element)).map(_permissionName).toSet();
+
+/// Every permission this project's own manifest deletes from the merged one.
+Set<String> _refusedPermissions(String manifest) =>
+    _usesPermissions(manifest).where(_refuses).map(_permissionName).toSet();
+
+Iterable<String> _usesPermissions(String manifest) =>
+    RegExp(r'<uses-permission\b[^>]*>')
         .allMatches(
           manifest.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), ''),
         )
-        .map((match) => match.group(1)!)
-        .toSet();
+        .map((match) => match.group(0)!);
+
+bool _refuses(String element) => element.contains('tools:node="remove"');
+
+String _permissionName(String element) =>
+    RegExp(r'android:name="([^"]+)"').firstMatch(element)!.group(1)!;

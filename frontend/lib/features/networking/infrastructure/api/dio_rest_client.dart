@@ -171,7 +171,8 @@ final class DioRestClient {
 
           if (_isRetryableStatus(wireResponse.statusCode) &&
               request.canReplay &&
-              !transportRetryUsed) {
+              !transportRetryUsed &&
+              !_isStandingRefusal(wireResponse)) {
             transportRetryUsed = true;
             await _retryScheduler.wait(const Duration(milliseconds: 100));
             continue;
@@ -473,6 +474,16 @@ final class DioRestClient {
       statusCode == 502 ||
       statusCode == 503 ||
       statusCode == 504;
+
+  /// A retryable status whose `code` says the answer describes the deployment
+  /// rather than its load, so a replay would be answered the same way.
+  ///
+  /// `voice_unconfigured` is the one such code: `TURN_URLS` is empty, and a
+  /// retry cannot make a relay appear (`realtime/API.md`). `unavailable` and
+  /// `storage_full` share its `503` and are still replayed. Read from the
+  /// `code`, never from `detail`.
+  bool _isStandingRefusal(_WireResponse response) =>
+      ErrorEnvelopeDto.fromJson(response.json).code == 'voice_unconfigured';
 
   Duration? _retryAfter(Headers headers) {
     final value = headers.value('retry-after');

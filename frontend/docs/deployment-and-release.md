@@ -80,7 +80,11 @@ by contract tests and conservative client behavior, not runtime version guessing
   `android/app/gradle.lockfile` in `LockMode.STRICT` over the six configurations a built
   artifact resolves. Every direct Dart dependency is one exact version, never a range.
 - Mirror/cache all build dependencies so a clean release can build without international
-  internet.
+  internet. No mirror is set up yet. Since [ADR-078](decisions.md) the Gradle half reaches
+  one repository beyond Google's Maven, Maven Central and Flutter's engine repository:
+  JitPack, for `com.github.davidliu:audioswitch` at commit
+  `039a35aefab7747c557242fa216c9ea11743b604` and nothing else, so a mirror has to carry
+  that coordinate too.
 - Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
   libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened. The
   Dart and Android/Gradle halves are the two lockfiles above plus
@@ -205,8 +209,8 @@ metadata endpoint. It never fetches executable code or dependencies dynamically.
 Web is not shipped in version 1. The following is a future release procedure and is not
 part of the Android release gate:
 
-1. Build and test the Flutter web bundle, shared crypto Wasm, and LiveKit E2EE worker from
-   the same reviewed tag.
+1. Build and test the Flutter web bundle and the shared crypto Wasm from the same
+   reviewed tag.
 2. Generate a content-hash manifest/SRI metadata for every static artifact.
 3. Verify the strict CSP and security headers against the exact compiled output.
 4. Serve immutable hashed assets and a no-store/revalidated root document from the
@@ -250,8 +254,9 @@ self-hosted configuration or compile-time decisions and cannot weaken cryptograp
 Before every production release, isolate the environment from foreign networks and prove:
 
 - build succeeds from approved mirrors/caches;
-- version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx,
-  LiveKit, and TURN are local/self-hosted;
+- version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx, and
+  the coturn relay are local/self-hosted, and no STUN server and no foreign ICE server is
+  configured anywhere (`CLIENT_CONTRACT.md` §N rule 2);
 - Android installation/update works. Web loading is post-v1.
 - two-phase enrollment, cross-signing/SAS, PQXDH and pairwise group fan-out, device-log
   gossip, register/login/message/attachment/voice/identity-recovery flows work;

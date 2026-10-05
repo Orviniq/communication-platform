@@ -2,194 +2,266 @@
 
 ## Status
 
-**Nothing in this document below the realtime gateway is implemented.** It is the design
-this project intends to build, not a description of the artifact. `/voice-rooms` renders
-`StructuralPlaceholderPage`, `pubspec.yaml` declares no media dependency, the shared Rust
-core exports no media-key operation, and no run record exists under
-`docs/validation/voice-media/`. ADR-044, closed by [ADR-075](decisions.md), placed voice in
-the **absent** tier, where absent means visibly missing rather than half-present.
+**The relay credential, the signalling transport, one peer connection, the room state, the
+call and its screens are implemented; no call has run on a device.** `lib/features/voice/`
+fetches the
+credential, holds it and builds the relay-only ICE configuration from it (phase 6 prompt
+3), and carries `CPVSV001` messages between devices in `signal` frames, each sealed to the
+pairwise session of the device it goes to and paced under the socket limits (prompt 4). That
+transport is `RealtimeGateway.send`'s one caller. Prompt 5 built the connection to one other
+device: one audio track, relay-only ICE, perfect negotiation over that transport and an
+ICE restart that keeps the connection ([`voice-signalling-v1.md`](voice-signalling-v1.md),
+The connection). Two adapters in `lib/features/voice/infrastructure/` are the only code
+that imports `flutter_webrtc` ([ADR-078](decisions.md)). Prompt 6 built the room: its
+signed control events, their fan-out and receipt, its four tables, and the durable requests
+that start the pairwise sessions its call will need, because a `signal` frame never starts
+one ([ADR-077](decisions.md), decided B on 2026-09-30). Prompt 7 built the call:
+`VoiceCallEngine` joins after minting the credential and starting the sessions, asks who is
+in the call, fans its `join` out, keeps one connection to each device in the call, retries
+and gives up on the schedule, refuses an eleventh device, closes a removed member's
+connections, carries room text, and hands the application layer the call's state as a
+stream ([`voice-signalling-v1.md`](voice-signalling-v1.md), The call). Prompt 8 added the
+microphone permission and the call's microphone-type foreground service behind two ports
+([`platform-android.md`](platform-android.md), A call's microphone). Prompt 9 built the
+screens on 2026-10-02 — the room list, Create, Room Info, the invite picker and the live
+room ([`ui-specification.md`](ui-specification.md) §10 and §13) — and the join, the one
+caller of those ports, which asks for the microphone, starts the service and only then
+joins. Prompt 10 runs a call on two devices. This document is the design phase 6 builds,
+not a description of the artifact.
 
 The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
-validates and routes `envelope` and `signal` frames today, and nothing else. The four room
-frames and the `presence` frame were retired by server ADR-0021 and ADR-0022, and
-[ADR-069](decisions.md) deleted the client half; neither room frames nor room behaviour
-exists now. Everything a room needs rides `signal`, which the voice phase specifies.
+validates and routes `envelope` and `signal` frames, and nothing else. The four room
+frames and the `presence` frame were retired by server
+[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+and [ADR-0022](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md),
+and [ADR-069](decisions.md) deleted the client half.
 
-**What piece 20 is waiting for is [ADR-058](decisions.md), not a schedule.** It replaces
-ADR-044's re-scope — itself a replacement for an unreachable public-release condition —
-with seven conditions that are answered by inspecting a named artifact rather than by
-judgement, and that fail closed when unanswered:
+**The seven prerequisites this document used to be gated on are gone.**
+[ADR-058](decisions.md)'s P1 to P7 named an MLS exporter as the media-key source, a
+per-ABI group permit, a self-hosted LiveKit deployment, an SFrame contract and a wire
+record proving an SFU could not decrypt. None of those things exists to be met: groups are
+pairwise sessions and the MLS core and the permit were deleted
+([ADR-075](decisions.md)), the SFU left with server ADR-0021, and DTLS-SRTP keys each
+connection between its two endpoints so there is no application-level media key for an
+exporter to supply. [ADR-077](decisions.md) supersedes that list and replaces it with the
+design below. Voice is **buildable**, and what remains between here and a call is work
+rather than a gate.
 
-| | Condition | State on 2026-08-25 |
-|---|---|---|
-| P1 | A dated ADR grants exactly one MLS exporter as the media-key source: the production exporter, or the closed-beta experimental one for experimental voice only | **Not granted.** ADR-044 declined; ADR-058 declines |
-| P2 | That exporter is reachable as key material, under a label domain-separated from the group's, with the symbol in the native export allowlist | **False.** The core returns only SHA-256 over `export_secret` as an epoch-agreement digest; no exporter secret crosses the FFI boundary |
-| P3 | Voice resolves through the same permit as groups, so it is never offered on an ABI whose packaged core has no admissible record (ADR-056) | Mechanism exists and fails closed; voice has no consumer of it yet |
-| P4 | The frame-encryption contract is settled by a recorded decision, reconciling the disagreement in *Media encryption gate* below | **Unresolved** |
-| P5 | An admissible Android wire record under `docs/validation/voice-media/` shows the SFU cannot decrypt | **None.** The directory does not exist |
-| P6 | Self-hosted LiveKit and TURN are reachable, and the client package is reviewed into the pinned dependency map under ADR-054 | **Not deployed, not declared** |
-| P7 | Voice is claimed no more strongly than the weakest layer beneath it, and the foreground-service interaction with ADR-051's service is decided in advance | Not applicable until P1 |
+## The architecture
 
-Absence of evidence is refusal, never permission. A partially satisfied list authorizes
-nothing.
+Voice is a full mesh of WebRTC audio between devices. Every path crosses the self-hosted
+coturn relay. Each connection is keyed by DTLS-SRTP between its two endpoints, so the
+backend, the relay and every other participant hold none of its keys.
+[`backend/CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §N is the binding
+statement of it and its eleven rules are cited by number throughout.
 
-**Updated 2026-09-14.** P1, P2 and P3 name things that no longer exist. There is no MLS
-exporter, production or closed-beta, and no per-ABI group permit: groups are pairwise
-sessions, and the closed-beta MLS core and the permit were deleted ([ADR-075](decisions.md)).
-Server ADR-0021 also keys each voice connection by DTLS-SRTP between its two endpoints, so
-there is no application-level media key for an exporter to supply
-([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §N). As written those three
-conditions can never be met, and no decision restating them has been recorded.
+- **Audio only.** One audio track for each connection: no video track and no data channel
+  in this version (§N rule 1).
+- **No application media key, and none is designed** (ADR-0021 point 3). A connection's
+  keys die with the connection, so a removed member's exclusion is the closing of a socket
+  rather than the rotation of a key.
+- **Relay-only ICE**, with the credential `POST /api/v1/me/relay` mints as the only ICE
+  server. No STUN server and no foreign server is configured anywhere (§N rule 2, ADR-0021
+  point 2).
+- **The server holds no room and no participant list.** It mints a relay credential and it
+  relays `signal` frames. That is the whole of its part.
+- **A room is client state, exactly as a group is** — signed control events over ordinary
+  durable envelopes. **A call is `signal` frames between devices.**
+
+Two wire formats carry that, and both are specified in
+[`voice-signalling-v1.md`](voice-signalling-v1.md), which is binding for the phase:
+`CPVRV001` for the room's control events, durable; `CPVSV001` for the call's signalling,
+volatile. The transport under both is [`pairwise-transport-v1.md`](pairwise-transport-v1.md)
+unchanged — no suite, no header flag, no key schedule of its own.
+
+## What the server does, and what it does not
+
+| | Where |
+|---|---|
+| Mints a coturn credential | `POST /api/v1/me/relay` |
+| Relays an opaque blob to one device, if that device is connected at that instant | `/ws` `signal` |
+| Publishes `voice_configured` and `signal_buckets` | `GET /api/v1/config` |
+| Stores a room, a name, a roster, a capability, a join token or a live count | **nowhere** |
+| Counts participants, enforces a ceiling or reports presence | **nowhere** |
+
+`backend/openapi.json` holds 28 paths and `/api/v1/me/relay` is the only one of them that
+voice touches. There is no `backend/voicerooms/API.md`; the file is gone.
+
+## The room
+
+A room is a named set of member accounts that exists only in its members' clients. It is
+standalone — not a group, not a direct conversation, and no group or direct conversation
+hosts a call in this version.
+
+- Its id is 32 CSPRNG bytes. Its name travels inside its control events, so the server
+  never holds it and there is nothing there to rename or delete.
+- Its roster is built by signed control events on one hash chain, mirroring
+  `GroupControlEvent` field for field under its own signing domain. Every active member
+  has the same authority: any member may add a member, remove a member, or rename the
+  room. There is no owner and no admin.
+- A member's *devices* are never in the roster. They are read from that member's
+  authenticated live device list when a payload is sealed, exactly as a group's are (§F).
+- Conflicting events at one revision are a fork, and a forked room is quarantined and
+  joins no call until it is resolved. A `pruned_through` gap makes a room wait for a
+  member's answer before it joins, invites or renames, because a device that may be
+  missing a removal would otherwise offer audio to somebody the room has ejected.
+- At most 50 members in a room; at most 10 joined devices in a call. They are different
+  numbers because membership costs an envelope fan-out on a change and a call costs every
+  participant an uplink for every peer.
+
+Leaving is a signed `remove member` event naming yourself. It is not a backend deletion,
+because there is nothing on the backend to delete: the other members keep the room, and
+a member who leaves needs a fresh invite to come back.
+
+## A call
+
+1. `voice_configured` is true, so a call action is offered. The room is held, unquarantined
+   and not waiting for its state.
+2. The microphone is requested — at join and at no other time (§N rule 11) — and the
+   microphone-type foreground service starts.
+3. `POST /api/v1/me/relay` mints a credential. It is held in memory, never written down,
+   and refreshed once less than an hour of `expires_in` remains (§N rule 9).
+4. The joining device mints a 16-byte `join_id` and fans a `join` announcement out to every
+   live device of every active member (§N rule 4).
+5. A participant that receives the announcement creates an `RTCPeerConnection` with
+   `iceTransportPolicy: 'relay'`, sends an `offer`, and the joiner answers. Of two devices
+   that offer at once, the one whose device id string sorts lower is the polite peer of the
+   perfect-negotiation pattern (§N rule 3) — both ends compute that from the two ids and
+   there is nothing to ask the server.
+6. Candidates go in one batch for each peer for each negotiation, and the DTLS handshake
+   keys the connection. **A remote description is accepted only from that channel** (§N
+   rule 6): the fingerprint inside the SDP is authenticated by the pairwise session and
+   never by the server, which is what makes the media end to end even though the server
+   chose neither endpoint.
+7. Leaving fans out a `leave` and closes every connection. The foreground service stops,
+   the ephemeral text is dropped, and nothing about the call was ever written to the
+   database.
+
+**Trouble is per person.** Every tile is its own encrypted connection, so one peer can be
+unreachable, or blocked by a changed safety number, while everybody else keeps talking.
+Nothing pauses when one connection fails and nothing pauses when somebody leaves — there
+is no shared key to rotate.
 
 ## Realtime gateway
 
 One application-owned gateway wraps `/ws`. It validates frame type and bounds before
-routing typed events. Widgets never send raw JSON. Android authenticates the upgrade
-with its bearer header. A future Web client sends the required auth frame first and sends
-nothing else until authentication succeeds.
+routing typed events; widgets never send raw JSON. The upgrade authenticates with
+`Authorization: Bearer <session token>`, which is the only handshake path: a refusal
+arrives as a failed upgrade with `403 Forbidden` and never as a close code, and a handler
+waiting for a close code there will never fire (§O).
 
-Durable `envelope` frames enter the inbox pipeline and are deduplicated against REST.
-`signal`, presence, room signal, and room presence are volatile and expire locally.
+Two frames go up — `ack` and `signal` — and two come down — `envelope` and `signal`. There
+is no subscription frame, no `presence` frame and no room frame in either direction
+(ADR-0022). Durable `envelope` frames enter the inbox pipeline and are deduplicated
+against REST. A `signal` frame is volatile and expires locally.
 
-The client obeys backend limits: JSON text objects only, maximum frame size, 100 frames
-per rolling second, bounded ack/presence lists, signal size, and room subscriptions.
-Batching and backpressure prevent locally generated bursts from causing close 4008.
+The client obeys the published limits: JSON text objects only, `WS_MAX_FRAME`, 100 frames
+per rolling second, at most 200 ack ids, and a `signal` blob that is base64 of exactly
+1024, 4096 or 16384 bytes. A blob off those buckets is dropped in silence — there is no
+`400 bad_bucket` on this path and no error frame to read. So the gateway holds a `signal`
+blob to the published `signal_buckets` in both directions: an off-bucket one is refused
+before it reaches the socket, where the caller hears about it, and one that arrives is
+dropped without closing the socket that carries durable wake-ups. Pacing and a bounded inbound
+queue keep a locally generated burst from reaching close `4008`; the numbers are in
+[`voice-signalling-v1.md`](voice-signalling-v1.md), "The socket limits".
 
-## Voice-room model
-
-A backend room is a capability ID plus an encrypted name and live count. Membership,
-invites, and media-key state are authenticated client protocol state. All invited peers
-are equal in the product UI; there is no server owner/member table.
-
-Create flow:
-
-1. Generate room metadata key and encrypted name bucket.
-2. POST `/api/v1/rooms`.
-3. Establish the room's client-side membership state: client-signed control events over
-   ordinary envelopes, as a group's is (server ADR-0021).
-4. Send encrypted `room.invite` events containing the capability and the room's membership
-   state.
-5. Persist room capability only in protected storage.
-
-Rename and invite actions require valid current room membership even though the backend
-capability endpoint cannot enforce it. A malicious capability holder can still call the
-backend rename API; clients authenticate accepted metadata updates and surface conflicts
-rather than trusting server ciphertext alone.
-
-Room membership obeys the same verified account-master/device-cross-signature as group
-chat. Groups are withheld on no device: the per-ABI permit [ADR-058](decisions.md) P3 would
-have had voice share was deleted with the MLS core ([ADR-075](decisions.md)). An unsigned,
-unverified, forked, or classical-only peer cannot receive room membership/media keys.
-
-Leaving is a client-protocol action, not a backend deletion. The client sends an
-authenticated `room.control` leave/removal event, applies that signed membership change,
-disconnects from LiveKit/realtime presence, and deletes its local capability, room keys,
-and ephemeral text after the durable transition succeeds. The backend room row persists
-and the capability itself cannot be revoked by the current API. Peers ignore future
-metadata from a removed credential, and a returning user requires a fresh authenticated
-invite. The confirmation dialog states these limits; it never claims that leaving deletes
-the server room or erases copies held by others.
-
-## Joining voice
-
-1. Fetch/decrypt room state and subscribe to room realtime presence.
-2. POST `/api/v1/rooms/{room_id}/token` with a device-bound full token.
-3. Derive the current media-key context inside the shared Rust core; no key secret enters
-   Dart. Nothing can supply it: this step named an exporter over the room's MLS state, and
-   no MLS state exists (see *Status*). No such operation exists either — see
-   [ADR-058](decisions.md) P2.
-4. Connect to the returned self-hosted LiveKit URL before token expiry.
-5. Enable E2EE before publishing the microphone.
-6. Publish audio only; do not enable video or unencrypted data channels.
-7. Re-mint a token on reconnect and rotate media keys on membership change.
-
-LiveKit is responsible for WebRTC/SRTP transport and SFU forwarding, not key
-distribution. Media keys are never placed in the LiveKit token or sent to the backend,
-SFU, or TURN server.
-
-## Media encryption gate
-
-**This section records an unresolved disagreement. It is not a settled contract, and
-[ADR-058](decisions.md) P4 requires it be settled by a recorded decision — standing on the
-P5 wire record — before piece 20 begins.** Four statements, verified 2026-08-25:
-
-| Source | What it says |
-|---|---|
-| This document, as written before ADR-058 | RFC 9605 SFrame is *the* target framing contract |
-| [`cryptographic-protocol.md`](cryptographic-protocol.md) media-framing row | RFC 9605 SFrame **or** the LiveKit E2EE implementation after wire-level validation |
-| [`backend/SECURITY.md`](../../backend/SECURITY.md), which this project may not edit | "audio itself is SFrame-encrypted end-to-end" |
-| [LiveKit's own documentation](https://docs.livekit.io/transport/encryption/) | Names no SFrame and no RFC 9605 anywhere on its encryption pages. `EncryptionType` is `kNone`, `kGcm`, `kCustom`; the built-in frame cipher is AES-GCM |
-
-LiveKit's silence does not disprove the backend statement — its frame format is not
-documented in enough detail on those pages to conclude either way, and `kCustom` leaves
-room for a conformant implementation. So the question is open, and it is recorded as open
-rather than answered in either direction here.
-
-What is established from LiveKit's official documentation, and is not in dispute:
-
-- Key distribution is entirely the application's problem. "LiveKit does not (and cannot)
-  store or transport encryption keys for you." Keys are never in the join token and never
-  reach the SFU or TURN server.
-- The built-in shared-key provider is **not sufficient** for this project. Per-participant
-  keys and in-room rotation — which removed-member exclusion requires — need a custom key
-  provider, which LiveKit documents as the route for "implementing the MEGOLM or MLS
-  protocol".
-- The Flutter SDK can accept raw exporter bytes per participant:
-  `BaseKeyProvider.setRawKey(Uint8List key, {String? participantId, int? keyIndex})`, with
-  `ratchetKey`, `keyRingSize` and `failureTolerance` alongside it. `livekit_client` was at
-  2.11.0 on 2026-08-25.
-
-Before any Android release carrying voice, a wire-level spike MUST prove on real hardware
-that the selected SDK version, cipher and key-provider behaviour keep the SFU unable to
-decrypt, and that record must be admissible under ADR-058 P5. Before a future Web release,
-the corresponding browser worker behaviour must also pass. If the spike cannot prove it,
-publishing stays fail-closed: ordinary SRTP to the SFU is not accepted as end-to-end
-encryption, no media cipher is invented here, and no foreign service is substituted.
-
-## Media-key lifecycle
-
-- Each media epoch has fresh key context.
-- A participant removal causes media-key rotation before further audio.
-- Per-sender key IDs/counters are unique and replay-checked.
-- Old media keys are retained only for a short jitter/reordering window then erased.
-- Reconnect never silently falls back to unencrypted media.
-- Key failure mutes publishing and shows a blocking encryption error.
+The socket is a wake-up hint and never the delivery contract. **A call can be
+audio-connected while the socket is down**: audio continues, and the ephemeral text,
+the joins and the leaves stop. That split is a visible state, not a silent freeze.
 
 ## Ephemeral room text
 
-**For the voice phase.** `room_signal` is not a frame (server ADR-0021); room text is one
-more thing members tell each other over `signal`, under the bucket rule that frame obeys.
-Room text uses authenticated ciphertext and is held in memory only. It is
-never appended to history or the durable message queue. Clients drop it when they leave,
-when room membership becomes invalid, and when the observed room empties. Wording remains
-best-effort because another participant can retain decrypted content.
+Room text is a `CPVSV001` frame fanned out to each device in the call, one at a time. It
+is authenticated ciphertext, held in memory only, never appended to a timeline or the
+durable queue, and dropped when the user leaves, when the room's membership becomes
+invalid and when the call empties. There is no subscriber fan-out and no echo of the
+sender's own message to account for: the panel renders what this client sent because it
+sent it.
 
-## Presence and participant state
+The wording stays best-effort, because another participant can retain what they
+decrypted, and because a frame published for a device that is mid-reconnect is gone.
 
-Room subscription produces device join/leave hints. The LiveKit participant connection
-is authoritative for current media tiles; backend `live_count` is a coarse hint and may
-lag. Display name/avatar comes from locally authenticated profile state. Speaking and mic
-indicators come from local/LiveKit media state and reveal no readable audio to the server.
+## Participants and speaking state
+
+- **The participant set is this device's own.** A device is in the call when a connection
+  to it is open, and for no other reason. `participants_query` and its answer are a hint
+  for a device that joined late (§N rule 5) and never an authority.
+- **Speaking and mute come from local media state**, never from the server, and each needs
+  a non-colour signal as well.
+- **A name and an avatar come from locally authenticated profile state**, not from
+  anything a peer sent in a call.
+- There is no `live_count`. A room in the list shows *Live now · N* only from a call this
+  device is in or has just been told about by a member; a room nobody has told it about
+  reads as *Empty*, which is honest — the device does not know.
 
 ## Platform lifecycle
 
-- Android uses microphone permission only on explicit join and a microphone/connected
-  foreground-service notification while active.
-- A future Web client requires secure context and a user gesture for microphone
-  permission/audio start.
-- Network change enters reconnecting state, stops misleading speaking indicators, and
+- Android requests the microphone on explicit join and at no other time, and runs a
+  microphone-type foreground service for as long as the call lasts (§N rule 11): a call
+  outlives the moment the user looks at another screen.
+- `POST_NOTIFICATIONS` is off by default on a fresh install, so a denied notification
+  permission is the common path rather than the edge. It is a stated outcome — the
+  foreground-service disclosure is degraded and the screen says so — and never a retry
+  loop.
+- A network change enters a reconnecting state, stops misleading speaking indicators, and
   never connects to a foreign fallback.
-- Minimizing the room keeps audio only when the platform can truthfully maintain it and
-  shows the persistent in-app banner.
+- Minimising keeps audio only when the platform can truthfully maintain it, and shows the
+  persistent in-app banner.
+
+## The existing surfaces
+
+Every voice surface in the tree before phase 6 was built for the removed design. What
+happens to each, and when it happened:
+
+| Surface | Where | Decision |
+|---|---|---|
+| `/voice-rooms` route | `app_router.dart` | **Keep.** The placeholder stands until prompt 9 builds the list. **Done 2026-10-02**: the room list |
+| `/voice-rooms/new` route | `app_router.dart` | **Keep.** Same. **Done 2026-10-02**: the create flow |
+| `/voice-rooms/sample-room` route | `app_router.dart` | **Replace** with `/voice-rooms/:roomId`, whose id is the room's 32-byte id in hex. A fixed path cannot name a room. **Done 2026-10-02**: `/voice-rooms/:roomId` is Room Info, with `call` and `invite` below it, and an id that is not 64 hexadecimal characters shows a missing room |
+| Shell compose action | `app_shell.dart` | **Keep.** It routes to `/voice-rooms/new` and still should |
+| `activeVoiceRoomName`, which nothing sets | `app_shell.dart`, `app_router.dart` | **Keep.** It is the minimised banner's input and the call controller is what will set it. **Done 2026-10-02**: `LiveShellStatus` sets it from the call in progress, with the room's id and this device's mute |
+| The banner's tap target | `app_shell.dart:649` | **Replace** with the id of the call in progress, alongside the route above. **Done 2026-10-02**: it opens `/voice-rooms/:roomId/call`, and the call's own screen does not show it |
+| Contacts "New voice room" | `contacts_new_page.dart` | **Keep.** Since 2026-10-02 it opens the create flow, and on a server with no voice it is disabled with the reason |
+| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep**, and add the 22 icons the design canvas draws that `AppIcons` has no mapping for — mic, mic-off, speaker, phone-off, user-plus and the rest. **Partly done 2026-10-02**: the 14 the built screens draw, mic, mic-off, phone-off and user-plus among them; speaker and the rest wait for the surfaces that draw them |
+| Drift table `voice_rooms` | `local_database.dart:995` | **Delete.** It has no reader and no writer, and its three columns describe a server room: a capability to hold, a name the server stored, a live count the server counted. `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` replace it. **Done 2026-09-30** by schema 23, phase 6 prompt 6 |
+| `StructuralPlaceholderKind.voiceRooms`, `.newRoom`, `.room` | `structural_placeholder_page.dart` | **Keep** until prompt 9 replaces each with a real screen. **Done 2026-10-02**: all three are deleted |
+| `voiceRoomsPlaceholderTitle` / `Body` | `l10n` | **Keep** until then. **Done 2026-10-02**: deleted, with `roomPlaceholderTitle` and `newRoomPlaceholderTitle` |
+| `voice_configured`, `signal_buckets` | `server_config_model.dart` | **Keep.** Both are already parsed and both are load-bearing here |
+
+## The testing path
+
+The owner decided to test voice on two real devices with the signed `production` flavor.
+The signing setup is done ([ADR-076](decisions.md),
+[`release-signing.md`](release-signing.md)).
+
+- **The flavor is `production`**: application id `com.orviniq.chat`, entry point
+  `lib/main_production.dart`.
+- **A production APK for a phone comes only from**
+  `tool/build_production_release.sh --build-number N` (ADR-076 D7). `N` must be greater
+  than every build `release-signing.md` records, and a number is never reused. The last
+  installed build was 2, on 2026-09-15, so the first voice build is **3 or higher**.
+- **The devices** are the Samsung A56 (`R5CY716AG0L`) and the emulator (`emulator-5554`).
+- **The upgrade is in place.** Each device holds `com.orviniq.chat.beta` and, beside it,
+  production build 2 of `com.orviniq.chat`. A new production build replaces build 2 with
+  `adb install -r`. **Neither app is ever uninstalled**, and the beta app is not touched:
+  the signing certificate and the application id both match, which is the only reason an
+  update is possible at all (ADR-067 D2).
+- **The owner signs in and enrolls each device by hand** in the production app. No script
+  enrolls a device.
+- **Prompt 10 runs the call**: build and install on both devices, enroll both, create a
+  room on one, invite the other, join from both, and check that audio carries in both
+  directions across the relay. Then the states that need two devices — one device leaving,
+  one device removed mid-call, the socket dropped while audio continues, and a peer that
+  never answers.
 
 ## Primary references
 
-- [Realtime API](../../backend/realtime/API.md)
-- [Voice rooms API](../../backend/voicerooms/API.md)
-- [RFC 9605: SFrame](https://www.rfc-editor.org/info/rfc9605)
-- [LiveKit encryption overview](https://docs.livekit.io/transport/encryption/)
-- [LiveKit Flutter SDK E2EE reference](https://docs.livekit.io/reference/client-sdk-flutter/)
-- [LiveKit E2EE implementation guide, including the custom key provider](https://docs.livekit.io/transport/encryption/start/)
-- [`BaseKeyProvider` API, including `setRawKey`](https://pub.dev/documentation/livekit_client/latest/livekit_client/BaseKeyProvider-class.html)
-- [RFC 9420 §8.5, the MLS exporter](https://www.rfc-editor.org/rfc/rfc9420.html)
-- [ADR-058, the prerequisite this document is gated on](decisions.md)
+- [`backend/CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F, §K, §N and §O
+- [Realtime API and the relay credential](../../backend/realtime/API.md)
+- [Server ADR-0021: a relayed WebRTC mesh, and no server room](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+- [Server ADR-0022: the gateway holds no presence](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
+- [`voice-signalling-v1.md`](voice-signalling-v1.md) — the two wire formats
+- [`pairwise-transport-v1.md`](pairwise-transport-v1.md) — the transport under both
+- [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md) — every
+  screen and state
+- [ADR-077](decisions.md) — the decision record for this design

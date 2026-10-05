@@ -2,11 +2,13 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/group_sync_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
+import 'package:communication_platform/core/protocol/room_sync_model.dart';
 
 /// What a committed receive changed beyond its own pairwise state.
 ///
 /// [groupState] marks a receive that commits in one transaction with a change
-/// to a group's control state.
+/// to client-held signed control state: a group's, or a voice room's, which is
+/// kept exactly as a group's is. Rows store the index, so the two share it.
 enum EnvelopeDependency { directOrLocal, groupState }
 
 enum QueueGapState { clear, recoveryRequired }
@@ -115,12 +117,17 @@ final class OpaqueEnvelopeInspection {
     required this.dependency,
     this.pairwiseCommit,
     this.groupCommit,
+    this.roomCommit,
   });
 
   final String opaqueEventId;
   final EnvelopeDependency dependency;
   final PairwiseSyncReceiveCommit? pairwiseCommit;
   final GroupSyncReceiveCommit? groupCommit;
+
+  /// A voice room's change, never set together with [groupCommit]: one
+  /// payload names one group or one room.
+  final RoomSyncReceiveCommit? roomCommit;
 }
 
 final class PreparedOutboxTarget {

@@ -15,6 +15,7 @@ mod prekey_state;
 mod protocol;
 mod provider;
 mod random;
+mod room_control;
 mod secret;
 
 use std::{

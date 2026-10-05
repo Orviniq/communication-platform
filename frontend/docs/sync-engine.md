@@ -477,7 +477,11 @@ mailbox nor transmitted its outbox. What runs now:
   a cycle when the outbox depth *increases*. That is what makes a queued message leave
   the device with no further stimulus, what drains rows queued before a restart, and what
   keeps a row waiting out its backoff from spinning the engine — only a new durable
-  target grows the depth, while every engine run re-emits the projection.
+  target grows the depth, while every engine run re-emits the projection. A signed group
+  or room change counts too, from the moment it commits until the post-inbox dispatch
+  routes it into the pairwise outbox: that dispatch runs only inside a cycle, so without
+  it a change made on this device waited for an unrelated wake-up. Corrected on
+  2026-10-05, after a room created on one device reached the other six minutes later.
 - **Platform edges are one port.** Connectivity, application lifecycle, wall-clock delay
   and the deferred scheduler resolve and release together as `DeliveryPlatformPorts`. An
   unreported platform lifecycle state at launch is read as foreground, because Flutter

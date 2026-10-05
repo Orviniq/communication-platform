@@ -45,10 +45,14 @@ void main() {
         isNot(contains('foregroundServiceType')),
         reason: 'the mandatory floor never runs in the foreground',
       );
+      // A third arrived with voice: the call's microphone service, which runs
+      // only for as long as a call the user joined (§N rule 11).
       expect(
         '<service'.allMatches(manifest),
-        hasLength(2),
-        reason: 'the catch-up job service and the opt-in sustained service',
+        hasLength(3),
+        reason:
+            'the catch-up job service, the opt-in sustained service and the '
+            'call service',
       );
     });
 

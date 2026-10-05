@@ -13,15 +13,7 @@ import 'package:go_router/go_router.dart';
 /// words. It deliberately offers nothing to open: a "not built yet" screen with
 /// a button to another "not built yet" screen is half-presence, which is what
 /// ADR-044 requires absent features not to be.
-enum StructuralPlaceholderKind {
-  chats,
-  voiceRooms,
-  settings,
-  thread,
-  room,
-  newChat,
-  newRoom,
-}
+enum StructuralPlaceholderKind { chats, settings, thread, newChat }
 
 class StructuralPlaceholderPage extends StatelessWidget {
   const StructuralPlaceholderPage({required this.kind, super.key});
@@ -33,16 +25,12 @@ class StructuralPlaceholderPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final title = switch (kind) {
       StructuralPlaceholderKind.chats => l10n.chatsPlaceholderTitle,
-      StructuralPlaceholderKind.voiceRooms => l10n.voiceRoomsPlaceholderTitle,
       StructuralPlaceholderKind.settings => l10n.settingsPlaceholderTitle,
       StructuralPlaceholderKind.thread => l10n.threadPlaceholderTitle,
-      StructuralPlaceholderKind.room => l10n.roomPlaceholderTitle,
       StructuralPlaceholderKind.newChat => l10n.newChatPlaceholderTitle,
-      StructuralPlaceholderKind.newRoom => l10n.newRoomPlaceholderTitle,
     };
     final body = switch (kind) {
       StructuralPlaceholderKind.chats => l10n.chatsPlaceholderBody,
-      StructuralPlaceholderKind.voiceRooms => l10n.voiceRoomsPlaceholderBody,
       StructuralPlaceholderKind.settings => l10n.settingsPlaceholderBody,
       _ => l10n.placeholderBody,
     };
@@ -50,9 +38,6 @@ class StructuralPlaceholderPage extends StatelessWidget {
       StructuralPlaceholderKind.chats ||
       StructuralPlaceholderKind.thread ||
       StructuralPlaceholderKind.newChat => AppIcons.chats,
-      StructuralPlaceholderKind.voiceRooms ||
-      StructuralPlaceholderKind.room ||
-      StructuralPlaceholderKind.newRoom => AppIcons.voiceRooms,
       StructuralPlaceholderKind.settings => AppIcons.settings,
     };
     final route = GoRouterState.of(context).uri.path;

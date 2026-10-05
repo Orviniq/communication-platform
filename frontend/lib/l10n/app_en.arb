@@ -70,14 +70,10 @@
   },
   "chatsPlaceholderTitle": "Chats structure",
   "chatsPlaceholderBody": "The routed conversation list and detail regions are ready for later feature pieces.",
-  "voiceRoomsPlaceholderTitle": "Voice rooms",
-  "voiceRoomsPlaceholderBody": "Voice rooms are not built yet. This build sends and receives no audio.",
   "settingsPlaceholderTitle": "Settings structure",
   "settingsPlaceholderBody": "The routed settings list and detail regions are ready for later feature pieces.",
   "threadPlaceholderTitle": "Conversation detail",
-  "roomPlaceholderTitle": "Voice room detail",
   "newChatPlaceholderTitle": "New conversation",
-  "newRoomPlaceholderTitle": "Create voice room",
   "placeholderBody": "This part of the app is not built yet.",
   "composeChat": "Start a conversation",
   "composeVoiceRoom": "Create a voice room",
@@ -526,6 +522,15 @@
     "description": "Names the notification category in Android system settings for this app. The user adjusts it there, so the name has to be recognisable out of context."
   },
   "sustainedChannelDescription": "Shown while the app is kept open so that messages can arrive.",
+  "voiceCallNotificationTitle": "Call in progress",
+  "@voiceCallNotificationTitle": {
+    "description": "The whole content of the entry Android shows while a call keeps the microphone. It names nobody in the call and no room, because it shows in the shade, on a locked screen and while the screen is being shared."
+  },
+  "voiceCallChannelName": "Voice calls",
+  "@voiceCallChannelName": {
+    "description": "Names the notification category in Android system settings for this app. The user adjusts it there, so the name has to be recognisable out of context."
+  },
+  "voiceCallChannelDescription": "Shown while you are in a call, so that the call keeps your microphone when you open another app. It never names anyone in the call.",
   "settingsSustainedTitle": "Receiving while closed",
   "settingsSustainedOff": "Off. Your phone looks for messages on its own schedule, which is slow and often not at all.",
   "settingsSustainedHolding": "On. The app is kept open in the background, and there is a permanent notice on your phone while it is.",
@@ -684,5 +689,313 @@
   "linkedDevicesRemoveBody": "The device stops being able to read new messages, and this cannot be undone. Everything it holds stays on it until it is signed out or erased.",
   "linkedDevicesRemoveSelfBody": "This phone is signed out and everything on it is erased, including your messages and the keys that decrypt them. This cannot be undone.",
   "linkedDevicesAddTitle": "Add another device",
-  "linkedDevicesAddBody": "Install the app on the other device, sign in there, and enter your recovery secret when it asks. It appears in this list once it is signed. Keep this phone online afterwards so it can send your history across; the server has no copy to send."
+  "linkedDevicesAddBody": "Install the app on the other device, sign in there, and enter your recovery secret when it asks. It appears in this list once it is signed. Keep this phone online afterwards so it can send your history across; the server has no copy to send.",
+  "voiceRoomsLoadingTitle": "Loading your rooms",
+  "voiceRoomsLoadingBody": "Reading the rooms stored on this device.",
+  "voiceRoomsEmptyTitle": "No voice rooms yet",
+  "voiceRoomsEmptyBody": "A voice room is a standalone room for calls. It lives on its members' devices, and the server never holds it.",
+  "voiceRoomsCreateAction": "Create a room",
+  "voiceRoomsOfflineNotice": "Offline — showing the rooms saved on this device. A call cannot start until the server is reachable.",
+  "voiceRoomsNoVoiceTitle": "This server does not offer voice",
+  "voiceRoomsNoVoiceBody": "It has no relay to carry a call, so rooms cannot be created or joined here. No other service is used in its place.",
+  "@voiceRoomsNoVoiceBody": {
+    "description": "voice_configured is false. The compose button is hidden as well (ui-specification.md §13.0)."
+  },
+  "voiceRoomsErrorBody": "The rooms on this device could not be read.",
+  "voiceRoomStateLive": "Live now · {count}",
+  "@voiceRoomStateLive": {
+    "description": "The room of the call this device is in, with the devices it counts in it. No other room can read as live: a device not in a call is told about none.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceRoomStateEmpty": "Empty",
+  "@voiceRoomStateEmpty": {
+    "description": "Means this device has not been told about a call, not that nobody is talking (ui-specification.md §13.0)."
+  },
+  "voiceRoomStateWaiting": "Asking a member for its state",
+  "voiceRoomStateConflict": "Paused by conflicting changes",
+  "voiceRoomStateLeft": "You left this room",
+  "voiceRoomStateRemoved": "You were removed from this room",
+  "voiceRoomCreateTitle": "New voice room",
+  "voiceRoomCreateStep": "Step {step} of 3",
+  "@voiceRoomCreateStep": {
+    "placeholders": {
+      "step": {"type": "int"}
+    }
+  },
+  "voiceRoomNameLabel": "Room name",
+  "voiceRoomNamePrivacyNote": "Encrypted on this device. The server never sees it.",
+  "voiceRoomStandaloneNote": "A voice room stands on its own. It is not attached to a chat or a group, and everyone you invite joins as an equal: any member can invite, remove or rename.",
+  "voiceRoomNameEmpty": "Give the room a name.",
+  "voiceRoomNameTooLong": "This name is too long. Shorten it to 100 characters or fewer.",
+  "voiceRoomContinueAction": "Continue",
+  "voiceRoomInviteStepTitle": "Who to invite",
+  "voiceRoomSelectedCount": "{count} selected",
+  "@voiceRoomSelectedCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceRoomNoVerifiedTitle": "Nobody to invite yet",
+  "voiceRoomNoVerifiedBody": "You can invite only contacts whose safety number you have checked, and none are verified yet.",
+  "@voiceRoomNoVerifiedBody": {
+    "description": "Verification precedes inviting (ui-specification.md, core rules)."
+  },
+  "voiceRoomVerifyContactAction": "Verify a contact",
+  "voiceRoomSelectAtLeastOne": "Choose at least one person to invite.",
+  "voiceRoomMemberLimit": "A room holds at most 50 members, you included.",
+  "voiceRoomReviewTitle": "Ready to create",
+  "voiceRoomReviewBody": "Creating signs the room on this device and sends it, encrypted, to everyone you chose. Each of them has the room once their device receives it, and the server never holds it.",
+  "voiceRoomReviewMembers": "People invited: {count}",
+  "@voiceRoomReviewMembers": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceRoomCreateAction": "Create room",
+  "voiceRoomCreatingState": "Signing the room and queueing it for the people you chose…",
+  "voiceRoomCreateFailed": "The room could not be created. Nothing was sent.",
+  "voiceRoomInfoTitle": "Room info",
+  "voiceRoomRenameAction": "Rename",
+  "voiceRoomRenameTitle": "Rename this room",
+  "voiceRoomRenameBody": "The new name is signed on this device and sent to every member, who see it when their device next receives messages.",
+  "voiceRoomSaveAction": "Save",
+  "voiceRoomCancelAction": "Cancel",
+  "voiceRoomRenameFailed": "The room was not renamed. Nothing was sent.",
+  "voiceRoomStartCallAction": "Start a call",
+  "voiceRoomReturnToCallAction": "Return to the call",
+  "voiceRoomJoinOffline": "A call cannot start while the server is unreachable.",
+  "voiceRoomJoinWaits": "Joining waits for the room's state.",
+  "voiceRoomJoinPaused": "Joining is paused until the room is settled.",
+  "voiceRoomJoinOtherCall": "You are in a call in another room. Leave it before you start one here.",
+  "voiceRoomMembersCount": "{count} members",
+  "@voiceRoomMembersCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceRoomYou": "You",
+  "voiceRoomInviteAction": "Invite people",
+  "voiceRoomLeaveAction": "Leave room",
+  "voiceRoomLeaveTitle": "Leave this room?",
+  "voiceRoomLeaveBody": "Leaving is a signed change that the other members apply. It ends your membership and your access to this room's calls. It does not delete the room: the others keep it, and the server holds nothing to delete. Coming back needs a fresh invitation from one of them.",
+  "@voiceRoomLeaveBody": {
+    "description": "Honest wording is a release rule (voice-room-states.md §4): a signed event the others apply, no deletion, and a fresh invitation to return."
+  },
+  "voiceRoomChangeFailed": "The change could not be committed. The room is unchanged.",
+  "voiceRoomWaitingNotice": "Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting, renaming and leaving resume when it arrives.",
+  "voiceRoomConflictNotice": "Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting, renaming and leaving wait until it is settled outside the app, if need be with a new room.",
+  "voiceRoomControlQuarantineNotice": "A change to this room could not be accepted, so the room is paused. Joining, inviting, renaming and leaving wait until it is settled outside the app.",
+  "voiceRoomRemovedByNotice": "{name} removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.",
+  "@voiceRoomRemovedByNotice": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceRoomRemovedNotice": "A member removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.",
+  "voiceRoomLeftNotice": "You left this room. Coming back needs a fresh invitation from a member.",
+  "voiceRoomNoVoiceNotice": "This server does not offer voice, so no call can start in this room.",
+  "voiceRoomPrivacyNote": "The room's name and members exist only on its members' devices. The server stores neither and could not read either.",
+  "voiceRoomNotFoundTitle": "This room is not on this device",
+  "voiceRoomNotFoundBody": "This device holds no room with this link.",
+  "voiceRoomVerified": "Verified",
+  "voiceRoomNotVerified": "Not verified",
+  "voiceRoomVerifyAction": "Verify safety number",
+  "voiceRoomNotVerifiedNote": "You have not checked this person's safety number, so nothing proves the key belongs to them.",
+  "voiceRoomRemoveMemberAction": "Remove from room",
+  "voiceRoomRemoveMemberTitle": "Remove {name}?",
+  "@voiceRoomRemoveMemberTitle": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceRoomRemoveMemberBody": "Removing is a signed change every member applies. {name}'s connections to this room's calls close, and coming back needs a fresh invitation. Any member can remove any other, and the only remedy for a removal is a new room.",
+  "@voiceRoomRemoveMemberBody": {
+    "description": "All peers are equal (ADR-077 D1): the cost is stated, not designed away.",
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceRoomInviteTitle": "Invite to {roomName}",
+  "@voiceRoomInviteTitle": {
+    "placeholders": {
+      "roomName": {"type": "String"}
+    }
+  },
+  "voiceRoomInviteNoneLeftTitle": "No one left to invite",
+  "voiceRoomInviteNoneLeftBody": "Everyone whose safety number you have checked is already in this room.",
+  "voiceRoomInviteSubmit": "Invite the people chosen ({count})",
+  "@voiceRoomInviteSubmit": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceRoomInvitingState": "Signing the invitation and queueing it…",
+  "voiceRoomInviteFailed": "Nobody was added. The room is unchanged.",
+  "voiceRoomInviteTooLong": "This room's signed history is too long to hand to a new member in one message, so nobody was added.",
+  "voiceRoomInviteNote": "Each person you invite is sent the room's whole signed history, so their device can check it for itself.",
+  "voiceRoomInviteRoomFull": "This room has 50 members, the most it can hold.",
+  "voiceCallCount": "{count} in the call",
+  "@voiceCallCount": {
+    "description": "Devices this device counts in the call, itself included: what it has been told, and no more.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceCallCountStale": "{count} in the call · last known",
+  "@voiceCallCountStale": {
+    "description": "Shown while the signalling connection is down: joins and leaves are not reaching this device.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceCallMinimizeAction": "Keep the call and go back",
+  "voiceCallPreJoinTitle": "Join the call?",
+  "voiceCallPreJoinBody": "Joining sends your microphone to each person in this call. Your phone asks for the microphone next, if it has not already.",
+  "voiceCallJoinAction": "Join",
+  "voiceCallNotNowAction": "Not now",
+  "voiceCallAskingMicrophone": "Waiting for your answer about the microphone…",
+  "voiceCallStartingService": "Getting the call ready…",
+  "voiceCallConnectingTitle": "Connecting to the call",
+  "voiceCallConnectingBody": "Nothing from your microphone is sent until a connection is up.",
+  "voiceCallMicDeniedTitle": "Microphone access is off",
+  "voiceCallMicDeniedBody": "This room is audio only, so there is nothing to join without a microphone. Nothing was sent.",
+  "voiceCallMicDeniedPermanentlyBody": "This room is audio only, so there is nothing to join without a microphone. Android will not ask again here: you can allow the microphone for this app in the system settings.",
+  "voiceCallOpenSettingsAction": "Open settings",
+  "voiceCallTryAgainAction": "Try again",
+  "voiceCallBackToRoomsAction": "Back to rooms",
+  "voiceCallServiceRefusedTitle": "The call could not start",
+  "voiceCallServiceNotInForegroundBody": "A call can start only while this app is on screen. Nothing was sent.",
+  "voiceCallServiceRefusedBody": "Your phone did not let the call keep the microphone while you use other apps, so the call was not started and nothing was sent.",
+  "voiceCallFullTitle": "This call is full",
+  "voiceCallFullBody": "Ten people are already in it, and a call holds ten at most, because every phone sends its audio to every other phone. You can try again when someone leaves.",
+  "@voiceCallFullBody": {
+    "description": "The ceiling and its reason (§N rule 10, ADR-077 D2)."
+  },
+  "voiceCallNoVoiceTitle": "Voice is not set up on this server",
+  "voiceCallNoVoiceBody": "Your server has no voice relay configured. Nothing else can carry the call, and nothing will be substituted.",
+  "voiceCallThrottledTitle": "Too many attempts",
+  "voiceCallThrottledBody": "The server asked this device to wait before joining again.",
+  "voiceCallTryAgainIn": "Try again in {seconds}s",
+  "@voiceCallTryAgainIn": {
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+  "voiceCallOfflineTitle": "No connection to the server",
+  "voiceCallOfflineBody": "A call cannot start while the server is unreachable. Nothing else will be tried in its place.",
+  "voiceCallWaitingTitle": "Waiting for this room's state",
+  "voiceCallWaitingBody": "This device may be missing a change to the room, so a call waits until a member answers.",
+  "voiceCallConflictTitle": "Joining is paused",
+  "voiceCallConflictBody": "This room is paused until its members settle a change to it outside the app.",
+  "voiceCallRemovedTitle": "You were removed from this room",
+  "voiceCallLeftRoomTitle": "You left this room",
+  "voiceCallEndedChatDropped": "The call ended, and its chat was dropped.",
+  "voiceCallLocalFailureTitle": "This phone could not open its microphone or a connection",
+  "voiceCallLocalFailureBody": "The call ended. Nothing more was sent.",
+  "voiceCallAlreadyInCallTitle": "You are already in a call",
+  "voiceCallAlreadyInCallBody": "Leave it before you join another.",
+  "voiceCallRelayNote": "Your audio crosses this server's relay rather than going straight between phones, so its path is longer than a direct one. The relay passes it on and cannot hear it.",
+  "@voiceCallRelayNote": {
+    "description": "Every path crosses the self-hosted relay, which forwards packets it cannot open (ui-specification.md §10)."
+  },
+  "voiceCallSocketDegraded": "Audio is fine. Room chat, joins and leaves are not updating until the connection to the server returns.",
+  "@voiceCallSocketDegraded": {
+    "description": "Deliberately calm: the audio is unaffected (voice-room-states.md §5.4)."
+  },
+  "voiceCallNotificationHidden": "Notifications are off for this app, so the call's notice is not in your notifications. Android still lists the call among the active apps in quick settings.",
+  "@voiceCallNotificationHidden": {
+    "description": "A stated outcome, never a retry loop (voice-room-states.md §5.1)."
+  },
+  "voiceCallAloneTitle": "You are the only one here",
+  "voiceCallAloneBody": "The call stays open. Invite someone, or wait for a member to join.",
+  "voiceCallWaitingForOthers": "Waiting for the others to answer…",
+  "voiceCallMuteAction": "Mute",
+  "voiceCallUnmuteAction": "Unmute",
+  "voiceCallInviteAction": "Invite",
+  "voiceCallLeaveAction": "Leave",
+  "voiceCallMicOn": "Your microphone is on",
+  "voiceCallMicMuted": "You are muted",
+  "voiceCallPeopleTab": "People",
+  "voiceCallChatTab": "Room chat",
+  "voiceCallReturnBanner": "Return to the call",
+  "voiceTileAnotherDevice": "{name} (another device)",
+  "@voiceTileAnotherDevice": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileMuted": "Muted",
+  "voiceTileMicOn": "Microphone on",
+  "voiceTileConnecting": "Connecting",
+  "voiceTileConnected": "Connected",
+  "voiceTileReconnecting": "Reconnecting",
+  "voiceTileNotReachable": "Not reachable",
+  "voiceTileIdentityBlocked": "Safety number changed",
+  "voiceTileIncompatible": "Needs a newer app",
+  "voiceTileRestartingIce": "Renewing its connection",
+  "voiceTileConnectingBody": "An encrypted connection with {name} is being set up.",
+  "@voiceTileConnectingBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileConnectedBody": "Audio between you and {name} is encrypted end to end by your two phones.",
+  "@voiceTileConnectedBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileReconnectingBody": "The path to {name} dropped. Audio with them stops until it comes back.",
+  "@voiceTileReconnectingBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileNotReachableBody": "{name}'s device did not answer after several tries, so there is no audio between you. Your audio with the others carries on.",
+  "@voiceTileNotReachableBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileIdentityBlockedBody": "{name}'s safety number changed. Audio between you has stopped until you check the new number. Your audio with the others carries on.",
+  "@voiceTileIdentityBlockedBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileIncompatibleBody": "{name}'s app speaks a version of calls this one does not, so there is no audio between you. One of you needs to update.",
+  "@voiceTileIncompatibleBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceTileRestartingIceBody": "The relay connection to {name} is being renewed. The audio keeps its old path meanwhile.",
+  "@voiceTileRestartingIceBody": {
+    "description": "An ICE restart in progress, after the relay credential was refreshed.",
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "voiceChatNote": "Temporary and best-effort. Cleared when the call ends; others may keep what they read.",
+  "@voiceChatNote": {
+    "description": "Ephemeral text is best-effort; copy never says it disappears forever (voice-room-states.md §1)."
+  },
+  "voiceChatEmpty": "Nothing said yet. Messages here are gone when the call ends.",
+  "voiceChatStale": "This chat is not updating. Your messages are not being delivered, and new ones will not appear.",
+  "voiceChatHint": "Message the call",
+  "voiceChatSendAction": "Send",
+  "voiceChatTooLong": "That message is too long to send. Shorten it by {count} characters.",
+  "@voiceChatTooLong": {
+    "description": "The limit is the largest published signal bucket under a regular header, or the record's 2,000 scalar values and 8,000 bytes, whichever is smaller.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "voiceChatUnsendable": "That message holds characters that cannot be sent.",
+  "voiceChatNotSent": "That message was not sent.",
+  "voiceChatUnavailable": "Chat unavailable",
+  "contactsNewVoiceRoomUnavailable": "This server does not offer voice.",
+  "voiceRoomsErrorTitle": "Rooms are unavailable"
 }

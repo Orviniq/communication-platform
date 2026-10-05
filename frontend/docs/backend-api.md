@@ -22,7 +22,10 @@ source of truth.
 - [Messaging API](../../backend/messaging/API.md)
 - [Realtime API](../../backend/realtime/API.md)
 - [Vault API](../../backend/vault/API.md)
-- [Voice Rooms API](../../backend/voicerooms/API.md)
+
+There is no voice-rooms API. The whole of the voice surface is one route,
+`POST /api/v1/me/relay`, published at the end of the realtime API, and the relaying of
+`signal` frames (server ADR-0021).
 
 ## The error vocabulary
 
@@ -52,7 +55,9 @@ the screen:
 | | `storage_full` | The server's disk is below its free-space floor | Retry later. It is not the account's fault, nothing was charged, and the operator has to free space |
 
 `503 voice_unconfigured` is a third thing at that status and is not a backoff at all:
-the deployment serves no voice, so the client offers no call rather than retrying.
+the deployment serves no voice, so the client offers no call rather than retrying. The
+REST client never replays it, even on a route marked safe to repeat, where every other
+`503` is replayed once.
 
 Four codes were deleted from the client because no route answers them: `bad_request`
 (now `invalid_request`), `token_not_valid` (now `invalid_token`), `device_scope_required`

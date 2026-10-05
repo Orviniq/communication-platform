@@ -3,7 +3,7 @@
 ## Security objective
 
 Protect content confidentiality and integrity when the backend, database, attachment
-store, SFU, TURN relay, or network is observed or later seized. The system does not hide
+store, coturn relay, or network is observed or later seized. The system does not hide
 that a device contacted the service or eliminate traffic-analysis metadata.
 
 ## Protected assets
@@ -139,12 +139,36 @@ evidence for a future Web trust boundary or its browser vectors.
 ## Residual metadata
 
 The server can observe usernames, public device bundles, day-level activity, recipient
-device IDs for pending envelopes, timing, IP addresses, size buckets, room IDs presented
-to room endpoints, attachment capabilities during download, and voice connection
-metadata. Live root can observe which authenticated connection writes to which device
-queues and infer the social graph and group fan-out. At rest there is no sender column or
-conversation graph, but that does not protect routing metadata from a live operator. The
-client MUST not claim otherwise.
+device IDs for pending envelopes, timing, IP addresses, size buckets, attachment
+capabilities during download, and the voice metadata below. Live root can observe which
+authenticated connection writes to which device queues and infer the social graph and
+group fan-out. At rest there is no sender column or conversation graph, but that does
+not protect routing metadata from a live operator. The client MUST not claim otherwise.
+
+### What a call costs
+
+A call hides its audio and hides nothing about who is in it. Both costs are server
+[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)'s
+own, and the client states them rather than implying a mesh is anonymous.
+
+- **The relay sees the peer pairs, the packet sizes and the timing.** Every media path
+  crosses the self-hosted coturn, so it allocates one relay address for each connection
+  and forwards packets between them. It cannot open a packet — SRTP is keyed by DTLS
+  between the two endpoints — and the credential it is shown carries no account and no
+  device identifier, but it sees each caller's source address as every server sees its
+  caller's, and it sees which allocations talk to each other, how much and when. Who is
+  in a call is therefore inferable at the relay.
+- **The gateway sees which device signals which device.** A `signal` frame names its
+  target device in the clear; only the blob is ciphertext. So the fan-out of a join
+  announcement is the participant list, one relay hop at a time, exactly as envelope
+  fan-out is the group roster. The bucket rule makes the length uniform at 1024, 4096 or
+  16384 bytes and buys nothing above that: it is a malformed-input guard and never a
+  security control, because a modified server would relay anything (server ADR-0022).
+- **A room's membership is not hidden either**, for the same reason a group's is not:
+  control events are one envelope per member device, and the server sees each target.
+- What is **not** exposed: the audio, the room's name, the roster's contents, the SDP,
+  the DTLS fingerprints and the ephemeral room text. None of those exists in plaintext
+  anywhere outside a member's device, and no application-level media key exists to leak.
 
 ## Security release gates
 

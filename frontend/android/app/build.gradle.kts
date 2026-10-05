@@ -430,6 +430,10 @@ dependencies {
 //
 //   ./gradlew :app:writeDependencyLocks --write-locks
 //
+// and then read the diff. The writer drops kotlin-stdlib-common from both runtime
+// classpaths, where validation still resolves it and so fails the build; keep that
+// line as the committed lock has it (ADR-078).
+//
 val lockedConfigurations =
     setOf(
         "developmentDebugCompileClasspath",

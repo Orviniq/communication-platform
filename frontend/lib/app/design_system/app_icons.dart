@@ -84,6 +84,41 @@ abstract final class AppIcons {
     FLucideIcons.cloudOff,
     'offlineQueue',
   );
+
+  // A call. Each state a participant tile shows has its own shape, so that
+  // colour is never the only thing telling them apart.
+  static const microphone = AppIconData._(FLucideIcons.mic, 'microphone');
+  static const microphoneOff = AppIconData._(
+    FLucideIcons.micOff,
+    'microphoneOff',
+  );
+  static const leaveCall = AppIconData._(FLucideIcons.phoneOff, 'leaveCall');
+  static const invite = AppIconData._(FLucideIcons.userPlus, 'invite');
+  static const people = AppIconData._(FLucideIcons.users, 'people');
+  static const roomChat = AppIconData._(
+    FLucideIcons.messageSquareText,
+    'roomChat',
+  );
+  static const minimize = AppIconData._(FLucideIcons.chevronDown, 'minimize');
+  static const relay = AppIconData._(FLucideIcons.route, 'relay');
+  static const connecting = AppIconData._(FLucideIcons.loader, 'connecting');
+  static const connected = AppIconData._(FLucideIcons.volume2, 'connected');
+  static const reconnecting = AppIconData._(
+    FLucideIcons.refreshCw,
+    'reconnecting',
+  );
+  static const notReachable = AppIconData._(
+    FLucideIcons.unplug,
+    'notReachable',
+  );
+  static const identityChanged = AppIconData._(
+    FLucideIcons.shieldAlert,
+    'identityChanged',
+  );
+  static const incompatible = AppIconData._(
+    FLucideIcons.circleSlash,
+    'incompatible',
+  );
 }
 
 /// App-owned icon renderer with intentional directional mirroring.

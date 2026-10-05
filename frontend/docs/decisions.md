@@ -87,6 +87,829 @@ is not silently edited out of history.
 | ADR-074 | Accepted | Supersedes the "not done here" of ADR-073: the second tick is reserved for *seen* and `MarkConversationVisiblyRead` is wired to the visibility trigger, so reading is the only thing that draws two ticks and the only thing that reports one (2026-09-10) | ADR-073 fixed which device state counts as read and left the sender's copy alone, and on a device that was the whole of what the user could see. Two faults met there. `AppIcons.delivered` drew `checkCheck` — **two ticks for delivered**, which a recipient's own device sends by itself the moment the inbox transaction commits, with nobody having looked at anything; and `MarkConversationVisiblyRead` was still unwired, so `receiptRead` was never sent by any client and the accent-coloured `read` state was **unreachable**. The result is that the only two-tick state the application could reach meant "stored on their phone", and a sender was told their message had been seen while the other person was on the chat list. A reader who has used any other messenger arrives knowing two ticks means somebody read what they sent and will not re-learn it here, so the glyph moves rather than the meaning: `delivered` becomes `check`, a new `read` token takes `checkCheck`, and the two arrival states are told apart by colour and by the label each already carried — `chatStateAccepted`, `chatStateDelivered` and `chatStateRead` were already written and already translated. Reading is then made reachable on ADR-073's trigger and no other: `_markRead` becomes `MarkConversationVisiblyRead`, so the receipt names exactly the message ids the local mark cleared and the two readings of "the user saw this" cannot disagree. `allowReadReceipts` is `!savedMessages`; `sendReceipt` already refuses anything that is not a direct conversation. Receipts are bounded by the mark, not by a timer: the second visibility change finds nothing left to clear and therefore sends nothing, which is what makes a trigger that fires on every foreground return and every arrival affordable. The receipt is a durable local commit before it is a network call (ADR-061), so one made with no connection is delivered by the ordinary cycle rather than lost. **No backend change, and none needed**: `openapi.json` has no occurrence of the word receipt, the server relays padded opaque blobs through the same three envelope routes, and a `receiptRead` is byte-indistinguishable from the `receiptDelivered` that already flows. **Not done here**: no privacy setting behind `allowReadReceipts`, which is passed `true` for every direct conversation — the parameter's existence says a setting was intended, and the disclosure makes no statement either way; no per-message reading, the receipt covers the conversation the way the mark does; and groups still set no unread state. |
 | ADR-075 | Accepted | Client-side record of server ADR-0001: a group is a set of pairwise sessions, so piece 19 is cancelled rather than blocked, the group screens open on every build, and each group message states what it costs — one encrypted copy for each device of each member — and is shown as sent only when its fan-out has ended; closes ADR-026, ADR-036, ADR-037, ADR-039, ADR-040, ADR-041, ADR-044, ADR-055 and ADR-056 (2026-09-13) | The server deleted every MLS route: `PUT /api/v1/me/devices/{device_id}/keypackages`, `GET /api/v1/me/devices/{device_id}/keypackages/count` and `POST /api/v1/users/{user_id}/keypackages/claim` answer `404`, `backend/openapi.json` holds 28 paths of which none accepts, stores or serves a key package, a Welcome, a commit or any other MLS artefact, and `KEYPACKAGE_BUCKETS` is gone. The five external prerequisites piece 19 waited on therefore gate nothing — meeting all of them would leave no server to talk to — so the item is cancelled, not blocked, and the nine decisions that shaped the closed-beta MLS track close with it. The pairwise design pays for groups in ciphertext rather than server state, and the screens say so rather than let a slow send in a large group look broken |
 | ADR-076 | Accepted (2026-09-14) | The `production` flavor, `com.orviniq.chat`, gains one persistent signing identity so that the owner can install real builds and test groups on real phones: an RSA-4096 v2+v3 key whose public fingerprint is committed beside the application ID and which reaches Gradle only from outside the repository; a release build without it fails closed unless it asks to be unsigned; one script provisions, signs, verifies and records each artifact; a signed build carries the deployment disclosure and no Experimental designation; and an artifact reaches a device only through `adb install`. It is not a public release and opens no gate. It amends the clause ADR-042 made and ADR-067 carried that production packages unsigned, the production half of ADR-045's D6, and the reason its D1 gives for production carrying no designation (2026-09-14) | Production packages unsigned by design, so no phone can install it, and groups have never run on a phone against the live server (ADR-075). The identity, the build mechanism and the verifier are the beta pipeline ADR-042 reviewed, readable at `8267429`, under production's names and without its in-repository properties fallback, because the rule behind them has not moved: Android updates an install only when the application ID and the signing certificate both match, and this client cannot survive the uninstall a mismatch forces (ADR-067 D2). What moves is custody. `deployment-and-release.md` step 4, `release-signing.md` and ADR-044 keep production's key offline; the owner's answer keeps it, for now, on a networked workstation that already holds the private CA's key; and with `minSdk` 24 the first key signs every later update, so the custody chosen for this test is the custody a public release under the same identity inherits. The owner decided that on 2026-09-14, together with the other three questions: the application ID is final, production carries the disclosure and not the Experimental designation, and an agent session may run the signed build through the release script. ADR-045 withheld the disclosure and the Experimental designation from production only because it could not be installed. The pinned `flutter_tools` uninstalls an installed app before `flutter install` installs and whenever `flutter run` is refused over it, and `flutter drive` uninstalls when it finishes, so none of the three is pointed at a device that holds the signed app. Found on the way and left open for a decision of its own: ADR-043 and the code enforce no SPKI pin on the app's own traffic, while ADR-067 D4, server ADR-0027 and `backend/SECURITY.md` state or rely on the opposite. ADR-017, every production completion gate and ADR-053's gate stay closed. |
+| ADR-077 | Accepted (2026-09-20), on the owner's answers to D1, D2, D3 and D5; its open conflict decided B (2026-09-30); one open question (2026-10-01) | Client-side record of server ADR-0021 and ADR-0022: voice is a relayed WebRTC mesh with no server room, so a room becomes client state on the group's own signed-control machinery and a call becomes volatile `signal` frames between devices. Two wire formats, split by the channel each needs — `CPVRV001` for the room's control events over durable envelopes, `CPVSV001` for the call's signalling over `signal` frames — and a payload is refused from the other channel. A volatile frame rides the durable pairwise session's own Double Ratchet rather than a second session or a new key schedule, and pays for it in dead skipped keys that the retry bound caps. Supersedes the voice prerequisites P1 to P7 of ADR-058, which name three things that no longer exist, and deletes the `voice_rooms` table (2026-09-20) | Server ADR-0021 decides the architecture and stops at the edge of the client: a room is client state "carried by client-signed control events over ordinary envelopes, exactly as a group is", and ephemeral room text and join and leave announcements are `signal` frames. No source defines the room model or the signalling payload, and `CLIENT_CONTRACT.md` §N says so in as many words — "Everything below is therefore yours to build, and none of it is checked by anything upstream." **The split by channel is the load-bearing decision.** A roster has to survive a device being offline and an offer must not: a durable offer is a call invitation that arrives an hour late, and a volatile roster is a room that forgets who was removed. So membership is durable and signalling is volatile, and each is refused from the other's channel, because without that rule the volatile path is a way to write durable state and the durable queue is a way to replay a call's signalling hours later. **The room reuses the group's machinery down to the byte.** The same hash chain, the same six apply outcomes, the same transcript, state-request and queue-gap rules, under its own two signing domains so that no event of one kind can be replayed as the other. That machinery is built, reviewed and tested; inventing a second one for the same problem would be a defect, not a design. **The volatile seal is the one place this costs something real, and the cost is stated rather than engineered away.** §N rule 6 binds the signalling to the pairwise session of §F, and `pairwise-transport-v1.md` is frozen and under independent review, so there is no second session and no signalling-only key schedule. A frame the server drops is never redelivered, so it leaves a hole the receiver fills with a dead skipped key on the next message that does arrive — and at 2,000 per pair the bound's failure mode is a repair that interrupts the *text* conversation with that device too. The retry bound is therefore the budget: 32 sealed frames per peer per call, 62 wholly undelivered calls before a pair reaches the bound, and a peer already reported unreachable is sealed nothing further until it announces itself again. **What was measured rather than assumed**: an audio-only, relay-only, max-bundle offer from libwebrtc is 1,363 bytes over 46 lines (Chromium 152.0.7977.76, 2026-09-20). With this framing an offer is about 1,516 bytes, which clears bucket 4096's regular-header budget of 4,014 by 2,498 and its worst-case initial-header budget of 1,554 by 38 — so an SDP is never the first message to a peer, and a device with no session sends its small `join` first. A margin of 38 bytes is one `a=extmap` line from a frame that goes off-bucket and is dropped without a word. Adds no dependency, changes no `backend/` file, and opens no production gate: nothing under `lib/` implements a byte of it. **Four questions went to the owner** and were answered A on 2026-09-20, as written out under "Owner questions": every member may remove every other, the ceiling counts devices, no group or DM hosts a call, and the volatile seal shares the durable ratchet. **Open conflict, dated 2026-09-30 by prompt 4, decided B by the owner the same day:** a volatile frame cannot start a session, because the core writes an initial header on a session's first message only and a first frame the relay drops leaves a session only the sender holds, on which its later messages, durable ones included, are refused. So a volatile frame still never starts one, and the room's own durable payloads start every session a call needs: a `CPVRV001` state request, the room's existing kind 2, sent to each live device of each active member this device has no session with, which the durable queue holds until that device fetches it. No new wire format; the choice of payload and moment, and its costs, are written under *Decided 2026-09-30* at the end of the record. |
+| ADR-078 | Accepted (2026-09-28) | Voice's media package is `flutter_webrtc` **1.6.2+hotfix.3**, pinned exactly. Its two native parts are libwebrtc 150.7871.01 from Maven Central and Twilio's `audioswitch` in David Liu's fork at commit `039a35ae`, which only JitPack publishes, so JitPack serves this build that one module and nothing else. The merged manifest gains `RECORD_AUDIO`, `FOREGROUND_SERVICE_MICROPHONE` and `MODIFY_AUDIO_SETTINGS` and refuses the `BLUETOOTH` permission `audioswitch` merges in, and the `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of ADR-054 hold (2026-09-28) | ADR-077 designed voice on `flutter_webrtc` and left the dependency review to a record of its own; this is it. **The version is the newest because its native parts are 1.6.1's**: the Android build file is byte-for-byte the same, so every fact gathered for 1.6.1 holds, and what came after is fixes to data-channel and camera paths this design never takes, plus two opt-in field trials that stay off. **What it costs is one native library**: an unsigned production release grows from 88,199,375 to 123,703,796 bytes, and 35,263,068 of the 35,504,421 bytes added are `libjingle_peerconnection_so.so` for three ABIs, the emulator's x86_64 copy alone 16,166,352. That library is libwebrtc with third-party code of its own — BoringSSL, libsrtp, Opus, libvpx, libaom, dav1d and more — and it will open a call's sockets itself, outside `dart:io` and outside the provisioned trust store, which is what server ADR-0021 means by DTLS-SRTP between two endpoints; `platform-android.md`'s claim that every byte leaves through `dart:io` is corrected. **JitPack is restricted in both directions, and the restriction was proven**, because JitPack builds whatever public repository a coordinate names and `flutter_webrtc`'s build script adds it, unfiltered, to every project. **`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it**: the package builds `audioswitch`'s `AudioSwitch`, which routes through `AudioManager`, and the one class that checks a Bluetooth permission keys on the target SDK and would check `BLUETOOTH_CONNECT` at 36. No Dart code imports the package, no service is declared and no permission is asked for yet. Found on the way: the Gradle lock writer drops `kotlin-stdlib-common` from both runtime classpaths on the unmodified tree too, while validation still resolves it there, so the committed line is kept; and libwebrtc's third-party notices exist nowhere for this build (F1). |
+| ADR-079 | Accepted (2026-10-05) | Phase 6 closes on a call between two real devices: on signed production build 5, APK SHA-256 `20a010b41eb43c5eb5a34d1c007d58fa84548408e707e20685043b68010a37dd`, each of the seven call steps of phase 6 prompt 10 passed — a room made on one device reached the other, both joined and connected through the relay, audio crossed both ways, mute silenced one side, the call ran on with a device out of view, a leave stopped that device's call service and was dropped by the other, and a rejoin carried audio again. Two corrections came first: a signed group or room change counts in the outbox depth until it is routed, so creating one starts a delivery cycle (D2); and a leave stops the call service only when no join has started since (D3) | Every voice test so far ran between fakes. On the owner's phone and emulator, build 3 found that a room reached the invited device only when something unrelated woke the creator's delivery cycle, more than six minutes after it was signed, and build 4 found that a rejoin made while a leave was still finishing lost its call service, so the new call lost its microphone and its network the moment the app left the screen. Build 4 corrected the first and build 5 the second, and the owner confirmed every audio step by ear against the devices' own audio levels ([`docs/validation/voice-mesh/2026-10-05/`](validation/voice-mesh/2026-10-05/README.md)). |
+
+## ADR-079 in full — a call on two devices, and the two things it took (2026-10-05)
+
+**Status:** Accepted, 2026-10-05. Validation record of phase 6 prompt 10, the last of the ten
+phase-6 prompts, with the two corrections the run required. Changes no cryptographic
+construction, protocol, wire format, state format, signing configuration, keystore, release
+identity or backend file. **Opens no production gate.**
+
+**Cites:** ADR-047 and ADR-060 (a send is a durable write the delivery supervisor observes),
+ADR-076 (how a production build is made and reaches a device), ADR-077 (the voice design),
+ADR-078 (the media package), and the run records of
+[2026-10-04](validation/voice-mesh/2026-10-04/README.md) and
+[2026-10-05](validation/voice-mesh/2026-10-05/README.md).
+
+### The question
+
+> Unit and widget tests prove the voice code only between fakes. Does a call work between
+> two real devices on the signed production build, and what does it take?
+
+On 2026-10-04 the deployment served no voice, and the run stopped before its first step. The
+owner configured the relay, and on 2026-10-05 the seven steps ran between the owner's Samsung
+Galaxy A56 (Android 16) and an Android 15 emulator. They held two different accounts, each
+a verified contact of the other, and ran builds 3, 4 and 5 of `com.orviniq.chat`, each made by
+`tool/build_production_release.sh` and installed in place with `adb install -r`.
+
+### D1. The call works on build 5
+
+| Build | Source | APK SHA-256 |
+|---|---|---|
+| 5 | `53ff38618e7e72103709e2f2787c5bb4017bd36d` | `20a010b41eb43c5eb5a34d1c007d58fa84548408e707e20685043b68010a37dd` |
+
+Run on 2026-10-05, with the owner confirming each audio step by ear and libwebrtc's own
+recording and playback levels on both devices agreeing with each answer:
+
+1. **Pass.** A room signed on the phone reached the emulator 6.3 s later.
+2. **Pass.** Both devices connected 14 s after the second joined, each over a relay candidate
+   pair on UDP, and both read "2 in the call".
+3. **Pass.** Audio crossed both ways.
+4. **Pass.** Muted, the phone sent nothing, and the emulator still reached it.
+5. **Pass.** With the phone on its home screen for 2 min 40 s, its call service stayed a
+   `microphone` foreground service with *Call in progress* in the shade, its recording was
+   not silenced, and audio crossed both ways.
+6. **Pass.** The phone left. The emulator saw the close within about 0.5 s and dropped the
+   phone within about 1.5 s, and five seconds later the phone held no call service,
+   notification or recording.
+7. **Pass.** The phone rejoined, both connected again within about 9 s, and audio crossed both
+   ways.
+
+The sequence that broke build 4 was then repeated on purpose: a leave, a rejoin 0.68 s later,
+and the home screen. The service and the audio held.
+
+### D2. A signed group or room change is owed work until it is routed
+
+On build 3 a room the phone signed at 13:26:37 UTC reached the emulator only after the phone's
+app was sent to the home screen and brought back, more than six minutes later. A signed group
+or room change waits in `group_outbound_objects` or `room_outbound_objects` until the
+post-inbox dispatch routes it into the pairwise outbox, and that dispatch runs only inside a
+delivery cycle. The supervisor starts a cycle when the outbox depth grows (ADR-047, ADR-060),
+and the depth counted neither table, so a change made on this device waited for an unrelated
+wake-up.
+
+**Decided:** the outbox depth counts each control payload still pending in either table, and
+its watch re-reads when either table changes (`52a117c`). Routing a payload inside a cycle can
+read as growth and cost one more cycle that finds nothing left to send, the same extra cycle
+a delivery receipt queued inside a cycle already costs. It cannot loop: a cycle that finds
+nothing new to route adds nothing to the depth, and the supervisor reacts only to growth.
+`sync-engine.md` states the rule. On build 4 a room reached the other
+device 9.1 s after it was signed.
+
+### D3. A leave stops the call service only when no join has started since
+
+On build 4 the phone left a call and rejoined within a second. A leave ends the call at once,
+and the service guard stops the call service as the call ends. The controller then waits while
+the call tells its peers, which took about two seconds there, and stopped the service again
+after that. The rejoin had started the service 657 ms after the leave began, so that second
+stop took it from the new call. On screen nothing showed it. Fifteen minutes later the phone
+went to its home screen. Android silenced its recording within six seconds, because the
+microphone app-op was missing without a foreground service, and destroyed its sockets, and the
+connection failed.
+
+**Decided:** `VoiceCallController.leave` stops the service only when no join has started since
+it began (`5b5cadb`). A test holds a leave open across a rejoin and pins the order, and
+`voice-signalling-v1.md` (*The call*) and `platform-android.md` (*A call's microphone*) state
+the rule. On build 5 the same sequence kept the service in the foreground.
+
+### What the run does not settle
+
+- **Not run on a device:** more than two devices, the ten-device ceiling, a removal mid-call,
+  renaming or leaving a room, the ICE restart at the credential's refresh, and a relay over
+  TCP. Every connection selected UDP.
+- **A connection that fails is dropped, as *The call* designs it, and only a fresh join
+  reconnects it.** Every join connected. Every path lost after it connected had a cause
+  outside the call: the phone's VPN, the phone's cellular connection, which the emulator's host
+  also used through the phone's hotspot, and the phone leaving the host's range. Short losses
+  recovered by themselves within 2 to 7 s. Nothing restarts ICE on a network change, which a
+  phone moving between networks will meet. Whether to restart rather than drop is a design
+  question for a later prompt, beside the relay-unreachable state *The credential* left unbuilt.
+- **Still open for the owner:** the disclosure's `unbuiltSurfaces` point says voice rooms "do
+  nothing" (the disclosure row of `implementation-checklist.md`), and ADR-077's room-text budget
+  question of 2026-10-01. Both devices are the owner's, so no build with voice has reached
+  anybody else.
+- **Builds:** 3, 4 and 5 were installed on both devices, 5 last, and the next is 6
+  (`release-signing.md`). About and the Diagnostics report name the version `0.1.0+1` on every
+  build, because `BuildIdentity.version` is a compile-time copy of `pubspec.yaml` and
+  `--build-number` moves only the version code; `dumpsys package` tells builds apart.
+
+## ADR-078 in full — the media package, what it links, and the three permissions a call asks for (2026-09-28)
+
+**Status:** Accepted, 2026-09-28. Dependency decision, under the rules ADR-054
+established, for the design ADR-077 recorded; ADR-077 said this review "is its own
+prompt", and it is the second of the ten phase-6 prompts. Adds one direct Dart dependency,
+the four Dart packages and two Android modules it brings, and three permissions to the
+merged manifest, and refuses a fourth. Writes no Dart code that uses the package, declares
+no service, and changes no cryptographic construction, protocol, wire format, state
+format, signing configuration, keystore, release identity or backend file. **Opens no
+production gate.**
+
+**Cites:** ADR-054 (what the artifact takes from outside, and its pins), ADR-059 (the
+precedent for stating a dependency's weight), ADR-077 (the voice design), server
+[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md),
+and `backend/CLIENT_CONTRACT.md` §N rules 6 and 11.
+
+### The question
+
+> Voice needs WebRTC on Android. Which exact release of which package, what does it put
+> into the artifact, where does each part come from, and what does the artifact then ask
+> its users for?
+
+The prompt carried six facts about `flutter_webrtc` 1.6.1, gathered on 2026-09-05, and
+asked for them to be checked against any later release. Four releases followed 1.6.1.
+`livekit_client` is not a candidate: it needs `connectivity_plus` 7, which forces
+`androidx.core` 1.18.0 and `compileSdk` 36.1, the move ADR-054 froze against.
+
+### D1. The version is 1.6.2+hotfix.3, and its native parts are 1.6.1's
+
+`flutter_webrtc` **1.6.2+hotfix.3**, published 2026-09-15 and the newest release on
+2026-09-28, is pinned exactly. Its `android/build.gradle` is byte-for-byte the file 1.6.1
+ships, so every fact recorded for 1.6.1 holds for it, each read from the published archive
+or from pub.dev:
+
+- MIT licence, and the verified publisher `flutter-webrtc.org`;
+- `compileSdkVersion 36` and `minSdkVersion 21`;
+- `io.github.webrtc-sdk:android:150.7871.01`;
+- `com.github.davidliu:audioswitch` at commit `039a35aefab7747c557242fa216c9ea11743b604`,
+  from JitPack;
+- no `androidx.core` dependency, from the plugin or from either native part:
+  `audioswitch`'s POM names only `androidx.annotation` 1.3.0, and libwebrtc's names
+  nothing;
+- `iceTransportPolicy` parsed by `MethodCallHandlerImpl`, and `setConfiguration` and
+  `restartIce` on the Dart `RTCPeerConnection`.
+
+What changed on Android after 1.6.1: 1.6.2 adds two opt-in `initialize()` options,
+`enableWARP` (the `WebRTC-IceHandshakeDtls` field trial, which carries the DTLS handshake
+inside the ICE exchange, plus DSCP marking) and `zeroPlayoutDelay`, both off unless asked
+for; 1.6.2+hotfix.2 releases data-channel handlers and wrappers on close and dispose; and a
+null check guards the camera path. This design uses no data channel and no video, so none
+of the fixes is load-bearing here, and neither option is set — turning either on is a
+decision of its own. The newest release is taken over 1.6.1 because the two link the same
+native code and the newer carries the fixes; 1.6.1 stays the fallback if a later prompt
+finds a regression.
+
+The pin carries a build suffix, which `dependency_policy_test.dart`'s exact-version check
+did not admit. `pub_semver` compares the suffix — `Version.allows` is equality, and
+equality includes the build — so `1.6.2+hotfix.3` still admits nothing else, and the check
+now accepts dot-separated build identifiers.
+
+### D2. What it brings with it, stated in full
+
+Dart, from `pubspec.lock`: `flutter_webrtc` 1.6.2+hotfix.3, `webrtc_interface` 1.5.1,
+`logger` 2.8.0, `synchronized` 3.4.2 and `dart_webrtc` 1.8.2, the browser implementation,
+which no Android build compiles. No version already in the lock moved, and nothing is a
+pre-release or retracted.
+
+Android: the release runtime classpath goes from 91 modules to 93, and nothing already
+there moved.
+
+| Module | What it is | Artifact, checked on 2026-09-28 |
+|---|---|---|
+| `io.github.webrtc-sdk:android:150.7871.01` | libwebrtc and its `org.webrtc` Java bindings, prebuilt by webrtc-sdk, BSD 3-Clause, from Maven Central | AAR of 49,147,033 bytes, SHA-256 `0a1627b1a48c2bc17d9a40d62fc47bd45166f44a311e95917f147c402de379b0`, equal to Central's published `.sha256` and `.sha1`; Central also holds a PGP signature, not verified here |
+| `com.github.davidliu:audioswitch:039a35aefab7747c557242fa216c9ea11743b604` | Twilio's Apache-2.0 audio router in David Liu's fork, commit of 2026-05-18, built by JitPack | AAR of 95,318 bytes, SHA-256 `c8240221daa9a96d4ea01a4dc6f6f6b10b4903d2a71f9b57f838bdfeb6c3fcbc`; its SHA-1 and MD5 equal JitPack's published ones |
+
+Both are on the runtime classpaths only. The requested `androidx.annotation` 1.1.0 and
+1.3.0 resolve to the locked 1.8.1, and `kotlin-stdlib` stays at 2.3.20.
+
+No component arrives. The plugin's manifest is empty, libwebrtc's names only `uses-sdk`,
+and `audioswitch`'s names two permissions (D4), so the verifier still counts five
+components with one exported. What arrives is **`libjingle_peerconnection_so.so`** for each
+of the three ABIs the build keeps. Measured rather than estimated, an unsigned production
+release goes from **88,199,375 to 123,703,796 bytes**, +35,504,421. Of that, 35,263,068 is
+the native library, stored uncompressed — 16,166,352 for x86_64, 12,287,312 for arm64-v8a
+and 6,809,404 for armeabi-v7a — and 237,127 is the compressed `classes.dex`. `libapp.so`
+does not change, because nothing imports the package yet. The x86_64 copy alone is 46 % of
+the cost and runs only on the emulator (F5).
+
+The native library is libwebrtc together with third-party libraries of its own; its
+strings name BoringSSL, libsrtp, Opus, libvpx 1.16.0, libaom, dav1d, dcsctp, libyuv and
+abseil-cpp. **BoringSSL is a second TLS and cryptographic library in the artifact**, beside
+the Rust core. It keys the DTLS-SRTP of each connection, which is what server ADR-0021
+means by a connection keyed between its two endpoints, and nothing in this application
+calls it directly. It is not the reviewed Rust core, and this record does not review it.
+Once a call runs, the library opens its own sockets to the relay, outside `dart:io` and
+outside the provisioned trust store, and the end-to-end authentication of that path is the
+DTLS fingerprint the pairwise session carries (§N rule 6). The dex it brings references
+`java.net` and `javax.net.ssl` types for the first time — `NetworkMonitorAutoDetect`
+enumerates interfaces and `PlatformCertificateVerifier` checks a TLS relay's certificate
+through the platform's trust managers — so the "Nothing in the artifact's Java or Kotlin
+can open a connection" paragraph of `platform-android.md` is corrected here.
+
+### D3. JitPack serves one module, in both directions, and that was proven
+
+`audioswitch` at a commit exists only on JitPack, which builds whatever public repository a
+coordinate names. `flutter_webrtc`'s own build script adds an unfiltered JitPack to every
+project in the build. Two rules answer that:
+
+- `android/build.gradle.kts` declares JitPack inside `exclusiveContent` for
+  `com.github.davidliu:audioswitch`, so that module is looked up nowhere else. Gradle
+  applies the exclusion through `repositories.all`, so it reaches repositories added after
+  it as well.
+- `android/settings.gradle.kts` registers, before any build script runs, a rule on every
+  JitPack declaration — `flutter_webrtc`'s included — that it serves that module and
+  nothing else. Gradle configures a repository before it adds one (Gradle 9.1.0,
+  `DefaultArtifactRepositoryContainer.addRepository`), so the rule sees the URL.
+
+The prompt asked for JitPack in both files. A `dependencyResolutionManagement` block in
+settings would be inert in this build: Gradle's default mode lets project repositories
+override settings ones, and every project here declares its own, Flutter's engine
+repository included. What settings holds instead is the rule over every declaration.
+
+**Proven on 2026-09-28** with a scratch probe that resolved `org.example.probe:not-published:1.0`,
+which no repository publishes, and printed where Gradle looked. With both rules it was
+searched in Google's Maven, Maven Central and Flutter's engine repository and not on
+JitPack, although each project lists two JitPack declarations. With the settings rule
+removed, `https://jitpack.io/…` joined the searched locations through the declaration
+`flutter_webrtc` adds. `dependency_policy_test.dart` pins both rules, and that the only
+`com.github.*` module in the lock is this one.
+
+**Offline.** After the online builds had cached both modules,
+`./gradlew --offline :app:assembleDevelopmentDebug` succeeded in 43 seconds. It compiled
+`:flutter_webrtc`'s Java, which cannot compile without `audioswitch`'s classes, and
+`dependencyInsight --offline` resolved `audioswitch` at the commit. The repository
+documents the need for a mirror (`deployment-and-release.md`, `README.md`) but no mirror,
+so there was none to add the coordinate to; `deployment-and-release.md` now names it.
+
+The checksums above are recorded, not enforced: the build has no Gradle dependency
+verification metadata, and a commit hash pins JitPack's source, not the binary it builds
+(F3).
+
+### D4. The permissions
+
+| Permission | Source | Protection level | Decision |
+|---|---|---|---|
+| `RECORD_AUDIO` | This manifest | Dangerous | **Added.** Asked for at join and at no other time (§N rule 11), through prompt 8's channel. `flutter_webrtc`'s `getUserMedia` asks for it by itself when it is missing, so the join has to have asked first |
+| `FOREGROUND_SERVICE_MICROPHONE` | This manifest | Normal | **Added.** From Android 14 a foreground service of the `microphone` type cannot start without it. The service is prompt 8's |
+| `FOREGROUND_SERVICE` | This manifest, since ADR-051 | Normal | Unchanged |
+| `MODIFY_AUDIO_SETTINGS` | `audioswitch` | Normal | **Kept**, and declared in this manifest too, under ADR-054's rule that every permission in the artifact is stated where a reviewer reads |
+| `BLUETOOTH`, `maxSdkVersion` 30 | `audioswitch` | Normal | **Refused** with `tools:node="remove"` |
+
+`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it.
+`flutter_webrtc` builds `audioswitch`'s `AudioSwitch`, which finds and routes audio devices
+through `AudioManager` callbacks and `startBluetoothSco`. The one class that checks a
+Bluetooth permission, `BluetoothHeadsetManager`, belongs to `LegacyAudioSwitch`, and it
+chooses the permission by the application's `targetSdkVersion` rather than the device's,
+so at target 36 it would check `BLUETOOTH_CONNECT` on every device. No Bluetooth headset
+route is part of the design record either: ADR-077 and `voice-signalling-v1.md` name none,
+and `design-handoff/voice-room-states.md` lists the output-route control (§5.7) under
+"Where the spec is silent" (§9). Whether the platform sends a call's audio to a connected
+Bluetooth headset on its own is not decided by this permission and has not been tried. A
+route that needs `BLUETOOTH_CONNECT` — a runtime permission in the Nearby devices group —
+is a dated record of its own.
+
+The merged manifest of both APKs asks for exactly **12 permissions**: the nine recorded
+before and these three. `tool/verify_release_apk.sh` records the new set, the unsigned
+release passes all seven of its checks, and the same script run on the baseline APK fails
+and names exactly the three. `message_alert_policy_test.dart`, which pinned the manifest's
+foreground-service permissions to two, now records the third.
+
+### D5. The pins ADR-054 made still hold
+
+- **`androidx.core:core:1.16.0`**: unchanged in the lock, and neither the plugin nor its
+  native parts declare `androidx.core`.
+- **`connectivity_plus` 6.0.5**: unchanged in `pubspec.lock`; `flutter_webrtc` does not
+  depend on it.
+- **`compileSdk` 36**: `flutter.compileSdkVersion` is unchanged, and the plugin compiles
+  at 36.
+- `androidx.annotation` stays at 1.8.1 and `kotlin-stdlib` at 2.3.20.
+
+### D6. The lock file, and a writer that disagrees with its validator
+
+`./gradlew :app:writeDependencyLocks --write-locks` recorded the two new modules and also
+dropped `org.jetbrains.kotlin:kotlin-stdlib-common:2.3.20` from both runtime classpaths.
+Validation then refused that lock: `dependencyInsight` reports the module resolved on
+`productionReleaseRuntimeClasspath` "which is not part of the dependency lock state",
+because `kotlinx-coroutines-core` 1.7.3 and `okio` 3.4.0 still request it. The same write
+on the unmodified tree drops the same line, so it is not this change. The committed line
+is kept as it was: the lock differs from its previous state by the two new modules alone,
+all four locked configurations resolve against it with no failure, and both APKs build.
+The comment beside the regeneration command in `android/app/build.gradle.kts` now says so
+(F4).
+
+### What this does not decide
+
+- **Nothing uses the package.** No Dart file imports it (prompts 5 and 7), no service is
+  declared (prompt 8), and no permission is asked for (prompts 8 and 9).
+- **Nothing ran on a device.** No call was placed, and the permission prompt, the audio
+  route and the Bluetooth behaviour are untested.
+- **Neither WARP nor `zeroPlayoutDelay`.**
+- **How a TLS relay should be trusted.** What this build does is verified from source:
+  `flutter_webrtc` supplies libwebrtc no certificate verifier, so libwebrtc's TLS client
+  accepts a `turns:` relay's chain if it reaches the roots compiled into
+  `rtc_base/ssl_roots.h` or, failing that, the platform trust store, which
+  `PlatformCertificateVerifier` reads with user- and administrator-installed CAs
+  included. The provisioned private CA is in neither, so a relay certificate it issued
+  would not verify over `turns:`, and one from any public or user-installed CA would.
+  Whether the relay credential names a `turns:` URL at all, and what should be trusted
+  if it does, belong to prompts 3 and 5. The media path's own authentication is the
+  DTLS fingerprint under the pairwise session either way. **Answered for the client on
+  2026-09-30 by prompt 3:** only `turn:` URLs are configured, and a credential that
+  names a `turns:` URL is refused whole, because the route names `turn:` URLs and the
+  relay has no TLS listener (`backend/SECURITY.md`, "Voice"). How a TLS relay would be
+  trusted stays undecided until the server gains one; the rule is in
+  `voice-signalling-v1.md`, *The credential*.
+- No signing configuration, keystore or release identity changed.
+
+### Sources, read on 2026-09-28
+
+| Claim | Source | State on 2026-09-28 |
+|---|---|---|
+| The releases, the publisher and the licence | [pub.dev API](https://pub.dev/api/packages/flutter_webrtc), [publisher](https://pub.dev/api/packages/flutter_webrtc/publisher), [pub.dev](https://pub.dev/packages/flutter_webrtc) | 1.6.2+hotfix.3 newest, published 2026-09-15; 1.6.1 published 2026-09-01; none retracted; publisher `flutter-webrtc.org`; tag `license:mit` |
+| The Android build file, the changelog and the `NOTICE` | The archives [1.6.1](https://pub.dev/api/archives/flutter_webrtc-1.6.1.tar.gz) and [1.6.2+hotfix.3](https://pub.dev/api/archives/flutter_webrtc-1.6.2%2Bhotfix.3.tar.gz) | SHA-256 `a2eb4a45…b733` and `c1d3674f…0fb9`, the second equal to `pubspec.lock`'s; `android/build.gradle` identical; outside the iOS, macOS and desktop trees, the diff between them is the changes D1 lists |
+| `audioswitch`'s manifest, permission check and licence | [davidliu/audioswitch at `039a35ae`](https://github.com/davidliu/audioswitch/tree/039a35aefab7747c557242fa216c9ea11743b604) | `BLUETOOTH` with `maxSdkVersion` 30 and `MODIFY_AUDIO_SETTINGS`; `DefaultPermissionsCheckStrategy` keys on `targetSdkVersion`; `BluetoothHeadsetManager` is used by `LegacyAudioSwitch` only; "Copyright 2020 Twilio, inc." |
+| libwebrtc's POM and checksums | [Maven Central](https://repo1.maven.org/maven2/io/github/webrtc-sdk/android/150.7871.01/) | BSD 3-Clause, no dependencies; `.sha256` and `.sha1` equal to the cached AAR |
+| WebRTC's licence and patent grant | [webrtc-sdk/webrtc `m150_release`](https://github.com/webrtc-sdk/webrtc/tree/m150_release), commit `ba469aa2` | Copied verbatim to `docs/licenses/WebRTC-LICENSE.txt` and `WebRTC-PATENTS.txt` |
+| How libwebrtc's TLS client trusts a relay | [`rtc_base/openssl_adapter.cc`](https://github.com/webrtc-sdk/webrtc/blob/m150_release/rtc_base/openssl_adapter.cc) and [`PlatformCertificateVerifier.java`](https://github.com/webrtc-sdk/webrtc/blob/m150_release/sdk/android/src/java/org/webrtc/PlatformCertificateVerifier.java) at `m150_release`; the class disassembled from the AAR; `flutter_webrtc`'s Android sources | With no embedder verifier, the platform store is consulted only after `ssl_roots.h` finds no path, through `TrustManagerFactory.init(null)`; `flutter_webrtc` sets no `SSLCertificateVerifier` and no TLS certificate policy |
+| The publisher's aggregated third-party list | [webrtc-sdk/android `Licenses/WEBRTC.md`](https://github.com/webrtc-sdk/android/blob/main/Licenses/WEBRTC.md) | Last changed for m92 on 2021-09-08, so it is not this build's |
+| `audioswitch`'s published checksums | [JitPack](https://jitpack.io/com/github/davidliu/audioswitch/039a35aefab7747c557242fa216c9ea11743b604/) | `.sha1` and `.md5` equal to the cached AAR |
+| How Gradle adds a repository and applies exclusive content | Gradle 9.1.0 sources in the wrapper distribution | `addRepository` runs the configure action before adding; `exclusiveContent` applies through `repositories.all` |
+| What `NOTICES.Z` is built from | `packages/flutter_tools/lib/src/license_collector.dart`, Flutter 3.44.7 | A package's `NOTICES` file, else its `LICENSE`; never `NOTICE` |
+| That a build suffix is part of an exact pin | `pub_semver` 2.2.0, `lib/src/version.dart` | `allows` is `==`, and `==` compares the build |
+
+### Follow-ups
+
+- **F1.** Generate libwebrtc's third-party notices for this build — WebRTC's
+  `tools_webrtc/libs/generate_licenses.py` over the m150 source the AAR was built from —
+  and bring them into `third-party-notices.md`. Until then the notices for
+  `libjingle_peerconnection_so.so` are incomplete, the state ADR-054 F3 records for the
+  Rust core.
+- **F2.** `flutter_webrtc` applies the Kotlin Gradle Plugin, as `emoji_picker_flutter`
+  does (ADR-059 F2), and the build warns that a future Flutter will fail on it. Watch for a
+  release that moves to built-in Kotlin.
+- **F3.** Nothing enforces the checksums in D2. Gradle dependency verification would make
+  a changed JitPack build fail the build; it is a whole-build decision, not voice's.
+- **F4.** The lock writer's disagreement with its validator (D6), until a toolchain
+  upgrade makes it go away.
+- **F5.** The x86_64 copy of libwebrtc is 16,166,352 of the 35,504,421 bytes and runs only
+  on the emulator. Whether a distributed build keeps x86_64 is a distribution decision.
+
+## ADR-077 in full — voice is a mesh of pairwise calls, and the room is one more thing the clients agree on (2026-09-20)
+
+**Status:** Accepted, 2026-09-20, on the owner's answers to its four questions, which are
+written under "Owner questions" at the end of this section. Four points waited on the
+owner, one question each: D1 (may every member remove every other), D2 (does the ceiling
+count devices or people), D3 (may a group or a direct conversation host a call) and D5
+(may a volatile frame share the durable ratchet). **All four were answered A**, the
+recommended option in each case, on 2026-09-20 and before any later prompt of the phase
+wrote code. From acceptance on this record changes only by a dated record. It is written
+by the first of ten phase-6 prompts of 2026-09-20, which live outside this repository and
+are called prompts 1 to 10 below. It **supersedes** the voice prerequisites P1 to P7 of
+ADR-058. It adds no dependency, no cryptographic construction and no server route, and it
+**opens no production gate**: this prompt changed documents only. The one conflict a later
+prompt found in it, that a volatile frame cannot start a session, was decided **B** by the
+owner on 2026-09-30, and is recorded under *Decided 2026-09-30* at the end of this section.
+
+**Cites:** server
+[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md),
+server
+[ADR-0022](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md), and
+`backend/CLIENT_CONTRACT.md` §F, §K, §N and §O.
+
+### The problem
+
+Server ADR-0021 decides the architecture and then stops, on purpose, at the edge of the
+client. A call is a full mesh of WebRTC audio, every path across the self-hosted coturn,
+each connection keyed by DTLS-SRTP between its two endpoints; the server holds no room and
+no participant list, mints a relay credential at `POST /api/v1/me/relay`, and relays
+`signal` frames. Point 7 says a room is "client state, carried by client-signed control
+events over ordinary envelopes, exactly as a group is", and that ephemeral room text and
+join and leave announcements are `signal` frames the client fans out.
+
+None of that is a wire format. §N says as much in as many words — "Everything below is
+therefore yours to build, and none of it is checked by anything upstream" — and then gives
+eleven rules that constrain the design without defining it. No source defines the room
+model, the control events, the signalling payload, the padding arithmetic, the retry
+bound, the pacing or the ceiling's unit.
+
+Meanwhile the client's own voice documents described something else entirely: a LiveKit
+SFU behind nginx, a backend room with a capability and an encrypted name, a join token,
+SFrame, an MLS exporter as the media-key source, and a live count the server counted. Ten
+files under `frontend/` still named one of those, and `voice-and-realtime.md` was gated on
+seven prerequisites of which three could never be met.
+
+### The decisions
+
+**D1. A room is a client-held set of members on the group's own machinery, and every
+active member has the same authority.** A room id is 32 CSPRNG bytes. Its name travels
+inside its control events. `RoomControlEvent` mirrors `GroupControlEvent` field for field
+— version, event id, room id, revision, previous state hash, signer, `created_ms`,
+operation — with the same hash chain and the same six apply outcomes, under its own two
+domain constants `"chat:v1:room-control"` and `"chat:v1:room-control-state"` so that no
+event of one kind can be replayed as the other. Five operations: create, add members,
+remove member, rename, and a reserved value 5 so a later role operation cannot reuse one.
+
+Any active member may add, remove and rename. That is the literal reading of "all peers
+are equal", which `ui-specification.md` §13.2 and the design canvas both already say, and
+it is the only reading that keeps its own promise: a room whose members can each invite
+anyone is a room whose members can each remove anyone. **The cost is that any member can
+eject any other and there is no authority above them to appeal to.** It is stated in the
+design rather than designed away, and the remedy is a new room. **Answered A.**
+
+**What the backend adds to that cost, checked on 2026-09-20 before acceptance.** The
+server cannot enforce a removal and cannot record one. It has ten models and none is a
+room, a membership or a participant; `core/tests/test_seizure_guard.py` forbids a column
+named `members`, `membership`, `roster` or `group_members`, so one cannot be added
+without failing a gate. More to the point, `realtime/gateway.py` `_handle_signal` runs
+**no authorization at all**: it checks that `to_device` parses as a UUID and that the
+blob is a bucket length, then publishes to that device's topic. It never asks whether the
+two devices share a room, are contacts, or have ever spoken, so any authenticated device
+can signal any device id it knows. **Each remaining member closing its own connection is
+therefore the whole of the enforcement**, which works because either end of a connection
+can close it — and it means a removal has no server-side record, no appeal and nothing to
+restore from. An owner role would be exactly as unenforceable, which is part of why A is
+the right answer rather than merely the simpler one, but under A a single compromised
+member device can sign events ejecting everybody, and the only remedy is the fork
+quarantine and a new room.
+
+**D2. A call holds ten joined devices.** §N rule 10 refuses an eleventh participant and
+the client is the only thing that enforces it. The cost the ceiling bounds is per
+connection — each participant carries one uplink for every peer and the relay carries
+every stream twice — and a connection is to a device, not to a person, so the unit that
+matches the cost is the device. A person on two devices occupies two of the ten and
+appears as two tiles. In practice a person joins from one device, which is why the copy
+reads *ten people* and stays true. Two devices joining a nine-device call at once both
+find room, so the refusal holds on the receiving side too, by the same device-id string
+sort §N rule 3 already uses for the polite peer: a participant keeps the ten lowest and
+offers nothing to the rest, every participant computes the same set, and the eleventh
+exhausts its retry bound and shows *Call full*. **Answered A.**
+
+**D3. A room is standalone. No group and no direct conversation hosts a call in this
+version.** A group call would make the group's roster double as a room's roster — two
+signed chains claiming authority over one member set, and a question with no good answer
+about which one a removal binds. `ui-specification.md` §13.1 already says rooms are
+standalone. Recommended as a later addition, once a room can be created *from* a group's
+roster as a snapshot rather than a live alias. **Answered A.**
+
+**D4. Two wire formats, split by the channel each needs, and each refused from the
+other's.** `CPVRV001` carries the room's signed control events in durable envelopes;
+`CPVSV001` carries the call's eight signalling kinds in volatile `signal` frames. A
+roster has to survive a device being offline and an offer must not: a durable offer is a
+call invitation that arrives an hour late, and a volatile roster is a room that forgets
+who was removed. The refusal in both directions is the security half — without it the
+volatile path is a way to write durable state, and the durable queue is a way to replay a
+call's signalling hours later.
+
+**D5. A volatile frame rides the durable pairwise session's own Double Ratchet.** No
+second session between a device pair, no signalling-only key schedule, no change to
+`pairwise-transport-v1.md`. §N rule 6 binds the signalling to the session of §F, and that
+profile is frozen and under independent review; a second concurrent session would also
+contradict its simultaneous-initiation rule, which erases the non-primary session rather
+than keeping two outgoing chains.
+
+The state is committed before the frame leaves, exactly as a durable send commits it,
+because a ratchet key that encrypts two plaintexts is the one failure this transport
+cannot survive. What a volatile seal does *not* write is an outbox row, and that is the
+whole of the difference; a retry re-seals on a new message number rather than resending
+stored bytes, which is right anyway, because the frame was not lost in transit — it was
+dropped because nobody was listening.
+
+**What it costs, stated plainly.** A dropped frame is never redelivered, so the sender's
+chain runs ahead for good. The receiver stores nothing at the time; the cost lands on the
+next message in that chain that does arrive, as one retained skipped key for every message
+number the drop left behind, dead weight for the life of the session. The bound is 2,000
+per device pair and 20,000 per account, and crossing it returns `repair_required` — which
+works, but interrupts the **text** conversation with that device too, because it is one
+session. So the retry bound is also the budget: at most 32 sealed volatile frames per peer
+per call, and nothing further to a peer already reported unreachable until it announces
+itself again. At 32 it takes 62 calls in which every frame to one peer is dropped before
+that pair reaches 2,000, and the outcome there is a repair rather than a loss.
+
+The alternative is a second pairwise session dedicated to signalling, so that volatile
+churn can never push the durable session into repair. It is the better isolation and the
+worse decision today: it is a change to a frozen, under-review transport profile, it
+doubles the prekey cost of a first call, and it buys protection against a case the budget
+already keeps 62 calls away. **Answered A.**
+
+**D6. `voice_rooms` is deleted, and four group-shaped tables replace it.** Its three
+columns describe a server room: a capability to hold, a name the server stored, a live
+count the server counted. `room_states`, `room_control_events`, `room_outbound_objects`
+and `room_state_requests` mirror the group's. **A call writes no row at all** — who is
+connected, who is speaking, the peer connections, the ICE state and the ephemeral text are
+in memory for the life of the call, because a call has no state worth recovering.
+
+**D7. An SDP is never the first message to a peer, and the arithmetic is written down
+rather than assumed.** A `signal` blob is an `EnvelopeV1` of exactly 1024, 4096 or 16384
+bytes, so the plaintext budget is `bucket − 24 − len(ratchet_header)`: 942, 4,014 and
+16,302 under a regular 58-byte header, and 1,554 and 13,842 in the two larger buckets
+under a worst-case 2,518-byte initial header.
+
+Measured on 2026-09-20 rather than estimated: an audio-only offer with
+`iceTransportPolicy: 'relay'`, `bundlePolicy: 'max-bundle'`, `rtcpMuxPolicy: 'require'`,
+one `sendrecv` audio transceiver and no data channel — exactly §N rules 1 and 2 — is
+**1,363 bytes over 46 lines** from libwebrtc in Chromium 152.0.7977.76. `flutter_webrtc`
+1.6.1 carries `io.github.webrtc-sdk:android:150.7871.01`, a near neighbour of the same
+stack. With this framing an offer is about 1,516 bytes: it clears bucket 4096's regular
+budget by 2,498 and its worst-case initial budget by **38**. Thirty-eight bytes is one
+`a=extmap` line away from a frame that goes off-bucket, and an off-bucket frame is dropped
+in silence with no error to read. So a device with no session to a peer sends its small
+`join` or `participants_query` first, and the SDP follows under a ratcheted 58-byte
+header; where an SDP must go under an initial header anyway, it goes in 16384.
+**Suspended on 2026-09-30 by prompt 4, for the owner:** a device with no session is
+sealed nothing, because a first frame the relay drops leaves a session only this side
+holds; see *Open conflict* at the end of this record. **Decided B on 2026-09-30:** the
+suspension is the rule now. The room's durable payloads start the session before a call
+needs it, so every frame of a call, the first `join` included, is sealed under a regular
+header, and the 16384 fallback for an SDP under an initial header never arises.
+
+**D8. Four attempts, then unreachable, and nothing global pauses.** Attempts at 0, 2 s,
+4 s and 8 s with ±25 % jitter, a 6-second answer window, unreachable at about 20 s.
+Retried: `join`, `offer`, `answer` and `participants_query`, the four frames that expect
+something back. Not retried: `candidates`, which the next batch supersedes; `room_text`,
+best-effort by construction; and `leave`, which the closing connection says anyway. The
+tile says *not reachable* and the rest of the call carries on. A peer reported unreachable
+is attempted again only on a fresh `join` from it, never on a timer — which is also what
+keeps D5's budget from being spent twice.
+
+**D9. A ten-device join meets the socket limits by arithmetic, and the pacing is for the
+case the arithmetic does not cover.** The joiner sends 27 frames and receives 18, against
+a 100-frame rolling second and a 256-frame server queue. A token bucket of 32 refilling at
+24 a second therefore adds no latency to a join and caps the worst second a client can
+produce at 56. Candidates go in one batch per peer per negotiation — relay-only ICE with
+BUNDLE gathers one candidate per TURN URL, so trickling one to a frame would multiply the
+count for no gain. The socket reader never decrypts: inbound frames go to a bounded
+in-memory queue of 256 drained by a worker, because a client that decrypted on the read
+loop would be a slow consumer the moment nine offers landed together, and a slow consumer
+is closed `4008`.
+
+**D10. The credential is fetched at join, refreshed under an hour, and an expiry mid-call
+is an ICE restart.** It is held in memory only and never written down. `voice_configured`
+from `GET /api/v1/config` decides whether a call action is offered at all, so
+`503 voice_unconfigured` is the same fact reached the hard way rather than the first the
+user sees. A credential minted against a dead relay is a `200`, because the route reads a
+setting and never reaches coturn; the client tells that apart from nine quiet people by
+reporting the **relay** unreachable when no connection reaches `connected` within 15
+seconds and every candidate pair failed.
+
+**D11. Removal is a consequence of the roster, not a refusal list.** On applying a signed
+removal: close every connection to that account's devices at once, drop them from the
+participant set and every pending retry, then commit the roster. From then on a `CPVSV001`
+frame is applied only from a device whose account is an active member of the room the
+frame names, which is §N rule 8's refusal without a second structure to keep in step. The
+two channels race — a removed member's volatile frames can arrive before the durable event
+that removes them — and the race is safe in the direction that matters: those frames are
+applied while that member is still in the roster, and the event lands moments later and
+closes everything. What cannot happen is a removed member reconnecting afterwards.
+
+**D12. Every existing voice surface is kept, replaced or deleted, once, here.** Kept: the
+`/voice-rooms` and `/voice-rooms/new` routes and their placeholders, the shell compose
+action, `activeVoiceRoomName`, the Contacts entry, `AppIcons.voiceRooms`, and the
+`voice_configured` and `signal_buckets` config fields. Replaced: `/voice-rooms/sample-room`
+and the banner's tap target, by `/voice-rooms/:roomId`, because a fixed path cannot name a
+room. Deleted: the `voice_rooms` table. Added: the 22 icons the design canvas draws that
+`AppIcons` has no mapping for.
+
+**D13. Voice is tested on two real devices with the signed `production` flavor**, which
+the owner decided and ADR-076 provisioned. `tool/build_production_release.sh
+--build-number N` with N above every build `release-signing.md` records — the last
+installed was 2, so the first voice build is 3 — installed with `adb install -r` over
+build 2 on the Samsung A56 (`R5CY716AG0L`) and the emulator (`emulator-5554`). Neither app
+is ever uninstalled and the beta app is untouched. The owner enrolls each device by hand.
+Prompt 10 runs the call.
+
+### What it supersedes
+
+**ADR-058's P1 to P7 in whole, as the voice gate.** P1 granted an MLS exporter as the
+media-key source, P2 required that exporter reachable through the native boundary, and P3
+required voice to resolve through the same per-ABI permit as groups. There is no MLS core
+and no permit — both were deleted by ADR-075 — and server ADR-0021 keys each connection by
+DTLS-SRTP between its two endpoints, so there is no application-level media key for an
+exporter to supply. Those three could never be met by any amount of work. P4's
+frame-encryption disagreement is resolved by the same fact: there is no frame cipher this
+project chooses, because DTLS-SRTP is negotiated by the two endpoints. P5's wire record
+was to prove an SFU could not decrypt, and there is no SFU. P6's LiveKit deployment left
+with it; coturn stays and `POST /api/v1/me/relay` mints for it. P7 survives in substance —
+voice is claimed no more strongly than the layer beneath it, and the foreground-service
+interaction with ADR-051 is decided in the design — but not as a gate.
+
+Absence of evidence was refusal under ADR-058, and that principle is not weakened here.
+What changed is that the evidence was being demanded about a system that does not exist.
+
+### Not done here, and not verified
+
+- **Nothing is built.** No file under `lib/`, `test/`, `android/`, `native/` or `tool/`
+  changed. `RealtimeGateway.send` still has no caller and `pubspec.yaml` declares no media
+  dependency.
+- **No media package is reviewed.** `flutter_webrtc` 1.6.1 is what server ADR-0021
+  evidenced and this design assumes nothing else, but it is not in the pinned dependency
+  map and `dependency_policy_test.dart` fails if it is added without an ADR-054 review.
+  That review is its own prompt.
+- **The measurement is Chromium's, not the phone's.** 1,363 bytes came from Chromium
+  152.0.7977.76's libwebrtc on this workstation; `flutter_webrtc` 1.6.1 carries
+  `io.github.webrtc-sdk:android:150.7871.01`. Both are libwebrtc and the offer's shape is
+  the same, but the Android number is unmeasured until a device runs one. It is why the
+  design leaves 2,498 bytes of margin instead of the 38 an initial header would have left.
+- **No run against the live server**, and no call has ever been placed by this client.
+- **Light theme and Persian RTL are undrawn** in the design canvas, deliberately: the
+  light palette is authored in `app_tokens.dart` and RTL mirroring is Flutter's own
+  behaviour, verified by goldens.
+
+### Owner questions
+
+Asked on 2026-09-20 and **answered A — the recommended option — in all four**, together
+with an affirmation of D4, which carried no competing option. The rejected option is kept
+beside each answer, because what a decision turned down is the part a reader six months
+from now cannot reconstruct.
+
+**D1 — may every member remove every other?** **A.** Yes, fully symmetric, no roles,
+matching §13.2 and the canvas. Any member can eject any other and the remedy is a new
+room. *Rejected B:* mirror the group exactly, with an owner and admins, which contradicts
+two documents that already say all peers are equal, adds a role hierarchy to a ten-person
+audio room, and — as the backend check under D1 above establishes — would be exactly as
+unenforceable, because the server neither holds a roster nor authorizes a signal.
+
+**D2 — does the ceiling count devices or people?** **A.** Ten joined devices, because the
+cost is per connection. A person on two devices takes two seats. *Rejected B:* ten people
+with unbounded devices each, which makes the mesh's cost unbounded — ten people on three
+devices each is 29 uplinks on every phone.
+
+**D3 — may a group or a direct conversation host a call?** **A.** No, not in this
+version; rooms stay standalone. *Rejected B:* a group hosts a call whose participants are
+its roster, which makes one member set answer to two signed chains. Revisiting it is a
+dated record of its own, and the shape to revisit is a room created *from* a group's
+roster as a snapshot rather than a live alias.
+
+**D5 — may a volatile frame share the durable ratchet?** **A.** Yes, one session, with
+the 32-frame-per-peer-per-call budget as the guard. *Rejected B:* a second pairwise
+session for signalling only, which isolates the text conversation completely and costs a
+change to a frozen transport profile that is under independent review, plus a second
+prekey for every first call. If the budget is ever observed to be reached in practice, B
+is the recorded answer to reach for.
+
+### Open conflict, dated 2026-09-30 — a volatile frame cannot start a session
+
+Found by phase 6 prompt 4 while building the volatile seal, and **not decided there**. D5
+and D7 have a device with no session to a peer claim that peer's bundle and seal its first
+`join` or `participants_query` under an initial header, in a `signal` frame. The native
+core writes an initial header on a session's first message only — `ratchet_encrypt` in
+`native/crypto_core/src/pairwise.rs` always writes a regular one — and the relay drops a
+frame for any device that is not connected at that instant, which is the ordinary fate of
+a `join` fanned out to every live device of every member. When that first frame is
+dropped, this device has committed a primary session its peer never saw:
+
+- Every later message on it, **durable ones included**, carries a regular header naming a
+  session the peer does not hold. The peer refuses it as unauthenticated input
+  (`_inspectRegular` in `pairwise_opaque_envelope_inspector.dart`), and the sync engine
+  quarantines and acknowledges a durable envelope refused that way, so a text message is
+  lost rather than late.
+- When the peer later starts a session of its own, `accept_initial` keeps the session of
+  the lower initiator device id as primary. If that is the lost one, the peer's session is
+  demoted to receive-only on this side, its regular messages are refused as well, and the
+  pair is broken in both directions.
+- The retry bound cannot help: a retry is the next message number on the same session,
+  under a regular header.
+
+`pairwise-transport-v1.md` has no case for a lost initial message, because its durable
+queue does not lose one short of the TTL, and D5's cost statement — that the bound's
+failure mode is a repair rather than a loss — holds only for a session both ends hold.
+
+**What the client does until the owner decides.** Nothing is sealed to a device with no
+ready primary session: the seal reports `noSession`, and the store refuses a volatile
+transition that would create a session. A call therefore reaches only devices that already
+share a session with this one, which the durable path starts. Receiving an initial header
+over a `signal` frame is still accepted, under every check a durable one gets, because the
+receiving side then holds everything the sender does. D7's 16384 fallback for an SDP under
+an initial header does not arise.
+
+**The options, for the owner.**
+
+- **A. Keep it.** A session begins on the durable path, and the call states *no secure
+  session with this device yet* for a peer it cannot reach. Two members of a room who have
+  never exchanged a durable message cannot call each other until one of them sends one.
+- **B. Let the room start the missing sessions.** Prompt 6's room already exchanges durable
+  `CPVRV001` payloads between members, and any durable payload one device sends another
+  starts their session. Which payload, and when, is a room-protocol decision for prompt 6,
+  and it needs no new wire format.
+- **C. A durable session-start payload**, whose only effect is the session its initial
+  header starts. A new wire format.
+- **D. Follow D7 as written**, and accept that a dropped first frame can break the pair's
+  text conversation for good.
+
+Recommended: A for prompt 5, and B decided before prompt 7 builds the join.
+
+### Decided 2026-09-30 — B: the room starts the missing sessions
+
+The owner accepted **B** on 2026-09-30, with one requirement: a missing pairwise session is
+established by the room's durable messages, with no new wire format, so that neither a text
+message nor a new peer's call is dropped. A is rejected because two members who have never
+exchanged a message could not call each other; C because it is a new wire format; D because
+it trades a text conversation for a call.
+
+**What stays.** A volatile frame never starts a session. The seal refuses a device with no
+ready primary session as `noSession`, and the store refuses a volatile transition that would
+create one, exactly as prompt 4 built them. That half is what keeps a text message from being
+lost: the first message on every session is a durable envelope, which the queue holds until
+the device fetches it.
+
+**What prompt 6 decided under it**, because B left the payload and the moment to the room
+protocol:
+
+- **The payload is the room's kind 2, the state request**, naming the state the sending
+  device holds and sealed to one device alone. It is the smallest room payload, 77 bytes, and
+  it tells the recipient nothing its account may not see: the room's id and the revision and
+  hash of a state in which that account is an active member. It is also a question, and its
+  answer is the session's second message, so one exchange confirms the session in both
+  directions and tells each end whether the other is behind.
+- **Two receiving rules extend the group's, for rooms only.** A request for a room this
+  device does not hold, and a request naming a later revision than this device holds, each
+  open a state request back to the device that sent it, as an event that builds on state this
+  device does not hold already does. The first rule is how a member's new device learns its
+  rooms: a member device starts a session with it by asking, and it asks back. Both are
+  bounded by the same 64 open requests as the group's.
+- **When.** On accepting a create, a transcript that first gives it the room, or an add, a
+  device starts a session with each live device of each active member that it has no session
+  with **and whose device id sorts above its own**, compared as lowercase strings as §N rule
+  3 compares them, so that two devices accepting one change at the same moment start one
+  session between them and not two. Every 24 hours for each room, and whenever the call asks
+  before a join, it starts one with every such device whatever the order, because a device
+  that sorts lower may be offline, and a member's new device has accepted nothing. A device
+  that is waiting on its state, holds the room quarantined, or is not an active member starts
+  nothing.
+
+**Rejected alternatives.** The whole transcript as the payload would hand a member's new
+device its room in one message, but a transcript is an answer: one that arrived unasked from
+a device that was itself behind would retire a request it does not answer. It is also up to
+200,000 bytes where a request is 77. Starting from both ends on acceptance would start two
+sessions between every pair that accepts one change at once, which for a room created with
+fifty members is nearly every pair: 2,352 sessions and one-time prekey pairs instead of
+1,176, and a second request and answer for each. Starting only when the call joins would make
+every first call in a room wait, for most of its peers, on a round trip through the durable
+queue.
+
+**What it costs.** Each missing session is one request and one answer, two durable
+envelopes, and one classical and one ML-KEM one-time prekey of the device that did not start
+it. A room of ten single-device members, created at once, starts 36 sessions beyond the
+creator's nine. One of fifty starts 1,176, and the device whose id sorts highest has 49 of
+them started with it, the creator's included, from a pool of 100 that the ordinary
+replenishment refills. The daily check resolves each member's authenticated live devices,
+one lookup per member, once a day for each room.
+
+**What it leaves open.** A device that appeared since the last check, and that nobody has
+reached yet, is still `noSession` to the call until the call's check before its join reaches
+it (prompt 7). A durable first message its recipient never fetches expires after
+`envelope_ttl_days` like any other, and leaves the one-sided session prompt 4 described; that
+is the durable path's existing limit, and B does not change it.
+
+**Built on 2026-09-30 by prompt 6, as decided above.** Three choices it made on the way are
+written into `voice-signalling-v1.md` as built, beside the rules they refine: a transcript
+gives a device a room only from a sender who is an active member of the state it leads to;
+a transcript confirms a device's state only when its head is exactly that state, so a copy
+from a member who was behind retires no open request; and a room's mailbox-gap request does
+not hold the checkpoint's gap open, because the room itself waits.
+
+### Built 2026-10-01 by prompt 7 — the call, and three choices the record left to it
+
+Prompt 7 built the call as `VoiceCallEngine` (`voice-signalling-v1.md`, *The call*). Three
+choices it made are written there as built, beside the rules they refine:
+
+- **The participant set before a join is the answers to a query.** D2 has a device decide
+  from its own participant set, before it sends its `join`, whether the call is full, and a
+  device not yet in the call holds none. So a join sends its `participants_query` first and
+  its `join` after the first answer window, 2 seconds within 25 %: every join waits that long
+  before it is announced.
+- **The ceiling counts every device a participant knows of, and closes a connection to a
+  device outside the ten.** That is D2 taken literally. It means a device that joins a full
+  call without having heard its answers, and two that join a nine-device call at once, take
+  the seats of the participants whose ids sort highest, and those leave with *Call full*. An
+  answer counts toward a device's own seat and a newcomer's, and closes no connection by
+  itself.
+- **A removal is learned from the committed room state.** D11 closes before the roster
+  commits. The call reads the room only through its read port, so it closes as the committed
+  change reaches it, ahead of anything else it is doing, and checks every frame against the
+  room as committed when the frame arrives. The moment between the commit and the close is
+  what that costs. A call into the call from the room's inbound path, and from its own signed
+  removals, before they commit would remove it; that is a change to prompt 6's room, so it
+  was not made here.
+
+Not built by it: the relay-unreachable state of D10, which no prompt of the phase lists.
+
+### Open question, dated 2026-10-01 — room text spends the signalling budget
+
+Found by prompt 7, and **not decided there**. D5 caps one join at 32 sealed frames to each
+peer, and sizes the cap on signalling alone: four `join`s, four offers or answers, four
+queries, a few candidate batches and one `leave`. §N rule 5 sends room text the same way,
+and the transport of prompt 4 counts every frame of a join, room text included. A device
+that sends one peer about thirty lines in one call therefore spends that peer's budget, and
+from then on nothing more is sealed to it in that call: no further line, no `leave`, and not
+the ICE restart the credential's refresh needs five hours in, so a call that long would lose
+the peer when the old credential expires.
+
+**What the client does until the owner decides** is what D5 says: room text counts, and a
+peer whose budget is spent is sent nothing more in the call. The options:
+
+- **A. Keep it**, and have the composer say so before a peer's budget runs out.
+- **B. Count signalling only.** Room text would spend no budget, so a call with much text
+  could leave a pair more dead skipped keys than D5's arithmetic allows — one for each line
+  the relay drops — which is the cost the cap exists to bound.
+- **C. A separate allowance for room text**, a fixed number of lines for each peer in a
+  call, beside the 32.
+- **D. Reserve part of the 32** for the `leave` and the ICE restarts, and give room text
+  only what is left.
+
+Recommended: D, so that text can never cost the call its own signalling, and C on top if
+room text is to carry more than a few dozen lines.
 
 ## ADR-076 in full — production gets a key, and the first install is the part that cannot be taken back (2026-09-14)
 

@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -149,4 +152,75 @@ void main() {
       );
     },
   );
+
+  test(
+    "a group's or a room's signed change is owed until it is routed",
+    () async {
+      // Neither payload is a send yet. Each waits in its own table until the
+      // post-inbox dispatch, which runs only inside a cycle, routes it into the
+      // pairwise outbox. Left out of this depth, a room created on one device
+      // reached the other only when something unrelated woke the creator's
+      // session, six minutes later on 2026-10-05.
+      await _queueRoomPayload(database, 'room-control:1');
+      expect(await depth(), 1);
+
+      await _queueGroupPayload(database, 'group-control:1');
+      expect(await depth(), 2);
+
+      // Routed, each is the pairwise outbox's to count, under the recipient's
+      // own operation id, so it is no longer owed here.
+      await database
+          .update(database.roomOutboundObjects)
+          .write(const RoomOutboundObjectsCompanion(deliveryState: Value(2)));
+      await database
+          .update(database.groupOutboundObjects)
+          .write(const GroupOutboundObjectsCompanion(deliveryState: Value(2)));
+      expect(await depth(), 0);
+    },
+  );
+
+  test('the watched depth rises the moment a change is queued', () async {
+    final depths = <int>[];
+    final subscription = sync.watchProjection().listen(
+      (projection) => depths.add(projection.outboxDepth),
+    );
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+    expect(depths, [0]);
+
+    await _queueRoomPayload(database, 'room-control:1');
+    await pumpEventQueue();
+
+    // The rise is the supervisor's whole trigger, so the watch has to re-read
+    // when the room's table changes, not merely count it when asked.
+    expect(depths.last, 1);
+  });
 }
+
+Future<void> _queueRoomPayload(LocalDatabase database, String operationId) =>
+    database
+        .into(database.roomOutboundObjects)
+        .insert(
+          RoomOutboundObjectsCompanion.insert(
+            operationId: operationId,
+            roomId: 'aa' * 32,
+            eventId: '0b' * 16,
+            payload: Uint8List.fromList(const [1, 2, 3]),
+            recipientUserIdsJson: '["$peerUserId"]',
+            deliveryState: 1,
+          ),
+        );
+
+Future<void> _queueGroupPayload(LocalDatabase database, String operationId) =>
+    database
+        .into(database.groupOutboundObjects)
+        .insert(
+          GroupOutboundObjectsCompanion.insert(
+            operationId: operationId,
+            groupId: 'cc' * 32,
+            eventId: '0d' * 16,
+            payload: Uint8List.fromList(const [4, 5, 6]),
+            recipientUserIdsJson: '["$peerUserId"]',
+            deliveryState: 1,
+          ),
+        );

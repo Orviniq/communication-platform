@@ -13,11 +13,35 @@ enum AppConnectionState { connected, connecting, offline }
 class AppShellStatus {
   const AppShellStatus({
     this.connection = AppConnectionState.connected,
+    this.activeVoiceRoomId,
     this.activeVoiceRoomName,
+    this.activeVoiceMuted = false,
+    this.voiceRoomsComposeAvailable = true,
   });
 
   final AppConnectionState connection;
+
+  /// The room of the call in progress: what the banner returns to. The banner
+  /// shows while it is set, and only then.
+  final String? activeVoiceRoomId;
+
+  /// The room's name, once this device has read it.
   final String? activeVoiceRoomName;
+
+  /// Whether the call's microphone is muted, which the banner shows.
+  final bool activeVoiceMuted;
+
+  /// Whether the Voice Rooms tab offers to create a room. False when the
+  /// deployment serves no voice (`ui-specification.md` §13.0).
+  final bool voiceRoomsComposeAvailable;
+
+  AppShellStatus copyWith({AppConnectionState? connection}) => AppShellStatus(
+    connection: connection ?? this.connection,
+    activeVoiceRoomId: activeVoiceRoomId,
+    activeVoiceRoomName: activeVoiceRoomName,
+    activeVoiceMuted: activeVoiceMuted,
+    voiceRoomsComposeAvailable: voiceRoomsComposeAvailable,
+  );
 }
 
 enum AppDestination { chats, voiceRooms, settings }
@@ -119,9 +143,22 @@ class _AppShellState extends State<AppShell> {
     // narrow layout floats it directly over the chat composer's send button.
     final onCompose =
         destination == AppDestination.settings ||
-            widget.location != destination.rootLocation
+            widget.location != destination.rootLocation ||
+            (destination == AppDestination.voiceRooms &&
+                !widget.status.voiceRoomsComposeAvailable)
         ? null
         : _compose;
+    // The banner returns to the call, so the call's own screen does not show
+    // it: everywhere else it stays until the call ends.
+    final callRoomId = widget.status.activeVoiceRoomId;
+    final banner =
+        callRoomId == null || widget.location == '/voice-rooms/$callRoomId/call'
+        ? null
+        : _VoiceRoomBanner(
+            roomId: callRoomId,
+            roomName: widget.status.activeVoiceRoomName,
+            muted: widget.status.activeVoiceMuted,
+          );
     final widthClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
     final shortcuts = <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () =>
@@ -149,7 +186,7 @@ class _AppShellState extends State<AppShell> {
     final shell = switch (widthClass) {
       AppWidthClass.narrow => _NarrowShell(
         selected: selected,
-        status: widget.status,
+        banner: banner,
         onSelect: _selectDestination,
         onCompose: onCompose,
         child: content,
@@ -157,7 +194,7 @@ class _AppShellState extends State<AppShell> {
       AppWidthClass.medium => _TwoPaneShell(
         compact: true,
         selected: selected,
-        status: widget.status,
+        banner: banner,
         onSelect: _selectDestination,
         onCompose: onCompose,
         child: content,
@@ -165,7 +202,7 @@ class _AppShellState extends State<AppShell> {
       AppWidthClass.wide => _TwoPaneShell(
         compact: false,
         selected: selected,
-        status: widget.status,
+        banner: banner,
         onSelect: _selectDestination,
         onCompose: onCompose,
         child: content,
@@ -192,14 +229,14 @@ class _AppShellState extends State<AppShell> {
 class _NarrowShell extends StatelessWidget {
   const _NarrowShell({
     required this.selected,
-    required this.status,
+    required this.banner,
     required this.onSelect,
     required this.onCompose,
     required this.child,
   });
 
   final int selected;
-  final AppShellStatus status;
+  final Widget? banner;
   final ValueChanged<int> onSelect;
   final VoidCallback? onCompose;
   final Widget child;
@@ -229,8 +266,7 @@ class _NarrowShell extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (status.activeVoiceRoomName case final roomName?)
-                _VoiceRoomBanner(roomName: roomName),
+              ?banner,
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.x2,
@@ -263,7 +299,7 @@ class _TwoPaneShell extends StatelessWidget {
   const _TwoPaneShell({
     required this.compact,
     required this.selected,
-    required this.status,
+    required this.banner,
     required this.onSelect,
     required this.onCompose,
     required this.child,
@@ -271,7 +307,7 @@ class _TwoPaneShell extends StatelessWidget {
 
   final bool compact;
   final int selected;
-  final AppShellStatus status;
+  final Widget? banner;
   final ValueChanged<int> onSelect;
   final VoidCallback? onCompose;
   final Widget child;
@@ -297,7 +333,7 @@ class _TwoPaneShell extends StatelessWidget {
               child: _DestinationRail(
                 compact: compact,
                 selected: selected,
-                status: status,
+                banner: banner,
                 onSelect: onSelect,
                 onCompose: onCompose,
               ),
@@ -314,14 +350,14 @@ class _DestinationRail extends StatelessWidget {
   const _DestinationRail({
     required this.compact,
     required this.selected,
-    required this.status,
+    required this.banner,
     required this.onSelect,
     required this.onCompose,
   });
 
   final bool compact;
   final int selected;
-  final AppShellStatus status;
+  final Widget? banner;
   final ValueChanged<int> onSelect;
   final VoidCallback? onCompose;
 
@@ -331,8 +367,7 @@ class _DestinationRail extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (status.activeVoiceRoomName case final roomName?)
-          _VoiceRoomBanner(roomName: roomName),
+        ?banner,
         Padding(
           padding: const EdgeInsets.all(AppSpacing.x3),
           child: compact
@@ -633,42 +668,64 @@ class _ConnectionStrip extends StatelessWidget {
 }
 
 class _VoiceRoomBanner extends StatelessWidget {
-  const _VoiceRoomBanner({required this.roomName});
+  const _VoiceRoomBanner({
+    required this.roomId,
+    required this.roomName,
+    required this.muted,
+  });
 
-  final String roomName;
+  final String roomId;
+
+  /// Null until this device has read the room's name.
+  final String? roomName;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
-    final label = AppLocalizations.of(context).returnToVoiceRoom(roomName);
+    final l10n = AppLocalizations.of(context);
+    final label = switch (roomName) {
+      final name? => l10n.returnToVoiceRoom(name),
+      null => l10n.voiceCallReturnBanner,
+    };
+    final microphone = muted ? l10n.voiceTileMuted : l10n.voiceTileMicOn;
+    final colors = context.tokens.colors;
     return Semantics(
+      key: const ValueKey('active-voice-banner'),
       button: true,
-      label: label,
+      label: '$label, $microphone',
+      excludeSemantics: true,
       child: Material(
-        color: context.tokens.colors.accentSoft,
+        color: colors.accentSoft,
         child: InkWell(
-          onTap: () => context.go('/voice-rooms/sample-room'),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.x2),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                AppIcon(
-                  AppIcons.voiceRooms,
-                  color: context.tokens.colors.accent,
-                  size: 18,
-                ),
-                const SizedBox(width: AppSpacing.x2),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: context.tokens.typography.compact.copyWith(
-                      color: context.tokens.colors.accent,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 2,
+          onTap: () => context.go('/voice-rooms/$roomId/call'),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: AppFocus.minimumTarget,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.x2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AppIcon(
+                    muted ? AppIcons.microphoneOff : AppIcons.microphone,
+                    color: colors.accent,
+                    size: 18,
                   ),
-                ),
-              ],
+                  const SizedBox(width: AppSpacing.x2),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: context.tokens.typography.compact.copyWith(
+                        color: colors.accent,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

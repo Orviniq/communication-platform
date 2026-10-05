@@ -1,6 +1,7 @@
 import 'package:communication_platform/app/app.dart';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,19 +22,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('preserves a nested route while resizing across breakpoints', (
-    tester,
-  ) async {
+  testWidgets('preserves a nested route and its draft while resizing across '
+      'breakpoints', (tester) async {
     await _pumpApp(
       tester,
       size: const Size(360, 800),
-      initialLocation: '/voice-rooms/sample-room',
+      initialLocation: '/voice-rooms/new',
     );
-    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('create-voice-room-screen')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('voice-room-name-field')),
+        matching: find.byType(EditableText),
+      ),
+      'Standup',
+    );
 
     await _resize(tester, const Size(1440, 900));
     expect(find.byKey(const ValueKey('shell-wide')), findsOneWidget);
-    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('create-voice-room-screen')),
+      findsOneWidget,
+    );
+    expect(find.text('Standup'), findsOneWidget);
   });
 
   testWidgets('keyboard shortcuts navigate the stable destination set', (
@@ -46,8 +60,8 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
 
-    expect(find.text('Voice rooms'), findsOneWidget);
-    expect(find.text('Route: /voice-rooms'), findsOneWidget);
+    expect(find.byKey(const ValueKey('voice-rooms-screen')), findsOneWidget);
+    expect(find.text('No voice rooms yet'), findsOneWidget);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
@@ -78,10 +92,13 @@ void main() {
     // into it, so this also proves the shell re-reads the location on a push.
     GoRouter.of(
       tester.element(find.byKey(const ValueKey('shell-narrow'))),
-    ).go('/voice-rooms/sample-room');
+    ).go('/voice-rooms/new');
     await tester.pumpAndSettle();
 
-    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('create-voice-room-screen')),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Create a voice room'), findsNothing);
     expect(find.byTooltip('Start a conversation'), findsNothing);
 
@@ -153,11 +170,73 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Voice rooms'), findsOneWidget);
+    expect(find.byKey(const ValueKey('voice-rooms-screen')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('app-route-spatial-transition')),
       findsNothing,
     );
+  });
+
+  testWidgets('a call in progress raises a banner on every screen but its own, '
+      'and the banner returns to it', (tester) async {
+    final semantics = tester.ensureSemantics();
+    const roomId =
+        'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00';
+    await _pumpApp(
+      tester,
+      size: const Size(360, 800),
+      status: const AppShellStatus(
+        activeVoiceRoomId: roomId,
+        activeVoiceRoomName: 'Standup',
+        activeVoiceMuted: true,
+      ),
+    );
+
+    final banner = find.byKey(const ValueKey('active-voice-banner'));
+    expect(banner, findsOneWidget);
+    expect(find.text('Return to voice room: Standup'), findsOneWidget);
+    expect(
+      tester.getSemantics(banner).label,
+      'Return to voice room: Standup, Muted',
+    );
+
+    await tester.tap(banner);
+    // The call screen shows a spinner in this harness, so it never settles.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    // On the call's own screen the banner would only point at itself.
+    expect(find.byKey(const ValueKey('active-voice-banner')), findsNothing);
+
+    GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    ).go('/settings');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('active-voice-banner')), findsOneWidget);
+
+    // Atop the rail on a wide layout, and still on every screen.
+    await _resize(tester, const Size(1440, 900));
+    expect(find.byKey(const ValueKey('shell-wide')), findsOneWidget);
+    expect(find.byKey(const ValueKey('active-voice-banner')), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('no call raises no banner, and a server without voice offers no '
+      'room to create', (tester) async {
+    await _pumpApp(
+      tester,
+      size: const Size(360, 800),
+      initialLocation: '/voice-rooms',
+      status: const AppShellStatus(voiceRoomsComposeAvailable: false),
+    );
+
+    expect(find.byKey(const ValueKey('active-voice-banner')), findsNothing);
+    expect(find.byTooltip('Create a voice room'), findsNothing);
+
+    GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    ).go('/chats');
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Start a conversation'), findsOneWidget);
   });
 }
 
@@ -167,6 +246,7 @@ Future<void> _pumpApp(
   ThemeMode themeMode = ThemeMode.light,
   String initialLocation = '/chats',
   bool guardSettings = false,
+  AppShellStatus status = const AppShellStatus(),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -178,6 +258,7 @@ Future<void> _pumpApp(
       locale: const Locale('en'),
       themeMode: themeMode,
       initialLocation: initialLocation,
+      shellStatus: status,
       routeGuard: guardSettings
           ? (context, state) =>
                 state.uri.path.startsWith('/settings') ? '/chats' : null

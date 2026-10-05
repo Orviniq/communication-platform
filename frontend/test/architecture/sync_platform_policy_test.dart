@@ -37,12 +37,18 @@ void main() {
     expect(manifest, isNot(contains('dataSync')));
     expect(manifest, isNot(contains('systemExempted')));
     expect(manifest, isNot(contains('shortService')));
+    // Voice added the second, and its type is the accurate one too: a call's
+    // service keeps the microphone and nothing else (§N rule 11), which is
+    // what the platform defines `microphone` for.
     expect(
       'android:foregroundServiceType'.allMatches(manifest),
-      hasLength(1),
-      reason: 'exactly one service in this artifact runs in the foreground',
+      hasLength(2),
+      reason:
+          'two services in this artifact run in the foreground: sustained '
+          'delivery and a call',
     );
     expect(manifest, contains('android:foregroundServiceType="specialUse"'));
+    expect(manifest, contains('android:foregroundServiceType="microphone"'));
     expect(
       manifest,
       contains('android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE'),

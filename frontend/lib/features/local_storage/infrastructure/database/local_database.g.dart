@@ -21112,322 +21112,476 @@ class PendingApplicationReceiptsCompanion
   }
 }
 
-class $VoiceRoomsTable extends VoiceRooms
-    with TableInfo<$VoiceRoomsTable, VoiceRoom> {
+class $RoomStatesTable extends RoomStates
+    with TableInfo<$RoomStatesTable, StoredRoomStateRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $VoiceRoomsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _localRoomIdMeta = const VerificationMeta(
-    'localRoomId',
-  );
+  $RoomStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
   @override
-  late final GeneratedColumn<String> localRoomId = GeneratedColumn<String>(
-    'local_room_id',
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _capabilityCiphertextMeta =
-      const VerificationMeta('capabilityCiphertext');
-  @override
-  late final GeneratedColumn<Uint8List> capabilityCiphertext =
-      GeneratedColumn<Uint8List>(
-        'capability_ciphertext',
-        aliasedName,
-        false,
-        type: DriftSqlType.blob,
-        requiredDuringInsert: true,
-      );
-  static const VerificationMeta _metadataCiphertextMeta =
-      const VerificationMeta('metadataCiphertext');
-  @override
-  late final GeneratedColumn<Uint8List> metadataCiphertext =
-      GeneratedColumn<Uint8List>(
-        'metadata_ciphertext',
-        aliasedName,
-        false,
-        type: DriftSqlType.blob,
-        requiredDuringInsert: true,
-      );
-  static const VerificationMeta _liveStateMeta = const VerificationMeta(
-    'liveState',
+  static const VerificationMeta _stateVersionMeta = const VerificationMeta(
+    'stateVersion',
   );
   @override
-  late final GeneratedColumn<int> liveState = GeneratedColumn<int>(
-    'live_state',
+  late final GeneratedColumn<int> stateVersion = GeneratedColumn<int>(
+    'state_version',
     aliasedName,
     false,
-    check: () => ComparableExpr(liveState).isBetweenValues(0, 4),
+    check: () => ComparableExpr(stateVersion).isBiggerThanValue(0),
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _controlProjectionCiphertextMeta =
+      const VerificationMeta('controlProjectionCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> controlProjectionCiphertext =
+      GeneratedColumn<Uint8List>(
+        'control_projection_ciphertext',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _controlRevisionMeta = const VerificationMeta(
+    'controlRevision',
+  );
+  @override
+  late final GeneratedColumn<int> controlRevision = GeneratedColumn<int>(
+    'control_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(controlRevision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _controlStateHashMeta = const VerificationMeta(
+    'controlStateHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> controlStateHash =
+      GeneratedColumn<Uint8List>(
+        'control_state_hash',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _lifecycleMeta = const VerificationMeta(
+    'lifecycle',
+  );
+  @override
+  late final GeneratedColumn<int> lifecycle = GeneratedColumn<int>(
+    'lifecycle',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(lifecycle).isBetweenValues(0, 5),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionsCheckedAtMeta = const VerificationMeta(
+    'sessionsCheckedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> sessionsCheckedAt =
+      GeneratedColumn<DateTime>(
+        'sessions_checked_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
-    localRoomId,
-    capabilityCiphertext,
-    metadataCiphertext,
-    liveState,
+    roomId,
+    stateVersion,
+    controlProjectionCiphertext,
+    controlRevision,
+    controlStateHash,
+    lifecycle,
+    sessionsCheckedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'voice_rooms';
+  static const String $name = 'room_states';
   @override
   VerificationContext validateIntegrity(
-    Insertable<VoiceRoom> instance, {
+    Insertable<StoredRoomStateRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('local_room_id')) {
+    if (data.containsKey('room_id')) {
       context.handle(
-        _localRoomIdMeta,
-        localRoomId.isAcceptableOrUnknown(
-          data['local_room_id']!,
-          _localRoomIdMeta,
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('state_version')) {
+      context.handle(
+        _stateVersionMeta,
+        stateVersion.isAcceptableOrUnknown(
+          data['state_version']!,
+          _stateVersionMeta,
         ),
       );
     } else if (isInserting) {
-      context.missing(_localRoomIdMeta);
+      context.missing(_stateVersionMeta);
     }
-    if (data.containsKey('capability_ciphertext')) {
+    if (data.containsKey('control_projection_ciphertext')) {
       context.handle(
-        _capabilityCiphertextMeta,
-        capabilityCiphertext.isAcceptableOrUnknown(
-          data['capability_ciphertext']!,
-          _capabilityCiphertextMeta,
+        _controlProjectionCiphertextMeta,
+        controlProjectionCiphertext.isAcceptableOrUnknown(
+          data['control_projection_ciphertext']!,
+          _controlProjectionCiphertextMeta,
         ),
       );
     } else if (isInserting) {
-      context.missing(_capabilityCiphertextMeta);
+      context.missing(_controlProjectionCiphertextMeta);
     }
-    if (data.containsKey('metadata_ciphertext')) {
+    if (data.containsKey('control_revision')) {
       context.handle(
-        _metadataCiphertextMeta,
-        metadataCiphertext.isAcceptableOrUnknown(
-          data['metadata_ciphertext']!,
-          _metadataCiphertextMeta,
+        _controlRevisionMeta,
+        controlRevision.isAcceptableOrUnknown(
+          data['control_revision']!,
+          _controlRevisionMeta,
         ),
       );
     } else if (isInserting) {
-      context.missing(_metadataCiphertextMeta);
+      context.missing(_controlRevisionMeta);
     }
-    if (data.containsKey('live_state')) {
+    if (data.containsKey('control_state_hash')) {
       context.handle(
-        _liveStateMeta,
-        liveState.isAcceptableOrUnknown(data['live_state']!, _liveStateMeta),
+        _controlStateHashMeta,
+        controlStateHash.isAcceptableOrUnknown(
+          data['control_state_hash']!,
+          _controlStateHashMeta,
+        ),
       );
     } else if (isInserting) {
-      context.missing(_liveStateMeta);
+      context.missing(_controlStateHashMeta);
+    }
+    if (data.containsKey('lifecycle')) {
+      context.handle(
+        _lifecycleMeta,
+        lifecycle.isAcceptableOrUnknown(data['lifecycle']!, _lifecycleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lifecycleMeta);
+    }
+    if (data.containsKey('sessions_checked_at')) {
+      context.handle(
+        _sessionsCheckedAtMeta,
+        sessionsCheckedAt.isAcceptableOrUnknown(
+          data['sessions_checked_at']!,
+          _sessionsCheckedAtMeta,
+        ),
+      );
     }
     return context;
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {localRoomId};
+  Set<GeneratedColumn> get $primaryKey => {roomId};
   @override
-  VoiceRoom map(Map<String, dynamic> data, {String? tablePrefix}) {
+  StoredRoomStateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return VoiceRoom(
-      localRoomId: attachedDatabase.typeMapping.read(
+    return StoredRoomStateRow(
+      roomId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}local_room_id'],
+        data['${effectivePrefix}room_id'],
       )!,
-      capabilityCiphertext: attachedDatabase.typeMapping.read(
-        DriftSqlType.blob,
-        data['${effectivePrefix}capability_ciphertext'],
-      )!,
-      metadataCiphertext: attachedDatabase.typeMapping.read(
-        DriftSqlType.blob,
-        data['${effectivePrefix}metadata_ciphertext'],
-      )!,
-      liveState: attachedDatabase.typeMapping.read(
+      stateVersion: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}live_state'],
+        data['${effectivePrefix}state_version'],
       )!,
+      controlProjectionCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_projection_ciphertext'],
+      )!,
+      controlRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}control_revision'],
+      )!,
+      controlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_state_hash'],
+      )!,
+      lifecycle: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lifecycle'],
+      )!,
+      sessionsCheckedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}sessions_checked_at'],
+      ),
     );
   }
 
   @override
-  $VoiceRoomsTable createAlias(String alias) {
-    return $VoiceRoomsTable(attachedDatabase, alias);
+  $RoomStatesTable createAlias(String alias) {
+    return $RoomStatesTable(attachedDatabase, alias);
   }
 }
 
-class VoiceRoom extends DataClass implements Insertable<VoiceRoom> {
-  final String localRoomId;
-  final Uint8List capabilityCiphertext;
-  final Uint8List metadataCiphertext;
-  final int liveState;
-  const VoiceRoom({
-    required this.localRoomId,
-    required this.capabilityCiphertext,
-    required this.metadataCiphertext,
-    required this.liveState,
+class StoredRoomStateRow extends DataClass
+    implements Insertable<StoredRoomStateRow> {
+  final String roomId;
+  final int stateVersion;
+  final Uint8List controlProjectionCiphertext;
+  final int controlRevision;
+  final Uint8List controlStateHash;
+  final int lifecycle;
+  final DateTime? sessionsCheckedAt;
+  const StoredRoomStateRow({
+    required this.roomId,
+    required this.stateVersion,
+    required this.controlProjectionCiphertext,
+    required this.controlRevision,
+    required this.controlStateHash,
+    required this.lifecycle,
+    this.sessionsCheckedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['local_room_id'] = Variable<String>(localRoomId);
-    map['capability_ciphertext'] = Variable<Uint8List>(capabilityCiphertext);
-    map['metadata_ciphertext'] = Variable<Uint8List>(metadataCiphertext);
-    map['live_state'] = Variable<int>(liveState);
+    map['room_id'] = Variable<String>(roomId);
+    map['state_version'] = Variable<int>(stateVersion);
+    map['control_projection_ciphertext'] = Variable<Uint8List>(
+      controlProjectionCiphertext,
+    );
+    map['control_revision'] = Variable<int>(controlRevision);
+    map['control_state_hash'] = Variable<Uint8List>(controlStateHash);
+    map['lifecycle'] = Variable<int>(lifecycle);
+    if (!nullToAbsent || sessionsCheckedAt != null) {
+      map['sessions_checked_at'] = Variable<DateTime>(sessionsCheckedAt);
+    }
     return map;
   }
 
-  VoiceRoomsCompanion toCompanion(bool nullToAbsent) {
-    return VoiceRoomsCompanion(
-      localRoomId: Value(localRoomId),
-      capabilityCiphertext: Value(capabilityCiphertext),
-      metadataCiphertext: Value(metadataCiphertext),
-      liveState: Value(liveState),
+  RoomStatesCompanion toCompanion(bool nullToAbsent) {
+    return RoomStatesCompanion(
+      roomId: Value(roomId),
+      stateVersion: Value(stateVersion),
+      controlProjectionCiphertext: Value(controlProjectionCiphertext),
+      controlRevision: Value(controlRevision),
+      controlStateHash: Value(controlStateHash),
+      lifecycle: Value(lifecycle),
+      sessionsCheckedAt: sessionsCheckedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionsCheckedAt),
     );
   }
 
-  factory VoiceRoom.fromJson(
+  factory StoredRoomStateRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return VoiceRoom(
-      localRoomId: serializer.fromJson<String>(json['localRoomId']),
-      capabilityCiphertext: serializer.fromJson<Uint8List>(
-        json['capabilityCiphertext'],
+    return StoredRoomStateRow(
+      roomId: serializer.fromJson<String>(json['roomId']),
+      stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      controlProjectionCiphertext: serializer.fromJson<Uint8List>(
+        json['controlProjectionCiphertext'],
       ),
-      metadataCiphertext: serializer.fromJson<Uint8List>(
-        json['metadataCiphertext'],
+      controlRevision: serializer.fromJson<int>(json['controlRevision']),
+      controlStateHash: serializer.fromJson<Uint8List>(
+        json['controlStateHash'],
       ),
-      liveState: serializer.fromJson<int>(json['liveState']),
+      lifecycle: serializer.fromJson<int>(json['lifecycle']),
+      sessionsCheckedAt: serializer.fromJson<DateTime?>(
+        json['sessionsCheckedAt'],
+      ),
     );
   }
   @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'localRoomId': serializer.toJson<String>(localRoomId),
-      'capabilityCiphertext': serializer.toJson<Uint8List>(
-        capabilityCiphertext,
+      'roomId': serializer.toJson<String>(roomId),
+      'stateVersion': serializer.toJson<int>(stateVersion),
+      'controlProjectionCiphertext': serializer.toJson<Uint8List>(
+        controlProjectionCiphertext,
       ),
-      'metadataCiphertext': serializer.toJson<Uint8List>(metadataCiphertext),
-      'liveState': serializer.toJson<int>(liveState),
+      'controlRevision': serializer.toJson<int>(controlRevision),
+      'controlStateHash': serializer.toJson<Uint8List>(controlStateHash),
+      'lifecycle': serializer.toJson<int>(lifecycle),
+      'sessionsCheckedAt': serializer.toJson<DateTime?>(sessionsCheckedAt),
     };
   }
 
-  VoiceRoom copyWith({
-    String? localRoomId,
-    Uint8List? capabilityCiphertext,
-    Uint8List? metadataCiphertext,
-    int? liveState,
-  }) => VoiceRoom(
-    localRoomId: localRoomId ?? this.localRoomId,
-    capabilityCiphertext: capabilityCiphertext ?? this.capabilityCiphertext,
-    metadataCiphertext: metadataCiphertext ?? this.metadataCiphertext,
-    liveState: liveState ?? this.liveState,
+  StoredRoomStateRow copyWith({
+    String? roomId,
+    int? stateVersion,
+    Uint8List? controlProjectionCiphertext,
+    int? controlRevision,
+    Uint8List? controlStateHash,
+    int? lifecycle,
+    Value<DateTime?> sessionsCheckedAt = const Value.absent(),
+  }) => StoredRoomStateRow(
+    roomId: roomId ?? this.roomId,
+    stateVersion: stateVersion ?? this.stateVersion,
+    controlProjectionCiphertext:
+        controlProjectionCiphertext ?? this.controlProjectionCiphertext,
+    controlRevision: controlRevision ?? this.controlRevision,
+    controlStateHash: controlStateHash ?? this.controlStateHash,
+    lifecycle: lifecycle ?? this.lifecycle,
+    sessionsCheckedAt: sessionsCheckedAt.present
+        ? sessionsCheckedAt.value
+        : this.sessionsCheckedAt,
   );
-  VoiceRoom copyWithCompanion(VoiceRoomsCompanion data) {
-    return VoiceRoom(
-      localRoomId: data.localRoomId.present
-          ? data.localRoomId.value
-          : this.localRoomId,
-      capabilityCiphertext: data.capabilityCiphertext.present
-          ? data.capabilityCiphertext.value
-          : this.capabilityCiphertext,
-      metadataCiphertext: data.metadataCiphertext.present
-          ? data.metadataCiphertext.value
-          : this.metadataCiphertext,
-      liveState: data.liveState.present ? data.liveState.value : this.liveState,
+  StoredRoomStateRow copyWithCompanion(RoomStatesCompanion data) {
+    return StoredRoomStateRow(
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      stateVersion: data.stateVersion.present
+          ? data.stateVersion.value
+          : this.stateVersion,
+      controlProjectionCiphertext: data.controlProjectionCiphertext.present
+          ? data.controlProjectionCiphertext.value
+          : this.controlProjectionCiphertext,
+      controlRevision: data.controlRevision.present
+          ? data.controlRevision.value
+          : this.controlRevision,
+      controlStateHash: data.controlStateHash.present
+          ? data.controlStateHash.value
+          : this.controlStateHash,
+      lifecycle: data.lifecycle.present ? data.lifecycle.value : this.lifecycle,
+      sessionsCheckedAt: data.sessionsCheckedAt.present
+          ? data.sessionsCheckedAt.value
+          : this.sessionsCheckedAt,
     );
   }
 
   @override
   String toString() {
-    return (StringBuffer('VoiceRoom(')
-          ..write('localRoomId: $localRoomId, ')
-          ..write('capabilityCiphertext: $capabilityCiphertext, ')
-          ..write('metadataCiphertext: $metadataCiphertext, ')
-          ..write('liveState: $liveState')
+    return (StringBuffer('StoredRoomStateRow(')
+          ..write('roomId: $roomId, ')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('controlProjectionCiphertext: $controlProjectionCiphertext, ')
+          ..write('controlRevision: $controlRevision, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('lifecycle: $lifecycle, ')
+          ..write('sessionsCheckedAt: $sessionsCheckedAt')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
-    localRoomId,
-    $driftBlobEquality.hash(capabilityCiphertext),
-    $driftBlobEquality.hash(metadataCiphertext),
-    liveState,
+    roomId,
+    stateVersion,
+    $driftBlobEquality.hash(controlProjectionCiphertext),
+    controlRevision,
+    $driftBlobEquality.hash(controlStateHash),
+    lifecycle,
+    sessionsCheckedAt,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is VoiceRoom &&
-          other.localRoomId == this.localRoomId &&
+      (other is StoredRoomStateRow &&
+          other.roomId == this.roomId &&
+          other.stateVersion == this.stateVersion &&
           $driftBlobEquality.equals(
-            other.capabilityCiphertext,
-            this.capabilityCiphertext,
+            other.controlProjectionCiphertext,
+            this.controlProjectionCiphertext,
           ) &&
+          other.controlRevision == this.controlRevision &&
           $driftBlobEquality.equals(
-            other.metadataCiphertext,
-            this.metadataCiphertext,
+            other.controlStateHash,
+            this.controlStateHash,
           ) &&
-          other.liveState == this.liveState);
+          other.lifecycle == this.lifecycle &&
+          other.sessionsCheckedAt == this.sessionsCheckedAt);
 }
 
-class VoiceRoomsCompanion extends UpdateCompanion<VoiceRoom> {
-  final Value<String> localRoomId;
-  final Value<Uint8List> capabilityCiphertext;
-  final Value<Uint8List> metadataCiphertext;
-  final Value<int> liveState;
+class RoomStatesCompanion extends UpdateCompanion<StoredRoomStateRow> {
+  final Value<String> roomId;
+  final Value<int> stateVersion;
+  final Value<Uint8List> controlProjectionCiphertext;
+  final Value<int> controlRevision;
+  final Value<Uint8List> controlStateHash;
+  final Value<int> lifecycle;
+  final Value<DateTime?> sessionsCheckedAt;
   final Value<int> rowid;
-  const VoiceRoomsCompanion({
-    this.localRoomId = const Value.absent(),
-    this.capabilityCiphertext = const Value.absent(),
-    this.metadataCiphertext = const Value.absent(),
-    this.liveState = const Value.absent(),
+  const RoomStatesCompanion({
+    this.roomId = const Value.absent(),
+    this.stateVersion = const Value.absent(),
+    this.controlProjectionCiphertext = const Value.absent(),
+    this.controlRevision = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.lifecycle = const Value.absent(),
+    this.sessionsCheckedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  VoiceRoomsCompanion.insert({
-    required String localRoomId,
-    required Uint8List capabilityCiphertext,
-    required Uint8List metadataCiphertext,
-    required int liveState,
+  RoomStatesCompanion.insert({
+    required String roomId,
+    required int stateVersion,
+    required Uint8List controlProjectionCiphertext,
+    required int controlRevision,
+    required Uint8List controlStateHash,
+    required int lifecycle,
+    this.sessionsCheckedAt = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : localRoomId = Value(localRoomId),
-       capabilityCiphertext = Value(capabilityCiphertext),
-       metadataCiphertext = Value(metadataCiphertext),
-       liveState = Value(liveState);
-  static Insertable<VoiceRoom> custom({
-    Expression<String>? localRoomId,
-    Expression<Uint8List>? capabilityCiphertext,
-    Expression<Uint8List>? metadataCiphertext,
-    Expression<int>? liveState,
+  }) : roomId = Value(roomId),
+       stateVersion = Value(stateVersion),
+       controlProjectionCiphertext = Value(controlProjectionCiphertext),
+       controlRevision = Value(controlRevision),
+       controlStateHash = Value(controlStateHash),
+       lifecycle = Value(lifecycle);
+  static Insertable<StoredRoomStateRow> custom({
+    Expression<String>? roomId,
+    Expression<int>? stateVersion,
+    Expression<Uint8List>? controlProjectionCiphertext,
+    Expression<int>? controlRevision,
+    Expression<Uint8List>? controlStateHash,
+    Expression<int>? lifecycle,
+    Expression<DateTime>? sessionsCheckedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (localRoomId != null) 'local_room_id': localRoomId,
-      if (capabilityCiphertext != null)
-        'capability_ciphertext': capabilityCiphertext,
-      if (metadataCiphertext != null) 'metadata_ciphertext': metadataCiphertext,
-      if (liveState != null) 'live_state': liveState,
+      if (roomId != null) 'room_id': roomId,
+      if (stateVersion != null) 'state_version': stateVersion,
+      if (controlProjectionCiphertext != null)
+        'control_projection_ciphertext': controlProjectionCiphertext,
+      if (controlRevision != null) 'control_revision': controlRevision,
+      if (controlStateHash != null) 'control_state_hash': controlStateHash,
+      if (lifecycle != null) 'lifecycle': lifecycle,
+      if (sessionsCheckedAt != null) 'sessions_checked_at': sessionsCheckedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  VoiceRoomsCompanion copyWith({
-    Value<String>? localRoomId,
-    Value<Uint8List>? capabilityCiphertext,
-    Value<Uint8List>? metadataCiphertext,
-    Value<int>? liveState,
+  RoomStatesCompanion copyWith({
+    Value<String>? roomId,
+    Value<int>? stateVersion,
+    Value<Uint8List>? controlProjectionCiphertext,
+    Value<int>? controlRevision,
+    Value<Uint8List>? controlStateHash,
+    Value<int>? lifecycle,
+    Value<DateTime?>? sessionsCheckedAt,
     Value<int>? rowid,
   }) {
-    return VoiceRoomsCompanion(
-      localRoomId: localRoomId ?? this.localRoomId,
-      capabilityCiphertext: capabilityCiphertext ?? this.capabilityCiphertext,
-      metadataCiphertext: metadataCiphertext ?? this.metadataCiphertext,
-      liveState: liveState ?? this.liveState,
+    return RoomStatesCompanion(
+      roomId: roomId ?? this.roomId,
+      stateVersion: stateVersion ?? this.stateVersion,
+      controlProjectionCiphertext:
+          controlProjectionCiphertext ?? this.controlProjectionCiphertext,
+      controlRevision: controlRevision ?? this.controlRevision,
+      controlStateHash: controlStateHash ?? this.controlStateHash,
+      lifecycle: lifecycle ?? this.lifecycle,
+      sessionsCheckedAt: sessionsCheckedAt ?? this.sessionsCheckedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -21435,21 +21589,28 @@ class VoiceRoomsCompanion extends UpdateCompanion<VoiceRoom> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (localRoomId.present) {
-      map['local_room_id'] = Variable<String>(localRoomId.value);
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
     }
-    if (capabilityCiphertext.present) {
-      map['capability_ciphertext'] = Variable<Uint8List>(
-        capabilityCiphertext.value,
+    if (stateVersion.present) {
+      map['state_version'] = Variable<int>(stateVersion.value);
+    }
+    if (controlProjectionCiphertext.present) {
+      map['control_projection_ciphertext'] = Variable<Uint8List>(
+        controlProjectionCiphertext.value,
       );
     }
-    if (metadataCiphertext.present) {
-      map['metadata_ciphertext'] = Variable<Uint8List>(
-        metadataCiphertext.value,
-      );
+    if (controlRevision.present) {
+      map['control_revision'] = Variable<int>(controlRevision.value);
     }
-    if (liveState.present) {
-      map['live_state'] = Variable<int>(liveState.value);
+    if (controlStateHash.present) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash.value);
+    }
+    if (lifecycle.present) {
+      map['lifecycle'] = Variable<int>(lifecycle.value);
+    }
+    if (sessionsCheckedAt.present) {
+      map['sessions_checked_at'] = Variable<DateTime>(sessionsCheckedAt.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -21459,11 +21620,1778 @@ class VoiceRoomsCompanion extends UpdateCompanion<VoiceRoom> {
 
   @override
   String toString() {
-    return (StringBuffer('VoiceRoomsCompanion(')
-          ..write('localRoomId: $localRoomId, ')
-          ..write('capabilityCiphertext: $capabilityCiphertext, ')
-          ..write('metadataCiphertext: $metadataCiphertext, ')
-          ..write('liveState: $liveState, ')
+    return (StringBuffer('RoomStatesCompanion(')
+          ..write('roomId: $roomId, ')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('controlProjectionCiphertext: $controlProjectionCiphertext, ')
+          ..write('controlRevision: $controlRevision, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('lifecycle: $lifecycle, ')
+          ..write('sessionsCheckedAt: $sessionsCheckedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RoomControlEventsTable extends RoomControlEvents
+    with TableInfo<$RoomControlEventsTable, StoredRoomControlEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RoomControlEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES room_states (room_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _revisionMeta = const VerificationMeta(
+    'revision',
+  );
+  @override
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(revision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _previousControlStateHashMeta =
+      const VerificationMeta('previousControlStateHash');
+  @override
+  late final GeneratedColumn<Uint8List> previousControlStateHash =
+      GeneratedColumn<Uint8List>(
+        'previous_control_state_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _controlStateHashMeta = const VerificationMeta(
+    'controlStateHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> controlStateHash =
+      GeneratedColumn<Uint8List>(
+        'control_state_hash',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _signerUserIdMeta = const VerificationMeta(
+    'signerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> signerUserId = GeneratedColumn<String>(
+    'signer_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signerDeviceIdMeta = const VerificationMeta(
+    'signerDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> signerDeviceId = GeneratedColumn<String>(
+    'signer_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _operationKindMeta = const VerificationMeta(
+    'operationKind',
+  );
+  @override
+  late final GeneratedColumn<int> operationKind = GeneratedColumn<int>(
+    'operation_kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(operationKind).isBetweenValues(1, 4),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _canonicalControlMeta = const VerificationMeta(
+    'canonicalControl',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> canonicalControl =
+      GeneratedColumn<Uint8List>(
+        'canonical_control',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _signatureMeta = const VerificationMeta(
+    'signature',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> signature = GeneratedColumn<Uint8List>(
+    'signature',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdMsMeta = const VerificationMeta(
+    'createdMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdMs = GeneratedColumn<int>(
+    'created_ms',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(createdMs).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    eventId,
+    roomId,
+    revision,
+    previousControlStateHash,
+    controlStateHash,
+    signerUserId,
+    signerDeviceId,
+    operationKind,
+    canonicalControl,
+    signature,
+    createdMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'room_control_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredRoomControlEventRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('revision')) {
+      context.handle(
+        _revisionMeta,
+        revision.isAcceptableOrUnknown(data['revision']!, _revisionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_revisionMeta);
+    }
+    if (data.containsKey('previous_control_state_hash')) {
+      context.handle(
+        _previousControlStateHashMeta,
+        previousControlStateHash.isAcceptableOrUnknown(
+          data['previous_control_state_hash']!,
+          _previousControlStateHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_state_hash')) {
+      context.handle(
+        _controlStateHashMeta,
+        controlStateHash.isAcceptableOrUnknown(
+          data['control_state_hash']!,
+          _controlStateHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_controlStateHashMeta);
+    }
+    if (data.containsKey('signer_user_id')) {
+      context.handle(
+        _signerUserIdMeta,
+        signerUserId.isAcceptableOrUnknown(
+          data['signer_user_id']!,
+          _signerUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signerUserIdMeta);
+    }
+    if (data.containsKey('signer_device_id')) {
+      context.handle(
+        _signerDeviceIdMeta,
+        signerDeviceId.isAcceptableOrUnknown(
+          data['signer_device_id']!,
+          _signerDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signerDeviceIdMeta);
+    }
+    if (data.containsKey('operation_kind')) {
+      context.handle(
+        _operationKindMeta,
+        operationKind.isAcceptableOrUnknown(
+          data['operation_kind']!,
+          _operationKindMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationKindMeta);
+    }
+    if (data.containsKey('canonical_control')) {
+      context.handle(
+        _canonicalControlMeta,
+        canonicalControl.isAcceptableOrUnknown(
+          data['canonical_control']!,
+          _canonicalControlMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_canonicalControlMeta);
+    }
+    if (data.containsKey('signature')) {
+      context.handle(
+        _signatureMeta,
+        signature.isAcceptableOrUnknown(data['signature']!, _signatureMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_signatureMeta);
+    }
+    if (data.containsKey('created_ms')) {
+      context.handle(
+        _createdMsMeta,
+        createdMs.isAcceptableOrUnknown(data['created_ms']!, _createdMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {eventId};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {roomId, revision},
+  ];
+  @override
+  StoredRoomControlEventRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredRoomControlEventRow(
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      )!,
+      previousControlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_control_state_hash'],
+      ),
+      controlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_state_hash'],
+      )!,
+      signerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signer_user_id'],
+      )!,
+      signerDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signer_device_id'],
+      )!,
+      operationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}operation_kind'],
+      )!,
+      canonicalControl: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}canonical_control'],
+      )!,
+      signature: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signature'],
+      )!,
+      createdMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $RoomControlEventsTable createAlias(String alias) {
+    return $RoomControlEventsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredRoomControlEventRow extends DataClass
+    implements Insertable<StoredRoomControlEventRow> {
+  final String eventId;
+  final String roomId;
+  final int revision;
+  final Uint8List? previousControlStateHash;
+  final Uint8List controlStateHash;
+  final String signerUserId;
+  final String signerDeviceId;
+  final int operationKind;
+  final Uint8List canonicalControl;
+  final Uint8List signature;
+  final int createdMs;
+  const StoredRoomControlEventRow({
+    required this.eventId,
+    required this.roomId,
+    required this.revision,
+    this.previousControlStateHash,
+    required this.controlStateHash,
+    required this.signerUserId,
+    required this.signerDeviceId,
+    required this.operationKind,
+    required this.canonicalControl,
+    required this.signature,
+    required this.createdMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['event_id'] = Variable<String>(eventId);
+    map['room_id'] = Variable<String>(roomId);
+    map['revision'] = Variable<int>(revision);
+    if (!nullToAbsent || previousControlStateHash != null) {
+      map['previous_control_state_hash'] = Variable<Uint8List>(
+        previousControlStateHash,
+      );
+    }
+    map['control_state_hash'] = Variable<Uint8List>(controlStateHash);
+    map['signer_user_id'] = Variable<String>(signerUserId);
+    map['signer_device_id'] = Variable<String>(signerDeviceId);
+    map['operation_kind'] = Variable<int>(operationKind);
+    map['canonical_control'] = Variable<Uint8List>(canonicalControl);
+    map['signature'] = Variable<Uint8List>(signature);
+    map['created_ms'] = Variable<int>(createdMs);
+    return map;
+  }
+
+  RoomControlEventsCompanion toCompanion(bool nullToAbsent) {
+    return RoomControlEventsCompanion(
+      eventId: Value(eventId),
+      roomId: Value(roomId),
+      revision: Value(revision),
+      previousControlStateHash: previousControlStateHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousControlStateHash),
+      controlStateHash: Value(controlStateHash),
+      signerUserId: Value(signerUserId),
+      signerDeviceId: Value(signerDeviceId),
+      operationKind: Value(operationKind),
+      canonicalControl: Value(canonicalControl),
+      signature: Value(signature),
+      createdMs: Value(createdMs),
+    );
+  }
+
+  factory StoredRoomControlEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredRoomControlEventRow(
+      eventId: serializer.fromJson<String>(json['eventId']),
+      roomId: serializer.fromJson<String>(json['roomId']),
+      revision: serializer.fromJson<int>(json['revision']),
+      previousControlStateHash: serializer.fromJson<Uint8List?>(
+        json['previousControlStateHash'],
+      ),
+      controlStateHash: serializer.fromJson<Uint8List>(
+        json['controlStateHash'],
+      ),
+      signerUserId: serializer.fromJson<String>(json['signerUserId']),
+      signerDeviceId: serializer.fromJson<String>(json['signerDeviceId']),
+      operationKind: serializer.fromJson<int>(json['operationKind']),
+      canonicalControl: serializer.fromJson<Uint8List>(
+        json['canonicalControl'],
+      ),
+      signature: serializer.fromJson<Uint8List>(json['signature']),
+      createdMs: serializer.fromJson<int>(json['createdMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'eventId': serializer.toJson<String>(eventId),
+      'roomId': serializer.toJson<String>(roomId),
+      'revision': serializer.toJson<int>(revision),
+      'previousControlStateHash': serializer.toJson<Uint8List?>(
+        previousControlStateHash,
+      ),
+      'controlStateHash': serializer.toJson<Uint8List>(controlStateHash),
+      'signerUserId': serializer.toJson<String>(signerUserId),
+      'signerDeviceId': serializer.toJson<String>(signerDeviceId),
+      'operationKind': serializer.toJson<int>(operationKind),
+      'canonicalControl': serializer.toJson<Uint8List>(canonicalControl),
+      'signature': serializer.toJson<Uint8List>(signature),
+      'createdMs': serializer.toJson<int>(createdMs),
+    };
+  }
+
+  StoredRoomControlEventRow copyWith({
+    String? eventId,
+    String? roomId,
+    int? revision,
+    Value<Uint8List?> previousControlStateHash = const Value.absent(),
+    Uint8List? controlStateHash,
+    String? signerUserId,
+    String? signerDeviceId,
+    int? operationKind,
+    Uint8List? canonicalControl,
+    Uint8List? signature,
+    int? createdMs,
+  }) => StoredRoomControlEventRow(
+    eventId: eventId ?? this.eventId,
+    roomId: roomId ?? this.roomId,
+    revision: revision ?? this.revision,
+    previousControlStateHash: previousControlStateHash.present
+        ? previousControlStateHash.value
+        : this.previousControlStateHash,
+    controlStateHash: controlStateHash ?? this.controlStateHash,
+    signerUserId: signerUserId ?? this.signerUserId,
+    signerDeviceId: signerDeviceId ?? this.signerDeviceId,
+    operationKind: operationKind ?? this.operationKind,
+    canonicalControl: canonicalControl ?? this.canonicalControl,
+    signature: signature ?? this.signature,
+    createdMs: createdMs ?? this.createdMs,
+  );
+  StoredRoomControlEventRow copyWithCompanion(RoomControlEventsCompanion data) {
+    return StoredRoomControlEventRow(
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      revision: data.revision.present ? data.revision.value : this.revision,
+      previousControlStateHash: data.previousControlStateHash.present
+          ? data.previousControlStateHash.value
+          : this.previousControlStateHash,
+      controlStateHash: data.controlStateHash.present
+          ? data.controlStateHash.value
+          : this.controlStateHash,
+      signerUserId: data.signerUserId.present
+          ? data.signerUserId.value
+          : this.signerUserId,
+      signerDeviceId: data.signerDeviceId.present
+          ? data.signerDeviceId.value
+          : this.signerDeviceId,
+      operationKind: data.operationKind.present
+          ? data.operationKind.value
+          : this.operationKind,
+      canonicalControl: data.canonicalControl.present
+          ? data.canonicalControl.value
+          : this.canonicalControl,
+      signature: data.signature.present ? data.signature.value : this.signature,
+      createdMs: data.createdMs.present ? data.createdMs.value : this.createdMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredRoomControlEventRow(')
+          ..write('eventId: $eventId, ')
+          ..write('roomId: $roomId, ')
+          ..write('revision: $revision, ')
+          ..write('previousControlStateHash: $previousControlStateHash, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('signerUserId: $signerUserId, ')
+          ..write('signerDeviceId: $signerDeviceId, ')
+          ..write('operationKind: $operationKind, ')
+          ..write('canonicalControl: $canonicalControl, ')
+          ..write('signature: $signature, ')
+          ..write('createdMs: $createdMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    eventId,
+    roomId,
+    revision,
+    $driftBlobEquality.hash(previousControlStateHash),
+    $driftBlobEquality.hash(controlStateHash),
+    signerUserId,
+    signerDeviceId,
+    operationKind,
+    $driftBlobEquality.hash(canonicalControl),
+    $driftBlobEquality.hash(signature),
+    createdMs,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredRoomControlEventRow &&
+          other.eventId == this.eventId &&
+          other.roomId == this.roomId &&
+          other.revision == this.revision &&
+          $driftBlobEquality.equals(
+            other.previousControlStateHash,
+            this.previousControlStateHash,
+          ) &&
+          $driftBlobEquality.equals(
+            other.controlStateHash,
+            this.controlStateHash,
+          ) &&
+          other.signerUserId == this.signerUserId &&
+          other.signerDeviceId == this.signerDeviceId &&
+          other.operationKind == this.operationKind &&
+          $driftBlobEquality.equals(
+            other.canonicalControl,
+            this.canonicalControl,
+          ) &&
+          $driftBlobEquality.equals(other.signature, this.signature) &&
+          other.createdMs == this.createdMs);
+}
+
+class RoomControlEventsCompanion
+    extends UpdateCompanion<StoredRoomControlEventRow> {
+  final Value<String> eventId;
+  final Value<String> roomId;
+  final Value<int> revision;
+  final Value<Uint8List?> previousControlStateHash;
+  final Value<Uint8List> controlStateHash;
+  final Value<String> signerUserId;
+  final Value<String> signerDeviceId;
+  final Value<int> operationKind;
+  final Value<Uint8List> canonicalControl;
+  final Value<Uint8List> signature;
+  final Value<int> createdMs;
+  final Value<int> rowid;
+  const RoomControlEventsCompanion({
+    this.eventId = const Value.absent(),
+    this.roomId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.previousControlStateHash = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.signerUserId = const Value.absent(),
+    this.signerDeviceId = const Value.absent(),
+    this.operationKind = const Value.absent(),
+    this.canonicalControl = const Value.absent(),
+    this.signature = const Value.absent(),
+    this.createdMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RoomControlEventsCompanion.insert({
+    required String eventId,
+    required String roomId,
+    required int revision,
+    this.previousControlStateHash = const Value.absent(),
+    required Uint8List controlStateHash,
+    required String signerUserId,
+    required String signerDeviceId,
+    required int operationKind,
+    required Uint8List canonicalControl,
+    required Uint8List signature,
+    required int createdMs,
+    this.rowid = const Value.absent(),
+  }) : eventId = Value(eventId),
+       roomId = Value(roomId),
+       revision = Value(revision),
+       controlStateHash = Value(controlStateHash),
+       signerUserId = Value(signerUserId),
+       signerDeviceId = Value(signerDeviceId),
+       operationKind = Value(operationKind),
+       canonicalControl = Value(canonicalControl),
+       signature = Value(signature),
+       createdMs = Value(createdMs);
+  static Insertable<StoredRoomControlEventRow> custom({
+    Expression<String>? eventId,
+    Expression<String>? roomId,
+    Expression<int>? revision,
+    Expression<Uint8List>? previousControlStateHash,
+    Expression<Uint8List>? controlStateHash,
+    Expression<String>? signerUserId,
+    Expression<String>? signerDeviceId,
+    Expression<int>? operationKind,
+    Expression<Uint8List>? canonicalControl,
+    Expression<Uint8List>? signature,
+    Expression<int>? createdMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (eventId != null) 'event_id': eventId,
+      if (roomId != null) 'room_id': roomId,
+      if (revision != null) 'revision': revision,
+      if (previousControlStateHash != null)
+        'previous_control_state_hash': previousControlStateHash,
+      if (controlStateHash != null) 'control_state_hash': controlStateHash,
+      if (signerUserId != null) 'signer_user_id': signerUserId,
+      if (signerDeviceId != null) 'signer_device_id': signerDeviceId,
+      if (operationKind != null) 'operation_kind': operationKind,
+      if (canonicalControl != null) 'canonical_control': canonicalControl,
+      if (signature != null) 'signature': signature,
+      if (createdMs != null) 'created_ms': createdMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RoomControlEventsCompanion copyWith({
+    Value<String>? eventId,
+    Value<String>? roomId,
+    Value<int>? revision,
+    Value<Uint8List?>? previousControlStateHash,
+    Value<Uint8List>? controlStateHash,
+    Value<String>? signerUserId,
+    Value<String>? signerDeviceId,
+    Value<int>? operationKind,
+    Value<Uint8List>? canonicalControl,
+    Value<Uint8List>? signature,
+    Value<int>? createdMs,
+    Value<int>? rowid,
+  }) {
+    return RoomControlEventsCompanion(
+      eventId: eventId ?? this.eventId,
+      roomId: roomId ?? this.roomId,
+      revision: revision ?? this.revision,
+      previousControlStateHash:
+          previousControlStateHash ?? this.previousControlStateHash,
+      controlStateHash: controlStateHash ?? this.controlStateHash,
+      signerUserId: signerUserId ?? this.signerUserId,
+      signerDeviceId: signerDeviceId ?? this.signerDeviceId,
+      operationKind: operationKind ?? this.operationKind,
+      canonicalControl: canonicalControl ?? this.canonicalControl,
+      signature: signature ?? this.signature,
+      createdMs: createdMs ?? this.createdMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (revision.present) {
+      map['revision'] = Variable<int>(revision.value);
+    }
+    if (previousControlStateHash.present) {
+      map['previous_control_state_hash'] = Variable<Uint8List>(
+        previousControlStateHash.value,
+      );
+    }
+    if (controlStateHash.present) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash.value);
+    }
+    if (signerUserId.present) {
+      map['signer_user_id'] = Variable<String>(signerUserId.value);
+    }
+    if (signerDeviceId.present) {
+      map['signer_device_id'] = Variable<String>(signerDeviceId.value);
+    }
+    if (operationKind.present) {
+      map['operation_kind'] = Variable<int>(operationKind.value);
+    }
+    if (canonicalControl.present) {
+      map['canonical_control'] = Variable<Uint8List>(canonicalControl.value);
+    }
+    if (signature.present) {
+      map['signature'] = Variable<Uint8List>(signature.value);
+    }
+    if (createdMs.present) {
+      map['created_ms'] = Variable<int>(createdMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomControlEventsCompanion(')
+          ..write('eventId: $eventId, ')
+          ..write('roomId: $roomId, ')
+          ..write('revision: $revision, ')
+          ..write('previousControlStateHash: $previousControlStateHash, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('signerUserId: $signerUserId, ')
+          ..write('signerDeviceId: $signerDeviceId, ')
+          ..write('operationKind: $operationKind, ')
+          ..write('canonicalControl: $canonicalControl, ')
+          ..write('signature: $signature, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RoomOutboundObjectsTable extends RoomOutboundObjects
+    with TableInfo<$RoomOutboundObjectsTable, StoredRoomOutboundObjectRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RoomOutboundObjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> payload = GeneratedColumn<Uint8List>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recipientUserIdsJsonMeta =
+      const VerificationMeta('recipientUserIdsJson');
+  @override
+  late final GeneratedColumn<String> recipientUserIdsJson =
+      GeneratedColumn<String>(
+        'recipient_user_ids_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _recipientDeviceIdMeta = const VerificationMeta(
+    'recipientDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> recipientDeviceId =
+      GeneratedColumn<String>(
+        'recipient_device_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _includeOwnDevicesMeta = const VerificationMeta(
+    'includeOwnDevices',
+  );
+  @override
+  late final GeneratedColumn<bool> includeOwnDevices = GeneratedColumn<bool>(
+    'include_own_devices',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_own_devices" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _deliveryStateMeta = const VerificationMeta(
+    'deliveryState',
+  );
+  @override
+  late final GeneratedColumn<int> deliveryState = GeneratedColumn<int>(
+    'delivery_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(deliveryState).isBetweenValues(1, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    roomId,
+    eventId,
+    payload,
+    recipientUserIdsJson,
+    recipientDeviceId,
+    includeOwnDevices,
+    deliveryState,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'room_outbound_objects';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredRoomOutboundObjectRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('recipient_user_ids_json')) {
+      context.handle(
+        _recipientUserIdsJsonMeta,
+        recipientUserIdsJson.isAcceptableOrUnknown(
+          data['recipient_user_ids_json']!,
+          _recipientUserIdsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recipientUserIdsJsonMeta);
+    }
+    if (data.containsKey('recipient_device_id')) {
+      context.handle(
+        _recipientDeviceIdMeta,
+        recipientDeviceId.isAcceptableOrUnknown(
+          data['recipient_device_id']!,
+          _recipientDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('include_own_devices')) {
+      context.handle(
+        _includeOwnDevicesMeta,
+        includeOwnDevices.isAcceptableOrUnknown(
+          data['include_own_devices']!,
+          _includeOwnDevicesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('delivery_state')) {
+      context.handle(
+        _deliveryStateMeta,
+        deliveryState.isAcceptableOrUnknown(
+          data['delivery_state']!,
+          _deliveryStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStateMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  StoredRoomOutboundObjectRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredRoomOutboundObjectRow(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}payload'],
+      )!,
+      recipientUserIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_user_ids_json'],
+      )!,
+      recipientDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_device_id'],
+      ),
+      includeOwnDevices: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_own_devices'],
+      )!,
+      deliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delivery_state'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RoomOutboundObjectsTable createAlias(String alias) {
+    return $RoomOutboundObjectsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredRoomOutboundObjectRow extends DataClass
+    implements Insertable<StoredRoomOutboundObjectRow> {
+  final String operationId;
+  final String roomId;
+  final String eventId;
+  final Uint8List payload;
+  final String recipientUserIdsJson;
+  final String? recipientDeviceId;
+  final bool includeOwnDevices;
+  final int deliveryState;
+  final DateTime createdAt;
+  const StoredRoomOutboundObjectRow({
+    required this.operationId,
+    required this.roomId,
+    required this.eventId,
+    required this.payload,
+    required this.recipientUserIdsJson,
+    this.recipientDeviceId,
+    required this.includeOwnDevices,
+    required this.deliveryState,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['room_id'] = Variable<String>(roomId);
+    map['event_id'] = Variable<String>(eventId);
+    map['payload'] = Variable<Uint8List>(payload);
+    map['recipient_user_ids_json'] = Variable<String>(recipientUserIdsJson);
+    if (!nullToAbsent || recipientDeviceId != null) {
+      map['recipient_device_id'] = Variable<String>(recipientDeviceId);
+    }
+    map['include_own_devices'] = Variable<bool>(includeOwnDevices);
+    map['delivery_state'] = Variable<int>(deliveryState);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  RoomOutboundObjectsCompanion toCompanion(bool nullToAbsent) {
+    return RoomOutboundObjectsCompanion(
+      operationId: Value(operationId),
+      roomId: Value(roomId),
+      eventId: Value(eventId),
+      payload: Value(payload),
+      recipientUserIdsJson: Value(recipientUserIdsJson),
+      recipientDeviceId: recipientDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recipientDeviceId),
+      includeOwnDevices: Value(includeOwnDevices),
+      deliveryState: Value(deliveryState),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StoredRoomOutboundObjectRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredRoomOutboundObjectRow(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      roomId: serializer.fromJson<String>(json['roomId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      payload: serializer.fromJson<Uint8List>(json['payload']),
+      recipientUserIdsJson: serializer.fromJson<String>(
+        json['recipientUserIdsJson'],
+      ),
+      recipientDeviceId: serializer.fromJson<String?>(
+        json['recipientDeviceId'],
+      ),
+      includeOwnDevices: serializer.fromJson<bool>(json['includeOwnDevices']),
+      deliveryState: serializer.fromJson<int>(json['deliveryState']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'roomId': serializer.toJson<String>(roomId),
+      'eventId': serializer.toJson<String>(eventId),
+      'payload': serializer.toJson<Uint8List>(payload),
+      'recipientUserIdsJson': serializer.toJson<String>(recipientUserIdsJson),
+      'recipientDeviceId': serializer.toJson<String?>(recipientDeviceId),
+      'includeOwnDevices': serializer.toJson<bool>(includeOwnDevices),
+      'deliveryState': serializer.toJson<int>(deliveryState),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StoredRoomOutboundObjectRow copyWith({
+    String? operationId,
+    String? roomId,
+    String? eventId,
+    Uint8List? payload,
+    String? recipientUserIdsJson,
+    Value<String?> recipientDeviceId = const Value.absent(),
+    bool? includeOwnDevices,
+    int? deliveryState,
+    DateTime? createdAt,
+  }) => StoredRoomOutboundObjectRow(
+    operationId: operationId ?? this.operationId,
+    roomId: roomId ?? this.roomId,
+    eventId: eventId ?? this.eventId,
+    payload: payload ?? this.payload,
+    recipientUserIdsJson: recipientUserIdsJson ?? this.recipientUserIdsJson,
+    recipientDeviceId: recipientDeviceId.present
+        ? recipientDeviceId.value
+        : this.recipientDeviceId,
+    includeOwnDevices: includeOwnDevices ?? this.includeOwnDevices,
+    deliveryState: deliveryState ?? this.deliveryState,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StoredRoomOutboundObjectRow copyWithCompanion(
+    RoomOutboundObjectsCompanion data,
+  ) {
+    return StoredRoomOutboundObjectRow(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      recipientUserIdsJson: data.recipientUserIdsJson.present
+          ? data.recipientUserIdsJson.value
+          : this.recipientUserIdsJson,
+      recipientDeviceId: data.recipientDeviceId.present
+          ? data.recipientDeviceId.value
+          : this.recipientDeviceId,
+      includeOwnDevices: data.includeOwnDevices.present
+          ? data.includeOwnDevices.value
+          : this.includeOwnDevices,
+      deliveryState: data.deliveryState.present
+          ? data.deliveryState.value
+          : this.deliveryState,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredRoomOutboundObjectRow(')
+          ..write('operationId: $operationId, ')
+          ..write('roomId: $roomId, ')
+          ..write('eventId: $eventId, ')
+          ..write('payload: $payload, ')
+          ..write('recipientUserIdsJson: $recipientUserIdsJson, ')
+          ..write('recipientDeviceId: $recipientDeviceId, ')
+          ..write('includeOwnDevices: $includeOwnDevices, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    roomId,
+    eventId,
+    $driftBlobEquality.hash(payload),
+    recipientUserIdsJson,
+    recipientDeviceId,
+    includeOwnDevices,
+    deliveryState,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredRoomOutboundObjectRow &&
+          other.operationId == this.operationId &&
+          other.roomId == this.roomId &&
+          other.eventId == this.eventId &&
+          $driftBlobEquality.equals(other.payload, this.payload) &&
+          other.recipientUserIdsJson == this.recipientUserIdsJson &&
+          other.recipientDeviceId == this.recipientDeviceId &&
+          other.includeOwnDevices == this.includeOwnDevices &&
+          other.deliveryState == this.deliveryState &&
+          other.createdAt == this.createdAt);
+}
+
+class RoomOutboundObjectsCompanion
+    extends UpdateCompanion<StoredRoomOutboundObjectRow> {
+  final Value<String> operationId;
+  final Value<String> roomId;
+  final Value<String> eventId;
+  final Value<Uint8List> payload;
+  final Value<String> recipientUserIdsJson;
+  final Value<String?> recipientDeviceId;
+  final Value<bool> includeOwnDevices;
+  final Value<int> deliveryState;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const RoomOutboundObjectsCompanion({
+    this.operationId = const Value.absent(),
+    this.roomId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.recipientUserIdsJson = const Value.absent(),
+    this.recipientDeviceId = const Value.absent(),
+    this.includeOwnDevices = const Value.absent(),
+    this.deliveryState = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RoomOutboundObjectsCompanion.insert({
+    required String operationId,
+    required String roomId,
+    required String eventId,
+    required Uint8List payload,
+    required String recipientUserIdsJson,
+    this.recipientDeviceId = const Value.absent(),
+    this.includeOwnDevices = const Value.absent(),
+    required int deliveryState,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       roomId = Value(roomId),
+       eventId = Value(eventId),
+       payload = Value(payload),
+       recipientUserIdsJson = Value(recipientUserIdsJson),
+       deliveryState = Value(deliveryState);
+  static Insertable<StoredRoomOutboundObjectRow> custom({
+    Expression<String>? operationId,
+    Expression<String>? roomId,
+    Expression<String>? eventId,
+    Expression<Uint8List>? payload,
+    Expression<String>? recipientUserIdsJson,
+    Expression<String>? recipientDeviceId,
+    Expression<bool>? includeOwnDevices,
+    Expression<int>? deliveryState,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (roomId != null) 'room_id': roomId,
+      if (eventId != null) 'event_id': eventId,
+      if (payload != null) 'payload': payload,
+      if (recipientUserIdsJson != null)
+        'recipient_user_ids_json': recipientUserIdsJson,
+      if (recipientDeviceId != null) 'recipient_device_id': recipientDeviceId,
+      if (includeOwnDevices != null) 'include_own_devices': includeOwnDevices,
+      if (deliveryState != null) 'delivery_state': deliveryState,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RoomOutboundObjectsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? roomId,
+    Value<String>? eventId,
+    Value<Uint8List>? payload,
+    Value<String>? recipientUserIdsJson,
+    Value<String?>? recipientDeviceId,
+    Value<bool>? includeOwnDevices,
+    Value<int>? deliveryState,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return RoomOutboundObjectsCompanion(
+      operationId: operationId ?? this.operationId,
+      roomId: roomId ?? this.roomId,
+      eventId: eventId ?? this.eventId,
+      payload: payload ?? this.payload,
+      recipientUserIdsJson: recipientUserIdsJson ?? this.recipientUserIdsJson,
+      recipientDeviceId: recipientDeviceId ?? this.recipientDeviceId,
+      includeOwnDevices: includeOwnDevices ?? this.includeOwnDevices,
+      deliveryState: deliveryState ?? this.deliveryState,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<Uint8List>(payload.value);
+    }
+    if (recipientUserIdsJson.present) {
+      map['recipient_user_ids_json'] = Variable<String>(
+        recipientUserIdsJson.value,
+      );
+    }
+    if (recipientDeviceId.present) {
+      map['recipient_device_id'] = Variable<String>(recipientDeviceId.value);
+    }
+    if (includeOwnDevices.present) {
+      map['include_own_devices'] = Variable<bool>(includeOwnDevices.value);
+    }
+    if (deliveryState.present) {
+      map['delivery_state'] = Variable<int>(deliveryState.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomOutboundObjectsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('roomId: $roomId, ')
+          ..write('eventId: $eventId, ')
+          ..write('payload: $payload, ')
+          ..write('recipientUserIdsJson: $recipientUserIdsJson, ')
+          ..write('recipientDeviceId: $recipientDeviceId, ')
+          ..write('includeOwnDevices: $includeOwnDevices, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RoomStateRequestsTable extends RoomStateRequests
+    with TableInfo<$RoomStateRequestsTable, StoredRoomStateRequestRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RoomStateRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<int> reason = GeneratedColumn<int>(
+    'reason',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(reason).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
+    'peerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> peerUserId = GeneratedColumn<String>(
+    'peer_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attempts).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _requestedAtMeta = const VerificationMeta(
+    'requestedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> requestedAt = GeneratedColumn<DateTime>(
+    'requested_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    roomId,
+    reason,
+    peerUserId,
+    attempts,
+    requestedAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'room_state_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredRoomStateRequestRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('peer_user_id')) {
+      context.handle(
+        _peerUserIdMeta,
+        peerUserId.isAcceptableOrUnknown(
+          data['peer_user_id']!,
+          _peerUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    if (data.containsKey('requested_at')) {
+      context.handle(
+        _requestedAtMeta,
+        requestedAt.isAcceptableOrUnknown(
+          data['requested_at']!,
+          _requestedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {roomId};
+  @override
+  StoredRoomStateRequestRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredRoomStateRequestRow(
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reason'],
+      )!,
+      peerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_user_id'],
+      ),
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+      requestedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}requested_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RoomStateRequestsTable createAlias(String alias) {
+    return $RoomStateRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredRoomStateRequestRow extends DataClass
+    implements Insertable<StoredRoomStateRequestRow> {
+  final String roomId;
+  final int reason;
+  final String? peerUserId;
+  final int attempts;
+  final DateTime? requestedAt;
+  final DateTime createdAt;
+  const StoredRoomStateRequestRow({
+    required this.roomId,
+    required this.reason,
+    this.peerUserId,
+    required this.attempts,
+    this.requestedAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['room_id'] = Variable<String>(roomId);
+    map['reason'] = Variable<int>(reason);
+    if (!nullToAbsent || peerUserId != null) {
+      map['peer_user_id'] = Variable<String>(peerUserId);
+    }
+    map['attempts'] = Variable<int>(attempts);
+    if (!nullToAbsent || requestedAt != null) {
+      map['requested_at'] = Variable<DateTime>(requestedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  RoomStateRequestsCompanion toCompanion(bool nullToAbsent) {
+    return RoomStateRequestsCompanion(
+      roomId: Value(roomId),
+      reason: Value(reason),
+      peerUserId: peerUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(peerUserId),
+      attempts: Value(attempts),
+      requestedAt: requestedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestedAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StoredRoomStateRequestRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredRoomStateRequestRow(
+      roomId: serializer.fromJson<String>(json['roomId']),
+      reason: serializer.fromJson<int>(json['reason']),
+      peerUserId: serializer.fromJson<String?>(json['peerUserId']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+      requestedAt: serializer.fromJson<DateTime?>(json['requestedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'roomId': serializer.toJson<String>(roomId),
+      'reason': serializer.toJson<int>(reason),
+      'peerUserId': serializer.toJson<String?>(peerUserId),
+      'attempts': serializer.toJson<int>(attempts),
+      'requestedAt': serializer.toJson<DateTime?>(requestedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StoredRoomStateRequestRow copyWith({
+    String? roomId,
+    int? reason,
+    Value<String?> peerUserId = const Value.absent(),
+    int? attempts,
+    Value<DateTime?> requestedAt = const Value.absent(),
+    DateTime? createdAt,
+  }) => StoredRoomStateRequestRow(
+    roomId: roomId ?? this.roomId,
+    reason: reason ?? this.reason,
+    peerUserId: peerUserId.present ? peerUserId.value : this.peerUserId,
+    attempts: attempts ?? this.attempts,
+    requestedAt: requestedAt.present ? requestedAt.value : this.requestedAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StoredRoomStateRequestRow copyWithCompanion(RoomStateRequestsCompanion data) {
+    return StoredRoomStateRequestRow(
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      peerUserId: data.peerUserId.present
+          ? data.peerUserId.value
+          : this.peerUserId,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      requestedAt: data.requestedAt.present
+          ? data.requestedAt.value
+          : this.requestedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredRoomStateRequestRow(')
+          ..write('roomId: $roomId, ')
+          ..write('reason: $reason, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('attempts: $attempts, ')
+          ..write('requestedAt: $requestedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(roomId, reason, peerUserId, attempts, requestedAt, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredRoomStateRequestRow &&
+          other.roomId == this.roomId &&
+          other.reason == this.reason &&
+          other.peerUserId == this.peerUserId &&
+          other.attempts == this.attempts &&
+          other.requestedAt == this.requestedAt &&
+          other.createdAt == this.createdAt);
+}
+
+class RoomStateRequestsCompanion
+    extends UpdateCompanion<StoredRoomStateRequestRow> {
+  final Value<String> roomId;
+  final Value<int> reason;
+  final Value<String?> peerUserId;
+  final Value<int> attempts;
+  final Value<DateTime?> requestedAt;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const RoomStateRequestsCompanion({
+    this.roomId = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.requestedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RoomStateRequestsCompanion.insert({
+    required String roomId,
+    required int reason,
+    this.peerUserId = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.requestedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : roomId = Value(roomId),
+       reason = Value(reason);
+  static Insertable<StoredRoomStateRequestRow> custom({
+    Expression<String>? roomId,
+    Expression<int>? reason,
+    Expression<String>? peerUserId,
+    Expression<int>? attempts,
+    Expression<DateTime>? requestedAt,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (roomId != null) 'room_id': roomId,
+      if (reason != null) 'reason': reason,
+      if (peerUserId != null) 'peer_user_id': peerUserId,
+      if (attempts != null) 'attempts': attempts,
+      if (requestedAt != null) 'requested_at': requestedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RoomStateRequestsCompanion copyWith({
+    Value<String>? roomId,
+    Value<int>? reason,
+    Value<String?>? peerUserId,
+    Value<int>? attempts,
+    Value<DateTime?>? requestedAt,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return RoomStateRequestsCompanion(
+      roomId: roomId ?? this.roomId,
+      reason: reason ?? this.reason,
+      peerUserId: peerUserId ?? this.peerUserId,
+      attempts: attempts ?? this.attempts,
+      requestedAt: requestedAt ?? this.requestedAt,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<int>(reason.value);
+    }
+    if (peerUserId.present) {
+      map['peer_user_id'] = Variable<String>(peerUserId.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    if (requestedAt.present) {
+      map['requested_at'] = Variable<DateTime>(requestedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomStateRequestsCompanion(')
+          ..write('roomId: $roomId, ')
+          ..write('reason: $reason, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('attempts: $attempts, ')
+          ..write('requestedAt: $requestedAt, ')
+          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -24110,7 +26038,13 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $ReceiptsTable receipts = $ReceiptsTable(this);
   late final $PendingApplicationReceiptsTable pendingApplicationReceipts =
       $PendingApplicationReceiptsTable(this);
-  late final $VoiceRoomsTable voiceRooms = $VoiceRoomsTable(this);
+  late final $RoomStatesTable roomStates = $RoomStatesTable(this);
+  late final $RoomControlEventsTable roomControlEvents =
+      $RoomControlEventsTable(this);
+  late final $RoomOutboundObjectsTable roomOutboundObjects =
+      $RoomOutboundObjectsTable(this);
+  late final $RoomStateRequestsTable roomStateRequests =
+      $RoomStateRequestsTable(this);
   late final $HistoryTransfersTable historyTransfers = $HistoryTransfersTable(
     this,
   );
@@ -24195,7 +26129,10 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     staleDeviceRefreshRequests,
     receipts,
     pendingApplicationReceipts,
-    voiceRooms,
+    roomStates,
+    roomControlEvents,
+    roomOutboundObjects,
+    roomStateRequests,
     historyTransfers,
     historyTransferBatches,
     syncCheckpoints,
@@ -24282,6 +26219,13 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
       result: [
         TableUpdate('pending_application_receipts', kind: UpdateKind.delete),
       ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'room_states',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('room_control_events', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -37012,166 +38956,1104 @@ typedef $$PendingApplicationReceiptsTableProcessedTableManager =
       PendingApplicationReceipt,
       PrefetchHooks Function({bool messageId})
     >;
-typedef $$VoiceRoomsTableCreateCompanionBuilder =
-    VoiceRoomsCompanion Function({
-      required String localRoomId,
-      required Uint8List capabilityCiphertext,
-      required Uint8List metadataCiphertext,
-      required int liveState,
+typedef $$RoomStatesTableCreateCompanionBuilder =
+    RoomStatesCompanion Function({
+      required String roomId,
+      required int stateVersion,
+      required Uint8List controlProjectionCiphertext,
+      required int controlRevision,
+      required Uint8List controlStateHash,
+      required int lifecycle,
+      Value<DateTime?> sessionsCheckedAt,
       Value<int> rowid,
     });
-typedef $$VoiceRoomsTableUpdateCompanionBuilder =
-    VoiceRoomsCompanion Function({
-      Value<String> localRoomId,
-      Value<Uint8List> capabilityCiphertext,
-      Value<Uint8List> metadataCiphertext,
-      Value<int> liveState,
+typedef $$RoomStatesTableUpdateCompanionBuilder =
+    RoomStatesCompanion Function({
+      Value<String> roomId,
+      Value<int> stateVersion,
+      Value<Uint8List> controlProjectionCiphertext,
+      Value<int> controlRevision,
+      Value<Uint8List> controlStateHash,
+      Value<int> lifecycle,
+      Value<DateTime?> sessionsCheckedAt,
       Value<int> rowid,
     });
 
-class $$VoiceRoomsTableFilterComposer
-    extends Composer<_$LocalDatabase, $VoiceRoomsTable> {
-  $$VoiceRoomsTableFilterComposer({
+final class $$RoomStatesTableReferences
+    extends
+        BaseReferences<_$LocalDatabase, $RoomStatesTable, StoredRoomStateRow> {
+  $$RoomStatesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<
+    $RoomControlEventsTable,
+    List<StoredRoomControlEventRow>
+  >
+  _roomControlEventsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.roomControlEvents,
+        aliasName: 'room_states__room_id__room_control_events__room_id',
+      );
+
+  $$RoomControlEventsTableProcessedTableManager get roomControlEventsRefs {
+    final manager =
+        $$RoomControlEventsTableTableManager(
+          $_db,
+          $_db.roomControlEvents,
+        ).filter(
+          (f) => f.roomId.roomId.sqlEquals($_itemColumn<String>('room_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _roomControlEventsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$RoomStatesTableFilterComposer
+    extends Composer<_$LocalDatabase, $RoomStatesTable> {
+  $$RoomStatesTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get localRoomId => $composableBuilder(
-    column: $table.localRoomId,
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<Uint8List> get capabilityCiphertext => $composableBuilder(
-    column: $table.capabilityCiphertext,
+  ColumnFilters<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<Uint8List> get metadataCiphertext => $composableBuilder(
-    column: $table.metadataCiphertext,
+  ColumnFilters<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get liveState => $composableBuilder(
-    column: $table.liveState,
+  ColumnFilters<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<int> get lifecycle => $composableBuilder(
+    column: $table.lifecycle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sessionsCheckedAt => $composableBuilder(
+    column: $table.sessionsCheckedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> roomControlEventsRefs(
+    Expression<bool> Function($$RoomControlEventsTableFilterComposer f) f,
+  ) {
+    final $$RoomControlEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.roomId,
+      referencedTable: $db.roomControlEvents,
+      getReferencedColumn: (t) => t.roomId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RoomControlEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.roomControlEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
-class $$VoiceRoomsTableOrderingComposer
-    extends Composer<_$LocalDatabase, $VoiceRoomsTable> {
-  $$VoiceRoomsTableOrderingComposer({
+class $$RoomStatesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $RoomStatesTable> {
+  $$RoomStatesTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get localRoomId => $composableBuilder(
-    column: $table.localRoomId,
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<Uint8List> get capabilityCiphertext => $composableBuilder(
-    column: $table.capabilityCiphertext,
+  ColumnOrderings<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<Uint8List> get metadataCiphertext => $composableBuilder(
-    column: $table.metadataCiphertext,
+  ColumnOrderings<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get liveState => $composableBuilder(
-    column: $table.liveState,
+  ColumnOrderings<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lifecycle => $composableBuilder(
+    column: $table.lifecycle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sessionsCheckedAt => $composableBuilder(
+    column: $table.sessionsCheckedAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
 
-class $$VoiceRoomsTableAnnotationComposer
-    extends Composer<_$LocalDatabase, $VoiceRoomsTable> {
-  $$VoiceRoomsTableAnnotationComposer({
+class $$RoomStatesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $RoomStatesTable> {
+  $$RoomStatesTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get localRoomId => $composableBuilder(
-    column: $table.localRoomId,
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
     builder: (column) => column,
   );
 
-  GeneratedColumn<Uint8List> get capabilityCiphertext => $composableBuilder(
-    column: $table.capabilityCiphertext,
+  GeneratedColumn<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
     builder: (column) => column,
   );
 
-  GeneratedColumn<Uint8List> get metadataCiphertext => $composableBuilder(
-    column: $table.metadataCiphertext,
+  GeneratedColumn<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get liveState =>
-      $composableBuilder(column: $table.liveState, builder: (column) => column);
+  GeneratedColumn<int> get lifecycle =>
+      $composableBuilder(column: $table.lifecycle, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get sessionsCheckedAt => $composableBuilder(
+    column: $table.sessionsCheckedAt,
+    builder: (column) => column,
+  );
+
+  Expression<T> roomControlEventsRefs<T extends Object>(
+    Expression<T> Function($$RoomControlEventsTableAnnotationComposer a) f,
+  ) {
+    final $$RoomControlEventsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.roomId,
+          referencedTable: $db.roomControlEvents,
+          getReferencedColumn: (t) => t.roomId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$RoomControlEventsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.roomControlEvents,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
-class $$VoiceRoomsTableTableManager
+class $$RoomStatesTableTableManager
     extends
         RootTableManager<
           _$LocalDatabase,
-          $VoiceRoomsTable,
-          VoiceRoom,
-          $$VoiceRoomsTableFilterComposer,
-          $$VoiceRoomsTableOrderingComposer,
-          $$VoiceRoomsTableAnnotationComposer,
-          $$VoiceRoomsTableCreateCompanionBuilder,
-          $$VoiceRoomsTableUpdateCompanionBuilder,
-          (
-            VoiceRoom,
-            BaseReferences<_$LocalDatabase, $VoiceRoomsTable, VoiceRoom>,
-          ),
-          VoiceRoom,
-          PrefetchHooks Function()
+          $RoomStatesTable,
+          StoredRoomStateRow,
+          $$RoomStatesTableFilterComposer,
+          $$RoomStatesTableOrderingComposer,
+          $$RoomStatesTableAnnotationComposer,
+          $$RoomStatesTableCreateCompanionBuilder,
+          $$RoomStatesTableUpdateCompanionBuilder,
+          (StoredRoomStateRow, $$RoomStatesTableReferences),
+          StoredRoomStateRow,
+          PrefetchHooks Function({bool roomControlEventsRefs})
         > {
-  $$VoiceRoomsTableTableManager(_$LocalDatabase db, $VoiceRoomsTable table)
+  $$RoomStatesTableTableManager(_$LocalDatabase db, $RoomStatesTable table)
     : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$VoiceRoomsTableFilterComposer($db: db, $table: table),
+              $$RoomStatesTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$VoiceRoomsTableOrderingComposer($db: db, $table: table),
+              $$RoomStatesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$VoiceRoomsTableAnnotationComposer($db: db, $table: table),
+              $$RoomStatesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<String> localRoomId = const Value.absent(),
-                Value<Uint8List> capabilityCiphertext = const Value.absent(),
-                Value<Uint8List> metadataCiphertext = const Value.absent(),
-                Value<int> liveState = const Value.absent(),
+                Value<String> roomId = const Value.absent(),
+                Value<int> stateVersion = const Value.absent(),
+                Value<Uint8List> controlProjectionCiphertext =
+                    const Value.absent(),
+                Value<int> controlRevision = const Value.absent(),
+                Value<Uint8List> controlStateHash = const Value.absent(),
+                Value<int> lifecycle = const Value.absent(),
+                Value<DateTime?> sessionsCheckedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => VoiceRoomsCompanion(
-                localRoomId: localRoomId,
-                capabilityCiphertext: capabilityCiphertext,
-                metadataCiphertext: metadataCiphertext,
-                liveState: liveState,
+              }) => RoomStatesCompanion(
+                roomId: roomId,
+                stateVersion: stateVersion,
+                controlProjectionCiphertext: controlProjectionCiphertext,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+                lifecycle: lifecycle,
+                sessionsCheckedAt: sessionsCheckedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
-                required String localRoomId,
-                required Uint8List capabilityCiphertext,
-                required Uint8List metadataCiphertext,
-                required int liveState,
+                required String roomId,
+                required int stateVersion,
+                required Uint8List controlProjectionCiphertext,
+                required int controlRevision,
+                required Uint8List controlStateHash,
+                required int lifecycle,
+                Value<DateTime?> sessionsCheckedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => VoiceRoomsCompanion.insert(
-                localRoomId: localRoomId,
-                capabilityCiphertext: capabilityCiphertext,
-                metadataCiphertext: metadataCiphertext,
-                liveState: liveState,
+              }) => RoomStatesCompanion.insert(
+                roomId: roomId,
+                stateVersion: stateVersion,
+                controlProjectionCiphertext: controlProjectionCiphertext,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+                lifecycle: lifecycle,
+                sessionsCheckedAt: sessionsCheckedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$RoomStatesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({roomControlEventsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (roomControlEventsRefs) db.roomControlEvents,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (roomControlEventsRefs)
+                    await $_getPrefetchedData<
+                      StoredRoomStateRow,
+                      $RoomStatesTable,
+                      StoredRoomControlEventRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$RoomStatesTableReferences
+                          ._roomControlEventsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$RoomStatesTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).roomControlEventsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.roomId == item.roomId),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$RoomStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $RoomStatesTable,
+      StoredRoomStateRow,
+      $$RoomStatesTableFilterComposer,
+      $$RoomStatesTableOrderingComposer,
+      $$RoomStatesTableAnnotationComposer,
+      $$RoomStatesTableCreateCompanionBuilder,
+      $$RoomStatesTableUpdateCompanionBuilder,
+      (StoredRoomStateRow, $$RoomStatesTableReferences),
+      StoredRoomStateRow,
+      PrefetchHooks Function({bool roomControlEventsRefs})
+    >;
+typedef $$RoomControlEventsTableCreateCompanionBuilder =
+    RoomControlEventsCompanion Function({
+      required String eventId,
+      required String roomId,
+      required int revision,
+      Value<Uint8List?> previousControlStateHash,
+      required Uint8List controlStateHash,
+      required String signerUserId,
+      required String signerDeviceId,
+      required int operationKind,
+      required Uint8List canonicalControl,
+      required Uint8List signature,
+      required int createdMs,
+      Value<int> rowid,
+    });
+typedef $$RoomControlEventsTableUpdateCompanionBuilder =
+    RoomControlEventsCompanion Function({
+      Value<String> eventId,
+      Value<String> roomId,
+      Value<int> revision,
+      Value<Uint8List?> previousControlStateHash,
+      Value<Uint8List> controlStateHash,
+      Value<String> signerUserId,
+      Value<String> signerDeviceId,
+      Value<int> operationKind,
+      Value<Uint8List> canonicalControl,
+      Value<Uint8List> signature,
+      Value<int> createdMs,
+      Value<int> rowid,
+    });
+
+final class $$RoomControlEventsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $RoomControlEventsTable,
+          StoredRoomControlEventRow
+        > {
+  $$RoomControlEventsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $RoomStatesTable _roomIdTable(_$LocalDatabase db) => db.roomStates
+      .createAlias('room_control_events__room_id__room_states__room_id');
+
+  $$RoomStatesTableProcessedTableManager get roomId {
+    final $_column = $_itemColumn<String>('room_id')!;
+
+    final manager = $$RoomStatesTableTableManager(
+      $_db,
+      $_db.roomStates,
+    ).filter((f) => f.roomId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_roomIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$RoomControlEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $RoomControlEventsTable> {
+  $$RoomControlEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signature => $composableBuilder(
+    column: $table.signature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$RoomStatesTableFilterComposer get roomId {
+    final $$RoomStatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.roomId,
+      referencedTable: $db.roomStates,
+      getReferencedColumn: (t) => t.roomId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RoomStatesTableFilterComposer(
+            $db: $db,
+            $table: $db.roomStates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RoomControlEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $RoomControlEventsTable> {
+  $$RoomControlEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get signature => $composableBuilder(
+    column: $table.signature,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$RoomStatesTableOrderingComposer get roomId {
+    final $$RoomStatesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.roomId,
+      referencedTable: $db.roomStates,
+      getReferencedColumn: (t) => t.roomId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RoomStatesTableOrderingComposer(
+            $db: $db,
+            $table: $db.roomStates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RoomControlEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $RoomControlEventsTable> {
+  $$RoomControlEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<int> get revision =>
+      $composableBuilder(column: $table.revision, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get signature =>
+      $composableBuilder(column: $table.signature, builder: (column) => column);
+
+  GeneratedColumn<int> get createdMs =>
+      $composableBuilder(column: $table.createdMs, builder: (column) => column);
+
+  $$RoomStatesTableAnnotationComposer get roomId {
+    final $$RoomStatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.roomId,
+      referencedTable: $db.roomStates,
+      getReferencedColumn: (t) => t.roomId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RoomStatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.roomStates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RoomControlEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $RoomControlEventsTable,
+          StoredRoomControlEventRow,
+          $$RoomControlEventsTableFilterComposer,
+          $$RoomControlEventsTableOrderingComposer,
+          $$RoomControlEventsTableAnnotationComposer,
+          $$RoomControlEventsTableCreateCompanionBuilder,
+          $$RoomControlEventsTableUpdateCompanionBuilder,
+          (StoredRoomControlEventRow, $$RoomControlEventsTableReferences),
+          StoredRoomControlEventRow,
+          PrefetchHooks Function({bool roomId})
+        > {
+  $$RoomControlEventsTableTableManager(
+    _$LocalDatabase db,
+    $RoomControlEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RoomControlEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RoomControlEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RoomControlEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> eventId = const Value.absent(),
+                Value<String> roomId = const Value.absent(),
+                Value<int> revision = const Value.absent(),
+                Value<Uint8List?> previousControlStateHash =
+                    const Value.absent(),
+                Value<Uint8List> controlStateHash = const Value.absent(),
+                Value<String> signerUserId = const Value.absent(),
+                Value<String> signerDeviceId = const Value.absent(),
+                Value<int> operationKind = const Value.absent(),
+                Value<Uint8List> canonicalControl = const Value.absent(),
+                Value<Uint8List> signature = const Value.absent(),
+                Value<int> createdMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomControlEventsCompanion(
+                eventId: eventId,
+                roomId: roomId,
+                revision: revision,
+                previousControlStateHash: previousControlStateHash,
+                controlStateHash: controlStateHash,
+                signerUserId: signerUserId,
+                signerDeviceId: signerDeviceId,
+                operationKind: operationKind,
+                canonicalControl: canonicalControl,
+                signature: signature,
+                createdMs: createdMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String eventId,
+                required String roomId,
+                required int revision,
+                Value<Uint8List?> previousControlStateHash =
+                    const Value.absent(),
+                required Uint8List controlStateHash,
+                required String signerUserId,
+                required String signerDeviceId,
+                required int operationKind,
+                required Uint8List canonicalControl,
+                required Uint8List signature,
+                required int createdMs,
+                Value<int> rowid = const Value.absent(),
+              }) => RoomControlEventsCompanion.insert(
+                eventId: eventId,
+                roomId: roomId,
+                revision: revision,
+                previousControlStateHash: previousControlStateHash,
+                controlStateHash: controlStateHash,
+                signerUserId: signerUserId,
+                signerDeviceId: signerDeviceId,
+                operationKind: operationKind,
+                canonicalControl: canonicalControl,
+                signature: signature,
+                createdMs: createdMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$RoomControlEventsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({roomId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (roomId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.roomId,
+                                referencedTable:
+                                    $$RoomControlEventsTableReferences
+                                        ._roomIdTable(db),
+                                referencedColumn:
+                                    $$RoomControlEventsTableReferences
+                                        ._roomIdTable(db)
+                                        .roomId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$RoomControlEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $RoomControlEventsTable,
+      StoredRoomControlEventRow,
+      $$RoomControlEventsTableFilterComposer,
+      $$RoomControlEventsTableOrderingComposer,
+      $$RoomControlEventsTableAnnotationComposer,
+      $$RoomControlEventsTableCreateCompanionBuilder,
+      $$RoomControlEventsTableUpdateCompanionBuilder,
+      (StoredRoomControlEventRow, $$RoomControlEventsTableReferences),
+      StoredRoomControlEventRow,
+      PrefetchHooks Function({bool roomId})
+    >;
+typedef $$RoomOutboundObjectsTableCreateCompanionBuilder =
+    RoomOutboundObjectsCompanion Function({
+      required String operationId,
+      required String roomId,
+      required String eventId,
+      required Uint8List payload,
+      required String recipientUserIdsJson,
+      Value<String?> recipientDeviceId,
+      Value<bool> includeOwnDevices,
+      required int deliveryState,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$RoomOutboundObjectsTableUpdateCompanionBuilder =
+    RoomOutboundObjectsCompanion Function({
+      Value<String> operationId,
+      Value<String> roomId,
+      Value<String> eventId,
+      Value<Uint8List> payload,
+      Value<String> recipientUserIdsJson,
+      Value<String?> recipientDeviceId,
+      Value<bool> includeOwnDevices,
+      Value<int> deliveryState,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$RoomOutboundObjectsTableFilterComposer
+    extends Composer<_$LocalDatabase, $RoomOutboundObjectsTable> {
+  $$RoomOutboundObjectsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recipientDeviceId => $composableBuilder(
+    column: $table.recipientDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeOwnDevices => $composableBuilder(
+    column: $table.includeOwnDevices,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RoomOutboundObjectsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $RoomOutboundObjectsTable> {
+  $$RoomOutboundObjectsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recipientDeviceId => $composableBuilder(
+    column: $table.recipientDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includeOwnDevices => $composableBuilder(
+    column: $table.includeOwnDevices,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RoomOutboundObjectsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $RoomOutboundObjectsTable> {
+  $$RoomOutboundObjectsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get recipientDeviceId => $composableBuilder(
+    column: $table.recipientDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includeOwnDevices => $composableBuilder(
+    column: $table.includeOwnDevices,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$RoomOutboundObjectsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $RoomOutboundObjectsTable,
+          StoredRoomOutboundObjectRow,
+          $$RoomOutboundObjectsTableFilterComposer,
+          $$RoomOutboundObjectsTableOrderingComposer,
+          $$RoomOutboundObjectsTableAnnotationComposer,
+          $$RoomOutboundObjectsTableCreateCompanionBuilder,
+          $$RoomOutboundObjectsTableUpdateCompanionBuilder,
+          (
+            StoredRoomOutboundObjectRow,
+            BaseReferences<
+              _$LocalDatabase,
+              $RoomOutboundObjectsTable,
+              StoredRoomOutboundObjectRow
+            >,
+          ),
+          StoredRoomOutboundObjectRow,
+          PrefetchHooks Function()
+        > {
+  $$RoomOutboundObjectsTableTableManager(
+    _$LocalDatabase db,
+    $RoomOutboundObjectsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RoomOutboundObjectsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RoomOutboundObjectsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RoomOutboundObjectsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> roomId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<Uint8List> payload = const Value.absent(),
+                Value<String> recipientUserIdsJson = const Value.absent(),
+                Value<String?> recipientDeviceId = const Value.absent(),
+                Value<bool> includeOwnDevices = const Value.absent(),
+                Value<int> deliveryState = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomOutboundObjectsCompanion(
+                operationId: operationId,
+                roomId: roomId,
+                eventId: eventId,
+                payload: payload,
+                recipientUserIdsJson: recipientUserIdsJson,
+                recipientDeviceId: recipientDeviceId,
+                includeOwnDevices: includeOwnDevices,
+                deliveryState: deliveryState,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String roomId,
+                required String eventId,
+                required Uint8List payload,
+                required String recipientUserIdsJson,
+                Value<String?> recipientDeviceId = const Value.absent(),
+                Value<bool> includeOwnDevices = const Value.absent(),
+                required int deliveryState,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomOutboundObjectsCompanion.insert(
+                operationId: operationId,
+                roomId: roomId,
+                eventId: eventId,
+                payload: payload,
+                recipientUserIdsJson: recipientUserIdsJson,
+                recipientDeviceId: recipientDeviceId,
+                includeOwnDevices: includeOwnDevices,
+                deliveryState: deliveryState,
+                createdAt: createdAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -37182,18 +40064,261 @@ class $$VoiceRoomsTableTableManager
       );
 }
 
-typedef $$VoiceRoomsTableProcessedTableManager =
+typedef $$RoomOutboundObjectsTableProcessedTableManager =
     ProcessedTableManager<
       _$LocalDatabase,
-      $VoiceRoomsTable,
-      VoiceRoom,
-      $$VoiceRoomsTableFilterComposer,
-      $$VoiceRoomsTableOrderingComposer,
-      $$VoiceRoomsTableAnnotationComposer,
-      $$VoiceRoomsTableCreateCompanionBuilder,
-      $$VoiceRoomsTableUpdateCompanionBuilder,
-      (VoiceRoom, BaseReferences<_$LocalDatabase, $VoiceRoomsTable, VoiceRoom>),
-      VoiceRoom,
+      $RoomOutboundObjectsTable,
+      StoredRoomOutboundObjectRow,
+      $$RoomOutboundObjectsTableFilterComposer,
+      $$RoomOutboundObjectsTableOrderingComposer,
+      $$RoomOutboundObjectsTableAnnotationComposer,
+      $$RoomOutboundObjectsTableCreateCompanionBuilder,
+      $$RoomOutboundObjectsTableUpdateCompanionBuilder,
+      (
+        StoredRoomOutboundObjectRow,
+        BaseReferences<
+          _$LocalDatabase,
+          $RoomOutboundObjectsTable,
+          StoredRoomOutboundObjectRow
+        >,
+      ),
+      StoredRoomOutboundObjectRow,
+      PrefetchHooks Function()
+    >;
+typedef $$RoomStateRequestsTableCreateCompanionBuilder =
+    RoomStateRequestsCompanion Function({
+      required String roomId,
+      required int reason,
+      Value<String?> peerUserId,
+      Value<int> attempts,
+      Value<DateTime?> requestedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$RoomStateRequestsTableUpdateCompanionBuilder =
+    RoomStateRequestsCompanion Function({
+      Value<String> roomId,
+      Value<int> reason,
+      Value<String?> peerUserId,
+      Value<int> attempts,
+      Value<DateTime?> requestedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$RoomStateRequestsTableFilterComposer
+    extends Composer<_$LocalDatabase, $RoomStateRequestsTable> {
+  $$RoomStateRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get requestedAt => $composableBuilder(
+    column: $table.requestedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RoomStateRequestsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $RoomStateRequestsTable> {
+  $$RoomStateRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get requestedAt => $composableBuilder(
+    column: $table.requestedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RoomStateRequestsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $RoomStateRequestsTable> {
+  $$RoomStateRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<int> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get requestedAt => $composableBuilder(
+    column: $table.requestedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$RoomStateRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $RoomStateRequestsTable,
+          StoredRoomStateRequestRow,
+          $$RoomStateRequestsTableFilterComposer,
+          $$RoomStateRequestsTableOrderingComposer,
+          $$RoomStateRequestsTableAnnotationComposer,
+          $$RoomStateRequestsTableCreateCompanionBuilder,
+          $$RoomStateRequestsTableUpdateCompanionBuilder,
+          (
+            StoredRoomStateRequestRow,
+            BaseReferences<
+              _$LocalDatabase,
+              $RoomStateRequestsTable,
+              StoredRoomStateRequestRow
+            >,
+          ),
+          StoredRoomStateRequestRow,
+          PrefetchHooks Function()
+        > {
+  $$RoomStateRequestsTableTableManager(
+    _$LocalDatabase db,
+    $RoomStateRequestsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RoomStateRequestsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RoomStateRequestsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RoomStateRequestsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> roomId = const Value.absent(),
+                Value<int> reason = const Value.absent(),
+                Value<String?> peerUserId = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<DateTime?> requestedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomStateRequestsCompanion(
+                roomId: roomId,
+                reason: reason,
+                peerUserId: peerUserId,
+                attempts: attempts,
+                requestedAt: requestedAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String roomId,
+                required int reason,
+                Value<String?> peerUserId = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<DateTime?> requestedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomStateRequestsCompanion.insert(
+                roomId: roomId,
+                reason: reason,
+                peerUserId: peerUserId,
+                attempts: attempts,
+                requestedAt: requestedAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RoomStateRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $RoomStateRequestsTable,
+      StoredRoomStateRequestRow,
+      $$RoomStateRequestsTableFilterComposer,
+      $$RoomStateRequestsTableOrderingComposer,
+      $$RoomStateRequestsTableAnnotationComposer,
+      $$RoomStateRequestsTableCreateCompanionBuilder,
+      $$RoomStateRequestsTableUpdateCompanionBuilder,
+      (
+        StoredRoomStateRequestRow,
+        BaseReferences<
+          _$LocalDatabase,
+          $RoomStateRequestsTable,
+          StoredRoomStateRequestRow
+        >,
+      ),
+      StoredRoomStateRequestRow,
       PrefetchHooks Function()
     >;
 typedef $$HistoryTransfersTableCreateCompanionBuilder =
@@ -38881,8 +42006,14 @@ class $LocalDatabaseManager {
         _db,
         _db.pendingApplicationReceipts,
       );
-  $$VoiceRoomsTableTableManager get voiceRooms =>
-      $$VoiceRoomsTableTableManager(_db, _db.voiceRooms);
+  $$RoomStatesTableTableManager get roomStates =>
+      $$RoomStatesTableTableManager(_db, _db.roomStates);
+  $$RoomControlEventsTableTableManager get roomControlEvents =>
+      $$RoomControlEventsTableTableManager(_db, _db.roomControlEvents);
+  $$RoomOutboundObjectsTableTableManager get roomOutboundObjects =>
+      $$RoomOutboundObjectsTableTableManager(_db, _db.roomOutboundObjects);
+  $$RoomStateRequestsTableTableManager get roomStateRequests =>
+      $$RoomStateRequestsTableTableManager(_db, _db.roomStateRequests);
   $$HistoryTransfersTableTableManager get historyTransfers =>
       $$HistoryTransfersTableTableManager(_db, _db.historyTransfers);
   $$HistoryTransferBatchesTableTableManager get historyTransferBatches =>

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/voice_screen_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -99,6 +100,9 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
     required bool waiting,
   }) {
     final strings = AppLocalizations.of(context);
+    // A server that serves no voice offers no room to create: the row stays,
+    // disabled, with the reason beside it.
+    final voiceAvailable = ref.watch(voiceAvailabilityProvider);
     final normalized = _search.text.trim().toLowerCase();
     final filtered = (contacts ?? const <ContactProjection>[])
         .where(
@@ -139,9 +143,15 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
               onTap: () => context.push('/groups/new'),
             ),
             ActionRow(
+              key: const ValueKey('contacts-new-voice-room'),
               label: strings.contactsNewVoiceRoom,
               icon: AppIcons.voiceRooms,
-              onTap: null,
+              subtitle: voiceAvailable
+                  ? null
+                  : strings.contactsNewVoiceRoomUnavailable,
+              onTap: voiceAvailable
+                  ? () => context.go('/voice-rooms/new')
+                  : null,
             ),
             const SizedBox(height: AppSpacing.x4),
             AppField(

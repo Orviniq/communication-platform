@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
@@ -9,6 +10,7 @@ import 'package:communication_platform/features/networking/domain/session_tokens
 import 'package:communication_platform/features/networking/infrastructure/realtime/dio_websocket_gateway.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/socket_connector.dart';
 import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -235,6 +237,128 @@ void main() {
     await gateway.close();
   });
 
+  test('a signal blob is held to signal_buckets, not to a length', () async {
+    final connection = FakeSocketConnection();
+    final gateway = gatewayFor(
+      connector: FakeSocketConnector(connection: connection),
+    );
+    await gateway.connect();
+    const id = 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b';
+
+    // The largest bucket is 21,848 characters of base64, which the old
+    // 16,384-character bound refused outright.
+    for (final bucket in const [1024, 4096, 16384]) {
+      final sent = await gateway.send({
+        'type': 'signal',
+        'to_device': id,
+        'blob': signalBlob(bucket),
+      });
+      expect(sent, isA<Success<void>>(), reason: '$bucket is a signal bucket');
+    }
+    expect(connection.sent, hasLength(3));
+
+    final offBucket = <String, Object?>{
+      'one byte short of a bucket': signalBlob(1023),
+      'one byte over a bucket': signalBlob(1025),
+      'an envelope bucket that is no signal bucket': signalBlob(65536),
+      'the URL-safe alphabet': signalBlob(
+        1024,
+      ).replaceAll('+', '-').replaceAll('/', '_'),
+      'no padding': signalBlob(1024).replaceAll('=', ''),
+      'a line break inside':
+          '${signalBlob(1024).substring(0, 4)}\n'
+          '${signalBlob(1024).substring(4)}',
+      'no string at all': 1024,
+      'nothing': null,
+    };
+    for (final entry in offBucket.entries) {
+      final refused = await gateway.send({
+        'type': 'signal',
+        'to_device': id,
+        'blob': entry.value,
+      });
+      expect(
+        (refused as FailureResult<void>).failure,
+        isA<ValidationFailure>(),
+        reason: '${entry.key} is refused in the client',
+      );
+    }
+    expect(
+      connection.sent,
+      hasLength(3),
+      reason: 'no off-bucket blob reached the socket',
+    );
+    await gateway.close();
+  });
+
+  test('the signal buckets are the published ones', () async {
+    final connection = FakeSocketConnection();
+    final gateway = DioWebSocketGateway(
+      serverOrigin: Uri.parse('https://chat.example.test'),
+      connector: FakeSocketConnector(connection: connection),
+      tokenCoordinator: FakeSocketTokenCoordinator(),
+      reconnectHook: RecordingReconnectHook(),
+      config: FixedServerConfig(onlySignalBucket(1024)),
+    );
+    await gateway.connect();
+    const id = 'e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b';
+
+    final kept = await gateway.send({
+      'type': 'signal',
+      'to_device': id,
+      'blob': signalBlob(1024),
+    });
+    final refused = await gateway.send({
+      'type': 'signal',
+      'to_device': id,
+      'blob': signalBlob(4096),
+    });
+
+    expect(kept, isA<Success<void>>());
+    expect(refused, isA<FailureResult<void>>());
+    expect(connection.sent, hasLength(1));
+    await gateway.close();
+  });
+
+  test('an off-bucket signal is dropped and the socket stays open', () async {
+    final connection = FakeSocketConnection();
+    final hook = RecordingReconnectHook();
+    final gateway = gatewayFor(
+      connector: FakeSocketConnector(connection: connection),
+      hook: hook,
+    );
+    await gateway.connect();
+    final events = <RealtimeEvent>[];
+    final subscription = gateway.events.listen(events.add);
+
+    for (final blob in <Object?>[
+      signalBlob(1023),
+      signalBlob(65536),
+      signalBlob(1024).replaceAll('+', '-'),
+      1024,
+      null,
+    ]) {
+      connection.serverMessage(jsonEncode({'type': 'signal', 'blob': blob}));
+    }
+    connection.serverMessage(
+      jsonEncode({'type': 'signal', 'blob': signalBlob(4096)}),
+    );
+    for (var turn = 0; turn < 10; turn += 1) {
+      await pumpEvents();
+    }
+
+    expect(events, hasLength(1), reason: 'only the on-bucket signal arrives');
+    expect((events.single as RealtimeSignal).blob, signalBlob(4096));
+    expect(
+      connection.closeCode,
+      isNull,
+      reason: 'a dropped signal is not a protocol violation',
+    );
+    expect(hook.records, isEmpty);
+    await subscription.cancel();
+    await gateway.close();
+  });
+
   test('refuses every retired outgoing frame', () async {
     final connection = FakeSocketConnection();
     final gateway = gatewayFor(
@@ -390,3 +514,29 @@ Future<void> pumpEvents() async {
 }
 
 String envelopeBlob() => base64.encode(List<int>.filled(1024, 0));
+
+/// Base64 of [bytes] bytes whose encoding uses `+` and `/`, so that an
+/// alphabet swap shows.
+String signalBlob(int bytes) => base64.encode(List<int>.filled(bytes, 0xfb));
+
+/// The fallback configuration, publishing [bucket] as its one signal bucket.
+ServerConfig onlySignalBucket(int bucket) {
+  const fallback = ServerConfig.fallback;
+  return ServerConfig(
+    envelopeTtlDays: fallback.envelopeTtlDays,
+    attachmentTtlDays: fallback.attachmentTtlDays,
+    attachmentDailyBytes: fallback.attachmentDailyBytes,
+    mailboxMaxBytes: fallback.mailboxMaxBytes,
+    maxDevicesPerUser: fallback.maxDevicesPerUser,
+    maxDeviceLogRecords: fallback.maxDeviceLogRecords,
+    sessionTokenDays: fallback.sessionTokenDays,
+    sendBatchMax: fallback.sendBatchMax,
+    ackMax: fallback.ackMax,
+    drainPageMax: fallback.drainPageMax,
+    claimMax: fallback.claimMax,
+    envelopeBuckets: fallback.envelopeBuckets,
+    attachmentBuckets: fallback.attachmentBuckets,
+    signalBuckets: {bucket},
+    voiceConfigured: fallback.voiceConfigured,
+  );
+}

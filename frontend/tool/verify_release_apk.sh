@@ -13,8 +13,8 @@
 #                           and unsigned, so that the OS refuses to install it?
 #
 # Both modes also ask whether the artifact declares only the permissions and
-# components ADR-054 recorded, and whether its packaged native core still lacks
-# the deleted beta MLS symbol.
+# components ADR-054 recorded, as ADR-078 extended them, and whether its packaged
+# native core still lacks the deleted beta MLS symbol.
 #
 # Every check fails closed. A check that cannot be performed is an error, never
 # a pass.
@@ -48,8 +48,8 @@ Usage: tool/verify_release_apk.sh (--production | --production-unsigned) <apk>
 
 Both modes also compare what the merged manifest declares - permissions and
 components, including everything a dependency contributed - against the set
-ADR-054 recorded, and check that the packaged native core does not export the
-deleted beta MLS symbol.
+ADR-054 recorded and ADR-078 extended, and check that the packaged native core
+does not export the deleted beta MLS symbol.
 USAGE
 }
 
@@ -212,17 +212,21 @@ fi
 
 # The source manifest is not the artifact's manifest. Every dependency merges
 # its own elements in, and the only place the result can be read is the packaged
-# file. ADR-054 enumerated what belongs there; this refuses anything else, so a
-# permission, a component or an exported entry point that arrives with a future
-# dependency upgrade fails the release rather than shipping unnoticed.
+# file. ADR-054 enumerated what belongs there, and ADR-078 added voice's three
+# permissions; this refuses anything else, so a permission, a component or an
+# exported entry point that arrives with a future dependency upgrade fails the
+# release rather than shipping unnoticed.
 
 expected_permissions="$(printf '%s\n' \
   "android.permission.ACCESS_NETWORK_STATE" \
   "android.permission.FOREGROUND_SERVICE" \
+  "android.permission.FOREGROUND_SERVICE_MICROPHONE" \
   "android.permission.FOREGROUND_SERVICE_SPECIAL_USE" \
   "android.permission.INTERNET" \
+  "android.permission.MODIFY_AUDIO_SETTINGS" \
   "android.permission.POST_NOTIFICATIONS" \
   "android.permission.RECEIVE_BOOT_COMPLETED" \
+  "android.permission.RECORD_AUDIO" \
   "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" \
   "android.permission.VIBRATE" \
   "$actual_application_id.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" |
@@ -232,12 +236,13 @@ actual_permissions="$(printf '%s' "$badging" |
   sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)"
 
 if [[ "$actual_permissions" != "$expected_permissions" ]]; then
-  fail "The packaged artifact does not ask for the permissions ADR-054 recorded.
+  fail "The packaged artifact does not ask for the permissions ADR-054 and ADR-078 recorded.
 $(diff <(printf '%s\n' "$expected_permissions") <(printf '%s\n' "$actual_permissions") |
     sed 's/^</       expected only: /; s/^>/       present but unrecorded: /' | grep -E 'expected only|unrecorded')
        A permission that arrived from a dependency is still a permission this
        application asks its users for. Read where it came from, decide it, and
-       record it in the manifest and in ADR-054 - or remove what brought it."
+       record it in the manifest and in a dated decision record - or remove
+       what brought it."
 fi
 pass "declares exactly the $(printf '%s\n' "$actual_permissions" | wc -l | tr -d ' ') recorded permissions"
 
@@ -270,16 +275,19 @@ components="$(printf '%s' "$manifest_tree" | awk '
   END { flush() }
 ' | sort)"
 
+# The call's microphone service joined the set ADR-054 recorded with phase 6
+# prompt 8 (CLIENT_CONTRACT.md §N rule 11; ADR-078 left it to that prompt).
 expected_components="$(printf '%s\n' \
   "activity|com.example.communication_platform.MainActivity|true" \
   "provider|androidx.core.content.FileProvider|false" \
   "provider|androidx.startup.InitializationProvider|false" \
   "service|com.example.communication_platform.DeferredDeliveryJobService|false" \
-  "service|com.example.communication_platform.SustainedDeliveryService|false" |
+  "service|com.example.communication_platform.SustainedDeliveryService|false" \
+  "service|com.example.communication_platform.VoiceCallService|false" |
   sort)"
 
 if [[ "$components" != "$expected_components" ]]; then
-  fail "The packaged artifact does not declare the components ADR-054 recorded.
+  fail "The packaged artifact does not declare the components ADR-054 recorded and voice added.
 $(diff <(printf '%s\n' "$expected_components") <(printf '%s\n' "$components") |
     sed 's/^</       expected only: /; s/^>/       present but unrecorded: /' | grep -E 'expected only|unrecorded')
        An entry point this project did not declare is reachable in the
@@ -287,7 +295,7 @@ $(diff <(printf '%s\n' "$expected_components") <(printf '%s\n' "$components") |
        the one this happened with before, and it is refused in the manifest
        with tools:node=\"remove\"."
 fi
-pass "declares exactly the 5 recorded components"
+pass "declares exactly the 6 recorded components"
 
 exported_components="$(printf '%s\n' "$components" | awk -F'|' '$3 == "true" { print $2 }')"
 [[ "$exported_components" == "com.example.communication_platform.MainActivity" ]] ||

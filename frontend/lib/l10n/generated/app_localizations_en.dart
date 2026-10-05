@@ -140,13 +140,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'The routed conversation list and detail regions are ready for later feature pieces.';
 
   @override
-  String get voiceRoomsPlaceholderTitle => 'Voice rooms';
-
-  @override
-  String get voiceRoomsPlaceholderBody =>
-      'Voice rooms are not built yet. This build sends and receives no audio.';
-
-  @override
   String get settingsPlaceholderTitle => 'Settings structure';
 
   @override
@@ -157,13 +150,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get threadPlaceholderTitle => 'Conversation detail';
 
   @override
-  String get roomPlaceholderTitle => 'Voice room detail';
-
-  @override
   String get newChatPlaceholderTitle => 'New conversation';
-
-  @override
-  String get newRoomPlaceholderTitle => 'Create voice room';
 
   @override
   String get placeholderBody => 'This part of the app is not built yet.';
@@ -1319,6 +1306,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Shown while the app is kept open so that messages can arrive.';
 
   @override
+  String get voiceCallNotificationTitle => 'Call in progress';
+
+  @override
+  String get voiceCallChannelName => 'Voice calls';
+
+  @override
+  String get voiceCallChannelDescription =>
+      'Shown while you are in a call, so that the call keeps your microphone when you open another app. It never names anyone in the call.';
+
+  @override
   String get settingsSustainedTitle => 'Receiving while closed';
 
   @override
@@ -1796,4 +1793,604 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get linkedDevicesAddBody =>
       'Install the app on the other device, sign in there, and enter your recovery secret when it asks. It appears in this list once it is signed. Keep this phone online afterwards so it can send your history across; the server has no copy to send.';
+
+  @override
+  String get voiceRoomsLoadingTitle => 'Loading your rooms';
+
+  @override
+  String get voiceRoomsLoadingBody =>
+      'Reading the rooms stored on this device.';
+
+  @override
+  String get voiceRoomsEmptyTitle => 'No voice rooms yet';
+
+  @override
+  String get voiceRoomsEmptyBody =>
+      'A voice room is a standalone room for calls. It lives on its members\' devices, and the server never holds it.';
+
+  @override
+  String get voiceRoomsCreateAction => 'Create a room';
+
+  @override
+  String get voiceRoomsOfflineNotice =>
+      'Offline — showing the rooms saved on this device. A call cannot start until the server is reachable.';
+
+  @override
+  String get voiceRoomsNoVoiceTitle => 'This server does not offer voice';
+
+  @override
+  String get voiceRoomsNoVoiceBody =>
+      'It has no relay to carry a call, so rooms cannot be created or joined here. No other service is used in its place.';
+
+  @override
+  String get voiceRoomsErrorBody =>
+      'The rooms on this device could not be read.';
+
+  @override
+  String voiceRoomStateLive(int count) {
+    return 'Live now · $count';
+  }
+
+  @override
+  String get voiceRoomStateEmpty => 'Empty';
+
+  @override
+  String get voiceRoomStateWaiting => 'Asking a member for its state';
+
+  @override
+  String get voiceRoomStateConflict => 'Paused by conflicting changes';
+
+  @override
+  String get voiceRoomStateLeft => 'You left this room';
+
+  @override
+  String get voiceRoomStateRemoved => 'You were removed from this room';
+
+  @override
+  String get voiceRoomCreateTitle => 'New voice room';
+
+  @override
+  String voiceRoomCreateStep(int step) {
+    return 'Step $step of 3';
+  }
+
+  @override
+  String get voiceRoomNameLabel => 'Room name';
+
+  @override
+  String get voiceRoomNamePrivacyNote =>
+      'Encrypted on this device. The server never sees it.';
+
+  @override
+  String get voiceRoomStandaloneNote =>
+      'A voice room stands on its own. It is not attached to a chat or a group, and everyone you invite joins as an equal: any member can invite, remove or rename.';
+
+  @override
+  String get voiceRoomNameEmpty => 'Give the room a name.';
+
+  @override
+  String get voiceRoomNameTooLong =>
+      'This name is too long. Shorten it to 100 characters or fewer.';
+
+  @override
+  String get voiceRoomContinueAction => 'Continue';
+
+  @override
+  String get voiceRoomInviteStepTitle => 'Who to invite';
+
+  @override
+  String voiceRoomSelectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get voiceRoomNoVerifiedTitle => 'Nobody to invite yet';
+
+  @override
+  String get voiceRoomNoVerifiedBody =>
+      'You can invite only contacts whose safety number you have checked, and none are verified yet.';
+
+  @override
+  String get voiceRoomVerifyContactAction => 'Verify a contact';
+
+  @override
+  String get voiceRoomSelectAtLeastOne =>
+      'Choose at least one person to invite.';
+
+  @override
+  String get voiceRoomMemberLimit =>
+      'A room holds at most 50 members, you included.';
+
+  @override
+  String get voiceRoomReviewTitle => 'Ready to create';
+
+  @override
+  String get voiceRoomReviewBody =>
+      'Creating signs the room on this device and sends it, encrypted, to everyone you chose. Each of them has the room once their device receives it, and the server never holds it.';
+
+  @override
+  String voiceRoomReviewMembers(int count) {
+    return 'People invited: $count';
+  }
+
+  @override
+  String get voiceRoomCreateAction => 'Create room';
+
+  @override
+  String get voiceRoomCreatingState =>
+      'Signing the room and queueing it for the people you chose…';
+
+  @override
+  String get voiceRoomCreateFailed =>
+      'The room could not be created. Nothing was sent.';
+
+  @override
+  String get voiceRoomInfoTitle => 'Room info';
+
+  @override
+  String get voiceRoomRenameAction => 'Rename';
+
+  @override
+  String get voiceRoomRenameTitle => 'Rename this room';
+
+  @override
+  String get voiceRoomRenameBody =>
+      'The new name is signed on this device and sent to every member, who see it when their device next receives messages.';
+
+  @override
+  String get voiceRoomSaveAction => 'Save';
+
+  @override
+  String get voiceRoomCancelAction => 'Cancel';
+
+  @override
+  String get voiceRoomRenameFailed =>
+      'The room was not renamed. Nothing was sent.';
+
+  @override
+  String get voiceRoomStartCallAction => 'Start a call';
+
+  @override
+  String get voiceRoomReturnToCallAction => 'Return to the call';
+
+  @override
+  String get voiceRoomJoinOffline =>
+      'A call cannot start while the server is unreachable.';
+
+  @override
+  String get voiceRoomJoinWaits => 'Joining waits for the room\'s state.';
+
+  @override
+  String get voiceRoomJoinPaused =>
+      'Joining is paused until the room is settled.';
+
+  @override
+  String get voiceRoomJoinOtherCall =>
+      'You are in a call in another room. Leave it before you start one here.';
+
+  @override
+  String voiceRoomMembersCount(int count) {
+    return '$count members';
+  }
+
+  @override
+  String get voiceRoomYou => 'You';
+
+  @override
+  String get voiceRoomInviteAction => 'Invite people';
+
+  @override
+  String get voiceRoomLeaveAction => 'Leave room';
+
+  @override
+  String get voiceRoomLeaveTitle => 'Leave this room?';
+
+  @override
+  String get voiceRoomLeaveBody =>
+      'Leaving is a signed change that the other members apply. It ends your membership and your access to this room\'s calls. It does not delete the room: the others keep it, and the server holds nothing to delete. Coming back needs a fresh invitation from one of them.';
+
+  @override
+  String get voiceRoomChangeFailed =>
+      'The change could not be committed. The room is unchanged.';
+
+  @override
+  String get voiceRoomWaitingNotice =>
+      'Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting, renaming and leaving resume when it arrives.';
+
+  @override
+  String get voiceRoomConflictNotice =>
+      'Two members changed this room at the same moment. The room is paused and the app will not choose between them: joining, inviting, renaming and leaving wait until it is settled outside the app, if need be with a new room.';
+
+  @override
+  String get voiceRoomControlQuarantineNotice =>
+      'A change to this room could not be accepted, so the room is paused. Joining, inviting, renaming and leaving wait until it is settled outside the app.';
+
+  @override
+  String voiceRoomRemovedByNotice(String name) {
+    return '$name removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.';
+  }
+
+  @override
+  String get voiceRoomRemovedNotice =>
+      'A member removed you from this room. What you saw stays on this device, but you have no access to its calls. Coming back needs a fresh invitation.';
+
+  @override
+  String get voiceRoomLeftNotice =>
+      'You left this room. Coming back needs a fresh invitation from a member.';
+
+  @override
+  String get voiceRoomNoVoiceNotice =>
+      'This server does not offer voice, so no call can start in this room.';
+
+  @override
+  String get voiceRoomPrivacyNote =>
+      'The room\'s name and members exist only on its members\' devices. The server stores neither and could not read either.';
+
+  @override
+  String get voiceRoomNotFoundTitle => 'This room is not on this device';
+
+  @override
+  String get voiceRoomNotFoundBody =>
+      'This device holds no room with this link.';
+
+  @override
+  String get voiceRoomVerified => 'Verified';
+
+  @override
+  String get voiceRoomNotVerified => 'Not verified';
+
+  @override
+  String get voiceRoomVerifyAction => 'Verify safety number';
+
+  @override
+  String get voiceRoomNotVerifiedNote =>
+      'You have not checked this person\'s safety number, so nothing proves the key belongs to them.';
+
+  @override
+  String get voiceRoomRemoveMemberAction => 'Remove from room';
+
+  @override
+  String voiceRoomRemoveMemberTitle(String name) {
+    return 'Remove $name?';
+  }
+
+  @override
+  String voiceRoomRemoveMemberBody(String name) {
+    return 'Removing is a signed change every member applies. $name\'s connections to this room\'s calls close, and coming back needs a fresh invitation. Any member can remove any other, and the only remedy for a removal is a new room.';
+  }
+
+  @override
+  String voiceRoomInviteTitle(String roomName) {
+    return 'Invite to $roomName';
+  }
+
+  @override
+  String get voiceRoomInviteNoneLeftTitle => 'No one left to invite';
+
+  @override
+  String get voiceRoomInviteNoneLeftBody =>
+      'Everyone whose safety number you have checked is already in this room.';
+
+  @override
+  String voiceRoomInviteSubmit(int count) {
+    return 'Invite the people chosen ($count)';
+  }
+
+  @override
+  String get voiceRoomInvitingState =>
+      'Signing the invitation and queueing it…';
+
+  @override
+  String get voiceRoomInviteFailed =>
+      'Nobody was added. The room is unchanged.';
+
+  @override
+  String get voiceRoomInviteTooLong =>
+      'This room\'s signed history is too long to hand to a new member in one message, so nobody was added.';
+
+  @override
+  String get voiceRoomInviteNote =>
+      'Each person you invite is sent the room\'s whole signed history, so their device can check it for itself.';
+
+  @override
+  String get voiceRoomInviteRoomFull =>
+      'This room has 50 members, the most it can hold.';
+
+  @override
+  String voiceCallCount(int count) {
+    return '$count in the call';
+  }
+
+  @override
+  String voiceCallCountStale(int count) {
+    return '$count in the call · last known';
+  }
+
+  @override
+  String get voiceCallMinimizeAction => 'Keep the call and go back';
+
+  @override
+  String get voiceCallPreJoinTitle => 'Join the call?';
+
+  @override
+  String get voiceCallPreJoinBody =>
+      'Joining sends your microphone to each person in this call. Your phone asks for the microphone next, if it has not already.';
+
+  @override
+  String get voiceCallJoinAction => 'Join';
+
+  @override
+  String get voiceCallNotNowAction => 'Not now';
+
+  @override
+  String get voiceCallAskingMicrophone =>
+      'Waiting for your answer about the microphone…';
+
+  @override
+  String get voiceCallStartingService => 'Getting the call ready…';
+
+  @override
+  String get voiceCallConnectingTitle => 'Connecting to the call';
+
+  @override
+  String get voiceCallConnectingBody =>
+      'Nothing from your microphone is sent until a connection is up.';
+
+  @override
+  String get voiceCallMicDeniedTitle => 'Microphone access is off';
+
+  @override
+  String get voiceCallMicDeniedBody =>
+      'This room is audio only, so there is nothing to join without a microphone. Nothing was sent.';
+
+  @override
+  String get voiceCallMicDeniedPermanentlyBody =>
+      'This room is audio only, so there is nothing to join without a microphone. Android will not ask again here: you can allow the microphone for this app in the system settings.';
+
+  @override
+  String get voiceCallOpenSettingsAction => 'Open settings';
+
+  @override
+  String get voiceCallTryAgainAction => 'Try again';
+
+  @override
+  String get voiceCallBackToRoomsAction => 'Back to rooms';
+
+  @override
+  String get voiceCallServiceRefusedTitle => 'The call could not start';
+
+  @override
+  String get voiceCallServiceNotInForegroundBody =>
+      'A call can start only while this app is on screen. Nothing was sent.';
+
+  @override
+  String get voiceCallServiceRefusedBody =>
+      'Your phone did not let the call keep the microphone while you use other apps, so the call was not started and nothing was sent.';
+
+  @override
+  String get voiceCallFullTitle => 'This call is full';
+
+  @override
+  String get voiceCallFullBody =>
+      'Ten people are already in it, and a call holds ten at most, because every phone sends its audio to every other phone. You can try again when someone leaves.';
+
+  @override
+  String get voiceCallNoVoiceTitle => 'Voice is not set up on this server';
+
+  @override
+  String get voiceCallNoVoiceBody =>
+      'Your server has no voice relay configured. Nothing else can carry the call, and nothing will be substituted.';
+
+  @override
+  String get voiceCallThrottledTitle => 'Too many attempts';
+
+  @override
+  String get voiceCallThrottledBody =>
+      'The server asked this device to wait before joining again.';
+
+  @override
+  String voiceCallTryAgainIn(int seconds) {
+    return 'Try again in ${seconds}s';
+  }
+
+  @override
+  String get voiceCallOfflineTitle => 'No connection to the server';
+
+  @override
+  String get voiceCallOfflineBody =>
+      'A call cannot start while the server is unreachable. Nothing else will be tried in its place.';
+
+  @override
+  String get voiceCallWaitingTitle => 'Waiting for this room\'s state';
+
+  @override
+  String get voiceCallWaitingBody =>
+      'This device may be missing a change to the room, so a call waits until a member answers.';
+
+  @override
+  String get voiceCallConflictTitle => 'Joining is paused';
+
+  @override
+  String get voiceCallConflictBody =>
+      'This room is paused until its members settle a change to it outside the app.';
+
+  @override
+  String get voiceCallRemovedTitle => 'You were removed from this room';
+
+  @override
+  String get voiceCallLeftRoomTitle => 'You left this room';
+
+  @override
+  String get voiceCallEndedChatDropped =>
+      'The call ended, and its chat was dropped.';
+
+  @override
+  String get voiceCallLocalFailureTitle =>
+      'This phone could not open its microphone or a connection';
+
+  @override
+  String get voiceCallLocalFailureBody =>
+      'The call ended. Nothing more was sent.';
+
+  @override
+  String get voiceCallAlreadyInCallTitle => 'You are already in a call';
+
+  @override
+  String get voiceCallAlreadyInCallBody => 'Leave it before you join another.';
+
+  @override
+  String get voiceCallRelayNote =>
+      'Your audio crosses this server\'s relay rather than going straight between phones, so its path is longer than a direct one. The relay passes it on and cannot hear it.';
+
+  @override
+  String get voiceCallSocketDegraded =>
+      'Audio is fine. Room chat, joins and leaves are not updating until the connection to the server returns.';
+
+  @override
+  String get voiceCallNotificationHidden =>
+      'Notifications are off for this app, so the call\'s notice is not in your notifications. Android still lists the call among the active apps in quick settings.';
+
+  @override
+  String get voiceCallAloneTitle => 'You are the only one here';
+
+  @override
+  String get voiceCallAloneBody =>
+      'The call stays open. Invite someone, or wait for a member to join.';
+
+  @override
+  String get voiceCallWaitingForOthers => 'Waiting for the others to answer…';
+
+  @override
+  String get voiceCallMuteAction => 'Mute';
+
+  @override
+  String get voiceCallUnmuteAction => 'Unmute';
+
+  @override
+  String get voiceCallInviteAction => 'Invite';
+
+  @override
+  String get voiceCallLeaveAction => 'Leave';
+
+  @override
+  String get voiceCallMicOn => 'Your microphone is on';
+
+  @override
+  String get voiceCallMicMuted => 'You are muted';
+
+  @override
+  String get voiceCallPeopleTab => 'People';
+
+  @override
+  String get voiceCallChatTab => 'Room chat';
+
+  @override
+  String get voiceCallReturnBanner => 'Return to the call';
+
+  @override
+  String voiceTileAnotherDevice(String name) {
+    return '$name (another device)';
+  }
+
+  @override
+  String get voiceTileMuted => 'Muted';
+
+  @override
+  String get voiceTileMicOn => 'Microphone on';
+
+  @override
+  String get voiceTileConnecting => 'Connecting';
+
+  @override
+  String get voiceTileConnected => 'Connected';
+
+  @override
+  String get voiceTileReconnecting => 'Reconnecting';
+
+  @override
+  String get voiceTileNotReachable => 'Not reachable';
+
+  @override
+  String get voiceTileIdentityBlocked => 'Safety number changed';
+
+  @override
+  String get voiceTileIncompatible => 'Needs a newer app';
+
+  @override
+  String get voiceTileRestartingIce => 'Renewing its connection';
+
+  @override
+  String voiceTileConnectingBody(String name) {
+    return 'An encrypted connection with $name is being set up.';
+  }
+
+  @override
+  String voiceTileConnectedBody(String name) {
+    return 'Audio between you and $name is encrypted end to end by your two phones.';
+  }
+
+  @override
+  String voiceTileReconnectingBody(String name) {
+    return 'The path to $name dropped. Audio with them stops until it comes back.';
+  }
+
+  @override
+  String voiceTileNotReachableBody(String name) {
+    return '$name\'s device did not answer after several tries, so there is no audio between you. Your audio with the others carries on.';
+  }
+
+  @override
+  String voiceTileIdentityBlockedBody(String name) {
+    return '$name\'s safety number changed. Audio between you has stopped until you check the new number. Your audio with the others carries on.';
+  }
+
+  @override
+  String voiceTileIncompatibleBody(String name) {
+    return '$name\'s app speaks a version of calls this one does not, so there is no audio between you. One of you needs to update.';
+  }
+
+  @override
+  String voiceTileRestartingIceBody(String name) {
+    return 'The relay connection to $name is being renewed. The audio keeps its old path meanwhile.';
+  }
+
+  @override
+  String get voiceChatNote =>
+      'Temporary and best-effort. Cleared when the call ends; others may keep what they read.';
+
+  @override
+  String get voiceChatEmpty =>
+      'Nothing said yet. Messages here are gone when the call ends.';
+
+  @override
+  String get voiceChatStale =>
+      'This chat is not updating. Your messages are not being delivered, and new ones will not appear.';
+
+  @override
+  String get voiceChatHint => 'Message the call';
+
+  @override
+  String get voiceChatSendAction => 'Send';
+
+  @override
+  String voiceChatTooLong(int count) {
+    return 'That message is too long to send. Shorten it by $count characters.';
+  }
+
+  @override
+  String get voiceChatUnsendable =>
+      'That message holds characters that cannot be sent.';
+
+  @override
+  String get voiceChatNotSent => 'That message was not sent.';
+
+  @override
+  String get voiceChatUnavailable => 'Chat unavailable';
+
+  @override
+  String get contactsNewVoiceRoomUnavailable =>
+      'This server does not offer voice.';
+
+  @override
+  String get voiceRoomsErrorTitle => 'Rooms are unavailable';
 }

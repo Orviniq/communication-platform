@@ -1,0 +1,26 @@
+<!--
+  The status-bar icon for a call in progress.
+
+  A notification small icon is rendered as a monochrome silhouette: the system
+  keeps the alpha channel and discards the colour, so this is drawn in solid
+  white and carries no detail that only survives in colour. It is a plain
+  microphone and not a brand mark, for the reason the message alert's bubble is
+  one: it sits in the status bar for as long as the call lasts, and a
+  distinctive mark would make the application recognisable at a glance to
+  anyone looking at the phone. What it says is that a microphone is live.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2a3,3 0,0 0,-3 3v6a3,3 0,0 0,6 0V5a3,3 0,0 0,-3 -3z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M6,11a6,6 0,0 0,12 0M12,17v4M8.5,21h7" />
+</vector>
