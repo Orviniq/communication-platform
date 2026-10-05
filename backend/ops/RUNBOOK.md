@@ -372,8 +372,10 @@ install -d -m 0755 /etc/chat
 install -o root -g turnserver -m 0640 ops/coturn/turnserver.conf /etc/chat/turnserver.conf
 # The packaged coturn unit reads /etc/turnserver.conf. Point it at the file
 # above rather than editing the packaged unit, which a package upgrade replaces.
+# `--pidfile=` is the packaged unit's own, kept: coturn runs as `turnserver`, which
+# cannot write /var/run, and without it every start writes an error to the journal.
 mkdir -p /etc/systemd/system/coturn.service.d
-printf '[Service]\nExecStart=\nExecStart=/usr/bin/turnserver -c /etc/chat/turnserver.conf\n' \
+printf '[Service]\nExecStart=\nExecStart=/usr/bin/turnserver -c /etc/chat/turnserver.conf --pidfile=\n' \
     > /etc/systemd/system/coturn.service.d/config-path.conf
 systemctl daemon-reload && systemctl enable --now coturn.service
 ```
