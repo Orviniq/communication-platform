@@ -63,31 +63,8 @@ final class ProfileResponseDto {
 final class PeerIdentityResponseDto {
   const PeerIdentityResponseDto(this.identity);
 
-  factory PeerIdentityResponseDto.fromJson(Object? value) {
-    final json = requireJsonObject(value);
-    final version = json['version'];
-    final master = _base64(json['master_pub'], length: 32);
-    final selfSigning = _base64(json['self_signing_pub'], length: 32);
-    final userSigning = _base64(json['user_signing_pub'], length: 32);
-    final signature = _base64(json['master_sig'], length: 64);
-    if (version is! int ||
-        version <= 0 ||
-        master == null ||
-        selfSigning == null ||
-        userSigning == null ||
-        signature == null) {
-      throw const MalformedApiBody();
-    }
-    return PeerIdentityResponseDto(
-      PeerIdentityPublic(
-        masterPublic: master,
-        selfSigningPublic: selfSigning,
-        userSigningPublic: userSigning,
-        masterSignature: signature,
-        version: version,
-      ),
-    );
-  }
+  factory PeerIdentityResponseDto.fromJson(Object? value) =>
+      PeerIdentityResponseDto(_identity(value));
 
   final PeerIdentityPublic identity;
 }
@@ -100,56 +77,91 @@ final class PeerDevicesResponseDto {
       return const PeerDevicesResponseDto(PeerDevicesNotModified());
     }
     final json = requireJsonObject(value);
-    final values = json['devices'];
     final etag = json['etag'];
-    final head = json['log_head_seq'];
-    if (values is! List<Object?> ||
-        values.length > 100 ||
-        etag is! String ||
-        etag.isEmpty ||
-        (head != null && (head is! int || head < 0))) {
+    if (etag is! String || etag.isEmpty) {
       throw const MalformedApiBody();
     }
-    final devices = values
-        .map((value) {
-          final row = requireJsonObject(value);
-          final id = row['device_id'];
-          final ik = _base64(row['ik_pub'], length: 64);
-          final registration = row['registration_id'];
-          final crossValue = row['cross_sig'];
-          final cross = crossValue == null
-              ? null
-              : _base64(crossValue, length: 64);
-          final version = row['bundle_version'];
-          if (id is! String ||
-              !_uuid.hasMatch(id) ||
-              ik == null ||
-              registration is! int ||
-              registration < 0 ||
-              (crossValue != null && cross == null) ||
-              (cross == null) != (version == null) ||
-              (version != null && (version is! int || version <= 0))) {
-            throw const MalformedApiBody();
-          }
-          return PeerPublicDevice(
-            deviceId: id,
-            identityPublic: ik,
-            registrationId: registration,
-            crossSignature: cross,
-            bundleVersion: version as int?,
-          );
-        })
-        .toList(growable: false);
     return PeerDevicesResponseDto(
       PeerDevicesUpdated(
-        devices: devices,
+        devices: _devices(json['devices']),
         etag: etag,
-        logHeadSequence: head as int?,
+        logHeadSequence: _logHead(json['log_head_seq']),
       ),
     );
   }
 
   final PeerDeviceRefresh refresh;
+}
+
+/// The body of `GET /api/v1/users/{user_id}/identity`, wherever it is served.
+PeerIdentityPublic _identity(Object? value) {
+  final json = requireJsonObject(value);
+  final version = json['version'];
+  final master = _base64(json['master_pub'], length: 32);
+  final selfSigning = _base64(json['self_signing_pub'], length: 32);
+  final userSigning = _base64(json['user_signing_pub'], length: 32);
+  final signature = _base64(json['master_sig'], length: 64);
+  if (version is! int ||
+      version <= 0 ||
+      master == null ||
+      selfSigning == null ||
+      userSigning == null ||
+      signature == null) {
+    throw const MalformedApiBody();
+  }
+  return PeerIdentityPublic(
+    masterPublic: master,
+    selfSigningPublic: selfSigning,
+    userSigningPublic: userSigning,
+    masterSignature: signature,
+    version: version,
+  );
+}
+
+/// The items of `GET /api/v1/users/{user_id}/devices`, wherever they are
+/// served.
+List<PeerPublicDevice> _devices(Object? values) {
+  if (values is! List<Object?> || values.length > 100) {
+    throw const MalformedApiBody();
+  }
+  return values
+      .map((value) {
+        final row = requireJsonObject(value);
+        final id = row['device_id'];
+        final ik = _base64(row['ik_pub'], length: 64);
+        final registration = row['registration_id'];
+        final crossValue = row['cross_sig'];
+        final cross = crossValue == null
+            ? null
+            : _base64(crossValue, length: 64);
+        final version = row['bundle_version'];
+        if (id is! String ||
+            !_uuid.hasMatch(id) ||
+            ik == null ||
+            registration is! int ||
+            registration < 0 ||
+            (crossValue != null && cross == null) ||
+            (cross == null) != (version == null) ||
+            (version != null && (version is! int || version <= 0))) {
+          throw const MalformedApiBody();
+        }
+        return PeerPublicDevice(
+          deviceId: id,
+          identityPublic: ik,
+          registrationId: registration,
+          crossSignature: cross,
+          bundleVersion: version as int?,
+        );
+      })
+      .toList(growable: false);
+}
+
+/// A device-log head, which is null for an empty log.
+int? _logHead(Object? head) {
+  if (head != null && (head is! int || head < 0)) {
+    throw const MalformedApiBody();
+  }
+  return head as int?;
 }
 
 final class ClaimedBundlesResponseDto {
