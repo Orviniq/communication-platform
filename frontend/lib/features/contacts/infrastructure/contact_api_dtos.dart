@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/api_dtos.dart';
+import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 
 final class DirectoryResponseDto {
   const DirectoryResponseDto(this.users);
@@ -91,6 +92,94 @@ final class PeerDevicesResponseDto {
   }
 
   final PeerDeviceRefresh refresh;
+}
+
+/// What `POST /api/v1/peers` answered for the peers one request named.
+///
+/// Items are matched to [requested] by `user_id`, never by position or count:
+/// a user that does not exist, is not activated or was deactivated is left out
+/// of the answer, and is [PeerStateAbsent] here. A full item is read by the
+/// same code that reads the per-user identity and device-list answers, because
+/// it is the same bytes.
+final class PeerStatesResponseDto {
+  const PeerStatesResponseDto(this.peers);
+
+  factory PeerStatesResponseDto.fromJson(
+    Object? value, {
+    required List<PeerStateQuery> requested,
+  }) {
+    final json = requireJsonObject(value);
+    final values = json['peers'];
+    if (values is! List<Object?> || values.length > requested.length) {
+      throw const MalformedApiBody();
+    }
+    final queries = {
+      for (final query in requested) query.userId.toLowerCase(): query,
+    };
+    final answered = <String, PeerStateRead>{};
+    for (final value in values) {
+      final item = requireJsonObject(value);
+      final userId = item['user_id'];
+      final etag = item['etag'];
+      final query = userId is String && _uuid.hasMatch(userId)
+          ? queries[userId.toLowerCase()]
+          : null;
+      if (query == null ||
+          answered.containsKey(query.userId) ||
+          etag is! String ||
+          etag.isEmpty ||
+          etag.length > ApiContractLimits.maximumPeerStateEtagCharacters) {
+        throw const MalformedApiBody();
+      }
+      // The shape is decided by whether `unchanged` is there at all. Its value
+      // is always `true`, and anything else is a broken answer rather than the
+      // other shape.
+      answered[query.userId] = item.containsKey('unchanged')
+          ? _unchangedPeer(item, query: query, etag: etag)
+          : _updatedPeer(item, etag: etag);
+    }
+    return PeerStatesResponseDto(
+      Map.unmodifiable({
+        for (final query in requested)
+          query.userId: answered[query.userId] ?? const PeerStateAbsent(),
+      }),
+    );
+  }
+
+  final Map<String, PeerStateRead> peers;
+
+  /// `unchanged` says the tag the request carried still holds, so it can only
+  /// answer a request that carried one, and only with that same tag.
+  static PeerStateUnchanged _unchangedPeer(
+    Map<String, Object?> item, {
+    required PeerStateQuery query,
+    required String etag,
+  }) {
+    if (item['unchanged'] != true ||
+        item.containsKey('identity') ||
+        item.containsKey('devices') ||
+        item.containsKey('log_head_seq') ||
+        query.etag != etag) {
+      throw const MalformedApiBody();
+    }
+    return PeerStateUnchanged(etag: etag);
+  }
+
+  static PeerStateUpdated _updatedPeer(
+    Map<String, Object?> item, {
+    required String etag,
+  }) {
+    if (!item.containsKey('identity') || !item.containsKey('log_head_seq')) {
+      throw const MalformedApiBody();
+    }
+    final identity = item['identity'];
+    return PeerStateUpdated(
+      identity: identity == null ? null : _identity(identity),
+      devices: _devices(item['devices']),
+      logHeadSequence: _logHead(item['log_head_seq']),
+      etag: etag,
+    );
+  }
 }
 
 /// The body of `GET /api/v1/users/{user_id}/identity`, wherever it is served.

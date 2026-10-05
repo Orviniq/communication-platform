@@ -43,6 +43,12 @@ abstract final class ApiContractLimits {
   static const maximumDeviceLogRecords = 50;
   static const maximumWebSocketFrameBytes = 524288;
 
+  /// Peers in one `POST /api/v1/peers` body. A larger set is several calls.
+  static const maximumPeerStateUsers = 64;
+
+  /// The longest tag `POST /api/v1/peers` takes back for one peer.
+  static const maximumPeerStateEtagCharacters = 64;
+
   static const profileBuckets = {1024, 4096};
   static const labelBuckets = {256, 1024};
   static const nameBuckets = {256, 1024};
@@ -60,6 +66,15 @@ abstract final class ApiContractLimits {
   static const prekeyJson = PayloadLimits(
     maximumRequestBytes: 256 * 1024,
     maximumResponseBytes: 64 * 1024,
+  );
+
+  /// `POST /api/v1/peers`. The request is 64 ids and their tags under the
+  /// route's 16 KiB body cap. The answer is at most 64 full items, each an
+  /// identity and up to the 100 devices one peer's list may carry, every
+  /// device under 512 bytes of JSON: about 3.2 MiB.
+  static const peerStateJson = PayloadLimits(
+    maximumRequestBytes: 16 * 1024,
+    maximumResponseBytes: 4 * 1024 * 1024,
   );
   static const envelopeBatchJson = PayloadLimits(
     maximumRequestBytes: 90 * 1024 * 1024,

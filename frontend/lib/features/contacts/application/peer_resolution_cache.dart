@@ -56,6 +56,12 @@ const int _sweepThreshold = 64;
 /// deserves another attempt, and remembering one would let a dropped
 /// connection keep writing `identityUnavailable` against a contact for the
 /// length of the window.
+///
+/// **The batched read passes through.** `fetchPeerStates` is never
+/// remembered or joined, and it is the one request that empties entries
+/// rather than fills them: a peer it finds moved is forgotten here, because
+/// its answer becomes that peer's stored state and nothing older may be
+/// served against it.
 final class PeerIdentityRoundTripCache
     implements PeerIdentityRemotePort, PeerResolutionCachePort {
   PeerIdentityRoundTripCache({
@@ -85,6 +91,13 @@ final class PeerIdentityRoundTripCache
   /// that nested and concurrent resolutions cannot end each other's bypass.
   final Map<String, int> _bypassed = {};
 
+  /// For each user, when a batched read last landed that moved them.
+  ///
+  /// An answer asked before then may be older than what that read stored, so
+  /// it is not remembered: served later, a head below the stored one would be
+  /// read as a fork.
+  final Map<String, DateTime> _floors = {};
+
   @override
   Future<Result<PeerIdentityPublic>> fetchIdentity({
     required String userId,
@@ -110,7 +123,8 @@ final class PeerIdentityRoundTripCache
       final result = await flight;
       if (result case Success(value: final identity)) {
         final held = _identities[userId];
-        if (held == null || !held.at.isAfter(asked)) {
+        if ((held == null || !held.at.isAfter(asked)) &&
+            !_predatesFloor(userId, asked)) {
           _identities[userId] = _RememberedIdentity(asked, identity);
           _sweepIdentities();
         }
@@ -147,7 +161,8 @@ final class PeerIdentityRoundTripCache
       final result = await flight;
       if (result case Success(value: final response)) {
         final held = _devices[userId];
-        if (held == null || !held.at.isAfter(asked)) {
+        if ((held == null || !held.at.isAfter(asked)) &&
+            !_predatesFloor(userId, asked)) {
           _devices[userId] = _RememberedDevices(asked, etag, response);
           _sweepDevices();
         }
@@ -204,6 +219,37 @@ final class PeerIdentityRoundTripCache
   }
 
   @override
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  ) async {
+    // Not remembered and not joined. One call answers for everybody a fan-out
+    // names, and the fan-out makes it once; what is worth keeping from it is
+    // already kept, as a tag, in each peer's stored record.
+    //
+    // What it changes here is everything else this cache holds about those
+    // peers. An answer that is not `unchanged` is about to become the stored
+    // state of that peer, newer than any identity or device answer remembered
+    // here and newer than any still in flight. Serving one of those afterwards
+    // would hand `_refresh` a head below the one it has just stored, and that
+    // is read as a fork, which withholds every send to everybody. So a peer
+    // that moved is forgotten, and nothing asked before this answer landed is
+    // remembered for it. A peer whose tag still held has stored nothing new,
+    // and what is remembered about it stays as good as it was.
+    final result = await remote.fetchPeerStates(peers);
+    if (result case Success(value: final reads)) {
+      final landed = clock.now();
+      for (final MapEntry(key: userId, value: read) in reads.entries) {
+        if (read is! PeerStateUnchanged) {
+          invalidate(userId);
+          _floors[userId] = landed;
+        }
+      }
+      _sweepFloors();
+    }
+    return result;
+  }
+
+  @override
   void invalidate(String userId) {
     _identities.remove(userId);
     _devices.remove(userId);
@@ -239,6 +285,11 @@ final class PeerIdentityRoundTripCache
 
   bool _isBypassed(String userId) => _bypassed.containsKey(userId);
 
+  bool _predatesFloor(String userId, DateTime asked) {
+    final floor = _floors[userId];
+    return floor != null && asked.isBefore(floor);
+  }
+
   /// Measured from when the request was *made* rather than when it returned, so
   /// [ttl] is a true upper bound on how old a served answer can be.
   bool _isFresh(DateTime asked) => clock.now().difference(asked) < ttl;
@@ -252,6 +303,14 @@ final class PeerIdentityRoundTripCache
   void _sweepDevices() {
     if (_devices.length > _sweepThreshold) {
       _devices.removeWhere((_, held) => !_isFresh(held.at));
+    }
+  }
+
+  /// A floor older than [ttl] protects nothing: an answer asked before it is
+  /// too old to be served anyway.
+  void _sweepFloors() {
+    if (_floors.length > _sweepThreshold) {
+      _floors.removeWhere((_, landed) => !_isFresh(landed));
     }
   }
 }

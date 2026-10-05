@@ -454,6 +454,53 @@ void main() {
     });
   });
 
+  group('the batched read', () {
+    test('an answer asked before it landed is not remembered', () async {
+      final harness = _Harness()..establishedSession();
+      harness.remote.hold = true;
+      final inFlight = harness.cache.fetchDevices(
+        userId: _peerUserId,
+        etag: '"devices-e0"',
+      );
+      await pumpEventQueue();
+      harness.clock.advance(const Duration(seconds: 1));
+
+      harness.remote.addSecondPeerDevice();
+      await harness.cache.fetchPeerStates(const [
+        PeerStateQuery(userId: _peerUserId),
+      ]);
+      await harness.remote.release();
+      await inFlight;
+      await harness.cache.fetchDevices(
+        userId: _peerUserId,
+        etag: '"devices-e0"',
+      );
+
+      // The answer that was in flight was asked before the read that moved
+      // the peer landed, so it is not what the second ask is given.
+      expect(harness.remote.deviceCalls[_peerUserId], 2);
+    });
+
+    test('a peer it found unchanged keeps what is remembered', () async {
+      final harness = _Harness()..establishedSession();
+      await harness.cache.fetchIdentity(userId: _peerUserId);
+
+      await harness.cache.fetchPeerStates([
+        PeerStateQuery(
+          userId: _peerUserId,
+          etag: harness.remote.peerStateTagOf(_peerUserId),
+        ),
+      ]);
+      await harness.cache.fetchIdentity(userId: _peerUserId);
+
+      expect(
+        harness.remote.answered.single[_peerUserId],
+        isA<PeerStateUnchanged>(),
+      );
+      expect(harness.remote.identityCalls, {_peerUserId: 1});
+    });
+  });
+
   group('the prekey claim', () {
     test('is claimed exactly once per session establishment', () async {
       final harness = _Harness()..noSession();
@@ -614,6 +661,10 @@ final class _Remote implements PeerIdentityRemotePort {
   final Map<String, int> claimCalls = {};
   final Map<String, List<String?>> etags = {};
   final List<List<String>> claimedDeviceIds = [];
+
+  /// Every batched read, by the users it named, and what it answered.
+  final List<List<String>> batches = [];
+  final List<Map<String, PeerStateRead>> answered = [];
 
   int peerDeviceCount = 1;
 
@@ -786,6 +837,35 @@ final class _Remote implements PeerIdentityRemotePort {
         headSequence: logHead,
       ),
     );
+  }
+
+  /// The batched read's tag, which moves whenever anything the per-user reads
+  /// would serve for that user moves.
+  String peerStateTagOf(String userId) => userId == _ownUserId
+      ? '"peers-own-$logHead"'
+      : '"peers-${_peerMaster.first}-$peerDeviceCount-$logHead-'
+            '$_peerDeviceUnsigned-${_peerDeviceIdentity.first}"';
+
+  /// Never held: the tests that hold use it to land between a per-user ask
+  /// and its answer.
+  @override
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  ) async {
+    batches.add([for (final peer in peers) peer.userId]);
+    final reads = <String, PeerStateRead>{
+      for (final peer in peers)
+        peer.userId: peer.etag == peerStateTagOf(peer.userId)
+            ? PeerStateUnchanged(etag: peer.etag!)
+            : PeerStateUpdated(
+                identity: identityOf(peer.userId),
+                devices: devicesOf(peer.userId),
+                logHeadSequence: logHead,
+                etag: peerStateTagOf(peer.userId),
+              ),
+    };
+    answered.add(reads);
+    return Result.success(reads);
   }
 }
 

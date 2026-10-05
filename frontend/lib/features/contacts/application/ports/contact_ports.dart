@@ -34,6 +34,16 @@ abstract interface class PeerIdentityRemotePort implements Port {
     required String userId,
     int? after,
   });
+
+  /// Reads the identity, live devices and log head of every peer in [peers]
+  /// through `POST /api/v1/peers`, in as few calls as its 64-peer ceiling
+  /// allows.
+  ///
+  /// Every queried user has an entry, keyed as it was asked. A user the route
+  /// left out is [PeerStateAbsent].
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  );
 }
 
 abstract interface class ContactLocalPort implements Port {

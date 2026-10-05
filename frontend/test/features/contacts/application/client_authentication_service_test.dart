@@ -468,6 +468,19 @@ final class _Harness {
 final class _Remote implements PeerIdentityRemotePort {
   PeerIdentityPublic identity = _identity();
   List<PeerPublicDevice> devices = [_device()];
+
+  /// The batched read's tag over the state above. A request carrying it is
+  /// answered `unchanged`.
+  var peerStateTag = '"peers-v1"';
+
+  /// Users the batched read leaves out, as it does an unknown, inactive or
+  /// deactivated account.
+  final absent = <String>{};
+
+  /// Users the batched read answers with `identity: null`.
+  final unpublished = <String>{};
+  final peerStateQueries = <List<PeerStateQuery>>[];
+  final answered = <Map<String, PeerStateRead>>[];
   var notModified = false;
   var identityCalls = 0;
   var deviceCalls = 0;
@@ -529,6 +542,28 @@ final class _Remote implements PeerIdentityRemotePort {
         headSequence: logHead,
       ),
     );
+  }
+
+  @override
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  ) async {
+    peerStateQueries.add(List.unmodifiable(peers));
+    final reads = <String, PeerStateRead>{
+      for (final peer in peers)
+        peer.userId: absent.contains(peer.userId)
+            ? const PeerStateAbsent()
+            : peer.etag == peerStateTag
+            ? PeerStateUnchanged(etag: peerStateTag)
+            : PeerStateUpdated(
+                identity: unpublished.contains(peer.userId) ? null : identity,
+                devices: devices,
+                logHeadSequence: advertisedHead,
+                etag: peerStateTag,
+              ),
+    };
+    answered.add(reads);
+    return Result.success(reads);
   }
 }
 

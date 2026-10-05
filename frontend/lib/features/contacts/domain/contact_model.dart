@@ -194,6 +194,54 @@ final class PeerDevicesUpdated extends PeerDeviceRefresh {
   final int? logHeadSequence;
 }
 
+/// One peer named in a `POST /api/v1/peers` request.
+final class PeerStateQuery {
+  const PeerStateQuery({required this.userId, this.etag});
+
+  final String userId;
+
+  /// The tag this route gave for [userId] before, which is what lets it answer
+  /// [PeerStateUnchanged].
+  final String? etag;
+}
+
+/// What `POST /api/v1/peers` said about one peer.
+sealed class PeerStateRead {
+  const PeerStateRead();
+}
+
+/// The tag the request carried still holds: the identity, the live devices,
+/// their bundle versions and the log head are as this client last read them
+/// with it.
+final class PeerStateUnchanged extends PeerStateRead {
+  const PeerStateUnchanged({required this.etag});
+
+  final String etag;
+}
+
+/// A peer's whole state: the bytes the per-user identity read and device-list
+/// read serve, under this route's own tag.
+final class PeerStateUpdated extends PeerStateRead {
+  const PeerStateUpdated({
+    required this.identity,
+    required this.devices,
+    required this.logHeadSequence,
+    required this.etag,
+  });
+
+  /// Null when the peer has published none.
+  final PeerIdentityPublic? identity;
+  final List<PeerPublicDevice> devices;
+  final int? logHeadSequence;
+  final String etag;
+}
+
+/// Left out of the answer: the user does not exist, is not activated or was
+/// deactivated, and the route does not say which.
+final class PeerStateAbsent extends PeerStateRead {
+  const PeerStateAbsent();
+}
+
 final class PeerDeviceLogPage {
   const PeerDeviceLogPage({
     required this.records,

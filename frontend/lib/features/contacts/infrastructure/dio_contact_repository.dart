@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
@@ -203,4 +204,48 @@ final class DioContactRepository
           onFailure: Result.failure,
         ),
       );
+
+  @override
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  ) async {
+    // A repeated id would be answered once for each entry, and the answers
+    // could then only be told apart by position, which nothing here relies on.
+    if (peers.map((peer) => peer.userId.toLowerCase()).toSet().length !=
+        peers.length) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final read = <String, PeerStateRead>{};
+    const ceiling = ApiContractLimits.maximumPeerStateUsers;
+    for (var start = 0; start < peers.length; start += ceiling) {
+      final batch = peers.sublist(start, min(start + ceiling, peers.length));
+      final result = await client.send(
+        ApiRequest<PeerStatesResponseDto>(
+          method: RestMethod.post,
+          path: '/api/v1/peers',
+          body: {
+            'peers': [
+              for (final peer in batch)
+                {'user_id': peer.userId, 'etag': ?peer.etag},
+            ],
+          },
+          decode: (json) =>
+              PeerStatesResponseDto.fromJson(json, requested: batch),
+          acceptedStatusCodes: const {200},
+          authentication: AuthenticationRequirement.full,
+          limits: ApiContractLimits.peerStateJson,
+          // The route reads and writes nothing, so a lost answer is asked for
+          // again rather than given up on.
+          replaySafety: ReplaySafety.contractIdempotent,
+        ),
+      );
+      if (result case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      read.addAll((result as Success<PeerStatesResponseDto>).value.peers);
+    }
+    return Result.success(Map.unmodifiable(read));
+  }
 }
