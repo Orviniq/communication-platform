@@ -574,7 +574,8 @@ No permission plugin is added (ADR-054). Since phase 6 prompt 9 (2026-10-02) the
 the one caller of either port, pinned in source: `VoiceCallController` asks for the
 microphone, starts the service and only then joins. A refused microphone or a service that
 does not start ends the attempt with nothing sent, a refused join stops the service again,
-and a leave stops it once the call has left. A call also ends with its session: a logout,
+and a leave stops it once the call has left, unless a join made in the meantime has started
+it for the next call. A call also ends with its session: a logout,
 an erasure or a revocation leaves it, and the service stops with it.
 
 **The permission** answers `granted`, `denied` or `deniedPermanently`.

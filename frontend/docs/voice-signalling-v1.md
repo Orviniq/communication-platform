@@ -977,7 +977,9 @@ microphone). A join refuses a second call and a server with no voice before it a
 anything, then asks for the microphone, starts the call's foreground service, and only then
 joins. A refused microphone or a service that does not start ends the attempt with nothing
 sent, a refused join stops the service again, and a leave leaves the call and then stops
-the service. **Mute** disables this device's one capture track, so every connection sends
+the service, unless a join made while the leave was still telling the peers has started it
+for the next call. Corrected on 2026-10-05: that late stop took the service from a rejoined
+call, which lost its microphone and its network as soon as the app was out of view. **Mute** disables this device's one capture track, so every connection sends
 silence and nothing is renegotiated; a join starts unmuted, and no frame carries a mute, so
 a peer's mute is not shown. **A session that ends** — a logout, an erasure or a revocation
 — leaves the call, which closes every connection and stops the capture and the service.
