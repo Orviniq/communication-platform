@@ -327,12 +327,12 @@ with the backend/proxy configuration and a REST health probe only when necessary
   detection.
 - A send's fan-out verifies all its recipients with one `POST /api/v1/peers`, at most 64 to a
   call, which answers `unchanged` for each peer whose stored tag still holds
-  ([ADR-080](decisions.md)). The per-user identity, device and device-log answers the
-  single-peer paths read are remembered in memory for 30 seconds; the cache sits below every
-  authentication gate, never holds a prekey claim or a batched answer, and is emptied by every
-  staleness signal. See [authentication-and-devices.md](authentication-and-devices.md).
-- `stale_devices` responses immediately invalidate matching outbox targets, drop that peer from
-  the resolution cache, and trigger one ETag refresh. Newly discovered eligible replacement devices receive independently
+  ([ADR-080](decisions.md)). Nothing remembers a peer's answers between resolutions
+  ([ADR-082](decisions.md)): the single-peer paths read the per-user identity, device and
+  device-log routes every time, the identity and the device list conditionally on the tag
+  stored beside them. See [authentication-and-devices.md](authentication-and-devices.md).
+- `stale_devices` responses immediately invalidate matching outbox targets and trigger one
+  conditional refresh of that peer. Newly discovered eligible replacement devices receive independently
   encrypted target rows with the same logical event ID; already accepted targets do not.
 
 ## Device-to-device history transfer
