@@ -18,7 +18,8 @@ later prompt of the phase. The architecture it implements is
 disagree, those win.
 
 **The credential, the signalling transport, one peer connection, the room, the call and
-its screens are built; none has run on a device.** `lib/features/voice/` fetches, holds
+its screens are built, and a call ran between two devices on 2026-10-05**
+([ADR-079](decisions.md)). `lib/features/voice/` fetches, holds
 and refreshes the relay
 credential and builds the ICE configuration from it (*The credential*, below, phase 6
 prompt 3). Phase 6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the
