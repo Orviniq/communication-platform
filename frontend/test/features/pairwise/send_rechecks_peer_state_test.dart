@@ -127,6 +127,30 @@ void main() {
       expect(harness.remote.claimCalls, {_peerUserId: 2});
     });
 
+    test('asks again with the tags it holds, and is told 304', () async {
+      final harness = _Harness()..noSession();
+
+      await harness.send('application:14');
+      await harness.gossip('device-head-gossip:14');
+
+      // The send's batched read stored the identity read's tag beside the
+      // identity it carried, so each claim asks for the identity with that
+      // tag, and the device list with its own. Nothing moved, so all four
+      // answers are a `304` with no body: the server was asked every time,
+      // and paid for a body none of the times.
+      final identityTag = harness.remote.identityTagOf(_peerUserId);
+      expect(harness.remote.identityTagsSent[_peerUserId], [
+        identityTag,
+        identityTag,
+      ]);
+      expect(harness.remote.identityNotModified, {_peerUserId: 2});
+      expect(harness.remote.devicesNotModified, {_peerUserId: 2});
+      expect(
+        harness.remote.batches.last.map((query) => query.etag),
+        isNot(contains(identityTag)),
+      );
+    });
+
     test('claims nothing for a device revoked since the last claim', () async {
       final harness = _Harness()..noSession(peerDevices: 2);
       await harness.send('application:12');
@@ -253,6 +277,13 @@ final class _Remote implements PeerIdentityRemotePort {
   final Map<String, int> claimCalls = {};
   final List<List<String>> claimedDeviceIds = [];
 
+  /// The tag each identity read carried, by user.
+  final Map<String, List<String?>> identityTagsSent = {};
+
+  /// Reads answered `304` with no body, by user and route.
+  final Map<String, int> identityNotModified = {};
+  final Map<String, int> devicesNotModified = {};
+
   /// Every batched read, by the queries it carried, and what it answered.
   final List<List<PeerStateQuery>> batches = [];
   final List<Map<String, PeerStateRead>> answered = [];
@@ -334,12 +365,33 @@ final class _Remote implements PeerIdentityRemotePort {
       ? '"peers-own"'
       : '"peers-${_peerMaster.first}-$peerDeviceCount-$peerLogHead"';
 
+  /// The identity read's tag, which moves with the key bytes and the version
+  /// and with nothing else.
+  String identityTagOf(String userId) => userId == _ownUserId
+      ? '"identity-own"'
+      : '"identity-${_peerMaster.first}"';
+
   @override
-  Future<Result<PeerIdentityPublic>> fetchIdentity({
+  Future<Result<PeerIdentityRefresh>> fetchIdentity({
     required String userId,
+    String? etag,
   }) async {
     identityCalls.update(userId, (count) => count + 1, ifAbsent: () => 1);
-    return Result.success(identityOf(userId));
+    (identityTagsSent[userId] ??= []).add(etag);
+    if (etag == identityTagOf(userId)) {
+      identityNotModified.update(
+        userId,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+      return const Result.success(PeerIdentityNotModified());
+    }
+    return Result.success(
+      PeerIdentityUpdated(
+        identity: identityOf(userId),
+        etag: identityTagOf(userId),
+      ),
+    );
   }
 
   @override
@@ -349,6 +401,11 @@ final class _Remote implements PeerIdentityRemotePort {
   }) async {
     deviceCalls.update(userId, (count) => count + 1, ifAbsent: () => 1);
     if (etag == deviceTagOf(userId)) {
+      devicesNotModified.update(
+        userId,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
       return const Result.success(PeerDevicesNotModified());
     }
     return Result.success(
@@ -404,6 +461,7 @@ final class _Remote implements PeerIdentityRemotePort {
             ? PeerStateUnchanged(etag: peer.etag!)
             : PeerStateUpdated(
                 identity: identityOf(peer.userId),
+                identityEtag: identityTagOf(peer.userId),
                 devices: devicesOf(peer.userId),
                 logHeadSequence: _headOf(peer.userId),
                 etag: peerStateTagOf(peer.userId),

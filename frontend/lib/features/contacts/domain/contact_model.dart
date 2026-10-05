@@ -93,6 +93,7 @@ final class ContactTrustRecord {
     this.attestation,
     this.etag,
     this.peerStateEtag,
+    this.identityEtag,
     this.logHeadSequence,
     Uint8List? logHeadHash,
   }) : confirmedMasterPublic = confirmedMasterPublic == null
@@ -113,10 +114,17 @@ final class ContactTrustRecord {
 
   /// `POST /api/v1/peers`'s tag for the stored identity, devices and log head.
   ///
-  /// Not the device list's [etag] and not the identity read's: each route
-  /// derives its own tag from its own inputs, so each tag goes back only to the
-  /// route that issued it.
+  /// Not the device list's [etag] and not the identity read's [identityEtag]:
+  /// each route derives its own tag from its own inputs, so each tag goes back
+  /// only to the route that issued it.
   final String? peerStateEtag;
+
+  /// The identity read's `ETag` for the stored [identity].
+  ///
+  /// It covers the four public byte fields and the version and nothing else,
+  /// so it is the same value whichever route delivered those bytes: the
+  /// batched answer carries it inside its identity, beside its own tag.
+  final String? identityEtag;
   final int? logHeadSequence;
   final Uint8List? logHeadHash;
 
@@ -129,6 +137,7 @@ final class ContactTrustRecord {
     UserSigningAttestation? attestation,
     String? etag,
     String? peerStateEtag,
+    String? identityEtag,
     int? logHeadSequence,
     Uint8List? logHeadHash,
   }) => ContactTrustRecord(
@@ -139,6 +148,7 @@ final class ContactTrustRecord {
     attestation: attestation ?? this.attestation,
     etag: etag ?? this.etag,
     peerStateEtag: peerStateEtag ?? this.peerStateEtag,
+    identityEtag: identityEtag ?? this.identityEtag,
     logHeadSequence: logHeadSequence ?? this.logHeadSequence,
     logHeadHash: logHeadHash ?? this.logHeadHash,
   );
@@ -184,6 +194,25 @@ final class OpenedProfile {
   final String authorUserId;
   final String authorDeviceId;
   final int revision;
+}
+
+/// What `GET /api/v1/users/{user_id}/identity` answered.
+sealed class PeerIdentityRefresh {
+  const PeerIdentityRefresh();
+}
+
+/// `304`: the tag the request carried still holds, so the identity is the one
+/// stored beside that tag.
+final class PeerIdentityNotModified extends PeerIdentityRefresh {
+  const PeerIdentityNotModified();
+}
+
+/// `200`: the published identity, and the route's tag for it.
+final class PeerIdentityUpdated extends PeerIdentityRefresh {
+  const PeerIdentityUpdated({required this.identity, required this.etag});
+
+  final PeerIdentityPublic identity;
+  final String etag;
 }
 
 sealed class PeerDeviceRefresh {
@@ -236,6 +265,7 @@ final class PeerStateUnchanged extends PeerStateRead {
 final class PeerStateUpdated extends PeerStateRead {
   const PeerStateUpdated({
     required this.identity,
+    required this.identityEtag,
     required this.devices,
     required this.logHeadSequence,
     required this.etag,
@@ -243,8 +273,14 @@ final class PeerStateUpdated extends PeerStateRead {
 
   /// Null when the peer has published none.
   final PeerIdentityPublic? identity;
+
+  /// The identity read's own tag for [identity], served inside it, and null
+  /// exactly when [identity] is. It is not [etag].
+  final String? identityEtag;
   final List<PeerPublicDevice> devices;
   final int? logHeadSequence;
+
+  /// This route's tag for the whole answer.
   final String etag;
 }
 

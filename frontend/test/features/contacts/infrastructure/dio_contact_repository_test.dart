@@ -13,6 +13,77 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('fetchIdentity', () {
+    test(
+      'sends the tag it holds, and reads the new one from the body',
+      () async {
+        final adapter = _QueueAdapter([
+          _jsonResponse(200, _identityBody(etag: '"new"')),
+        ]);
+
+        final result = await _repository(
+          adapter,
+        ).fetchIdentity(userId: _user(1), etag: '"held"');
+
+        final request = adapter.requests.single;
+        expect(request.method, 'GET');
+        expect(request.path, '/api/v1/users/${_user(1)}/identity');
+        expect(_ifNoneMatch(request), '"held"');
+        final updated =
+            (result as Success<PeerIdentityRefresh>).value
+                as PeerIdentityUpdated;
+        expect(updated.etag, '"new"');
+        expect(updated.identity.version, 2);
+      },
+    );
+
+    test('asks unconditionally when it holds no tag', () async {
+      final adapter = _QueueAdapter([
+        _jsonResponse(200, _identityBody(etag: '"new"')),
+      ]);
+
+      await _repository(adapter).fetchIdentity(userId: _user(1));
+
+      expect(_ifNoneMatch(adapter.requests.single), isNull);
+    });
+
+    test('a 304 with no body is not modified', () async {
+      final adapter = _QueueAdapter([_jsonResponse(304, null)]);
+
+      final result = await _repository(
+        adapter,
+      ).fetchIdentity(userId: _user(1), etag: '"held"');
+
+      expect(
+        (result as Success<PeerIdentityRefresh>).value,
+        isA<PeerIdentityNotModified>(),
+      );
+    });
+
+    test('a 404 is the failure it always was, whatever tag was sent', () async {
+      final adapter = _QueueAdapter([
+        _jsonResponse(404, {
+          'code': 'not_found',
+          'detail': 'No published identity.',
+        }),
+      ]);
+
+      final result = await _repository(
+        adapter,
+      ).fetchIdentity(userId: _user(1), etag: '"held"');
+
+      expect(
+        (result as FailureResult<PeerIdentityRefresh>).failure,
+        isA<BackendFailure>().having(
+          (failure) => failure.code,
+          'code',
+          BackendFailureCode.notFound,
+        ),
+      );
+      expect(adapter.requests, hasLength(1));
+    });
+  });
+
   group('fetchPeerStates', () {
     test('names every peer with the tag it holds, in one call', () async {
       final adapter = _QueueAdapter([
@@ -141,6 +212,21 @@ DioContactRepository _repository(_QueueAdapter adapter) {
 
 Map<String, Object?> _body(RequestOptions request) =>
     jsonDecode(request.data as String) as Map<String, Object?>;
+
+/// The `If-None-Match` a request carried, whatever case it was written in.
+Object? _ifNoneMatch(RequestOptions request) => request.headers.entries
+    .where((header) => header.key.toLowerCase() == 'if-none-match')
+    .map((header) => header.value)
+    .firstOrNull;
+
+Map<String, Object?> _identityBody({required String etag}) => {
+  'master_pub': base64Encode(Uint8List(32)),
+  'self_signing_pub': base64Encode(Uint8List(32)),
+  'user_signing_pub': base64Encode(Uint8List(32)),
+  'master_sig': base64Encode(Uint8List(64)),
+  'version': 2,
+  'etag': etag,
+};
 
 List<Object?> _peersIn(RequestOptions request) =>
     _body(request)['peers']! as List<Object?>;

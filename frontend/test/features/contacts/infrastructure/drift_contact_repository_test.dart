@@ -120,8 +120,12 @@ void main() {
     expect((forked as Success<bool>).value, isFalse);
   });
 
-  group('the two stored tags', () {
-    ContactTrustRecord verified({String? etag, String? peerStateEtag}) {
+  group('the stored tags', () {
+    ContactTrustRecord verified({
+      String? etag,
+      String? peerStateEtag,
+      String? identityEtag,
+    }) {
       final identity = PeerIdentityPublic(
         masterPublic: _bytes(32, 1),
         selfSigningPublic: _bytes(32, 2),
@@ -137,6 +141,7 @@ void main() {
         attestation: UserSigningAttestation(_bytes(64, 5)),
         etag: etag,
         peerStateEtag: peerStateEtag,
+        identityEtag: identityEtag,
         logHeadSequence: 0,
         logHeadHash: _bytes(32, 6),
       );
@@ -144,13 +149,28 @@ void main() {
 
     test('are stored apart and read back apart', () async {
       await repository.writeTrust(
-        verified(etag: '"devices"', peerStateEtag: '"peers"'),
+        verified(
+          etag: '"devices"',
+          peerStateEtag: '"peers"',
+          identityEtag: '"identity"',
+        ),
       );
 
       final read = await _readTrust(repository);
 
       expect(read.etag, '"devices"');
       expect(read.peerStateEtag, '"peers"');
+      expect(read.identityEtag, '"identity"');
+    });
+
+    test('a record holding no identity tag still reads', () async {
+      // Every record written before the identity read was conditional.
+      await repository.writeTrust(verified(etag: '"devices"'));
+
+      final read = await _readTrust(repository);
+
+      expect(read.state, ContactTrustState.verified);
+      expect(read.identityEtag, isNull);
     });
 
     test('a verified record may hold only the batched read\'s tag', () async {

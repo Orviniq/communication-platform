@@ -97,25 +97,30 @@ final class DioContactRepository
       );
 
   @override
-  Future<Result<PeerIdentityPublic>> fetchIdentity({required String userId}) =>
-      client
-          .send(
-            ApiRequest<PeerIdentityResponseDto>(
-              method: RestMethod.get,
-              path: '/api/v1/users/$userId/identity',
-              decode: PeerIdentityResponseDto.fromJson,
-              acceptedStatusCodes: const {200},
-              authentication: AuthenticationRequirement.full,
-              limits: ApiContractLimits.smallJson,
-              replaySafety: ReplaySafety.readOnly,
-            ),
-          )
-          .then(
-            (result) => result.fold(
-              onSuccess: (value) => Result.success(value.identity),
-              onFailure: Result.failure,
-            ),
-          );
+  Future<Result<PeerIdentityRefresh>> fetchIdentity({
+    required String userId,
+    String? etag,
+  }) => client
+      .send(
+        ApiRequest<PeerIdentityResponseDto>(
+          method: RestMethod.get,
+          path: '/api/v1/users/$userId/identity',
+          headers: {'If-None-Match': ?etag},
+          decode: PeerIdentityResponseDto.fromJson,
+          // A `404` is not in this set, so it stays the failure it always was
+          // when a tag is sent: the route has no tag for an absent identity.
+          acceptedStatusCodes: const {200, 304},
+          authentication: AuthenticationRequirement.full,
+          limits: ApiContractLimits.smallJson,
+          replaySafety: ReplaySafety.readOnly,
+        ),
+      )
+      .then(
+        (result) => result.fold(
+          onSuccess: (value) => Result.success(value.refresh),
+          onFailure: Result.failure,
+        ),
+      );
 
   @override
   Future<Result<PeerDeviceRefresh>> fetchDevices({

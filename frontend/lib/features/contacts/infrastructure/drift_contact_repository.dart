@@ -377,6 +377,7 @@ ORDER BY u.directory_entry_ciphertext ASC
           'attestation': base64Encode(trust.attestation!.signature),
         if (trust.etag != null) 'etag': trust.etag,
         if (trust.peerStateEtag != null) 'peer_etag': trust.peerStateEtag,
+        if (trust.identityEtag != null) 'identity_etag': trust.identityEtag,
         if (trust.logHeadSequence != null) 'head_seq': trust.logHeadSequence,
         if (trust.logHeadHash != null)
           'head_hash': base64Encode(trust.logHeadHash!),
@@ -425,8 +426,10 @@ ORDER BY u.directory_entry_ciphertext ASC
           );
     final etag = json['etag'];
     final peerStateEtag = json['peer_etag'];
+    final identityEtag = json['identity_etag'];
     if ((etag != null && etag is! String) ||
-        (peerStateEtag != null && peerStateEtag is! String)) {
+        (peerStateEtag != null && peerStateEtag is! String) ||
+        (identityEtag != null && identityEtag is! String)) {
       throw const FormatException();
     }
     // A verified record is the product of an answer this client accepted, so
@@ -453,6 +456,7 @@ ORDER BY u.directory_entry_ciphertext ASC
           : UserSigningAttestation(attestation),
       etag: etag as String?,
       peerStateEtag: peerStateEtag as String?,
+      identityEtag: identityEtag as String?,
       logHeadSequence: json['head_seq'] as int?,
       logHeadHash: headHash,
     );

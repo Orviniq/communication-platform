@@ -25,7 +25,15 @@ abstract interface class ProfileRemotePort implements Port {
 /// check again. What a repeat read may save is the body, through the tag the
 /// stored state was read with, and never the request.
 abstract interface class PeerIdentityRemotePort implements Port {
-  Future<Result<PeerIdentityPublic>> fetchIdentity({required String userId});
+  /// Reads [userId]'s published identity, sending [etag] as `If-None-Match`.
+  ///
+  /// An identity that was never published is `404 not_found` whatever [etag]
+  /// holds: there is no tag for a row that does not exist, so that answer is
+  /// never [PeerIdentityNotModified].
+  Future<Result<PeerIdentityRefresh>> fetchIdentity({
+    required String userId,
+    String? etag,
+  });
 
   Future<Result<PeerDeviceRefresh>> fetchDevices({
     required String userId,

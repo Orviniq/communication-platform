@@ -48,6 +48,36 @@ void main() {
     expect(dto.refresh.runtimeType.toString(), 'PeerDevicesNotModified');
   });
 
+  group('the identity read', () {
+    test('a 304 with no body is the not-modified answer', () {
+      final dto = PeerIdentityResponseDto.fromJson(null);
+
+      expect(dto.refresh, isA<PeerIdentityNotModified>());
+    });
+
+    test('carries the tag it was served with', () {
+      final dto = PeerIdentityResponseDto.fromJson(_identityJson);
+
+      final updated = dto.refresh as PeerIdentityUpdated;
+      expect(updated.etag, '"identity-tag"');
+      expect(updated.identity.version, 3);
+    });
+
+    test('is refused without its tag', () {
+      for (final body in <Map<String, Object?>>[
+        {..._identityJson}..remove('etag'),
+        {..._identityJson, 'etag': ''},
+        {..._identityJson, 'etag': 7},
+      ]) {
+        expect(
+          () => PeerIdentityResponseDto.fromJson(body),
+          throwsA(isA<MalformedApiBody>()),
+          reason: '$body',
+        );
+      }
+    });
+  });
+
   group('the batched peer-state answer', () {
     const requested = [
       PeerStateQuery(userId: _first, etag: _firstTag),
@@ -90,8 +120,19 @@ void main() {
 
       final updated = dto.peers[_second]! as PeerStateUpdated;
       expect(updated.identity, isNull);
+      expect(updated.identityEtag, isNull);
       expect(updated.devices, isEmpty);
       expect(updated.logHeadSequence, isNull);
+    });
+
+    test('keeps the identity tag apart from the answer tag', () {
+      final dto = PeerStatesResponseDto.fromJson({
+        'peers': [_full(_second)],
+      }, requested: requested);
+
+      final updated = dto.peers[_second]! as PeerStateUpdated;
+      expect(updated.etag, _secondTag);
+      expect(updated.identityEtag, '"identity-tag"');
     });
 
     test('takes `unchanged` only as the echo of the tag that was sent', () {
@@ -144,6 +185,10 @@ void main() {
         {
           ..._full(_second),
           'identity': {..._identityJson, 'master_sig': 'AAAA'},
+        },
+        {
+          ..._full(_second),
+          'identity': {..._identityJson}..remove('etag'),
         },
         {
           ..._full(_second),

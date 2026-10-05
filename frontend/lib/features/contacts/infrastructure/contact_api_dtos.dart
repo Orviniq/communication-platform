@@ -62,12 +62,19 @@ final class ProfileResponseDto {
 }
 
 final class PeerIdentityResponseDto {
-  const PeerIdentityResponseDto(this.identity);
+  const PeerIdentityResponseDto(this.refresh);
 
-  factory PeerIdentityResponseDto.fromJson(Object? value) =>
-      PeerIdentityResponseDto(_identity(value));
+  factory PeerIdentityResponseDto.fromJson(Object? value) {
+    if (value == null) {
+      return const PeerIdentityResponseDto(PeerIdentityNotModified());
+    }
+    final (:identity, :etag) = _identity(value);
+    return PeerIdentityResponseDto(
+      PeerIdentityUpdated(identity: identity, etag: etag),
+    );
+  }
 
-  final PeerIdentityPublic identity;
+  final PeerIdentityRefresh refresh;
 }
 
 final class PeerDevicesResponseDto {
@@ -172,9 +179,11 @@ final class PeerStatesResponseDto {
     if (!item.containsKey('identity') || !item.containsKey('log_head_seq')) {
       throw const MalformedApiBody();
     }
-    final identity = item['identity'];
+    final identityValue = item['identity'];
+    final identity = identityValue == null ? null : _identity(identityValue);
     return PeerStateUpdated(
-      identity: identity == null ? null : _identity(identity),
+      identity: identity?.identity,
+      identityEtag: identity?.etag,
       devices: _devices(item['devices']),
       logHeadSequence: _logHead(item['log_head_seq']),
       etag: etag,
@@ -182,28 +191,35 @@ final class PeerStatesResponseDto {
   }
 }
 
-/// The body of `GET /api/v1/users/{user_id}/identity`, wherever it is served.
-PeerIdentityPublic _identity(Object? value) {
+/// The body of `GET /api/v1/users/{user_id}/identity`, wherever it is served,
+/// with that route's own tag for it.
+({PeerIdentityPublic identity, String etag}) _identity(Object? value) {
   final json = requireJsonObject(value);
   final version = json['version'];
   final master = _base64(json['master_pub'], length: 32);
   final selfSigning = _base64(json['self_signing_pub'], length: 32);
   final userSigning = _base64(json['user_signing_pub'], length: 32);
   final signature = _base64(json['master_sig'], length: 64);
+  final etag = json['etag'];
   if (version is! int ||
       version <= 0 ||
       master == null ||
       selfSigning == null ||
       userSigning == null ||
-      signature == null) {
+      signature == null ||
+      etag is! String ||
+      etag.isEmpty) {
     throw const MalformedApiBody();
   }
-  return PeerIdentityPublic(
-    masterPublic: master,
-    selfSigningPublic: selfSigning,
-    userSigningPublic: userSigning,
-    masterSignature: signature,
-    version: version,
+  return (
+    identity: PeerIdentityPublic(
+      masterPublic: master,
+      selfSigningPublic: selfSigning,
+      userSigningPublic: userSigning,
+      masterSignature: signature,
+      version: version,
+    ),
+    etag: etag,
   );
 }
 
