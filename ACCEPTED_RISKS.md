@@ -745,10 +745,13 @@ call makes a mid-call ICE restart routine rather than exceptional.
   credentials one account can be holding at a time.
 - coturn's `user-quota=20`, which bounds one credential to twenty relay allocations at
   once, and `total-quota=500`, which bounds the host.
-- The denied peer ranges: loopback, link-local, the RFC 1918 and CGNAT blocks, and the
-  host's own public address. An allocation cannot be pointed at the loopback services of
-  the shared VPS, and cannot be turned into an on-host proxy into nginx — which is AR-6's
-  laundering problem reached from outside the host instead of from a neighbour on it.
+- The denied peer ranges — loopback, link-local, the RFC 1918 and CGNAT blocks — and
+  `no-tcp-relay`. An allocation cannot be pointed at the loopback services of the shared
+  VPS, and cannot open a TCP connection at all, so it cannot be turned into an on-host
+  proxy into nginx — which is AR-6's laundering problem reached from outside the host
+  instead of from a neighbour on it. The host's own public address is allowed as a peer,
+  because both ends of every call are relay addresses on it, and nothing on that address
+  listens on UDP but coturn.
 - The credential is not the secret. It is an HMAC over one username, so it neither
   reveals `TURN_STATIC_AUTH_SECRET` nor lets its holder sign a second username.
 
@@ -756,6 +759,10 @@ call makes a mid-call ICE restart routine rather than exceptional.
 rest of that credential's lifetime, at twenty allocations at a time, to peers outside the
 denied ranges. The cost is bandwidth and a share of `total-quota` — a denial of service
 against other calls if it is large enough, and per AR-15 one with no log line behind it.
+The holder can also send datagrams into a call in progress on this relay, because a TURN
+permission names an address rather than a port and every allocation here shares the
+host's; the receiving client drops them — an ICE check carries message integrity and SRTP
+is authenticated — so that too costs bandwidth and nothing else.
 No content, no key and no account is reached: it decrypts no media, because SRTP is keyed
 by DTLS between the two client endpoints and neither this server nor coturn holds a DTLS
 key; it joins no call, because a mesh connection is offered and answered inside a

@@ -372,8 +372,10 @@ install -d -m 0755 /etc/chat
 install -o root -g turnserver -m 0640 ops/coturn/turnserver.conf /etc/chat/turnserver.conf
 # The packaged coturn unit reads /etc/turnserver.conf. Point it at the file
 # above rather than editing the packaged unit, which a package upgrade replaces.
+# `--pidfile=` is the packaged unit's own, kept: coturn runs as `turnserver`, which
+# cannot write /var/run, and without it every start writes an error to the journal.
 mkdir -p /etc/systemd/system/coturn.service.d
-printf '[Service]\nExecStart=\nExecStart=/usr/bin/turnserver -c /etc/chat/turnserver.conf\n' \
+printf '[Service]\nExecStart=\nExecStart=/usr/bin/turnserver -c /etc/chat/turnserver.conf --pidfile=\n' \
     > /etc/systemd/system/coturn.service.d/config-path.conf
 systemctl daemon-reload && systemctl enable --now coturn.service
 ```
@@ -405,8 +407,16 @@ of one is *refused*, and a relay can fail it while passing the other.
   `static-auth-secret=` are filled inline in `/etc/chat/turnserver.conf`, from
   the `TURN_REALM` and `TURN_STATIC_AUTH_SECRET` values of the environment file,
   and the file is given the same trust boundary as `.env.production`. Set
-  `listening-ip`, `relay-ip` and the `denied-peer-ip=YOUR_VPS_IP` entry to the VPS
+  `listening-ip`, `relay-ip` and the `allowed-peer-ip=YOUR_VPS_IP` entry to the VPS
   address; never a wildcard.
+- **coturn has no trailing comment.** It ends a directive's name at the first
+  space, tab or `=` and reads the rest of the line as the value, so
+  `no-cli  # why` sets `no-cli` to `# why` — on a flag that is
+  `Unknown boolean value`, and coturn exits before it opens a port. Measured on
+  the host's 4.6.1 on 2026-10-05, against the committed file while four of its
+  flags carried one. A comment added to `/etc/chat/turnserver.conf` goes on a line
+  of its own, and because the relay writes no log,
+  `systemctl is-active coturn.service` is what reports the mistake.
 - **coturn has no TLS listener and no certificate.** The hop it carries is
   already SRTP that the relay cannot open, so a TLS or DTLS listener would buy
   nothing and would put a certificate and a renewal on a box whose posture is to
@@ -417,12 +427,21 @@ of one is *refused*, and a relay can fail it while passing the other.
   record at every layer. The file sets `no-stdout-log`, `simple-log` and
   `log-file=/dev/null`. That is deliberate: a relay problem is diagnosed by
   raising the level temporarily and lowering it again, never by leaving it raised.
-- **The peer deny list is what keeps the relay from being a pivot, and one
-  entry that is *not* in it is why voice connects at all.** The file denies the
-  loopback, private and link-local ranges, and denies the host's own address
-  beside them: without that last line an allocation may name this box as its
-  peer, which makes the relay an on-host proxy into nginx (AR-6). What must never
-  be added is `denied-peer-ip=::`. coturn stores a single address as a range
+- **The peer lists are what keep the relay from being a pivot, and the one
+  address the relay must reach is the host's own.** The file denies the loopback,
+  private and link-local ranges, and *allows* the host's own address: a
+  relay-only client holds its allocation there, so both ends of every call are
+  relay addresses on this box and each side's permission names it — client,
+  relay, relay, client. Denying it refuses the call itself. Measured on the host's
+  coturn 4.6.1 on 2026-10-05: two allocations answered
+  `channel bind: error 403 (Forbidden IP)` with it denied and relayed every
+  message with it allowed. Denying it used to keep an allocation from reaching
+  nginx on 443 from the relay's own address (AR-6); `no-tcp-relay` does that now.
+  nginx listens on TCP alone, a TCP peer needs a TCP relay allocation, and the
+  relay refuses one with `442` — which no WebRTC client ever asks for. Nothing
+  on the public address listens on UDP but coturn, and a UDP service added there
+  later is one a relay allocation can reach. What must never be added is
+  `denied-peer-ip=::`. coturn stores a single address as a range
   whose min and max are that address, and its `ioa_addr_in_range` matches every
   address when the max is the all-zero "any" address — so that one line denies
   every peer of every family, IPv4 included, and no call ever connects. Measured
@@ -536,24 +555,32 @@ $(as_deploy .venv/bin/python -c 'import django; django.setup(); from realtime im
 EOF
 turnutils_uclient -y -c -X -n 10 -l 100 -p 3478 -u "$turn_user" -w "$turn_pass" \
     "$(sed -n 's/^listening-ip=//p' /etc/chat/turnserver.conf)"
-# `channel bind: error 403 ()` is the PASS, and it is the only pass this host can
-# produce. A client reaches a channel bind only after an allocation, so that line
-# says coturn authenticated the minted credential under its own copy of the
-# secret; the bind behind it is then refused by this deployment's own
-# denied-peer-ip entry for the host's own address, because -y makes the peer
-# another relay address on this box. Two real devices never meet that entry.
-# `ERROR Cannot complete Allocation` is the FAIL: coturn refused the credential,
+# `start_mclient: tot_send_msgs=20, tot_recv_msgs=20` is the PASS, and the run
+# exits 0. -y gives the client two allocations on this relay and sends between
+# their relay addresses, which is the path of a real call: both devices are
+# relay-only, so both ends are relay addresses on this box. The line says coturn
+# authenticated the minted credential under its own copy of the secret and
+# relayed from one allocation to the other.
+# `ERROR Cannot complete Allocation` is a FAIL: coturn refused the credential,
 # so the value in .env.production and the static-auth-secret in
 # /etc/chat/turnserver.conf are not the same string.
-# Neither line before the command gives up: nothing is answering on 3478. Check
-# the unit, the drop-in of step 7, and the firewall rule of step 1.
+# `channel bind: error 403 (Forbidden IP)` is a FAIL: the credential was accepted
+# and the host's own address is denied as a peer, so no call can connect. Look
+# for a `denied-peer-ip` that names it, and for the `allowed-peer-ip` of step 7.
+# None of these lines before the command gives up: nothing is answering on 3478.
+# Check the unit, the drop-in of step 7, and the firewall rule of step 1.
+turnutils_uclient -T -n 1 -p 3478 -u "$turn_user" -w "$turn_pass" \
+    "$(sed -n 's/^listening-ip=//p' /etc/chat/turnserver.conf)"
+# `error 442 (TCP Transport is not allowed by the TURN Server configuration)` is
+# the PASS: the relay refuses a TCP relay allocation, which is what keeps one
+# from reaching nginx from the relay's own address (step 7). A run that relays
+# anything means `no-tcp-relay` is missing.
 ```
 
 Check 10 is the one check with no second source. The relay writes no log at all
 (AR-15), so `journalctl -u coturn.service` will not confirm or contradict it: the
-client's own output is the whole of the evidence, which is why the pass and the
-fail above are distinguished by the line and never by the exit status — both of
-them exit non-zero.
+client's own output is the whole of the evidence, which is why every outcome
+above is named by its line rather than by the exit status.
 
 There is no readiness endpoint and no metric, by design
 ([ADR-0019](../../docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md)):

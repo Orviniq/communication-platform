@@ -820,18 +820,29 @@ class CoturnPostureTests(SimpleTestCase):
 
     @staticmethod
     def directives(conf):
-        """Every directive the file actually sets, as (key, value) pairs.
+        """Every directive the file actually sets, as (key, value) pairs, read the
+        way coturn reads them.
 
-        A `#` starts a comment wherever it appears, so a whole-line comment
-        disappears — which is what keeps a commented-out `cert=` from reading as a
-        certificate this relay serves — and a trailing one is cut off the value it
-        follows.
+        A line whose first non-blank character is `#` is a comment and disappears,
+        which is what keeps a commented-out `cert=` from reading as a certificate
+        this relay serves. A `#` anywhere else is not a comment: coturn ends the key
+        at the first space, tab or `=` and takes the rest of the line as the value.
         """
         return [
-            (line.split("=", 1) + [""])[:2]
-            for line in (raw.split("#", 1)[0].strip() for raw in conf.splitlines())
-            if line
+            re.match(r"([^\s=]+)[\s=]*(.*)", line).groups()
+            for line in (raw.strip() for raw in conf.splitlines())
+            if line and not line.startswith("#")
         ]
+
+    def test_no_directive_carries_a_trailing_comment(self):
+        """coturn has no trailing comment. `no-stun  # why` sets `no-stun` to
+        `# why`, and on a flag that is not a value at all: coturn logs
+        `Unknown boolean value` and exits before it opens a port. Measured on the
+        host's coturn 4.6.1 on 2026-10-05, against this file while four of its
+        flags carried one: the relay never started. With the four comments moved to
+        lines of their own, the same file started. A comment goes on its own line."""
+        for key, value in self.directives(self.relay()):
+            self.assertNotIn("#", value, f"{key} {value}")
 
     def test_the_relay_carries_no_tls_listener_and_no_certificate(self):
         """The hop between a client and this relay already carries SRTP keyed by
@@ -868,7 +879,8 @@ class CoturnPostureTests(SimpleTestCase):
         service of a shared VPS: PostgreSQL, Redis, uvicorn and the panel all
         listen there. coturn denies loopback by default, and the default is not
         what a reader can check — so every range is written out, and this is what
-        holds them there."""
+        holds them there. The host's own public address is the one peer that has to
+        be allowed rather than denied, and `no-tcp-relay` is what makes that safe."""
         denied = {
             value
             for key, value in self.directives(self.relay())
@@ -878,10 +890,22 @@ class CoturnPostureTests(SimpleTestCase):
         self.assertNotIn(
             "allow-loopback-peers", {k for k, _v in self.directives(self.relay())}
         )
-        # The host itself, filled with `listening-ip` at deploy time. An allocation
-        # that may name this box relays into nginx from the relay's own address,
-        # which is the caller's address laundered past the anonymous rate limiter.
-        self.assertIn(dict(self.directives(self.relay()))["listening-ip"], denied)
+        # The host itself, filled with `listening-ip` at deploy time. A relay-only
+        # client holds its allocation here, so both ends of every call are relay
+        # addresses on this box: denying it refuses the call itself, which the
+        # host's coturn answered `channel bind: error 403 (Forbidden IP)` on
+        # 2026-10-05. What keeps an allocation from reaching nginx from the relay's
+        # own address is `no-tcp-relay` instead — no allocation can open a TCP
+        # connection, and nothing on the public address listens on UDP but coturn.
+        own = dict(self.directives(self.relay()))["listening-ip"]
+        allowed = {
+            value
+            for key, value in self.directives(self.relay())
+            if key == "allowed-peer-ip"
+        }
+        self.assertNotIn(own, denied)
+        self.assertEqual(allowed, {own})
+        self.assertIn("no-tcp-relay", {k for k, _v in self.directives(self.relay())})
         for required in (
             "10.0.0.0-10.255.255.255",
             "100.64.0.0-100.127.255.255",
@@ -931,7 +955,10 @@ class CoturnPostureTests(SimpleTestCase):
         directives = dict(self.directives(self.relay()))
 
         self.assertEqual(directives["listening-port"], "3478")
-        self.assertNotIn("no-tcp-relay", directives)
+        # Both listeners. `no-tcp-relay` is a different switch: it refuses a TCP
+        # relay allocation and leaves the TCP listener a client reaches it on.
+        self.assertNotIn("no-tcp", directives)
+        self.assertNotIn("no-udp", directives)
         for key in ("listening-ip", "relay-ip"):
             self.assertNotIn("0.0.0.0", directives[key])
 
