@@ -820,18 +820,29 @@ class CoturnPostureTests(SimpleTestCase):
 
     @staticmethod
     def directives(conf):
-        """Every directive the file actually sets, as (key, value) pairs.
+        """Every directive the file actually sets, as (key, value) pairs, read the
+        way coturn reads them.
 
-        A `#` starts a comment wherever it appears, so a whole-line comment
-        disappears — which is what keeps a commented-out `cert=` from reading as a
-        certificate this relay serves — and a trailing one is cut off the value it
-        follows.
+        A line whose first non-blank character is `#` is a comment and disappears,
+        which is what keeps a commented-out `cert=` from reading as a certificate
+        this relay serves. A `#` anywhere else is not a comment: coturn ends the key
+        at the first space, tab or `=` and takes the rest of the line as the value.
         """
         return [
-            (line.split("=", 1) + [""])[:2]
-            for line in (raw.split("#", 1)[0].strip() for raw in conf.splitlines())
-            if line
+            re.match(r"([^\s=]+)[\s=]*(.*)", line).groups()
+            for line in (raw.strip() for raw in conf.splitlines())
+            if line and not line.startswith("#")
         ]
+
+    def test_no_directive_carries_a_trailing_comment(self):
+        """coturn has no trailing comment. `no-stun  # why` sets `no-stun` to
+        `# why`, and on a flag that is not a value at all: coturn logs
+        `Unknown boolean value` and exits before it opens a port. Measured on the
+        host's coturn 4.6.1 on 2026-10-05, against this file while four of its
+        flags carried one: the relay never started. With the four comments moved to
+        lines of their own, the same file started. A comment goes on its own line."""
+        for key, value in self.directives(self.relay()):
+            self.assertNotIn("#", value, f"{key} {value}")
 
     def test_the_relay_carries_no_tls_listener_and_no_certificate(self):
         """The hop between a client and this relay already carries SRTP keyed by

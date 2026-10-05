@@ -407,6 +407,14 @@ of one is *refused*, and a relay can fail it while passing the other.
   and the file is given the same trust boundary as `.env.production`. Set
   `listening-ip`, `relay-ip` and the `denied-peer-ip=YOUR_VPS_IP` entry to the VPS
   address; never a wildcard.
+- **coturn has no trailing comment.** It ends a directive's name at the first
+  space, tab or `=` and reads the rest of the line as the value, so
+  `no-cli  # why` sets `no-cli` to `# why` — on a flag that is
+  `Unknown boolean value`, and coturn exits before it opens a port. Measured on
+  the host's 4.6.1 on 2026-10-05, against the committed file while four of its
+  flags carried one. A comment added to `/etc/chat/turnserver.conf` goes on a line
+  of its own, and because the relay writes no log,
+  `systemctl is-active coturn.service` is what reports the mistake.
 - **coturn has no TLS listener and no certificate.** The hop it carries is
   already SRTP that the relay cannot open, so a TLS or DTLS listener would buy
   nothing and would put a certificate and a renewal on a box whose posture is to
