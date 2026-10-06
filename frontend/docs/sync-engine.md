@@ -32,7 +32,7 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
 1. Load provisioned trust configuration and open protected local storage.
 2. Validate local schema and key handles.
 3. Call anonymous health only against the configured server.
-4. Load/refresh the device-bound session through a single-flight token coordinator.
+4. Load/renew the device-bound session through a single-flight token coordinator.
 5. Open WebSocket; Android sends the bearer header. A future Web client sends the
    required first auth frame within the backend deadline.
 6. Drain `GET /api/v1/me/envelopes`; before processing a page, compare its
@@ -263,8 +263,8 @@ queued -> preparing -> ready -> sending -> accepted
 - A transport timeout after upload is ambiguous; retrying is safe because recipients
   deduplicate logical event IDs. The retry reuses the persisted ciphertext for the same
   target; it never advances that target's ratchet twice.
-- Authentication failure enters single-flight refresh; it does not independently refresh
-  in every request.
+- Authentication failure enters the single-flight renewal; it does not renew
+  independently in every request.
 - 429 honors `Retry-After` when present and otherwise applies capped exponential backoff
   with full jitter.
 - Validation/crypto errors are permanent until user action or a protocol repair changes
@@ -279,29 +279,29 @@ with the backend/proxy configuration and a REST health probe only when necessary
 
 ## Token lifecycle
 
-- Access expiry is tracked from token claims with clock-skew allowance.
-- Refresh begins shortly before expiry and is guarded by one mutex inside the owning
-  isolate. That mutex does not span isolates. ADR-046's durable delivery lease, which an
-  earlier revision of this document credited with covering that gap, was removed by
-  ADR-049 and never shipped; what prevents two coordinators from racing the rotating
-  refresh token is ADR-050's in-process ownership gate, asked for by the *entry point*
-  before storage is opened or a token is read.
-- Every successful refresh atomically replaces both access and rotated refresh tokens, and
-  compares against the durable row rather than the isolate's own cache, so a rotation
-  cannot overwrite a newer pair another owner persisted while it was in flight.
-- An invalid/replayed refresh token ends the session; it is not retried indefinitely. One
-  case is excepted, because the backend blacklists a refresh token the moment it is
-  rotated and so answers a lost race and a real session ending identically: if the durable
-  row no longer holds the token just presented, another owner in this process rotated
-  first, and the coordinator adopts what that owner wrote instead of ending the session
-  (ADR-050). It waits a bounded number of re-reads for the row to move; a row that never
-  moves means no working token exists, and the session is ended exactly as before.
-  `token_revoked` is never repaired this way — a revoked device or a dead account cannot be
-  fixed by presenting a different token.
-- WebSocket close 4001 attempts one valid refresh/reconnect cycle.
+One device-bound session token, and nothing retires it (server ADR-0023, ADR-068).
+*Corrected 2026-10-07 (ADR-083):* this section described a rotating refresh token, a repair
+for losing its race, and ADR-050's ownership gate as what kept two coordinators from racing
+it. None of the three is true of this server.
+
+- Expiry is the issuing answer's `expires_in`, counted on this device's clock with a
+  clock-skew allowance. The client never reads the token's claims.
+- Renewal begins shortly before expiry: `POST /api/v1/auth/renew` presents the token held
+  and answers another, retiring none, so a renewal is safe to repeat.
+- One renewal is in flight per coordinator, and every caller inside the renewal window joins
+  it. That single flight is a **contention control** and nothing more (ADR-083): it turns
+  the callers in the window into one renewal, one write of the session row and one new token
+  on the `accounts` scope. Nothing depends on it for correctness. Two owners in this process
+  each hold a coordinator; they may renew at once, both keep working tokens, and the shared
+  row holds whichever write landed last.
+- A renewal the server refuses as `invalid_token` or `token_revoked` ends the session.
+  Nothing but a logout, a device revocation or a deactivated account ends a token before
+  its own expiry, so either is a session that is over, never a lost race to repair. A
+  renewal that cannot reach the server keeps the session it could not renew.
 - Close 4003 or REST `token_revoked` immediately wipes the local device session.
 - Close 4008 is a client protocol defect/security event and uses a circuit breaker.
-- Close 4403 is a deployment-origin error and is not retried rapidly.
+- Closes 4001 and 4403 are retired (ADR-069): authentication is decided before the accept,
+  so a refusal arrives as a failed upgrade rather than a close code.
 
 ## Device maintenance
 
@@ -399,10 +399,11 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   is kept open. Messaging still never starts a `dataSync` or `remoteMessaging` service.
 - **Exactly one delivery owner at a time**, arbitrated in the process rather than in the
   database (ADR-049, replacing ADR-046's durable lease; placement corrected by ADR-050).
-  Concurrent owners would race `TokenCoordinator` instances on a *rotating* refresh token
-  — the loser presents a retired one, the backend answers 401 `invalid_token`, and the
-  session ends — and would hand the same envelope to the ratchet twice, because
+  Concurrent owners would hand the same envelope to the ratchet twice, because
   `beginNextEnvelopeInspection` deliberately re-offers rows left `inspecting` by a crash.
+  They used to race a *rotating* refresh token as well, and the loser was signed out; since
+  server ADR-0023 nothing retires a token, so two owners renewing at once both keep working
+  ones (ADR-083).
   The job service runs in the default process and the Flutter engine documents one Dart VM
   per process, so every owner is on one main looper: a wake-up goes to the isolate that
   already exists, and a headless engine starts only when none does. Since ADR-051 there are
@@ -411,7 +412,7 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   the same latched handshake and `awaitExclusiveOwnership` waiting for both.
 - **The foreground asks for ownership at the entry point, not at the delivery session.**
   ADR-049 placed that question in `MessageDeliverySession.compose`, which is reached only
-  after `AuthenticationController.restore()` — and that restore is itself a rotation of the
+  after `AuthenticationController.restore()` — and that restore was then a rotation of the
   shared refresh token, so the gate sat downstream of the damage it existed to prevent.
   `bootstrap()` now asks before `ApplicationRuntime` is built, which covers restoration,
   delivery, alerts and anything added later with one gate. The session-level check remains
@@ -431,8 +432,10 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   between lives in the one process, so process death releases all of it at once and there
   is no stale holder to detect, expire or displace — and no clock to be wrong about. Every
   wait it imposes is bounded, and every bound expires into *proceeding* rather than into
-  stopping, so the mechanism cannot wedge delivery. What that costs when it fails is one
-  redundant token rotation, which the coordinator repairs, rather than a sign-out.
+  stopping, so the mechanism cannot wedge delivery. What that costs when it fails is the
+  overlap ADR-050 bounds — one envelope handed to the ratchet twice, which fails and is
+  retried, and one outbox batch sent twice, which recipients deduplicate — and never the
+  session.
 - **A deferred wake-up is acknowledged, not fired and forgotten.** The platform lets the
   process be frozen again once the job is finished, so an unacknowledged tick is a drain
   the system stops part-way. `BestEffortDeliveryTick.complete()` is called unconditionally,
@@ -462,9 +465,9 @@ mailbox nor transmitted its outbox. What runs now:
 - **One networking foundation.** `AuthenticationAssembly` owns a single
   `NetworkingFoundation` — one `DioRestClient`, one `TokenCoordinator`, one provisioned
   trust context — and builds the delivery socket from it. There is no second client and
-  no second coordinator: two coordinators would both rotate the same refresh token, and
-  the loser would present one the server has already retired, ending the session for
-  both.
+  no second coordinator, so a renewal, a logout and a revocation decide the session
+  together. A second coordinator would no longer end the session: nothing retires a token
+  (ADR-083).
 - **The application root owns delivery, not a screen.** `MessageDeliveryController` is a
   Riverpod notifier that the root holds through `listenManual`, because subscriptions
   created in `build` are paused when their widget leaves the view and a paused controller
@@ -523,8 +526,8 @@ mailbox nor transmitted its outbox. What runs now:
   transactions across every connected client, so a transaction is already mutually
   exclusive between owners. That is a precise limit: it makes writes atomic, and it does
   nothing for a logical operation that spans transactions with network I/O in between —
-  read token, rotate, write token; claim envelope, decrypt, commit. Those are exactly the
-  operations ADR-050 excludes.
+  claim envelope, decrypt, commit. That is the operation ADR-050 excludes. Read token,
+  rotate, write token was the other, until nothing rotated (ADR-068, ADR-083).
 - **Layer 3 is built and is not part of the delivery session.** ADR-048 composes
   `MessageAlertController` at the application root, beside `MessageDeliveryController` and
   deliberately not inside it: a delivery session that fails to compose still leaves
