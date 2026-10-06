@@ -169,9 +169,10 @@ final class FlutterApplicationLifecyclePort
 ///
 /// [awaitExclusiveOwnership] exists because a headless callback and a
 /// foregrounded application are two Dart root isolates in one operating-system
-/// process, and two of them running the delivery path at once would hold two
-/// token coordinators against one *rotating* refresh token: the loser presents
-/// a token the server has already retired, which is a 401 and an ended session.
+/// process, and two of them running the delivery path at once would hand one
+/// envelope to the ratchet twice, because a row left `inspecting` is offered
+/// again (ADR-050). Their two token coordinators are no hazard: nothing retires
+/// a token, so both keep working ones (ADR-083).
 /// The foreground waits for a catch-up that is already in flight rather than
 /// racing it or killing it, because abandoning a call into the shared native
 /// cryptographic core mid-flight is a worse trade than waiting a few seconds.

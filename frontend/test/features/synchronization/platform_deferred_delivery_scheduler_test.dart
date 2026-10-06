@@ -217,7 +217,7 @@ void main() {
     test('it asks the platform before anything else has happened', () async {
       // The whole correction ADR-050 makes. The question used to be asked by
       // the delivery session, which composes behind session restoration - and
-      // restoration is itself a token rotation against the shared durable row.
+      // restoration was then a token rotation against the shared durable row.
       // Asking here means nothing authenticated has happened yet.
       await const DeliveryOwnershipGate().awaitExclusiveOwnership();
 
@@ -229,8 +229,8 @@ void main() {
     test('a platform that never answers does not stop the launch', () async {
       // Refusing to start would replace an intermittent correctness bug with a
       // permanent availability one: an application that cannot be opened. What
-      // makes starting anyway survivable is that the shared row this protects
-      // repairs itself rather than ending the session.
+      // makes starting anyway survivable is that two owners overlapping cost a
+      // repeated envelope inspection and a repeated batch, never the session.
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
             channel,

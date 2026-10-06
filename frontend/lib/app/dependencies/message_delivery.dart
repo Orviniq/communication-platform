@@ -105,16 +105,18 @@ final class MessageDeliverySession {
     final platform = await ref.read(deliveryPlatformPortsProvider)();
     final realtime = GatewayRealtimeSyncAdapter();
     try {
-      // Before anything is opened, and before any token is read: a deferred
-      // catch-up the platform started a moment ago is a second delivery owner
-      // in this process, and two owners hold two token coordinators against one
-      // rotating refresh token. This waits for it instead of racing it, and
-      // returns immediately in the ordinary case where nothing is running.
+      // Before anything is opened: a deferred catch-up the platform started a
+      // moment ago is a second delivery owner in this process, and two owners
+      // would hand one envelope to the ratchet twice (ADR-050). This waits for
+      // it instead of racing it, and returns immediately in the ordinary case
+      // where nothing is running. Their tokens are no part of it: nothing
+      // retires a token, so two owners renewing at once both keep working ones
+      // (ADR-083).
       await platform.polling.awaitExclusiveOwnership();
       final store = await ref.read(durableSyncStoreProvider.future);
       final engine = await ref.read(durableSyncEngineProvider(scope).future);
       // The gateway comes from the shared foundation, so this socket presents
-      // the same access token, refreshes through the same single-flight
+      // the same session token, renews through the same single-flight
       // coordinator, and terminates its TLS chain at the same provisioned
       // authority as every REST call the application makes.
       final gateway = ref
