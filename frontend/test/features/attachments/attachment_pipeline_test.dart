@@ -10,6 +10,7 @@ import 'package:communication_platform/core/protocol/attachment_crypto_model.dar
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
+import 'package:communication_platform/features/attachments/application/attachment_transfer_service.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_allowance_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
@@ -271,6 +272,7 @@ void main() {
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
           clock: const _FixedClock(),
+          storage: PrivateAttachmentStorage(),
           dio: dio,
         );
         final root = await Directory.systemTemp.createTemp('cp_quota_test_');
@@ -338,6 +340,7 @@ void main() {
           config: const FixedServerConfig.fallback(),
           allowance: allowance,
           clock: const _FixedClock(),
+          storage: PrivateAttachmentStorage(),
           dio: dio,
         );
 
@@ -373,6 +376,7 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
+        storage: PrivateAttachmentStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_allowance_test_');
@@ -408,6 +412,7 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
+        storage: PrivateAttachmentStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_bucket_test_');
@@ -428,7 +433,11 @@ void main() {
       expect(allowance.recorded, isEmpty);
     });
 
-    test('maps expired capability to not-found and writes no bytes', () async {
+    test('maps expired capability to not-found and keeps no bytes', () async {
+      final root = await Directory.systemTemp.createTemp('cp_expired_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
       final dio = Dio();
       dio.httpClientAdapter = _QueueAdapter([
         (options, requestStream, cancelFuture) async =>
@@ -440,17 +449,15 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: _RecordingAllowance(),
         clock: const _FixedClock(),
+        storage: PrivateAttachmentStorage(root: root),
         dio: dio,
       );
-      final sink = _CollectingSink();
       final result = await transport.download(
         capabilityId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-        destination: sink,
         expectedBucketSize: 65536,
       );
-      await sink.close();
 
-      final failure = (result as FailureResult<void>).failure;
+      final failure = (result as FailureResult<File>).failure;
       expect(
         failure,
         isA<BackendFailure>().having(
@@ -459,7 +466,67 @@ void main() {
           BackendFailureCode.notFound,
         ),
       );
-      expect(sink.bytes, isEmpty);
+      expect(root.listSync(), isEmpty);
+    });
+  });
+
+  group('the transfer service and the file a download hands it', () {
+    late Directory root;
+
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('cp_transfer_test_');
+    });
+
+    tearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+
+    test('decrypts the file it is handed, then deletes it', () async {
+      final crypto = AttachmentCryptoService(_RecordingCryptoPort());
+      final plaintext = Uint8List(70000);
+      for (var index = 0; index < plaintext.length; index += 1) {
+        plaintext[index] = index & 0xff;
+      }
+      final fetched = File('${root.path}/fetched.bin');
+      final encrypted = await crypto.encryptToFile(
+        source: AttachmentSource(
+          length: plaintext.length,
+          displayName: 'notes.txt',
+          mimeType: 'text/plain',
+          openRead: () => Stream.value(plaintext),
+        ),
+        destination: fetched,
+      );
+      final descriptor = (encrypted as Success<AttachmentDescriptor>).value
+          .withCapability('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+      final service = AttachmentTransferService(
+        crypto: crypto,
+        transport: _HandingTransport(Result.success(fetched)),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(descriptor: descriptor);
+
+      final decrypted = (result as Success<File>).value;
+      expect(await decrypted.readAsBytes(), plaintext);
+      expect(await fetched.exists(), isFalse);
+    });
+
+    test('leaves what a failed download fetched to the transport', () async {
+      final service = AttachmentTransferService(
+        crypto: AttachmentCryptoService(_RecordingCryptoPort()),
+        transport: _HandingTransport(
+          const Result.failure(TransportFailure(TransportFailureKind.offline)),
+        ),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(
+        descriptor: _descriptor(plaintextSize: 10),
+      );
+
+      expect((result as FailureResult<File>).failure, isA<TransportFailure>());
+      expect(root.listSync(), isEmpty);
     });
   });
 }
@@ -698,51 +765,26 @@ final class _FullTokenCoordinator implements AccessTokenCoordinator {
   Future<void> logout() async {}
 }
 
-final class _CollectingSink implements IOSink {
-  final BytesBuilder _builder = BytesBuilder(copy: false);
+/// Hands the transfer service one fixed answer to every download.
+final class _HandingTransport implements AttachmentTransportPort {
+  _HandingTransport(this.answer);
 
-  Uint8List get bytes => _builder.toBytes();
-
-  @override
-  void add(List<int> data) => _builder.add(data);
+  final Result<File> answer;
 
   @override
-  void addError(Object error, [StackTrace? stackTrace]) {}
+  Future<Result<File>> download({
+    required String capabilityId,
+    required int expectedBucketSize,
+    CancellationSignal? cancellation,
+    void Function(int bytes)? onProgress,
+  }) async => answer;
 
   @override
-  Future<void> addStream(Stream<List<int>> stream) async {
-    await for (final chunk in stream) {
-      add(chunk);
-    }
-  }
-
-  @override
-  Future<void> close() async {}
-
-  @override
-  Future<void> get done async {}
-
-  @override
-  Future<void> flush() async {}
-
-  @override
-  Encoding get encoding => utf8;
-
-  @override
-  set encoding(Encoding value) {}
-
-  @override
-  void write(Object? object) => add(utf8.encode('$object'));
-
-  @override
-  void writeAll(Iterable<Object?> objects, [String separator = '']) =>
-      write(objects.join(separator));
-
-  @override
-  void writeCharCode(int charCode) => add([charCode]);
-
-  @override
-  void writeln([Object? object = '']) => write('$object\n');
+  Future<Result<AttachmentUploadResponse>> upload({
+    required File encryptedFile,
+    required int bucketSize,
+    CancellationSignal? cancellation,
+  }) => throw UnimplementedError('this test only downloads');
 }
 
 /// A day's count held in memory, so a test can say what has already been spent.

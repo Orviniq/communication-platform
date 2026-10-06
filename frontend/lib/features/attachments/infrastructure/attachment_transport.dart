@@ -23,6 +23,7 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
     required this.config,
     required this.allowance,
     required this.clock,
+    required this.storage,
     Dio? dio,
   }) : _dio =
            dio ??
@@ -45,6 +46,9 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
   final AttachmentAllowancePort allowance;
 
   final TimeSource clock;
+
+  /// Where a download's ciphertext is written.
+  final AttachmentStoragePort storage;
 
   @override
   Future<Result<AttachmentUploadResponse>> upload({
@@ -146,9 +150,8 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
   }
 
   @override
-  Future<Result<void>> download({
+  Future<Result<File>> download({
     required String capabilityId,
-    required IOSink destination,
     required int expectedBucketSize,
     CancellationSignal? cancellation,
     void Function(int bytes)? onProgress,
@@ -163,12 +166,15 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
     if (token case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
+    final file = await storage.createEncryptedTemp();
     final cancelToken = CancelToken();
     final subscription = cancellation?.whenCancelled.listen((_) {
       cancelToken.cancel('cancelled');
     });
-    var count = 0;
+    RandomAccessFile? output;
+    File? fetched;
     try {
+      output = await file.open(mode: FileMode.write);
       final response = await _dio.get<ResponseBody>(
         '/api/v1/attachments/$capabilityId',
         cancelToken: cancelToken,
@@ -186,6 +192,7 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
       if (response.statusCode != 200 || response.data == null) {
         return Result.failure(_statusFailure(response.statusCode));
       }
+      var count = 0;
       await for (final chunk in response.data!.stream) {
         if (cancellation?.isCancelled ?? false) {
           return const Result.failure(
@@ -198,7 +205,7 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
             TransportFailure(TransportFailureKind.responseTooLarge),
           );
         }
-        destination.add(chunk);
+        await output.writeFrom(chunk);
         onProgress?.call(count);
       }
       if (count != expectedBucketSize) {
@@ -206,7 +213,11 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
           SecurityFailure(SecurityFailureKind.malformedServerResponse),
         );
       }
-      return const Result.success(null);
+      final written = output;
+      output = null;
+      await written.close();
+      fetched = file;
+      return Result.success(file);
     } on DioException catch (error) {
       return error.type == DioExceptionType.cancel
           ? const Result.failure(
@@ -215,8 +226,20 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
           : const Result.failure(
               TransportFailure(TransportFailureKind.offline),
             );
+    } on FileSystemException {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
     } finally {
       await subscription?.cancel();
+      try {
+        await output?.close();
+      } on FileSystemException {
+        // The file is deleted below either way.
+      }
+      if (fetched == null) {
+        await storage.delete(file);
+      }
     }
   }
 

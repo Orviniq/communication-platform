@@ -33,9 +33,11 @@ abstract interface class AttachmentTransportPort {
     CancellationSignal? cancellation,
   });
 
-  Future<Result<void>> download({
+  /// Fetches the ciphertext of [capabilityId] and answers the file that holds
+  /// it: exactly [expectedBucketSize] bytes, which the caller then owns and
+  /// deletes.
+  Future<Result<File>> download({
     required String capabilityId,
-    required IOSink destination,
     required int expectedBucketSize,
     CancellationSignal? cancellation,
     void Function(int bytes)? onProgress,
