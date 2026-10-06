@@ -8,15 +8,6 @@ abstract interface class SessionTokenStore implements Port {
   /// answer from its own memory.
   Future<SessionTokens?> read();
 
-  /// The tokens the durable store actually holds, ignoring anything this owner
-  /// has cached.
-  ///
-  /// The durable row is shared with every other delivery owner in this process
-  /// (ADR-050), and a renewal in any of them replaces it. A cached answer is
-  /// this owner's last observation, not the truth, so every decision that could
-  /// *end a session* is made against this rather than against [read].
-  Future<SessionTokens?> readDurable();
-
   Future<void> replace(SessionTokens tokens);
 
   Future<void> clear();

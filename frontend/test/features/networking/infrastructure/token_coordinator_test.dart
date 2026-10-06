@@ -317,7 +317,6 @@ final class MemoryTokenStore implements SessionTokenStore {
 
   SessionTokens? current;
   int replacements = 0;
-  int durableReads = 0;
 
   @override
   Future<void> clear() async {
@@ -326,12 +325,6 @@ final class MemoryTokenStore implements SessionTokenStore {
 
   @override
   Future<SessionTokens?> read() async => current;
-
-  @override
-  Future<SessionTokens?> readDurable() async {
-    durableReads += 1;
-    return current;
-  }
 
   @override
   Future<void> replace(SessionTokens tokens) async {

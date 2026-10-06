@@ -52,7 +52,7 @@ void main() {
   late Directory directory;
   late File databaseFile;
   late _DatabaseServer server;
-  SecureSessionTokenAdapter? verifier;
+  SecureLocalStorageRuntime? verifier;
 
   setUp(() async {
     verifier = null;
@@ -74,16 +74,19 @@ void main() {
     }
   });
 
-  // One verification adapter for the whole test, on its own connection to the
+  // One verification runtime for the whole test, on its own connection to the
   // shared server. A second `LocalDatabase` in one isolate is a drift warning
   // and says nothing this test is about.
-  Future<SecureSessionTokenAdapter> observer() async => verifier ??=
-      SecureSessionTokenAdapter(_runtimeOn(await server.connect()));
+  Future<SecureLocalStorageRuntime> observer() async =>
+      verifier ??= _runtimeOn(await server.connect());
 
+  // A new adapter has nothing cached, so what it reads is the shared row as
+  // the owners left it rather than an earlier answer of this isolate's.
   Future<SessionTokens?> durableSession() async =>
-      (await observer()).readDurable();
+      SecureSessionTokenAdapter(await observer()).read();
 
-  Future<void> seed() async => (await observer()).replace(_tokens('token-0'));
+  Future<void> seed() async =>
+      SecureSessionTokenAdapter(await observer()).replace(_tokens('token-0'));
 
   group('two owners renewing one session', () {
     for (final firstToBeServed in const [0, 1]) {
