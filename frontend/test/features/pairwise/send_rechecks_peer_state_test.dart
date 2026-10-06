@@ -145,9 +145,16 @@ void main() {
       ]);
       expect(harness.remote.identityNotModified, {_peerUserId: 2});
       expect(harness.remote.devicesNotModified, {_peerUserId: 2});
+      // The gossip's own read carries the batched tags the send stored, which
+      // the first claim kept because nothing moved, so it is answered
+      // `unchanged` for everybody. Five of the eight requests had no body.
       expect(
         harness.remote.batches.last.map((query) => query.etag),
         isNot(contains(identityTag)),
+      );
+      expect(
+        harness.remote.answered.last.values,
+        everyElement(isA<PeerStateUnchanged>()),
       );
     });
 
