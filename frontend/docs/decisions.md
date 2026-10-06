@@ -323,6 +323,13 @@ reason it already dropped the device list's.
 A verified record used to require the device list's tag when it was decoded. It now requires the
 tag of either route, because a batched read that moved the stored state drops the device list's.
 
+> **Amended by ADR-082 (2026-10-06).** The identity read's `ETag` is sent now, as
+> `If-None-Match` to `/identity` alone. It is the record's third tag, `identityEtag`, written
+> beside whichever identity is stored; the batched answer carries it inside its identity, beside
+> its own tag, which stays `peerStateEtag`. A refused record sends none of the three, and
+> `_persistBlocked` drops all three. What a verified record needs when it is decoded is
+> unchanged: the tag of the device list or of the batched read.
+
 ### D4. The cache passes the batched read through
 
 `PeerIdentityRoundTripCache` neither remembers nor joins `fetchPeerStates`. One call answers for
@@ -347,6 +354,12 @@ Round trips, counted on the composed send path in `peer_resolution_cache_test.da
 | Two sends to one peer | 4 | 2 |
 | A first contact and its gossip | 6 | 6 |
 | A group of fifty, first send | up to 150 | 1, plus log pages for moved heads and the claim path for each new session |
+
+> **Superseded by ADR-082 (2026-10-06).** The cache is deleted, and with it the forgetting and
+> the floor described here; `peer_resolution_cache_test.dart` went with it, and the counts are
+> taken in `send_rechecks_peer_state_test.dart` now. A first contact and its gossip cost eight
+> requests, five of them answered with no body. The other rows stand: a send that starts no
+> session never reached the cache.
 
 ### D5. What stays per user
 
@@ -2581,6 +2594,13 @@ shape, no accepted status code, no cryptographic construction, no ciphersuite id
 protocol, no wire format, no transport trust anchor and no backend file. **Opens no production
 gate.** This ADR closes the RCA ADR-060 opened.
 
+> **Superseded in part by ADR-082 (2026-10-06).** D1 to D5, the peer cache, are deleted.
+> ADR-080 made a fan-out one read, and `/identity` now serves an `ETag` and answers a matching
+> `If-None-Match` with `304`, so two things below no longer hold: that the endpoint "offers no
+> ETag", and that reducing identity round trips is therefore "a caching problem". D6 and D7,
+> gossip as a debt the cycle pays after the outbox, stand. The measurements below were taken
+> through the cache and are kept as history.
+
 ### The question
 
 > Nothing a user waits on is slow any more. What is left is redundant network work *inside*
@@ -2880,6 +2900,9 @@ composes exactly what it composed before.
   `PairwiseCryptoOperation`, no `backend/` file.
 - **No change to what gossip says.** It advertises this device's verified log heads to a peer
   it is talking to, exactly as before. Only when it runs has changed.
+
+> **Corrected by ADR-082 (2026-10-06).** The server offers that `ETag` now, and the client
+> sends it back as `If-None-Match`. The cache this ADR built for want of it is deleted.
 
 ### What is explicitly left undone
 

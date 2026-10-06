@@ -133,7 +133,8 @@ The Linked Devices screen uses `GET /api/v1/me/devices` with ETag caching. Label
 locally. Removing a device requires confirmation and calls DELETE. Removing this device
 transitions directly to revoked cleanup.
 
-Peer device lists also use ETags covering both the live set and device-log head. Before
+Peer device lists also use ETags covering both the live set and device-log head, and the
+identity read uses one covering the four public key fields and the version. Before
 use, every device bundle is verified against the peer's out-of-band-confirmed master key,
 fetched from `/api/v1/users/{user_id}/identity`, and the paged
 `/api/v1/users/{user_id}/devicelog` must extend the last verified head. A legitimately
@@ -159,57 +160,45 @@ head moved.
   or was deactivated is left out, and the route does not say which. A peer left out, or one with
   no published identity, is what the per-user identity read answers `404` for, and is blocked as
   that `404` is: `identityUnavailable`.
-- **The three tags stay apart.** The identity read's `ETag` is never sent; the device list's
-  is stored as the record's `etag` and sent only to that route; the batched read's is stored as
-  `peerStateEtag` and sent only to it. Each vouches for the stored state it was read with, so a
-  read by one route keeps the other route's tag only when it left the stored identity, device
-  list and head exactly as they were. A refused record sends neither.
+- **The three tags stay apart.** The identity read's `ETag` is stored as `identityEtag` and sent
+  only to that route. It covers the identity alone, so it is written beside whichever identity
+  is stored, and the batched answer carries it inside its identity, beside its own tag. The
+  device list's is stored as the record's `etag` and sent only to that route; the batched
+  read's is stored as `peerStateEtag` and sent only to it. Each of those two vouches for the
+  stored state it was read with, so a read by one route keeps the other route's tag only when
+  it left the stored identity, device list and head exactly as they were. A refused record
+  sends none of the three.
 
 The per-user routes are not deprecated and still serve every single-peer path: a safety number,
 a `stale_devices` refresh, the prekey claim's re-resolution, the sender of an inbound envelope,
 session repair, and voice.
 
-### Short-lived peer-resolution cache
+### No peer cache
 
-Within one process, the answers `/identity`, `/devices` and `/devicelog` gave about a peer may
-stand in for a repeat of the same request for **30 seconds**. The cache decorates the remote
-port, *below* every check described above: a served answer re-enters the same authentication
-the network's would have, so the master-key comparison, the unsigned-device rejection, the
-device transition rule, the hash-chain and sequence verification, the current-live-set
-requirement on the head record, the trust states and the global fork gate all run again on
-every resolution. A hit shortens the path to a verdict; it never reaches one a live fetch would
-not have reached, and it can never widen a live device set beyond what the server itself
-returned inside the window.
+Nothing remembers what the server said about a peer between two resolutions
+([ADR-082](decisions.md)). Every resolution asks the server, so a send is verified against the
+state its recipients hold when it is made, and a safety number or a `stale_devices` refresh
+reads exactly what a fan-out reads. The authentication service is composed against the network
+repository itself, with nothing between them that could answer from memory.
 
-It is in memory only. Nothing is persisted, so a restart starts cold — deliberately: a cache
-that outlives the process can outlive a revocation it never saw. Only successful answers are
-remembered. `/devicelog` pages are shared between concurrent identical requests but never
-stored, because a stored page outlives the device answer that said which head to expect and a
-mismatched head is read as a fork.
+What a repeat read saves is the body, never the request:
 
-**A prekey claim is never cached, coalesced, memoized or replayed.** It consumes one-time
-prekeys, so two callers asking for the same device produce two claims or none.
+- **The identity read is conditional.** It sends the tag stored beside the identity as
+  `If-None-Match`. A `304` stands for that stored identity, which is verified again exactly as
+  a `200` would be, and a `304` to a read that carried no tag is refused. An identity that was
+  never published is `404 not_found` whatever the header holds, because there is no tag for a
+  row that does not exist, and it blocks the record as `identityUnavailable`.
+- **The device list is conditional** on its own `ETag`. A `304` stands for the stored list and
+  head, which are verified again.
+- **The batched read answers `unchanged`** for each peer whose tag still holds.
+- **The device log is read page by page,** and only for a peer whose head moved.
+- **A prekey claim is a request every time.** It consumes one-time prekeys, so it is never
+  replayed and never shared between callers.
 
-Everything invalidates it immediately:
-
-- a `stale_devices` response, through `stale_device_refresh_requests`;
-- a user opening or confirming a contact's safety number;
-- any trust-state transition, fork detection or device-log head advance;
-- a batched read that finds the peer moved;
-- 30 seconds.
-
-**The batched read passes through it.** `POST /api/v1/peers` is never remembered or joined. A
-peer it finds moved is forgotten, and no per-user answer asked before the batched answer landed
-is remembered for that peer: that answer becomes the stored state, and a remembered head below
-it would be read as a fork. A peer it finds `unchanged` keeps what is remembered about it.
-
-`refreshPeer` and `confirmOutOfBand` are never served a remembered answer. Both exist to ask
-whether this device's idea of a peer is still right — one for a person reading a safety number,
-one for the delivery cycle acting on a `stale_devices` response — so each drops the peer and
-keeps it dropped for the whole resolution, including against a fan-out running concurrently.
-`resolveLiveDevices` and `refreshPeerForDevices` are the ones the cache exists for: the
-single-peer paths and the prekey claim ask about the same peer more than once inside one
-delivery cycle. See [ADR-065](decisions.md) and [ADR-080](decisions.md).
+Until ADR-082, a thirty-second cache answered repeated per-user reads from memory
+([ADR-065](decisions.md)). It existed because a fan-out cost three reads for each recipient.
+ADR-080 made a fan-out one call, and what the cache still saved, the second re-read of a peer on
+the claim path, did not pay for a send sealed to state nobody had checked again.
 
 ## Prekey and key-package policy
 
