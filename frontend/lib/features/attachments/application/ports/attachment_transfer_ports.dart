@@ -36,6 +36,11 @@ abstract interface class AttachmentTransportPort {
   /// Fetches the ciphertext of [capabilityId] and answers the file that holds
   /// it: exactly [expectedBucketSize] bytes, which the caller then owns and
   /// deletes.
+  ///
+  /// A download of one of the two largest buckets that stops part-way is kept,
+  /// and the next call for the same capability takes it up from the byte it
+  /// stopped at rather than from zero (ADR-083). The caller does nothing
+  /// different to get that: it asks again.
   Future<Result<File>> download({
     required String capabilityId,
     required int expectedBucketSize,

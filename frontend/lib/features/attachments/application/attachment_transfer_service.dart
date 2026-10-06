@@ -89,6 +89,8 @@ final class AttachmentTransferService {
       ),
     );
     if (downloaded case FailureResult(failure: final failure)) {
+      // Whatever the attempt fetched stays with the transport, which takes it
+      // up again on the next call when it can (ADR-083).
       return Result.failure(failure);
     }
     final encrypted = (downloaded as Success<File>).value;

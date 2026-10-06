@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:communication_platform/core/application/cancellation_signal.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
@@ -49,6 +50,25 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
 
   /// Where a download's ciphertext is written.
   final AttachmentStoragePort storage;
+
+  /// The buckets a download resumes in: the two largest, 16 MiB and 64 MiB.
+  ///
+  /// Below them a download is fetched again from zero. The largest of the rest
+  /// is 4 MiB, a quarter of the smallest bucket that resumes, and it costs less
+  /// to fetch again than the bookkeeping costs to keep.
+  static final Set<int> resumableBuckets =
+      (AttachmentCryptoProtocolV1.buckets.toList()..sort()).reversed
+          .take(2)
+          .toSet();
+
+  /// The download that stopped part-way and may be taken up again, or null.
+  ///
+  /// One at a time, and in memory. A second download that stops replaces it,
+  /// which bounds what resuming keeps on disk to one bucket. The record names a
+  /// capability, so it is never written anywhere but this object: a process
+  /// that dies takes it along, and its file is left behind as any temporary
+  /// file of a killed process is.
+  _PartialDownload? _partial;
 
   @override
   Future<Result<AttachmentUploadResponse>> upload({
@@ -166,15 +186,32 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
     if (token case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    final file = await storage.createEncryptedTemp();
+    final previous = _takePartial(capabilityId, expectedBucketSize);
+    final file = previous?.file ?? await storage.createEncryptedTemp();
     final cancelToken = CancelToken();
     final subscription = cancellation?.whenCancelled.listen((_) {
       cancelToken.cancel('cancelled');
     });
     RandomAccessFile? output;
+    // The tag the bytes on disk were fetched under, which a later attempt
+    // sends back in `If-Range`. Null whenever they cannot be resumed: nothing
+    // has been fetched, the answer carried no strong tag, or the bucket is one
+    // of the small ones.
+    String? tag;
+    // Whether this attempt ended in a way that leaves the object as it was
+    // and the bytes on disk a true prefix of it: a dropped transfer, a
+    // cancellation, or a refusal other than the two below that say they are
+    // not. Nothing else keeps them.
+    var resumeLater = false;
     File? fetched;
     try {
-      output = await file.open(mode: FileMode.write);
+      output = await file.open(mode: FileMode.append);
+      var offset = await output.length();
+      tag = previous?.tag;
+      if (tag == null || offset <= 0 || offset >= expectedBucketSize) {
+        offset = await _restart(output);
+        tag = null;
+      }
       final response = await _dio.get<ResponseBody>(
         '/api/v1/attachments/$capabilityId',
         cancelToken: cancelToken,
@@ -186,15 +223,67 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
             'Authorization':
                 'Bearer ${(token as Success<AccessToken>).value.value}',
             'Accept': 'application/octet-stream',
+            // The rest of the object, and only if it is still the object the
+            // bytes came from: a server whose tag no longer matches ignores
+            // the range and answers the whole body (RFC 9110 §13.1.5).
+            if (tag != null) 'Range': 'bytes=$offset-',
+            'If-Range': ?tag,
           },
         ),
       );
-      if (response.statusCode != 200 || response.data == null) {
-        return Result.failure(_statusFailure(response.statusCode));
+      final status = response.statusCode;
+      if (status != 200 && status != 206) {
+        // A refusal carries no byte of the object, so the bytes on disk are
+        // as good as they were. Two refusals say otherwise: the `404` that
+        // says the object is gone, and the `416` nginx answers a range that
+        // does not fit it, which these bytes would then ask for every time.
+        resumeLater =
+            status != null && status >= 400 && status != 404 && status != 416;
+        return Result.failure(_statusFailure(status));
       }
-      var count = 0;
-      await for (final chunk in response.data!.stream) {
+      final body = response.data;
+      if (body == null || (status == 206 && tag == null)) {
+        // Nothing to read, or a continuation of bytes this attempt never
+        // asked to continue.
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.malformedServerResponse),
+        );
+      }
+      final answeredTag = _onlyValue(response.headers, 'etag');
+      if (tag != null && answeredTag != null && answeredTag != tag) {
+        // The object the bytes came from is not the one answering. An
+        // attachment is immutable and its id is never reused, so its tag
+        // moves only after the retention sweep deleted it: the attachment is
+        // gone, exactly as a `404` says.
+        return const Result.failure(
+          BackendFailure(BackendFailureCode.notFound),
+        );
+      }
+      if (status == 206) {
+        // A continuation of these bytes and of nothing else: starting where
+        // they stop and running to the bucket's last byte.
+        if (_onlyValue(response.headers, 'content-range') !=
+            'bytes $offset-${expectedBucketSize - 1}/$expectedBucketSize') {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
+        }
+      } else {
+        if (tag != null) {
+          // Asked for a range and sent the whole object, under a tag that
+          // still matches: the answer starts at the first byte, so the file
+          // does too.
+          offset = await _restart(output);
+        }
+        tag = resumableBuckets.contains(expectedBucketSize)
+            ? _strongTag(answeredTag)
+            : null;
+      }
+      // Counted from the resume offset rather than from zero.
+      var count = offset;
+      await for (final chunk in body.stream) {
         if (cancellation?.isCancelled ?? false) {
+          resumeLater = true;
           return const Result.failure(
             CancellationFailure(CancellationFailureKind.requestedByUser),
           );
@@ -208,7 +297,10 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
         await output.writeFrom(chunk);
         onProgress?.call(count);
       }
-      if (count != expectedBucketSize) {
+      // What ends on disk is exactly one bucket, however many answers it took
+      // to collect.
+      if (count != expectedBucketSize ||
+          await output.length() != expectedBucketSize) {
         return const Result.failure(
           SecurityFailure(SecurityFailureKind.malformedServerResponse),
         );
@@ -219,6 +311,7 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
       fetched = file;
       return Result.success(file);
     } on DioException catch (error) {
+      resumeLater = true;
       return error.type == DioExceptionType.cancel
           ? const Result.failure(
               CancellationFailure(CancellationFailureKind.requestedByUser),
@@ -230,16 +323,59 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
       return const Result.failure(
         StorageFailure(StorageFailureKind.unavailable),
       );
+    } on IOException {
+      // The connection dropped mid-transfer. dart:io reports that on the body
+      // stream as an `HttpException`, and Dio passes it through as it is
+      // rather than as a `DioException`. It is the failure resuming is for.
+      resumeLater = true;
+      return const Result.failure(
+        TransportFailure(TransportFailureKind.offline),
+      );
     } finally {
       await subscription?.cancel();
       try {
         await output?.close();
       } on FileSystemException {
-        // The file is deleted below either way.
+        resumeLater = false;
       }
       if (fetched == null) {
-        await storage.delete(file);
+        final resumeTag = tag;
+        if (resumeLater && resumeTag != null) {
+          await _keepPartial(
+            _PartialDownload(
+              capabilityId: capabilityId,
+              bucketSize: expectedBucketSize,
+              file: file,
+              tag: resumeTag,
+            ),
+          );
+        } else {
+          await storage.delete(file);
+        }
       }
+    }
+  }
+
+  /// The kept partial download of [capabilityId] in [bucketSize], taken out
+  /// so that a second download of it running at the same time starts a file
+  /// of its own rather than writing this one.
+  _PartialDownload? _takePartial(String capabilityId, int bucketSize) {
+    final partial = _partial;
+    if (partial == null ||
+        partial.capabilityId != capabilityId ||
+        partial.bucketSize != bucketSize) {
+      return null;
+    }
+    _partial = null;
+    return partial;
+  }
+
+  /// Keeps [partial] for the next attempt, in place of whatever was kept.
+  Future<void> _keepPartial(_PartialDownload partial) async {
+    final replaced = _partial;
+    _partial = partial;
+    if (replaced != null && replaced.file.path != partial.file.path) {
+      await storage.delete(replaced.file);
     }
   }
 
@@ -289,3 +425,45 @@ Failure _statusFailure(int? status) => switch (status) {
   429 => const BackendFailure(BackendFailureCode.throttled),
   _ => const SecurityFailure(SecurityFailureKind.malformedServerResponse),
 };
+
+/// Bytes a download has already written, and what it takes to go on from
+/// them.
+final class _PartialDownload {
+  const _PartialDownload({
+    required this.capabilityId,
+    required this.bucketSize,
+    required this.file,
+    required this.tag,
+  });
+
+  final String capabilityId;
+  final int bucketSize;
+  final File file;
+
+  /// The `ETag` of the answer the bytes in [file] came from.
+  final String tag;
+}
+
+/// Empties [output] and puts its next write at byte zero.
+Future<int> _restart(RandomAccessFile output) async {
+  await output.truncate(0);
+  await output.setPosition(0);
+  return 0;
+}
+
+/// The value of the header [name], or null unless the answer carries it
+/// exactly once.
+String? _onlyValue(Headers headers, String name) {
+  final values = headers[name];
+  return values != null && values.length == 1 ? values.single : null;
+}
+
+/// [value] when it is a strong entity tag, the only kind a client may send in
+/// `If-Range` (RFC 9110 §13.1.5), and null otherwise.
+///
+/// It is kept exactly as it arrived, because the server compares the two
+/// character by character (§8.8.3.2).
+String? _strongTag(String? value) =>
+    value != null && _strongEntityTag.hasMatch(value) ? value : null;
+
+final _strongEntityTag = RegExp(r'^"[\x21\x23-\x7e]{1,128}"$');
