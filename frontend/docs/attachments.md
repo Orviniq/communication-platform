@@ -38,7 +38,8 @@ immediate server deletion of abandoned uploads.
 
 1. Validate the descriptor and bucket before allocating.
 2. Download ciphertext as a stream; development direct-to-Daphne empty-body behavior is
-   not treated as a valid production download.
+   not treated as a valid production download. A download of the two largest buckets
+   that stops part-way is taken up where it stopped (see *Resuming a download*).
 3. Verify and decrypt each secretstream chunk before exposing it.
 4. Stop and delete temporary output on any authentication, length, or final-tag failure.
 5. Verify authenticated declared length and metadata.
@@ -47,6 +48,39 @@ immediate server deletion of abandoned uploads.
 Never open active content directly in the application origin. Web downloads use safe
 blob URLs, download disposition, a strict allowlist for inline image/audio formats, and
 timely URL revocation. Android shares files through a scoped content URI, not a raw path.
+
+## Resuming a download
+
+Implemented 2026-10-07 (ADR-083), on the behaviour the
+[attachments API](../../backend/attachments/API.md) documents under **Resuming**. A
+download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped. Below
+them a download starts again from zero: the largest of the rest is 4 MiB, a quarter of the
+smallest bucket that resumes, and costs less to fetch again than the bookkeeping costs to
+keep.
+
+- **The call.** When a partial file exists for the capability, the request carries
+  `Range: bytes=<bytes already written>-` and `If-Range: <ETag of the first answer>`. Only
+  a strong tag is kept, because RFC 9110 forbids a weak one in `If-Range`, so an answer
+  without one can be downloaded and not resumed.
+- **The status.** `206` is accepted beside `200`, and only as an exact continuation:
+  `Content-Range: bytes <offset>-<bucket - 1>/<bucket>`. A `200` in answer to a range is the
+  whole object, so the partial file is emptied and the answer written from its first byte.
+- **The length.** Bytes are counted from the resume offset, and what ends on disk is
+  exactly one bucket, however many answers it took to collect.
+- **The partial file.** It is kept only while the tag matches. An answer under another tag
+  means the retention sweep deleted the object, so the partial file is deleted and the
+  attachment reported gone, as a `404` reports it. The file is kept after a dropped
+  connection, a cancellation or a refusal, and deleted after a `404`, a `416`, an answer
+  that breaks the range or length rule, or a failed write.
+
+The record of a partial download names a capability, so it lives in the transport's memory
+and nowhere else: one at a time, replaced by the next download that stops, and lost with the
+process. A restart therefore downloads from zero, and the file it leaves stays in the private
+cache directory as any temporary file of a killed process does.
+
+A development client that talks to the application directly cannot test this. The range
+is nginx's work, from the internal location the download redirects to; the application
+answers `200` with an empty body and does nothing with `Range`.
 
 ## Caching
 

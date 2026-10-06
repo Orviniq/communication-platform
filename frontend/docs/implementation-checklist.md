@@ -84,7 +84,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Bucketed encrypted upload/download | Ready | Pending secretstream pipeline. `AttachmentTransferService` exists but is composed by no provider, `pubspec.yaml` declares no picker, and the composer's sheet now says attachments are not built rather than offering inert choices (ADR-045, correcting ADR-044's supported tier) |
+| Bucketed encrypted upload/download | Ready | Pending secretstream pipeline. `AttachmentTransferService` exists but is composed by no provider, `pubspec.yaml` declares no picker, and the composer's sheet now says attachments are not built rather than offering inert choices (ADR-045, correcting ADR-044's supported tier). **Download resume, 2026-10-07 (ADR-083)**: a download of the 16 MiB or 64 MiB bucket that stops part-way is taken up where it stopped, under `Range` and `If-Range` with the first answer's strong `ETag`; a `206` must continue the bytes exactly, a `200` to a range starts the file again, a tag that moved reports the attachment gone, and what ends on disk is exactly one bucket. Covered by transport tests against a fake server whose bodies drop part-way. **Not verified:** no run against nginx, which alone serves the range — a development client talking to the application directly cannot exercise it |
 | Quota and TTL | Ready | Pending UI/error handling |
 | Encrypted attachment metadata/key | Client protocol | Pending |
 | Bounded secure cache | Not applicable | Pending |

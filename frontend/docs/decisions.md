@@ -92,6 +92,186 @@ is not silently edited out of history.
 | ADR-079 | Accepted (2026-10-05) | Phase 6 closes on a call between two real devices: on signed production build 5, APK SHA-256 `20a010b41eb43c5eb5a34d1c007d58fa84548408e707e20685043b68010a37dd`, each of the seven call steps of phase 6 prompt 10 passed — a room made on one device reached the other, both joined and connected through the relay, audio crossed both ways, mute silenced one side, the call ran on with a device out of view, a leave stopped that device's call service and was dropped by the other, and a rejoin carried audio again. Two corrections came first: a signed group or room change counts in the outbox depth until it is routed, so creating one starts a delivery cycle (D2); and a leave stops the call service only when no join has started since (D3) | Every voice test so far ran between fakes. On the owner's phone and emulator, build 3 found that a room reached the invited device only when something unrelated woke the creator's delivery cycle, more than six minutes after it was signed, and build 4 found that a rejoin made while a leave was still finishing lost its call service, so the new call lost its microphone and its network the moment the app left the screen. Build 4 corrected the first and build 5 the second, and the owner confirmed every audio step by ear against the devices' own audio levels ([`docs/validation/voice-mesh/2026-10-05/`](validation/voice-mesh/2026-10-05/README.md)). |
 | ADR-080 | Accepted (2026-10-06); the identity tag of D3 and the cache of D4 amended by ADR-082 (2026-10-06) | A send verifies its recipients with one `POST /api/v1/peers` for each 64 users instead of up to three per-user reads for each. Every answer goes through the same `_refresh` checks the per-user answers feed; `unchanged` is a shape decided by its presence; a user the route leaves out is blocked as the identity read's `404` is; and the batched tag is stored and sent apart from the device list's `ETag`. The round-trip cache passes the batched read through and forgets every peer it found moved | A send read the identity, the device list and, when its head had moved, the device log of every recipient before it sealed one copy, against a round trip ADR-060 and ADR-065 measured at 107-137 ms: a group of fifty was up to a hundred and fifty round trips. ADR-065's cache stopped a cycle asking twice, never the first time. The server answers up to 64 peers in four queries, and `CLIENT_CONTRACT.md` §L names that route the one to poll on. Counted on the composed send path: a send is one call where it was four, a send and its gossip two where they were four, and a first contact with its gossip stays at six. Adds one call to a route the server already serves; changes no cryptographic construction, protocol, local schema or backend file. |
 | ADR-082 | Accepted (2026-10-06) | Every resolution asks the server: ADR-065's thirty-second peer cache is deleted, so a send is verified against the state its recipients hold when it is made. The per-user identity read becomes conditional on its own `ETag`; a `304` stands for the stored identity and is verified again, an identity never published stays `404 not_found` whatever tag is sent, and the three tags stay on three routes. Supersedes ADR-065's cache and amends ADR-080 D3 and D4 | The cache existed because a fan-out cost three reads for each recipient. ADR-080 made a fan-out one call, the `accounts` scope allows 300 calls a minute, and `/identity` serves a tag now, so all the cache still bought was the second re-read of a peer on the claim path, at the price of a send sealed to state nobody had checked again for up to thirty seconds. Counted on the composed send path: a first contact and its gossip go from six requests to eight, five of them answered with no body. Changes no wire format, local schema or backend file. |
+| ADR-083 | Accepted (2026-10-07) | A download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped: the next attempt for the same capability sends `Range: bytes=<bytes already written>-` and `If-Range` with the first answer's strong `ETag`, accepts `206` beside `200` only as an exact continuation, counts from the offset, and ends with exactly one bucket on disk. A `200` to a range starts the file again, a tag that moved reports the attachment gone, and the bytes are kept only after a dropped connection, a cancellation or a refusal, one partial at a time and in memory. The token coordinator's single flight is kept as a contention control and documented as one, and `SessionTokenStore.readDurable` is deleted | A dropped 64 MiB download cost the whole bucket again, although nginx serves a range of the stored file and `backend/attachments/API.md` now documents it. Phase 7 answers server ADR-0024's contract cost; these are the last two items `CLIENT_WORK.md` left optional, which ADR-0024 itself did not decide: the resume rests on what the attachments API published in the run of server ADR-0025, and the coordinator on server ADR-0023, after which nothing retires a token. The single flight protects nothing now, but it still turns every caller in the renewal window into one renewal on the `accounts` scope, and deleting it would leave the zone marker and the session generation beside it as they are. `readDurable` had no caller after ADR-068 deleted the rotation repair, under a contract that said session-ending decisions were made against it. Below 16 MiB the bookkeeping costs more than the bytes. Changes no wire format, local schema, cryptographic construction or backend file. |
+
+## ADR-083 in full — a download takes up where it stopped, and the single flight is kept for what it saves (2026-10-07)
+
+**Status:** Accepted, 2026-10-07. Client-side decision, phase 7 prompt 3, the last of the phase.
+Phase 7 is the client's answer to server ADR-0024, which set out to take the contract's cost off
+the client: ADR-080 and ADR-082 removed the per-recipient reads and the peer cache. This record
+takes the two items the server's `CLIENT_WORK.md` left optional that ADR-0024 itself did not
+decide. The `Range` resume rests on what `backend/attachments/API.md` published in the run of
+server ADR-0025, and the token coordinator on server ADR-0023. **Changes no wire format, local
+schema, cryptographic construction or backend file**; the download's port hands back a file
+instead of writing into a sink. **Opens no production gate.**
+
+**Cites:** ADR-049 and ADR-050 (the arbitration), ADR-068 (one session token), the
+[attachments API](../../backend/attachments/API.md) under **Resuming**,
+[`CLIENT_WORK.md`](../../CLIENT_WORK.md) § "Optional — resume an attachment download" and
+§ "Optional — the arbitration the rotation forced", and RFC 9110 §8.8.3.2, §13.1.5, §14.1.2,
+§14.4 and §15.3.7 (<https://www.rfc-editor.org/rfc/rfc9110.txt>, read 2026-10-07).
+
+### The question
+
+> A download that dropped part-way started again from zero, and the token coordinator still
+> carries the single flight a rotating refresh token once needed. Can a download take up where
+> it stopped, and what does the single flight still do?
+
+### D1. The two largest buckets resume
+
+nginx serves a download from an internal location, and its static handler has always honoured a
+`Range` there; the application never sees one. `backend/attachments/API.md` now documents it,
+and `GROUND-TRUTH.md` §4 measured it on 2026-09-06: `Range: bytes=10-19` answered `206` with
+`Content-Range: bytes 10-19/65536`, and the whole answer carries `Accept-Ranges: bytes`, an
+`ETag` and a `Last-Modified`. `backend/openapi.json` lists no `206` for the route, by design: it
+describes what the route answers, and the route always answers `200` with an empty body.
+
+`DioAttachmentTransport.download` changes in four places:
+
+| Part | Now |
+|---|---|
+| The call | When a partial file exists for the capability, it sends `Range: bytes=<bytes already written>-` and `If-Range: <the first answer's ETag>` |
+| The status check | `206` is accepted beside `200`, and only as an exact continuation: `Content-Range: bytes <offset>-<bucket - 1>/<bucket>`. A `200` to a range is the whole object, so the partial file is emptied and the answer written from its first byte |
+| The length check | Counted from the resume offset. What ends on disk is exactly one bucket, however many answers it took |
+| The partial file | Kept only while the tag matches. An answer under another tag, a `200` or a `206`, means the retention sweep deleted the object, so the file is deleted and the attachment reported gone: `BackendFailure(notFound)`, as a `404` reports it |
+
+The tag is kept only when it is strong, because RFC 9110 §13.1.5 forbids a weak one in
+`If-Range`, and it is kept exactly as it arrived, because the server compares the two character
+by character (§8.8.3.2). An answer without a strong tag can be downloaded and cannot be resumed.
+The open range is RFC 9110's `bytes=9500-` form (§14.1.2): the rest of the object from the
+offset. A `206` must repeat the tag (§15.3.7), and one that names another is a moved tag.
+
+Only 16 MiB and 64 MiB resume. The largest of the four buckets below them is 4 MiB, a quarter of
+the smallest that resumes, and fetching it again costs less than the bookkeeping. The set is the
+two largest of `AttachmentCryptoProtocolV1.buckets`, so it follows the protocol rather than a
+deployment's published list.
+
+### D2. What keeps the bytes and what deletes them
+
+The bytes stay only after an ending that leaves the object as it was and them a true prefix of
+it: a dropped connection, a cancellation, or a refusal, which carries no byte of the object —
+any status from `400` up but two. Everything else deletes them: a `404`; a tag that moved; a
+`416`, which nginx answers a range that does not fit the object and which these bytes would ask
+for again every time; a continuation that starts anywhere but where they stop; a body that runs
+past the bucket or ends short of it; and a write to disk that fails.
+
+A dropped connection is the case this exists for, and before this change it escaped `download`
+as an exception. dart:io reports it on the body stream as an `HttpException`, and Dio 5.11.0
+passes an error on that stream through as it is (`handleResponseStream` in
+`lib/src/response/response_stream_handler.dart` of the pinned package), so it never arrived as
+the `DioException` the transport caught. The transport now catches `IOException` and reports it
+as `offline`, after `FileSystemException`, which is the disk and is reported as storage.
+
+### D3. One partial, in memory
+
+The record of a partial download names a capability, and a capability lives only in protected
+local state (`attachments.md`, Security model). A file named after it would put it on disk
+outside SQLCipher, and the client has no hash it can reach from Dart to name a file from it:
+`package:crypto` is not a dependency, and the crypto core's ports offer none. So the transport
+holds one record in memory — the capability, the bucket, the file and the tag — and a second
+download that stops replaces it, which bounds what resuming keeps on disk to one bucket. The
+record is taken out before the request, so a second download of the same capability running at
+the same time starts a file of its own rather than writing this one.
+
+What that costs: a process that dies takes the record with it, so the download after a restart
+begins at zero, and its partial file stays in the private cache directory as any temporary file
+of a killed process already did. A process the system froze and thawed keeps the record.
+Freezing a cached application terminates its sockets (the AOSP freezer documentation ADR-050
+quotes), which the transport sees as a dropped connection; that is argued here, not measured on a
+device.
+
+The port changed to fit. `download` answers the file it filled instead of writing into a sink
+the caller owned, because the transport has to keep that file between attempts.
+`AttachmentTransferService` decrypts the file it is handed and deletes it, and never sees a
+partial one.
+
+### D4. The single flight stays, as a contention control
+
+Chosen: keep it, and call it what it is.
+
+Server ADR-0023 retires nothing on a renewal, so the race the single flight was built for — two
+owners presenting one rotating refresh token, the loser presenting a retired one, the session
+ending for both — cannot happen. Each owner in the process has its own coordinator, and two of
+them renew independently and both keep working tokens; `delivery_owner_contention_test.dart`
+shows it with two real isolates over one shared store. Nothing depends on the single flight for
+correctness.
+
+It still saves requests. Every caller that asks for a token inside the renewal window joins the
+one renewal in flight: one `POST /api/v1/auth/renew`, one write of the session row and one new
+token, where each caller would otherwise make its own, on the `accounts` scope that the peer
+reads of ADR-080 and ADR-082 share at 300 a minute. Deleting it buys almost nothing: it is a
+field and one short method. The zone marker beside it stays either way, because the renewal is
+itself an authenticated request that asks the coordinator for its header token, and without the
+marker that question would start another renewal. So does the session generation, because a
+renewal answered after a logout must not write the session back.
+
+**Rejected: delete it.** Every caller in the window would renew on its own, to remove a field and
+a method, and the coordinator's two other mechanisms would stay exactly as they are.
+
+**Deleted beside it: `SessionTokenStore.readDurable`.** It was the read ADR-050's decision C made
+its two decisions against, the success path's comparison and the wait for another owner's
+rotation. ADR-068 deleted both on 2026-09-08 (`d58f4d9`) and left the read with no caller in
+`lib`, under a contract that still said every decision that could end a session was made against
+it. It goes from the port, the adapter and three test doubles, and
+`delivery_owner_contention_test.dart` reads the shared row through an adapter with nothing cached
+instead.
+
+### D5. The records that called it a safeguard
+
+ADR-049 and ADR-050 gain dated notes and new statuses, and their text stays as history.
+ADR-050's gate stands, decisions A and B, for the envelope two owners would hand to the ratchet
+twice. `sync-engine.md` gets a token lifecycle with one token, the single flight named a
+contention control, and no close `4001` or `4403`, which ADR-069 retired; its ownership and
+composition sections stop citing the token race. So do the comments on the ownership wait in
+`message_delivery.dart`, `sync_ports.dart`, `sync_platform_adapters.dart` and
+`platform_deferred_delivery_scheduler.dart`, and the line of `testing-strategy.md` that listed a
+rotating refresh.
+
+### What it costs
+
+| A download, then a retry | Fetched before | Fetched now |
+|---|---|---|
+| 64 MiB, dropped at 48 MiB | 112 MiB | 64 MiB |
+| 16 MiB, cancelled at 1 MiB | 17 MiB | 16 MiB |
+| 4 MiB, dropped at 2 MiB | 6 MiB | 6 MiB, by design |
+
+The transport keeps at most one file of up to 64 MiB in the private cache between attempts.
+
+### Correctness
+
+- **`attachment_pipeline_test.dart`** drives `DioAttachmentTransport` against a fake server whose
+  bodies can drop part-way, over a 16 MiB object whose every byte depends on its offset. A
+  dropped download resumes from the byte it stopped at with the two headers, counts from there,
+  and ends with the object exactly; a `200` to a range starts the file again; a moved tag on a
+  `200` or a `206` reports the attachment gone and keeps nothing; a cancellation and a `429` keep
+  the bytes for the next attempt; a `404` and a `416` keep nothing; a continuation from the wrong
+  offset, or one byte past the bucket, keeps nothing; the four small buckets and an answer
+  without a strong tag start again from zero; and the transfer service decrypts and deletes the
+  file a download hands it.
+- Each was run against a deliberate defect, one at a time: counting from zero, appending after a
+  whole answer, ignoring a moved tag, resuming every bucket, accepting a weak tag, keeping the
+  bytes after a `416`, keeping them after a `404`, missing a dropped connection, and ignoring
+  `Content-Range`. The tests caught all nine.
+- **`token_coordinator_test.dart`** still pins one renewal for concurrent callers, and
+  **`delivery_owner_contention_test.dart`** still shows two owners keeping two working tokens.
+
+### What is not done
+
+- **No run against nginx.** Every check is a fake server. A development client that talks to the
+  application directly cannot test the resume at all: the range is nginx's work, from the
+  internal location the download redirects to, and the application answers `200` with an empty
+  body and does nothing with `Range`. `GROUND-TRUTH.md` measured a closed range; the open one
+  the client sends is RFC 9110's and unmeasured here.
+- **No screen downloads yet.** `AttachmentTransferService` is still composed by no provider, so
+  the resume waits, like the rest of the pipeline, for the piece that composes it.
+- **A restart forgets the partial**, as D3 says, and nothing sweeps the file it leaves.
+- **The download's `500` and `503`** are still read as malformed answers by its status mapping,
+  although `backend/openapi.json` lists both for this route. The bytes survive either; only the
+  failure reported is wrong.
+- **Found in passing: the renewal window is two and a half minutes of a thirty-day token.** The
+  coordinator renews only inside `proactiveRenewalWindow` plus `clockSkewAllowance` before the
+  token expires, and `/auth/renew` answers an expired token `401 invalid_token`, so a device that
+  makes no request in those minutes is signed out by its next one. Not changed here.
 
 ## ADR-082 in full — every send asks, and the identity read is conditional (2026-10-06)
 
