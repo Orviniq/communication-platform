@@ -29,12 +29,16 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
 
 ## Startup sequence
 
+*Corrected 2026-10-07 (server ADR-0020):* step 5 said a future Web client sent a first
+`auth` frame within a backend deadline. The server removed that frame and its deadline:
+the `/ws` gateway has one handshake path, the `Authorization` header, and ADR-069 records
+the socket surface this client retired with them.
+
 1. Load provisioned trust configuration and open protected local storage.
 2. Validate local schema and key handles.
 3. Call anonymous health only against the configured server.
 4. Load/renew the device-bound session through a single-flight token coordinator.
-5. Open WebSocket; Android sends the bearer header. A future Web client sends the
-   required first auth frame within the backend deadline.
+5. Open WebSocket with the session token in the upgrade's `Authorization` header.
 6. Drain `GET /api/v1/me/envelopes`; before processing a page, compare its
    `pruned_through` with the durable highest contiguous acked sequence.
 7. If `last_acked_seq < pruned_through`, start queue-gap recovery for every active

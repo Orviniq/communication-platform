@@ -9,12 +9,16 @@ a production artifact accidentally.
 
 ## Bootstrap routing
 
+*Corrected 2026-10-07 (server ADR-0020):* step 4 said a Web client, being
+online-session-first, stayed at the connection gate. There is no Web client: the server
+serves no browser surface, and the client's web target was removed on 2026-09-08
+(`implementation-checklist.md`, The web target).
+
 1. Load trust configuration and protected storage.
 2. If configuration is absent or invalid, show the blocking not-provisioned state.
 3. Check `/api/v1/health` on the configured server only.
 4. If unreachable with no usable identity, remain on the connection screen with Retry.
-   With a usable Android identity, open cached content in offline mode. The Web client is
-   online-session-first and remains at the connection gate.
+   With a usable identity, open cached content in offline mode.
 5. If a valid device session exists, renew if required and enter the app.
 6. Otherwise show Login; a remembered username is non-secret and may be prefilled.
 
