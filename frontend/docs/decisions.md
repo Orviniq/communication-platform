@@ -281,6 +281,23 @@ two and a half minutes.
   and `_performRenewal` ends the session again on the failure it then returns, so the revocation
   wipe runs twice and `revoked` is emitted twice. A throwaway test through the real client
   recorded `[revoked, revoked]` for one refusal. It predates this change and is not changed here.
+  **Done 2026-10-07**, by the addendum below.
+
+**Addendum, 2026-10-07 — one refused renewal ends the session once.** `_performRenewal` now ends
+the session on a refusal only while the session generation it started with is unmoved. On the
+renewal's own `token_revoked` the reviewed client has already called `handleRevocation`, which
+moved the generation and ended the session, so the failure that follows ends nothing more; a
+logout that lands while the renewal is out moves the generation too. D5's generation now keeps a
+renewal answered after a logout, a revocation or an expiry from ending the session as well as
+from writing. The zone marker, the single flight and `handleRevocation` are unchanged.
+`dio_token_endpoints_test.dart` renews through the real client against `401 token_revoked` and
+expects one `revoked`, and `token_coordinator_test.dart` refuses a renewal after a logout and
+expects `logout` alone; at `94d0be5` they record `[revoked, revoked]` and `[logout, expired]`.
+Still open, and `handleRevocation`'s rather than the renewal's: it ends the session at every
+call, so two refusals end it twice. A throwaway test through the real client recorded
+`[revoked, revoked]` for a socket close 4003 during a renewal then refused as `token_revoked`
+(three before this fix), and `[logout, revoked]` for a request that was out when the user logged
+out and was refused as `token_revoked` after.
 
 ## ADR-084 in full — a device the log does not cover yet is pending, not a fork (2026-10-07)
 
