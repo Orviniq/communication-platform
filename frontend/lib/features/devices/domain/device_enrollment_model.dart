@@ -148,12 +148,16 @@ final class DeviceRegistrationResponse {
     required this.userId,
     required this.accessToken,
     required this.accessExpiresAt,
+    required this.accessLifetime,
   });
 
   final String deviceId;
   final String userId;
   final String accessToken;
   final DateTime accessExpiresAt;
+
+  /// `expires_in`: how long [accessToken] lives, counted from its issue.
+  final Duration accessLifetime;
 }
 
 final class PublishedIdentity {

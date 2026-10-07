@@ -408,6 +408,9 @@ void main() {
         domain.accessToken.expiresAt,
         receivedAt.add(const Duration(days: 30)),
       );
+      // Kept beside the expiry, because the renewal is timed from half of it
+      // (ADR-085).
+      expect(domain.accessToken.lifetime, const Duration(days: 30));
       expect(
         () => SessionTokenResponseDto.fromJson({'token': token}),
         throwsA(isA<MalformedApiBody>()),

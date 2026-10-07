@@ -20,6 +20,12 @@ import 'package:drift/drift.dart';
 /// A row written by a build that stored a pair has no readable shape here: the
 /// guard in [_readDurableRow] finds no `token`, deletes the row, and the user
 /// signs in once more.
+///
+/// Beside the token the row keeps its lifetime, the `expires_in` of the answer
+/// that issued it, which is what the coordinator times a renewal from
+/// (ADR-085). The key is optional: a row written before it existed restores
+/// with no lifetime, and the coordinator assumes the deployment default for
+/// that one token.
 final class SecureSessionTokenAdapter implements SessionTokenStore {
   SecureSessionTokenAdapter(this.runtime);
 
@@ -57,6 +63,7 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
       final metadata = _decodeObject(row.tokenMetadataCiphertext);
       final token = metadata['token'];
       final version = metadata['version'];
+      final lifetime = metadata['lifetime'];
       final expiresAt = row.expiresAt;
       final userId = utf8.decode(row.userIdCiphertext);
       final deviceBytes = row.deviceIdCiphertext;
@@ -65,6 +72,7 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
       if (version != _formatVersion ||
           token is! String ||
           token.isEmpty ||
+          (lifetime != null && (lifetime is! int || lifetime <= 0)) ||
           expiresAt == null ||
           !_uuid.hasMatch(userId) ||
           deviceId == null ||
@@ -78,6 +86,7 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
           value: token,
           expiresAt: expiresAt.toUtc(),
           scope: SessionScope.full,
+          lifetime: lifetime is int ? Duration(seconds: lifetime) : null,
         ),
         userId: userId,
         deviceId: deviceId,
@@ -140,6 +149,7 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     SessionTokens merged,
   ) async {
     final token = merged.accessToken.value;
+    final lifetime = merged.accessToken.lifetime;
     final userId = merged.userId;
     final deviceId = merged.deviceId;
     final username = merged.username;
@@ -174,6 +184,7 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
                 jsonEncode(<String, Object?>{
                   'version': _formatVersion,
                   'token': token,
+                  if (lifetime != null) 'lifetime': lifetime.inSeconds,
                 }),
               ),
             ),

@@ -27,6 +27,7 @@ void main() {
         register.accessExpiresAt,
         receivedAt.add(const Duration(minutes: 10)),
       );
+      expect(register.accessLifetime, const Duration(minutes: 10));
 
       final full = LoginAccountResponseDto.fromJson({
         'token': _jwt(2000000001),
@@ -42,6 +43,9 @@ void main() {
       // The lifetime is stated relative to the moment the server issued the
       // token, not decoded out of the claims.
       expect(full.accessExpiresAt, receivedAt.add(const Duration(days: 30)));
+      // Kept beside the expiry, because the renewal is timed from half of it
+      // (ADR-085).
+      expect(full.accessLifetime, const Duration(days: 30));
     });
 
     test('a body naming access instead of token is refused', () {

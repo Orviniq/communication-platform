@@ -46,6 +46,7 @@ void main() {
       expect(decoded.userId, userId);
       expect(decoded.accessToken, _jwt(2000000000));
       expect(decoded.accessExpiresAt, receivedAt.add(const Duration(days: 30)));
+      expect(decoded.accessLifetime, const Duration(days: 30));
       // The one route a register token reaches answers a session token; a
       // register scope back would mean it minted no device.
       expect(
