@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
@@ -8,6 +9,8 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/devices/application/device_enrollment_coordinator.dart';
 import 'package:communication_platform/features/devices/application/ports/device_enrollment_ports.dart';
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
+import 'package:communication_platform/features/devices/infrastructure/device_enrollment_dtos.dart';
+import 'package:communication_platform/features/networking/infrastructure/api/api_dtos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -156,6 +159,42 @@ void main() {
           (result as Success<EnrollmentJournal>).value.phase,
           EnrollmentPhase.recoverySecret,
         );
+        expect(fixture.repository.registerCount, 1);
+        expect(fixture.repository.revokeCount, 0);
+      },
+    );
+
+    test(
+      'ambiguous orphan is found in the list as the server serves it',
+      () async {
+        final fixture = _EnrollmentFixture(firstDevice: true)
+          ..repository.registerFailure = const TransportFailure(
+            TransportFailureKind.timeout,
+          )
+          ..repository.registerCreatesOrphan = true
+          ..repository.servesWireJson = true
+          ..store.sessionDeviceId = deviceId;
+        await fixture.coordinator.loadOrStart(userId: userId);
+
+        final result = await fixture.coordinator.reconcileAmbiguousRegistration(
+          userId: userId,
+        );
+
+        // The orphan never cross-signed, so the server lists it at version 0
+        // beside no signature. The own parser refused that pair until
+        // ADR-084, and the reconcile paused on a malformed answer instead.
+        expect(fixture.repository.servedDevices.single, {
+          'device_id': deviceId,
+          'ik_pub': base64Encode(fixture.crypto.device.public.ikPub),
+          'registration_id': fixture.crypto.device.public.registrationId,
+          'cross_sig': null,
+          'bundle_version': 0,
+        });
+        expect(
+          (result as Success<EnrollmentJournal>).value.phase,
+          EnrollmentPhase.recoverySecret,
+        );
+        expect(fixture.store.lastJournal?.deviceId, deviceId);
         expect(fixture.repository.registerCount, 1);
         expect(fixture.repository.revokeCount, 0);
       },
@@ -581,6 +620,8 @@ final class _MemoryEnrollmentRepository implements DeviceEnrollmentRepository {
   int backupUploadCount = 0;
   bool registrationBodyHadCrossSignature = false;
   Uint8List? uploadedBackup;
+  bool servesWireJson = false;
+  List<Map<String, Object?>> servedDevices = const [];
 
   @override
   Future<Result<DeviceRegistrationResponse>> registerDevice({
@@ -705,6 +746,9 @@ final class _MemoryEnrollmentRepository implements DeviceEnrollmentRepository {
   Future<Result<PublicDeviceList>> fetchPublicDevices({
     required String userId,
   }) {
+    if (servesWireJson) {
+      return Future.value(_fetchWireJson());
+    }
     final values = <PublicDevice>[...devices];
     if (injectInvalidDevice) {
       values.add(
@@ -767,6 +811,42 @@ final class _MemoryEnrollmentRepository implements DeviceEnrollmentRepository {
     revokeCount += 1;
     devices.removeWhere((device) => device.deviceId == deviceId);
     return Future.value(const Result.success(null));
+  }
+
+  /// The list as `GET /api/v1/users/{user_id}/devices` serves it
+  /// (`peer_devices` in `backend/devices/services.py`), read by the decode the
+  /// application's repository hands its REST client.
+  Result<PublicDeviceList> _fetchWireJson() {
+    final body =
+        jsonDecode(
+              jsonEncode({
+                'devices': [
+                  for (final device in devices)
+                    {
+                      'device_id': device.deviceId,
+                      'ik_pub': base64Encode(device.ikPub),
+                      'registration_id': device.registrationId,
+                      'cross_sig': device.crossSignature == null
+                          ? null
+                          : base64Encode(device.crossSignature!),
+                      // `Device.bundle_version` is 0 until the device signs.
+                      'bundle_version': device.bundleVersion ?? 0,
+                    },
+                ],
+                'etag': 'fixture',
+                'log_head_seq': logs.isEmpty ? null : logs.last.sequence,
+              }),
+            )
+            as Map<String, Object?>;
+    servedDevices = (body['devices']! as List<Object?>)
+        .cast<Map<String, Object?>>();
+    try {
+      return Result.success(PublicDevicesResponseDto.fromJson(body).toDomain());
+    } on MalformedApiBody {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
   }
 
   PublicDevice _unsignedDevice(DeviceRegistrationPublic public) => PublicDevice(

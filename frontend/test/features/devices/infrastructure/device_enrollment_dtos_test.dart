@@ -85,42 +85,55 @@ void main() {
       }
     });
 
-    test(
-      'public device vectors reject partial completion and invalid sizes',
-      () {
-        final unsigned = PublicDevicesResponseDto.fromJson({
-          'devices': [
-            {
-              'device_id': deviceId,
-              'ik_pub': base64Encode(Uint8List(64)),
-              'registration_id': 7,
-              'cross_sig': null,
-              'bundle_version': null,
-            },
-          ],
-          'etag': 'fixture',
-          'log_head_seq': null,
-        }).toDomain();
-        expect(unsigned.devices.single.isUnsigned, isTrue);
+    test('an own device that has not cross-signed itself is read as unsigned '
+        'from the pair the server lists it with', () {
+      final list = PublicDevicesResponseDto.fromJson({
+        'devices': [
+          {..._signedDeviceJson, 'bundle_version': 1},
+          _unsignedDeviceJson,
+        ],
+        'etag': 'fixture',
+        'log_head_seq': 0,
+      }).toDomain();
 
+      // 1 is the first version a signature can cover.
+      expect(list.devices.first.isUnsigned, isFalse);
+      expect(list.devices.first.bundleVersion, 1);
+      // The 0 beside no signature is no version at all to the domain.
+      expect(list.devices.last.isUnsigned, isTrue);
+      expect(list.devices.last.crossSignature, isNull);
+      expect(list.devices.last.bundleVersion, isNull);
+    });
+
+    test('an own device list refuses every other pairing of signature and '
+        'version', () {
+      for (final device in <Map<String, Object?>>[
+        // A signature covers the version beside it, which starts at 1.
+        {..._signedDeviceJson, 'bundle_version': 0},
+        {..._signedDeviceJson, 'bundle_version': -1},
+        {..._signedDeviceJson, 'bundle_version': null},
+        // No signature at a version past 0, which is how a device that
+        // withdrew its signature is listed, is not read as unsigned.
+        {..._unsignedDeviceJson, 'bundle_version': 1},
+        {..._unsignedDeviceJson, 'bundle_version': 3},
+        // The version is always there, a number and never a negative one.
+        {..._unsignedDeviceJson, 'bundle_version': -1},
+        {..._unsignedDeviceJson, 'bundle_version': null},
+        {..._unsignedDeviceJson, 'bundle_version': '0'},
+        {..._unsignedDeviceJson, 'bundle_version': 0.5},
+        {..._unsignedDeviceJson}..remove('bundle_version'),
+      ]) {
         expect(
           () => PublicDevicesResponseDto.fromJson({
-            'devices': [
-              {
-                'device_id': deviceId,
-                'ik_pub': base64Encode(Uint8List(64)),
-                'registration_id': 7,
-                'cross_sig': base64Encode(Uint8List(64)),
-                'bundle_version': null,
-              },
-            ],
+            'devices': [device],
             'etag': 'fixture',
-            'log_head_seq': null,
+            'log_head_seq': 0,
           }),
           throwsA(isA<MalformedApiBody>()),
+          reason: '$device',
         );
-      },
-    );
+      }
+    });
 
     test(
       'device-log response binds outer sequence and exact record buckets',
@@ -152,6 +165,26 @@ void main() {
 
 const userId = '6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10';
 const deviceId = '9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611';
+
+final _signedDeviceJson = <String, Object?>{
+  'device_id': '55555555-5555-4555-8555-555555555555',
+  'ik_pub': base64Encode(Uint8List(64)),
+  'registration_id': 7,
+  'cross_sig': base64Encode(Uint8List(64)),
+  'bundle_version': 2,
+};
+
+/// A device between its registration and its cross-signature, as
+/// `GET /api/v1/users/{user_id}/devices` serves it for this account: the
+/// server stores 0 until the follow-up `PUT` names a version, and lists the
+/// column verbatim.
+final _unsignedDeviceJson = <String, Object?>{
+  'device_id': deviceId,
+  'ik_pub': base64Encode(Uint8List(64)),
+  'registration_id': 8,
+  'cross_sig': null,
+  'bundle_version': 0,
+};
 
 DeviceRegistrationPublic _public() => DeviceRegistrationPublic(
   userId: Uint8List(16),

@@ -5,10 +5,10 @@ import 'package:communication_platform/core/application/ports/enrollment_crypto_
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
-import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/devices/application/own_device_log_coordinator.dart';
+import 'package:communication_platform/features/devices/application/own_live_set_judge.dart';
 import 'package:communication_platform/features/devices/application/ports/device_enrollment_ports.dart';
 import 'package:communication_platform/features/devices/application/ports/linked_device_ports.dart';
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
@@ -349,31 +349,31 @@ final class LinkedDeviceManager {
         SecurityFailure(SecurityFailureKind.policyBlocked),
       );
     }
-    final verifiedLiveSet = await identityCrypto.inspectPeerDeviceLog(
+    final verdict = await OwnLiveSetJudge(identityCrypto).judge(
       userId: _uuidBytes(userId)!,
       selfSigningPublic: tuple.$3.selfSigningPub,
-      liveDevices: public.devices
-          .map(
-            (device) => PeerPublicDevice(
-              deviceId: device.deviceId,
-              identityPublic: device.ikPub,
-              registrationId: device.registrationId,
-              bundleVersion: device.bundleVersion,
-              crossSignature: device.crossSignature,
-            ),
-          )
-          .toList(growable: false),
-      requireCurrentLiveSet: true,
-      record: chainHead.record,
+      listed: public.devices,
+      headRecord: chainHead.record,
     );
-    if (verifiedLiveSet case FailureResult(failure: final failure)) {
-      await local.setGlobalSecurityState(
-        GlobalSecurityState.deviceLogFork,
-        evidence: DeviceLogEvidenceKind.liveSetMismatch,
-      );
-      return Result.failure(failure);
+    switch (verdict) {
+      case OwnLiveSetVerdict.authenticated:
+        return const Result.success(null);
+      case OwnLiveSetVerdict.pending:
+        // Another device of this account has not reached the log yet, or a
+        // signed removal waits for its revocation. Nothing is stored and the
+        // posture is left as it is: the refresh after that append decides.
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
+      case OwnLiveSetVerdict.mismatch:
+        await local.setGlobalSecurityState(
+          GlobalSecurityState.deviceLogFork,
+          evidence: DeviceLogEvidenceKind.liveSetMismatch,
+        );
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
     }
-    return const Result.success(null);
   }
 
   Future<Result<bool>> _cleanupIfCurrentDeviceWasRemotelyRevoked() async {

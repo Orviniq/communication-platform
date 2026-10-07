@@ -248,9 +248,8 @@ final class PublicDeviceDto {
         registrationId < 0 ||
         (cross != null &&
             (cross is! String || !_isCanonicalBase64(cross, 64))) ||
-        (bundleVersion != null &&
-            (bundleVersion is! int || bundleVersion <= 0)) ||
-        (cross == null) != (bundleVersion == null)) {
+        bundleVersion is! int ||
+        (cross == null ? bundleVersion != 0 : bundleVersion <= 0)) {
       throw const MalformedApiBody();
     }
     return PublicDeviceDto(
@@ -258,7 +257,11 @@ final class PublicDeviceDto {
       ikPub: ikPub,
       registrationId: registrationId,
       crossSignature: cross == null ? null : base64Decode(cross as String),
-      bundleVersion: bundleVersion as int?,
+      // The server lists a device that has not cross-signed itself at
+      // version 0, and the domain holds it as no version at all. A signature
+      // covers a version of 1 or more, and every other pair is malformed
+      // (ADR-081, ADR-084).
+      bundleVersion: cross == null ? null : bundleVersion,
     );
   }
 

@@ -144,13 +144,36 @@ Unknown/foreign/revoked IDs are treated identically in UI to avoid exposing serv
 existence distinctions.
 
 A device that has not cross-signed itself is listed as `cross_sig: null` beside
-`bundle_version: 0`, the version the server stores until the follow-up `PUT` names one. On the
-peer routes that pair, and only that pair, is an unsigned device: it is read with no version,
-and the list holding it is refused as `invalidDevice` rather than the answer as malformed. A
-signature below version 1, no signature past version 0, and a negative, null or missing version
-are malformed answers. This account's own list, read for enrollment, Linked Devices and the own
-device log, still refuses the server's pair until its live-set checks treat a device that is
-not in the log yet as pending ([ADR-081](decisions.md)).
+`bundle_version: 0`, the version the server stores until the follow-up `PUT` names one. That
+pair, and only that pair, is an unsigned device, on the peer routes and on this account's own
+list alike: it is read with no version. A signature below version 1, no signature past version
+0, and a version that is negative, null, missing or not an integer are malformed answers. On the
+peer routes, the list holding an unsigned device is refused as `invalidDevice` rather than the
+answer as malformed ([ADR-081](decisions.md)). This account's own list is read for enrollment,
+including the reconcile of an ambiguous registration, which looks for exactly such a device, and
+for Linked Devices and the own device log ([ADR-084](decisions.md)).
+
+### This account's live set and the log
+
+Linked Devices and every own device-set change require the live set the server lists for this
+account to be the set its head log record covers. A record carries only the hash of that set,
+so the client asks the core whether a candidate built from the list is the set the signed head
+covers. The list is:
+
+- **authenticated** when the head covers it exactly;
+- **pending** when the head covers it with changes to at most two devices undone: a device
+  dropped, because no record covers it yet (it registered or cross-signed after the head, or a
+  signed removal names it and its `DELETE` has not landed), or a signed device put back
+  unsigned, because an earlier append covered it before it cross-signed. A pending list is
+  refused with `policyBlocked`, stores nothing and leaves the global posture as it is: the
+  refresh keeps the rows it has, and a removal does not start;
+- **a fork** otherwise, which latches `deviceLogFork` with `liveSetMismatch`. That covers a
+  logged device gone with no record, a changed identity key or registration id, a changed
+  signature or version on a device the head covers signed, and a third device in flight.
+
+A list whose head number differs from the chain the client has just verified is a conflict to
+read again, not a fork. A prekey rotation, which uploads a new signature and version before its
+append, still latches if another device checks inside that gap ([ADR-084](decisions.md)).
 
 ### Verifying a fan-out in one call
 

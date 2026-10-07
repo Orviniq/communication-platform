@@ -4,9 +4,9 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
-import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/devices/application/own_live_set_judge.dart';
 import 'package:communication_platform/features/devices/application/ports/device_enrollment_ports.dart';
 import 'package:communication_platform/features/devices/application/ports/linked_device_ports.dart';
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
@@ -441,7 +441,7 @@ final class OwnDeviceLogCoordinator {
     required _VerifiedLog chain,
     required PublicDeviceList current,
   }) async {
-    if (chain.records.isEmpty || current.logHeadSequence != chain.sequence) {
+    if (chain.records.isEmpty) {
       await local.setGlobalSecurityState(
         GlobalSecurityState.deviceLogFork,
         evidence: DeviceLogEvidenceKind.liveSetMismatch,
@@ -450,37 +450,39 @@ final class OwnDeviceLogCoordinator {
         SecurityFailure(SecurityFailureKind.policyBlocked),
       );
     }
-    try {
-      final inspected = await identityCrypto.inspectPeerDeviceLog(
-        userId: _uuidBytes(userId)!,
-        selfSigningPublic: identity.selfSigningPub,
-        liveDevices: current.devices
-            .map(
-              (device) => PeerPublicDevice(
-                deviceId: device.deviceId,
-                identityPublic: device.ikPub,
-                registrationId: device.registrationId,
-                bundleVersion: device.bundleVersion,
-                crossSignature: device.crossSignature,
-              ),
-            )
-            .toList(growable: false),
-        requireCurrentLiveSet: true,
-        record: chain.records.last.record,
+    if (current.logHeadSequence != chain.sequence) {
+      // The list was read after the chain, so another device's append can
+      // land between the two. A head number is the server's word, not a
+      // signed record; the chain checks above catch a fork (ADR-084).
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.conflict),
       );
-      if (inspected case Success()) {
-        return const Result.success(null);
-      }
-    } on Object {
-      // Malformed device fields are unauthenticated server input.
     }
-    await local.setGlobalSecurityState(
-      GlobalSecurityState.deviceLogFork,
-      evidence: DeviceLogEvidenceKind.liveSetMismatch,
+    final verdict = await OwnLiveSetJudge(identityCrypto).judge(
+      userId: _uuidBytes(userId)!,
+      selfSigningPublic: identity.selfSigningPub,
+      listed: current.devices,
+      headRecord: chain.records.last.record,
     );
-    return const Result.failure(
-      SecurityFailure(SecurityFailureKind.policyBlocked),
-    );
+    switch (verdict) {
+      case OwnLiveSetVerdict.authenticated:
+        return const Result.success(null);
+      case OwnLiveSetVerdict.pending:
+        // A device change has not reached the log yet. No record is built
+        // over a set the head does not cover, and the posture is left as it
+        // is: the mutation is refused and can be asked for again.
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
+      case OwnLiveSetVerdict.mismatch:
+        await local.setGlobalSecurityState(
+          GlobalSecurityState.deviceLogFork,
+          evidence: DeviceLogEvidenceKind.liveSetMismatch,
+        );
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
+    }
   }
 
   Future<bool> _containsExact(int sequence, Uint8List exact) async {
