@@ -108,6 +108,44 @@ void main() {
       expect(store.replacements, 0);
       expect(termination.reasons, isEmpty);
     });
+
+    test('a renewal refused as token_revoked ends the session once', () async {
+      // The renewal's own request is an ordinary authenticated one, so the
+      // reviewed client reads `token_revoked` on it and hands the revocation
+      // to the coordinator, which ends the session there. The failure then
+      // reaches the renewal, which used to end it again: two wipes and two
+      // `revoked` for one refusal.
+      final adapter = RecordingAdapter([
+        jsonResponse(401, {'code': 'token_revoked', 'detail': 'x'}),
+      ]);
+      final store = MemoryTokenStore(
+        session('first-token', DateTime.utc(2026, 9, 8, 12, 1)),
+      );
+      final termination = RecordingTerminationHandler();
+      final client = testClient(adapter);
+      final coordinator = TokenCoordinator(
+        store: store,
+        renewExchange: DioRenewTokenExchange(client),
+        terminationHandler: termination,
+        timeSource: FixedTimeSource(DateTime.utc(2026, 9, 8, 12)),
+      );
+      client.bindTokenCoordinator(coordinator);
+
+      // A minute from expiry, so the caller waits for the renewal.
+      final result = await coordinator.accessToken();
+
+      expect(
+        (result as FailureResult<AccessToken>).failure,
+        isA<BackendFailure>().having(
+          (failure) => failure.code,
+          'code',
+          BackendFailureCode.tokenRevoked,
+        ),
+      );
+      expect(adapter.requests, hasLength(1));
+      expect(store.current, isNull);
+      expect(termination.reasons, [SessionTerminationReason.revoked]);
+    });
   });
 }
 

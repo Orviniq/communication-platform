@@ -210,6 +210,34 @@ void main() {
     },
   );
 
+  test('a renewal refused after a logout ends nothing more', () async {
+    // The logout ended the session. A renewal that was out when it did, and
+    // is refused after, does not end it again: a user who signed out is not
+    // also told that the session expired.
+    final store = MemoryTokenStore(
+      session('old-token', DateTime.utc(2026, 7, 27, 12, 1)),
+    );
+    final exchange = ControlledRenewExchange();
+    final termination = RecordingTerminationHandler();
+    final coordinator = TokenCoordinator(
+      store: store,
+      renewExchange: exchange,
+      terminationHandler: termination,
+      timeSource: FixedTimeSource(DateTime.utc(2026, 7, 27, 12)),
+    );
+
+    final renewal = coordinator.accessToken();
+    await Future<void>.delayed(Duration.zero);
+    await coordinator.logout();
+    exchange.completer.complete(
+      const Result.failure(BackendFailure(BackendFailureCode.invalidToken)),
+    );
+
+    expect(await renewal, isA<FailureResult<AccessToken>>());
+    expect(store.current, isNull);
+    expect(termination.reasons, [SessionTerminationReason.logout]);
+  });
+
   test('register-scope token cannot renew and expires closed', () async {
     // `POST /auth/renew` answers `403 scope_forbidden` to a register token,
     // which names no device and so has no session to renew.

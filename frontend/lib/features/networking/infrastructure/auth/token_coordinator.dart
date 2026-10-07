@@ -257,6 +257,14 @@ final class TokenCoordinator implements AccessTokenCoordinator {
         if (!_endsSession(failure)) {
           return Result.failure(failure);
         }
+        if (generation != _sessionGeneration) {
+          // Whatever moved the generation ends the session, so this refusal
+          // ends nothing more. The renewal's own request is an ordinary
+          // authenticated one: on `token_revoked` the reviewed client has
+          // called [handleRevocation] before this failure arrives. A logout
+          // that lands while the renewal is out moves it as well.
+          return Result.failure(failure);
+        }
         final reason =
             failure is BackendFailure &&
                 failure.code == BackendFailureCode.tokenRevoked
