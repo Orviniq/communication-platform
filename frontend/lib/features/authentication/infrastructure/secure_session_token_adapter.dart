@@ -42,18 +42,6 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     return restored;
   }
 
-  /// The durable row, never this adapter's memory.
-  ///
-  /// [read] answers from `_memoryTokens` so an ordinary request does not pay a
-  /// SQLCipher round trip for a value this isolate already has. That cache is
-  /// per-isolate and the row behind it is shared with every other delivery
-  /// owner in this process, so a caller that must see what another owner wrote
-  /// asks this instead (ADR-050). It deliberately does not disturb the cache:
-  /// a token this owner holds keeps working whatever the row now says, because
-  /// nothing retires it (ADR-0023).
-  @override
-  Future<SessionTokens?> readDurable() => _readDurableRow();
-
   Future<SessionTokens?> _readDurableRow() async {
     final database = await _database();
     if (database == null) {

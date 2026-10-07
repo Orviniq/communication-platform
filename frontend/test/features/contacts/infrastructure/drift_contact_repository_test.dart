@@ -119,6 +119,80 @@ void main() {
 
     expect((forked as Success<bool>).value, isFalse);
   });
+
+  group('the stored tags', () {
+    ContactTrustRecord verified({
+      String? etag,
+      String? peerStateEtag,
+      String? identityEtag,
+    }) {
+      final identity = PeerIdentityPublic(
+        masterPublic: _bytes(32, 1),
+        selfSigningPublic: _bytes(32, 2),
+        userSigningPublic: _bytes(32, 3),
+        masterSignature: _bytes(64, 4),
+        version: 1,
+      );
+      return ContactTrustRecord(
+        userId: 'peer',
+        state: ContactTrustState.verified,
+        identity: identity,
+        confirmedMasterPublic: identity.masterPublic,
+        attestation: UserSigningAttestation(_bytes(64, 5)),
+        etag: etag,
+        peerStateEtag: peerStateEtag,
+        identityEtag: identityEtag,
+        logHeadSequence: 0,
+        logHeadHash: _bytes(32, 6),
+      );
+    }
+
+    test('are stored apart and read back apart', () async {
+      await repository.writeTrust(
+        verified(
+          etag: '"devices"',
+          peerStateEtag: '"peers"',
+          identityEtag: '"identity"',
+        ),
+      );
+
+      final read = await _readTrust(repository);
+
+      expect(read.etag, '"devices"');
+      expect(read.peerStateEtag, '"peers"');
+      expect(read.identityEtag, '"identity"');
+    });
+
+    test('a record holding no identity tag still reads', () async {
+      // Every record written before the identity read was conditional.
+      await repository.writeTrust(verified(etag: '"devices"'));
+
+      final read = await _readTrust(repository);
+
+      expect(read.state, ContactTrustState.verified);
+      expect(read.identityEtag, isNull);
+    });
+
+    test('a verified record may hold only the batched read\'s tag', () async {
+      // A batched read that moved the stored state drops the device list's
+      // tag, and the record it writes is no less verified for that.
+      await repository.writeTrust(verified(peerStateEtag: '"peers"'));
+
+      final read = await _readTrust(repository);
+
+      expect(read.state, ContactTrustState.verified);
+      expect(read.etag, isNull);
+      expect(read.peerStateEtag, '"peers"');
+    });
+
+    test('a verified record with no tag at all is still refused', () async {
+      await repository.writeTrust(verified());
+
+      final read = await repository.readTrust('peer');
+
+      expect(read, isA<FailureResult<ContactTrustRecord?>>());
+    });
+  });
 }
 
 Future<void> _writePosture(LocalDatabase database, GlobalSecurityState state) =>
@@ -133,3 +207,8 @@ Future<void> _writePosture(LocalDatabase database, GlobalSecurityState state) =>
 
 Uint8List _bytes(int length, int value) =>
     Uint8List.fromList(List<int>.filled(length, value));
+
+Future<ContactTrustRecord> _readTrust(
+  DriftContactRepository repository,
+) async =>
+    (await repository.readTrust('peer') as Success<ContactTrustRecord?>).value!;

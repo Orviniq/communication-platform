@@ -94,6 +94,15 @@ void main() {
         expect(harness.local.trust?.state, ContactTrustState.masterKeyChanged);
         expect(harness.remote.deviceCalls, 0);
         expect(harness.remote.claimCalls, 0);
+        // The record holds the new identity and the tag issued for it, and,
+        // blocked, sends that tag nowhere.
+        expect(harness.local.trust?.identity?.masterPublic.first, 99);
+        expect(harness.local.trust?.identityEtag, harness.remote.identityTag);
+        await harness.service.refreshPeer(
+          userId: _peerUserId,
+          requirePrekeys: true,
+        );
+        expect(harness.remote.identityEtags, [null, null]);
       },
     );
 
@@ -352,7 +361,7 @@ void main() {
       expect(harness.local.trust?.state, ContactTrustState.invalidDevice);
     });
 
-    test('a blocked record is revalidated without its stored tag', () async {
+    test('a blocked record is revalidated without its stored tags', () async {
       final harness = _Harness();
       harness.local
         ..devices = [_unsignedDevice()]
@@ -361,6 +370,7 @@ void main() {
           state: ContactTrustState.invalidDevice,
           identity: _identity(),
           etag: '"stale"',
+          identityEtag: harness.remote.identityTag,
         );
 
       final result = await harness.service.resolveLiveDevices(
@@ -369,6 +379,7 @@ void main() {
 
       expect(result, isA<Success<AuthenticatedPeer>>());
       expect(harness.remote.etags, [null]);
+      expect(harness.remote.identityEtags, [null]);
     });
 
     test('a refused device list never becomes a cache validator', () async {
@@ -400,9 +411,412 @@ void main() {
       expect(harness.remote.claimCalls, 0);
     });
   });
+
+  group('the conditional identity read', () {
+    test(
+      'sends the tag stored beside the identity, and a 304 keeps both',
+      () async {
+        final harness = _Harness();
+        await harness.service.resolveLiveDevices(userId: _peerUserId);
+        expect(harness.local.trust?.identityEtag, harness.remote.identityTag);
+
+        final second = await harness.service.resolveLiveDevices(
+          userId: _peerUserId,
+        );
+
+        expect(second, isA<Success<AuthenticatedPeer>>());
+        expect(harness.remote.identityEtags, [
+          null,
+          harness.remote.identityTag,
+        ]);
+        expect(harness.remote.identityNotModifiedAnswers, 1);
+        expect(harness.local.trust?.identity?.version, 1);
+        expect(harness.local.trust?.identityEtag, harness.remote.identityTag);
+      },
+    );
+
+    test(
+      'a 304 stands for the stored identity, which is checked again',
+      () async {
+        final harness = _Harness();
+        await harness.service.resolveLiveDevices(userId: _peerUserId);
+        harness.crypto.rejectIdentity = true;
+
+        final refused = await harness.service.resolveLiveDevices(
+          userId: _peerUserId,
+        );
+
+        expect(harness.remote.identityNotModifiedAnswers, 1);
+        expect(refused, isA<FailureResult<AuthenticatedPeer>>());
+        expect(
+          harness.local.trust?.state,
+          ContactTrustState.identityUnavailable,
+        );
+        // Refused, so the tag goes, and the next read is a full one.
+        expect(harness.local.trust?.identityEtag, isNull);
+      },
+    );
+
+    test('an identity that moved comes back whole with its new tag', () async {
+      final harness = _Harness();
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
+      final first = harness.remote.identityTag;
+      harness.remote.identity = _identity(version: 2);
+
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
+
+      expect(harness.remote.identityEtags, [null, first]);
+      expect(harness.remote.identityNotModifiedAnswers, 0);
+      expect(harness.local.trust?.identity?.version, 2);
+      expect(harness.local.trust?.identityEtag, harness.remote.identityTag);
+      expect(harness.local.trust?.identityEtag, isNot(first));
+    });
+
+    test('an identity never published is a 404 whatever tag is sent', () async {
+      final harness = _Harness();
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
+      final held = harness.local.trust?.identityEtag;
+      harness.remote.unpublished.add(_peerUserId);
+
+      final result = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      // The tag was sent, and the route answered for the missing row rather
+      // than for the tag.
+      expect(held, isNotNull);
+      expect(harness.remote.identityEtags.last, held);
+      expect(
+        _failureOf(result),
+        const BackendFailure(BackendFailureCode.notFound),
+      );
+      expect(harness.local.trust?.state, ContactTrustState.identityUnavailable);
+      expect(harness.local.trust?.identityEtag, isNull);
+      expect(harness.local.trust?.etag, isNull);
+      expect(harness.local.trust?.peerStateEtag, isNull);
+
+      // So once the identity is back, it is asked for whole.
+      harness.remote.unpublished.clear();
+      final recovered = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+      expect(harness.remote.identityEtags.last, isNull);
+      expect(recovered, isA<Success<AuthenticatedPeer>>());
+    });
+
+    test('a 304 to a read that sent no tag is refused', () async {
+      // An identity is stored, but no tag beside it, as in every record
+      // written before the identity read was conditional.
+      final harness = _Harness()..remote.forceIdentityNotModified = true;
+      harness.local
+        ..devices = [_device()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.unverified,
+          identity: _identity(),
+          etag: '"devices-v1"',
+          logHeadSequence: 0,
+          logHeadHash: _bytes(32, 11),
+        );
+
+      final result = await harness.service.resolveLiveDevices(
+        userId: _peerUserId,
+      );
+
+      expect(harness.remote.identityEtags, [null]);
+      expect(
+        _failureOf(result),
+        const SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+      expect(harness.local.trust?.state, ContactTrustState.identityUnavailable);
+    });
+  });
+
+  group('resolveLiveDevicesForUsers', () {
+    test('one read answers every user, and no per-user read is made', () async {
+      final harness = _Harness();
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId, _otherUserId],
+      );
+
+      final peers = _resolved(result);
+      expect(peers.keys, [_peerUserId, _otherUserId]);
+      expect(peers.values, everyElement(isA<Success<AuthenticatedPeer>>()));
+      expect(
+        harness.remote.peerStateQueries.single.map(
+          (query) => (query.userId, query.etag),
+        ),
+        [(_peerUserId, null), (_otherUserId, null)],
+      );
+      expect(harness.remote.identityCalls, 0);
+      expect(harness.remote.deviceCalls, 0);
+      // Neither log had been read before, so each is read from its start.
+      expect(harness.remote.logCalls, 2);
+      for (final userId in const [_peerUserId, _otherUserId]) {
+        expect(
+          harness.local.trusts[userId]?.state,
+          ContactTrustState.unverified,
+        );
+        expect(harness.local.trusts[userId]?.peerStateEtag, '"peers-v1"');
+        expect(harness.local.trusts[userId]?.etag, isNull);
+      }
+    });
+
+    test('an unchanged peer is verified from what is stored', () async {
+      final harness = _Harness();
+      await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+
+      expect(harness.remote.peerStateQueries.last.single.etag, '"peers-v1"');
+      expect(
+        harness.remote.answered.last[_peerUserId],
+        isA<PeerStateUnchanged>(),
+      );
+      final peer = _resolved(result)[_peerUserId];
+      expect(peer, isA<Success<AuthenticatedPeer>>());
+      // No body came back: the devices are the stored ones, the head is the
+      // stored head, and the log is not read a second time.
+      expect(
+        (peer! as Success<AuthenticatedPeer>).value.devices.single.deviceId,
+        _peerDeviceId,
+      );
+      expect(harness.remote.logCalls, 1);
+      expect(harness.local.trust?.logHeadSequence, 0);
+      expect(harness.local.trust?.peerStateEtag, '"peers-v1"');
+    });
+
+    test('an unchanged answer is checked like any other', () async {
+      final harness = _Harness();
+      await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+      harness.crypto.rejectIdentity = true;
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+
+      expect(
+        harness.remote.answered.last[_peerUserId],
+        isA<PeerStateUnchanged>(),
+      );
+      expect(_resolved(result)[_peerUserId], isA<FailureResult<Object?>>());
+      expect(harness.local.trust?.state, ContactTrustState.identityUnavailable);
+      // Refused, so its tag goes too, and the next read is a full one.
+      expect(harness.local.trust?.peerStateEtag, isNull);
+    });
+
+    test(
+      'a user left out of the answer is blocked as the identity 404 blocks it',
+      () async {
+        final harness = _Harness()..remote.absent.add(_otherUserId);
+
+        final result = await harness.service.resolveLiveDevicesForUsers(
+          userIds: const [_otherUserId, _peerUserId],
+        );
+
+        final peers = _resolved(result);
+        expect(harness.remote.peerStateQueries.single, hasLength(2));
+        expect(
+          harness.remote.answered.single[_otherUserId],
+          isA<PeerStateAbsent>(),
+        );
+        expect(
+          _failureOf(peers[_otherUserId]),
+          const BackendFailure(BackendFailureCode.notFound),
+        );
+        expect(
+          harness.local.trusts[_otherUserId]?.state,
+          ContactTrustState.identityUnavailable,
+        );
+        // Matched by id, so the user after the missing one is still verified.
+        expect(peers[_peerUserId], isA<Success<AuthenticatedPeer>>());
+      },
+    );
+
+    test('a user with no published identity is blocked the same way', () async {
+      final harness = _Harness()..remote.unpublished.add(_peerUserId);
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+
+      expect(
+        _failureOf(_resolved(result)[_peerUserId]),
+        const BackendFailure(BackendFailureCode.notFound),
+      );
+      expect(harness.local.trust?.state, ContactTrustState.identityUnavailable);
+      expect(harness.remote.deviceCalls, 0);
+    });
+
+    test('each route is only ever sent its own tag', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_device()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.unverified,
+          identity: _identity(),
+          etag: '"devices-v0"',
+          logHeadSequence: 0,
+          logHeadHash: _bytes(32, 11),
+        );
+
+      // The device list's tag answers nothing the batched read is asked. The
+      // answer carries two tags, its own and the identity read's inside its
+      // identity, and each is stored on its own side.
+      await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+      expect(harness.local.trust?.etag, '"devices-v0"');
+      expect(harness.local.trust?.peerStateEtag, '"peers-v1"');
+      expect(harness.local.trust?.identityEtag, '"identity-1-1"');
+
+      // Nothing moved, so each tag outlives a read by the other route, and
+      // the identity is confirmed with a `304`.
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
+      expect(harness.local.trust?.etag, '"devices-v1"');
+      expect(harness.local.trust?.peerStateEtag, '"peers-v1"');
+      expect(harness.local.trust?.identityEtag, '"identity-1-1"');
+
+      // The identity moves. The batched read stores it with its new tag, and
+      // the device list's tag, which vouched for the state before it, is
+      // dropped.
+      harness.remote
+        ..identity = _identity(version: 2)
+        ..peerStateTag = '"peers-v2"';
+      await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+      expect(harness.local.trust?.identity?.version, 2);
+      expect(harness.local.trust?.etag, isNull);
+      expect(harness.local.trust?.peerStateEtag, '"peers-v2"');
+      expect(harness.local.trust?.identityEtag, '"identity-1-2"');
+
+      await harness.service.resolveLiveDevices(userId: _peerUserId);
+
+      expect(harness.remote.etags, ['"devices-v0"', null]);
+      expect(
+        harness.remote.peerStateQueries.map((queries) => queries.single.etag),
+        [null, '"peers-v1"'],
+      );
+      expect(harness.remote.identityEtags, [
+        '"identity-1-1"',
+        '"identity-1-2"',
+      ]);
+      expect(harness.remote.identityNotModifiedAnswers, 2);
+      expect(harness.local.trust?.etag, '"devices-v1"');
+      expect(harness.local.trust?.peerStateEtag, '"peers-v2"');
+      expect(harness.local.trust?.identityEtag, '"identity-1-2"');
+    });
+
+    test('a refused record is read again without its tag', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_unsignedDevice()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.invalidDevice,
+          identity: _identity(),
+          peerStateEtag: '"peers-v1"',
+        );
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId],
+      );
+
+      // Sent, the tag would have been answered `unchanged`, and the refused
+      // list in storage would have been refused again.
+      expect(harness.remote.peerStateQueries.single.single.etag, isNull);
+      expect(_resolved(result)[_peerUserId], isA<Success<AuthenticatedPeer>>());
+    });
+
+    test('a fork found in one user withholds every user after it', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_device()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.unverified,
+          identity: _identity(),
+          logHeadSequence: 1,
+          logHeadHash: _bytes(32, 13),
+        );
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId, _otherUserId],
+      );
+
+      final peers = _resolved(result);
+      expect(harness.local.trust?.state, ContactTrustState.deviceLogFork);
+      expect(peers[_peerUserId], isA<FailureResult<Object?>>());
+      expect(
+        _failureOf(peers[_otherUserId]),
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(harness.local.trusts[_otherUserId], isNull);
+    });
+
+    test('a substituted own identity is refused here too', () async {
+      final harness = _Harness()..remote.identity = _identity(master: 99);
+
+      final result = await harness.service.resolveLiveDevicesForUsers(
+        userIds: const [_peerUserId, _localUserId],
+      );
+
+      expect(
+        _failureOf(_resolved(result)[_localUserId]),
+        const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+    });
+
+    test(
+      'a recorded fork withholds everybody before anything is read',
+      () async {
+        final harness = _Harness()..local.anyFork = true;
+
+        final result = await harness.service.resolveLiveDevicesForUsers(
+          userIds: const [_peerUserId],
+        );
+
+        expect(
+          (result as FailureResult<Object?>).failure,
+          const SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
+        expect(harness.remote.peerStateQueries, isEmpty);
+      },
+    );
+
+    test('refuses an empty, repeated or malformed list', () async {
+      final harness = _Harness();
+
+      for (final userIds in [
+        const <String>[],
+        const [_peerUserId, _peerUserId],
+        [_peerUserId, _peerUserId.toUpperCase()],
+        const ['not-a-user'],
+      ]) {
+        final result = await harness.service.resolveLiveDevicesForUsers(
+          userIds: userIds,
+        );
+        expect(
+          (result as FailureResult<Object?>).failure,
+          const ValidationFailure(ValidationFailureKind.invalidInput),
+        );
+      }
+      expect(harness.remote.peerStateQueries, isEmpty);
+    });
+  });
 }
 
 const _peerUserId = '11111111-1111-4111-8111-111111111111';
+const _otherUserId = '66666666-6666-4666-8666-666666666666';
 const _peerDeviceId = '22222222-2222-4222-8222-222222222222';
 const _localUserId = '33333333-3333-4333-8333-333333333333';
 const _localDeviceId = '44444444-4444-4444-8444-444444444444';
@@ -410,13 +824,21 @@ const _localDeviceId = '44444444-4444-4444-8444-444444444444';
 Uint8List _bytes(int length, int value) =>
     Uint8List.fromList(List<int>.filled(length, value));
 
-PeerIdentityPublic _identity({int master = 1}) => PeerIdentityPublic(
-  masterPublic: _bytes(32, master),
-  selfSigningPublic: _bytes(32, 2),
-  userSigningPublic: _bytes(32, 3),
-  masterSignature: _bytes(64, 4),
-  version: 1,
-);
+PeerIdentityPublic _identity({int master = 1, int version = 1}) =>
+    PeerIdentityPublic(
+      masterPublic: _bytes(32, master),
+      selfSigningPublic: _bytes(32, 2),
+      userSigningPublic: _bytes(32, 3),
+      masterSignature: _bytes(64, 4),
+      version: version,
+    );
+
+Map<String, Result<AuthenticatedPeer>> _resolved(
+  Result<Map<String, Result<AuthenticatedPeer>>> result,
+) => (result as Success<Map<String, Result<AuthenticatedPeer>>>).value;
+
+Failure _failureOf(Result<AuthenticatedPeer>? result) =>
+    (result! as FailureResult<AuthenticatedPeer>).failure;
 
 PeerPublicDevice _unsignedDevice() => PeerPublicDevice(
   deviceId: _peerDeviceId,
@@ -468,8 +890,29 @@ final class _Harness {
 final class _Remote implements PeerIdentityRemotePort {
   PeerIdentityPublic identity = _identity();
   List<PeerPublicDevice> devices = [_device()];
+
+  /// The batched read's tag over the state above. A request carrying it is
+  /// answered `unchanged`.
+  var peerStateTag = '"peers-v1"';
+
+  /// Users the batched read leaves out, as it does an unknown, inactive or
+  /// deactivated account.
+  final absent = <String>{};
+
+  /// Users with no published identity: `identity: null` in the batched read,
+  /// and `404 not_found` from the identity read whatever tag it carries.
+  final unpublished = <String>{};
+  final peerStateQueries = <List<PeerStateQuery>>[];
+  final answered = <Map<String, PeerStateRead>>[];
   var notModified = false;
+
+  /// Answers `304` to every identity read, whatever it carried.
+  var forceIdentityNotModified = false;
   var identityCalls = 0;
+  var identityNotModifiedAnswers = 0;
+
+  /// The tag each identity read carried, in order.
+  final identityEtags = <String?>[];
   var deviceCalls = 0;
   var claimCalls = 0;
   final claimedDeviceIds = <List<String>>[];
@@ -481,12 +924,29 @@ final class _Remote implements PeerIdentityRemotePort {
   ];
   final etags = <String?>[];
 
+  /// The identity read's tag, which moves with the key bytes and the version
+  /// and with nothing else.
+  String get identityTag =>
+      '"identity-${identity.masterPublic.first}-${identity.version}"';
+
   @override
-  Future<Result<PeerIdentityPublic>> fetchIdentity({
+  Future<Result<PeerIdentityRefresh>> fetchIdentity({
     required String userId,
+    String? etag,
   }) async {
     identityCalls += 1;
-    return Result.success(identity);
+    identityEtags.add(etag);
+    // There is no tag for a row that does not exist.
+    if (unpublished.contains(userId)) {
+      return const Result.failure(BackendFailure(BackendFailureCode.notFound));
+    }
+    if (forceIdentityNotModified || etag == identityTag) {
+      identityNotModifiedAnswers += 1;
+      return const Result.success(PeerIdentityNotModified());
+    }
+    return Result.success(
+      PeerIdentityUpdated(identity: identity, etag: identityTag),
+    );
   }
 
   @override
@@ -530,37 +990,76 @@ final class _Remote implements PeerIdentityRemotePort {
       ),
     );
   }
+
+  @override
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  ) async {
+    peerStateQueries.add(List.unmodifiable(peers));
+    final reads = <String, PeerStateRead>{
+      for (final peer in peers)
+        peer.userId: absent.contains(peer.userId)
+            ? const PeerStateAbsent()
+            : peer.etag == peerStateTag
+            ? PeerStateUnchanged(etag: peerStateTag)
+            : PeerStateUpdated(
+                identity: unpublished.contains(peer.userId) ? null : identity,
+                identityEtag: unpublished.contains(peer.userId)
+                    ? null
+                    : identityTag,
+                devices: devices,
+                logHeadSequence: advertisedHead,
+                etag: peerStateTag,
+              ),
+    };
+    answered.add(reads);
+    return Result.success(reads);
+  }
 }
 
 final class _Local implements ContactLocalPort {
-  ContactTrustRecord? trust;
-  List<PeerPublicDevice> devices = [];
+  final trusts = <String, ContactTrustRecord>{};
+  final storedDevices = <String, List<PeerPublicDevice>>{};
   final records = <VerifiedDeviceLogRecord>[];
   var anyFork = false;
 
+  /// The peer's record and devices, which every single-user test is about.
+  ContactTrustRecord? get trust => trusts[_peerUserId];
+  set trust(ContactTrustRecord? value) =>
+      value == null ? trusts.remove(_peerUserId) : trusts[_peerUserId] = value;
+
+  List<PeerPublicDevice> get devices => storedDevices[_peerUserId] ?? const [];
+  set devices(List<PeerPublicDevice> value) =>
+      storedDevices[_peerUserId] = value;
+
   @override
-  Future<Result<bool>> hasAnyDeviceLogFork() async => Result.success(anyFork);
+  Future<Result<bool>> hasAnyDeviceLogFork() async => Result.success(
+    anyFork ||
+        trusts.values.any(
+          (trust) => trust.state == ContactTrustState.deviceLogFork,
+        ),
+  );
 
   @override
   Future<Result<ContactTrustRecord?>> readTrust(String userId) async =>
-      Result.success(trust);
+      Result.success(trusts[userId]);
 
   @override
   Future<Result<void>> writeTrust(ContactTrustRecord trust) async {
-    this.trust = trust;
+    trusts[trust.userId] = trust;
     return const Result.success(null);
   }
 
   @override
   Future<Result<List<PeerPublicDevice>>> readDevices(String userId) async =>
-      Result.success(devices);
+      Result.success(storedDevices[userId] ?? const []);
 
   @override
   Future<Result<void>> replaceDevices(
     String userId,
     List<PeerPublicDevice> devices,
   ) async {
-    this.devices = devices;
+    storedDevices[userId] = devices;
     return const Result.success(null);
   }
 

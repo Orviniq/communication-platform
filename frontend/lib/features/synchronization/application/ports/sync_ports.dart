@@ -223,9 +223,9 @@ abstract interface class BestEffortPollingPort implements Port {
   ///
   /// A session waits on this before it composes anything, because a catch-up
   /// that the platform started a moment earlier is a second delivery owner, and
-  /// two owners hold two token coordinators against one *rotating* refresh
-  /// token. It completes immediately when nothing is running, which is the
-  /// ordinary case.
+  /// two owners would hand one envelope to the ratchet twice (ADR-050). It
+  /// completes immediately when nothing is running, which is the ordinary
+  /// case.
   Future<void> awaitExclusiveOwnership();
 }
 

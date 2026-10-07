@@ -504,6 +504,20 @@ final class FakeLiveDevices implements PairwiseLiveDeviceResolverPort {
     }
     return Result.success(devices[userId] ?? const []);
   }
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async {
+    calls.addAll(userIds);
+    for (final userId in userIds) {
+      if (failures[userId] case final failure?) {
+        return Result.failure(failure);
+      }
+    }
+    return Result.success({
+      for (final userId in userIds) userId: devices[userId] ?? const [],
+    });
+  }
 }
 
 final class FixedTime implements TimeSource {

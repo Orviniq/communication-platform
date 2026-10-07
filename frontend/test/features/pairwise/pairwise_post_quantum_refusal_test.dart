@@ -165,6 +165,14 @@ final class _Peers
   }) async => Result.success(_peer(userId, const []));
 
   @override
+  Future<Result<Map<String, Result<AuthenticatedPeer>>>>
+  resolveLiveDevicesForUsers({required List<String> userIds}) async =>
+      Result.success({
+        for (final userId in userIds)
+          userId: Result.success(_peer(userId, const [])),
+      });
+
+  @override
   Future<Result<AuthenticatedPeer>> refreshPeerForDevices({
     required String userId,
     required List<String> deviceIds,

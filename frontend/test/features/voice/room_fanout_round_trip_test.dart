@@ -188,10 +188,19 @@ final class _Resolver implements PairwiseLiveDeviceResolverPort {
   @override
   Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
     String userId,
-  ) async => Result.success([
+  ) async => Result.success(_devicesOf(userId));
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async =>
+      Result.success({
+        for (final userId in userIds) userId: _devicesOf(userId),
+      });
+
+  List<VerifiedPairwiseLiveDevice> _devicesOf(String userId) => [
     for (final deviceId in network.devicesByUser[userId] ?? const <String>[])
       network.device(userId, deviceId),
-  ]);
+  ];
 }
 
 final class _Claims implements PairwiseSelectiveClaimPort {

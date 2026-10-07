@@ -59,8 +59,8 @@ is not silently edited out of history.
 | ADR-046 | Accepted, Layers 0 and 1 amended by ADR-047 and ADR-049 | Background message delivery is layered — a composed foreground socket, a best-effort WorkManager floor, and an opt-in `specialUse` foreground service holding the same connection — and a notification is a projection of committed local state, never of the transport; supersedes ADR-029 (2026-08-21) | ADR-029 chose best-effort polling and no persistent service. Inspection of the composed artifact found something else entirely: `SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and `NetworkingFoundation` exist, are tested, and are constructed **only in tests**, and `durableSyncEngineProvider` is read by nothing, so the shipped build neither drains its mailbox nor transmits its outbox — `SendConversationEvents` ends at `fanout.prepareAndQueue` and the rows stay there. ADR-045's disclosure "messages arrive only while this app is open" is therefore wrong in the user's favour and is corrected here. On the platform, primary sources read 2026-08-21 leave a narrow design space: a backgrounded process is cached, and "if all processes for a particular app are frozen, the system terminates any active TCP sockets maintained by the app", so an unattended socket is closed rather than slow; `WorkManager`'s floor is 15 minutes, Doze defers `JobScheduler` to maintenance windows that thin out over time, Android 16 enforces job quota even in the active standby bucket, and the *rare* and *restricted* buckets disable background network outright, so deferrable work can only ever be *eventual*; while-idle alarms buy six minutes of best-case cadence for a user-revocable `SCHEDULE_EXACT_ALARM` and still wake an app that has no network. The one documented state with unrestricted background network is "app process is running a foreground service", and Android's own Doze acceptable-use table rates the battery-optimization exemption **Acceptable** for an "instant messaging, chat, or calling app" that "can't use FCM because of technical dependency", which is this application exactly — the exemption granting that an app "can use the network and hold partial wake locks during Doze and App Standby" and being itself an exemption from the Android 12 background FGS-start restriction. The type is `specialUse` with a truthful subtype property, because `dataSync` is capped at 6 h/24 h and barred from `BOOT_COMPLETED` at `targetSdk` 35+, `remoteMessaging` means device-to-device continuity, and `systemExempted` is gated on roles this app lacks; the existing test forbidding `remoteMessaging` and `FOREGROUND_SERVICE_DATA_SYNC` in the manifest stands unchanged. Exactly one delivery owner runs at a time, held as a durable Drift lease rather than an in-memory flag, because concurrent isolates would race a *rotating* refresh token and can invalidate the session. Notifications fire only from the existing `PostInboxCommitWorkPort` after the inbox transaction commits, deduplicated by a durable `notified_at`, recovered by query rather than replay, and bounded by a grouped summary. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; near-real-time best-effort backgrounded when the user has granted the exemption and their vendor cooperates; eventual otherwise, and nothing at all in the *rare* and *restricted* buckets; and nothing whatsoever after force-stop, which no design can change. The costs are accepted and disclosed: a persistent shade entry that makes the app observable on the device, real battery use, two permissions, and per-vendor setup on the 77% of the Iranian fleet that is Samsung or Xiaomi (Statcounter, July 2026). Layer 2 ships off by default and may not be enabled in any distributed artifact before the physical-device matrix runs; UnifiedPush was rejected because the backend has no push endpoint and may not be changed, it needs a second app and a second service per user, and it moves message-timing metadata outside the reviewed boundary without removing the Android constraint; SMS wake was rejected outright for binding accounts to carrier-held phone numbers. No experiment was run: only Play-Store emulator images without root were available and no Samsung or Xiaomi hardware, so a local result would have proved nothing about the fleet that matters. Reaffirms ADR-013, opens no production gate, changes no cryptographic behaviour, and adds no dependency by itself. |
 | ADR-047 | Accepted | The delivery path is composed at the application root, on the one networking foundation, and a send is a durable write the supervisor observes rather than a call it receives (2026-08-21) | Implements ADR-046's Layer 0 and closes its follow-up step 1. **The two composition roots are resolved into one**: `AuthenticationAssembly` owns a single `NetworkingFoundation` — one `DioRestClient`, one `TokenCoordinator`, one provisioned `SecurityContext` — and the socket is built from it by `NetworkingFoundation.realtimeGateway`, so close 4001 refreshes and close 4003 revokes through the coordinator the whole application shares. A second coordinator was rejected outright: both would rotate the same refresh token and the loser would present one the server has already retired, ending the session for both. `NetworkingFoundation` was dead code and, contrary to ADR-046's inventory, had no tests at all; it is kept and made live rather than deleted, because the role its name claims is the role the application needs. **Ownership sits at the application root**, as a Riverpod notifier the root holds through `listenManual`: `flutter_riverpod` 3.3.2 pauses subscriptions created in `build` when their widget leaves the view (`ConsumerStatefulElement._applyTickerMode`, verified in the pinned source), so a screen-owned or `ref.watch`-owned controller would silently stop managing sessions when a route covered it, while `listenManual` subscriptions are never ticker-mode managed. Exactly one session runs at a time, serialized on one transition queue with the wanted scope re-checked after every await; the durable cross-isolate lease ADR-046 requires is not built and is not yet needed, because this stage composes exactly one isolate. A session runs only for `fullScope`/`offlineFullScope` and stops when logout *begins*, because `TokenCoordinator.logout` wipes protected storage and closes the database before it emits the termination a completion-triggered stop would wait for. **A send is not a call into the supervisor**: composers write exact per-recipient ciphertext into `outbox_operations` and return, and the supervisor requests a cycle when the durable projection's outbox depth *increases*. Reacting to depth being non-zero was rejected — every engine run rewrites the connection phase and re-emits the projection, so it spins against a row waiting out its backoff (demonstrated: the rule inverted makes the loop-safety test hang) — and an in-memory trigger port was rejected for needing cross-feature wiring that the durable queue already provides, and for not surviving a restart. Two platform edges were corrected because they neutralised the composed path: Flutter leaves `WidgetsBinding.lifecycleState` null until the first `SystemChannels.lifecycle` message and documents the initial value as detached "updated to the current state (usually resumed) as soon as the first lifecycle update is received", so reading "not yet reported" as background made a session started at launch stand itself down and never connect; and connectivity_plus documents that Android 8.0+ does not deliver connectivity changes to a backgrounded app and that status should be re-checked on resume, so a cached *unavailable* could outlive the outage and block foreground reconnect. Connectivity, lifecycle, wall-clock delay and the deferred scheduler are resolved and released together as one `DeliveryPlatformPorts`, which is also what lets a test drive the real supervisor without a device. This build composes `UnscheduledBestEffortPolling`, which schedules nothing and emits nothing: ADR-046's Layers 1 to 3 stay unbuilt, a backgrounded application still performs no catch-up, and ADR-045's `foregroundDeliveryOnly` disclosure — previously wrong in the user's favour — is now true, so its revision does not move. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched: the engine's group stack still resolves through the compile-time permit, and the production artifact verifies unsigned and free of the beta MLS symbol. |
 | ADR-048 | Accepted, notification claim corrected by ADR-052 | The user is told a message arrived by one sender-neutral system notification that is a reconciliation of committed local state, not an event; amends ADR-046's Layer 3 and ADR-045's delivery disclosure (2026-08-21) | ADR-046 sketched Layer 3 in three sentences and ADR-047 built the delivery path under it; inspection of the composed artifact found no notification port, adapter, channel or dependency of any kind, and two things that change what could honestly be built — a message arriving into the conversation on screen is still marked unread, because `ChatConversationView` marks read exactly once from `initState`, so `messages.unread` alone cannot answer "is the user looking at this"; and inbound **group** messages set no unread state at all, because `commitMessageInsideTransaction` writes neither `unread` nor `unread_count`, which is a piece-18 gap left unfixed here because `GroupChatPage` also never marks a group read. Three of ADR-046's Layer 3 details are amended on evidence. **One aggregate notification, not bounded individual ones plus a summary**: with a sender-neutral preview, N notifications are N copies of one sentence, and the only thing they add is a per-message or per-conversation identifier visible to `system_server` and to any app holding notification access — which the threat model's "person with filesystem access to a locked device" adversary and its protection of "notification previews" both weigh against; `MessagingStyle` and conversation shortcuts were rejected outright for publishing a pseudonymous per-contact identifier into the launcher, and an unspecified per-package cap (AOSP near 50, OEM-variable, unqueryable) makes any count-growing design unspecified. **A reconciliation of durable state, not an emission from `PostInboxCommitWorkPort`**: that hook fires only when the engine runs, so it can announce but never *withdraw*, and read-elsewhere, withdrawn-by-sender, conversation-opened and mute are all changes to committed state that no post-drain hook observes; drift dispatches table updates only after `COMMIT` (`Transaction.complete()` precedes `disposeChildStreams()`, verified in pinned 2.34.2 source), so a stream over `messages` and `conversations` is a strictly post-commit trigger and preserves ADR-046's actual principle more directly than the hook did. **A boolean `messages.alerted` (schema 12), not `notified_at`**: nothing reads the time, and it survives projection rebuilds because the projector upserts with a companion that omits the column, the same mechanism that already preserves `starred`. Content is `New message` / `New messages` and nothing else — no sender, conversation, text, count or timestamp — `VISIBILITY_PRIVATE` with a matching `setPublicVersion`, because Android 15 shows that during screen sharing and otherwise redacts "without any further context". Tapping carries the launcher intent alone under `FLAG_IMMUTABLE`: no destination, no extra, no identifier, so there is nothing to forge and no path around the routing guards. Deliberate silence (muted, on screen) still spends the marker so it cannot surface late; a platform refusal spends nothing, so granting later announces the backlog. "On screen" requires a mounted route **and** a foregrounded application, with an unreported lifecycle read as foreground for ADR-047's reason. One automatic `POST_NOTIFICATIONS` prompt at the point of use, guarded by a durable marker and by `shouldShowRequestPermissionRationale` — true in exactly the one state where a second refusal would make the denial permanent — so the app never nags and never spends the user's last prompt. No dependency: `flutter_local_notifications` 22.3.0 would work but every API needed is in `androidx.core:core:1.16.0`, already declared for `FileProvider`, so the platform half is app-owned Kotlin behind a port that carries no identifier and holds no policy. Only `POST_NOTIFICATIONS` and `VIBRATE` are added; a new architecture test forbids every foreground-service, boot, exact-alarm and SMS permission while ADR-046's Layers 1 and 2 stay unbuilt. Reliability is unchanged and stated: an alert reaches the user only while the process is alive, so ADR-045's `foregroundDeliveryOnly` — which said "There are no notifications" — is now false, its revision moves 1 → 2, and re-delivering the written handover becomes release-blocking. The Kotlin half is **unmeasured**: no rooted image and no signed-in session are reachable from this workstation, so what the notification looks like on a device is a release gate, not a claim. Full reasoning in "ADR-048 in full" below. Opens no production gate and changes no cryptographic behaviour. |
-| ADR-049 | Accepted, ownership arbitration corrected by ADR-050, delivery disclosure extended by ADR-052 | A backgrounded client catches up through one persisted periodic `JobScheduler` job at the platform floor, delivered to the isolate that already exists or to a headless one when none does, and never to both; ADR-046's WorkManager dependency and its durable delivery lease are both replaced (2026-08-21) | ADR-046's Layer 1. Nothing was assumed: every Android mechanism that runs without the user was re-derived from primary sources read 2026-08-21, and the scope excludes anything the user must grant, configure or change, which removes the foreground service, the exact alarm and the battery-optimization exemption by definition and leaves deferrable jobs as the only floor. **The dependency is dropped.** `JobInfo` is in the framework at `minSdk` 24 and `setPersisted(true)` survives a reboot with no receiver of this application's own, so `androidx.work` would have added a Room database, a service and a boot receiver to the merged manifest of a security-reviewed artifact in order to schedule one job; the existing test forbidding the `workmanager` package therefore stands and now records a decision rather than an absence. **The durable Drift lease is dropped too, and replaced by something exact.** Verified in the pinned engine source, `DartVMRef::Create` documents that "there can only be one VM running in the process at any given time", the `IsolateNameServer` belongs to that VM, and the job service is declared with no `android:process` — so every delivery owner this design can produce is in one process, on one main looper, and in-process arbitration is not weaker than a heartbeat lease but strictly more precise: a job whose process holds a live activity engine sends `runCatchUp` into that isolate and waits for the reply, and only a process with no engine starts a headless one. The hazard being removed is concrete and now evidenced twice over: two `TokenCoordinator`s rotate one refresh token, the loser presents a retired one, the backend returns 401 `invalid_token` (accounts `API.md`) and `TokenCoordinator._endsSession` clears the session — and `beginNextEnvelopeInspection` selects rows in `received` *or* `inspecting`, so two engines would hand the same envelope to the ratchet twice. A foreground session therefore asks the platform for exclusive ownership *before* it opens storage or reads a token, and waits for a headless run rather than killing one mid-call into the shared native core. **A tick is acknowledged, not fired and forgotten**, because a job that is finished lets the process be frozen again and an unacknowledged tick is a catch-up the platform stops mid-drain. **Arming moved off the lifecycle**: a periodic job restarts its window every time it is registered, so ADR-046's arm-on-background/cancel-on-foreground would have meant a user who opens the app more often than the interval never receives one wake-up, and a process that died while foregrounded would have left nothing scheduled at all; it is armed once for the life of a signed-in session and disarmed on logout, and a headless run that finds no session disarms it for itself. **Both entry points now compose through one `ApplicationRuntime`**, so the provisioned authority, the single token coordinator and the environment-gated crypto core cannot be silently absent from the background path; `MainActivity`'s protected-storage and message-alert channels were Activity-scoped and unreachable from a headless engine, and are now Context-bound classes with one implementation each. The alert path needs no change and asks for no permission in the background, because `ReconcileMessageAlerts` already gates the single automatic prompt on `visible.isForeground`. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; *eventual* backgrounded, fifteen minutes at best and bound to Doze maintenance windows that thin out; **nothing** in the *rare* and *restricted* buckets, where Android disables background network and which Android 13+ applies after eight days without interaction; and nothing whatsoever after a force-stop. ADR-045's disclosure moves to revision 3 in both catalogues, which makes re-delivering the written handover release-blocking again. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched — verified after the change against the built artifact, which packages unsigned, carries the production application ID, exports no beta MLS symbol, and declares exactly one service, bound with `BIND_JOB_SERVICE`, unexported, in the default process, with no foreground-service permission of any kind. |
-| ADR-050 | Accepted | Exactly one part of the application drives delivery, arbitrated in the process and asked for by the *entry point* rather than by the delivery session; the losing owner is asked to stand down and gives way between units of work; and losing a refresh-token rotation to another owner is repaired instead of read as the server ending the session; corrects ADR-049 (2026-08-22) | The hazard ADR-049 named is real and reachable on an ordinary user action - a headless catch-up posts a notification (ADR-048), the user taps it, and two Dart root isolates in one process both rotate one shared refresh token that the backend blacklists on use (`ROTATE_REFRESH_TOKENS` with `BLACKLIST_AFTER_ROTATION`), signing out a user who did nothing. ADR-049 chose the right mechanism and put it in the wrong place: `awaitExclusiveOwnership` was called by `MessageDeliverySession.compose`, which is reached only after `AuthenticationController.restore()` - and that restore *is* the rotation. A test asserted the opposite and passed, because its harness replaced the real `TokenCoordinator`; `sync-engine.md` simultaneously claimed a durable lease ADR-049 had already removed. The gate moves to `bootstrap()`, before storage is opened or a token is read; `attachForeground` now asks an in-flight catch-up to stand down, which `DurableSyncEngine` reads between envelopes, pages and batches, so the foreground waits for one unit of work rather than a whole drain; and the coordinator tells a lost race apart from a real session ending by re-reading the shared durable row rather than its own per-isolate cache. ADR-046's durable lease was re-derived independently and rejected again: every owner is in one process, so a lease coordinates things that always die together while adding an expiry, a clock and a stale-holder window - and it would be *weaker* where it matters, because a headless engine destroyed while the process survives leaves a lease nobody releases, whereas the Kotlin arbiter is the code that destroys it. Nothing durable records ownership and no wait is unbounded, so the mechanism cannot wedge delivery. Proved with two real isolates over one real shared SQLCipher store, in both orderings, under repeated contention, and with a contender killed mid-rotation. Separately corrects a pre-existing defect the work uncovered: `account_session` and `account_identity` were upserted without `singleton_id`, which SQLite treats as a rowid alias and auto-assigns, so every write after the first threw `SqliteException(275)`. Adds no dependency, changes no cryptographic behaviour, touches no backend, opens no production gate, and changes nothing the application says about itself. |
+| ADR-049 | Accepted, ownership arbitration corrected by ADR-050, delivery disclosure extended by ADR-052; its token hazard gone since server ADR-0023, recorded by ADR-083 (2026-10-07) | A backgrounded client catches up through one persisted periodic `JobScheduler` job at the platform floor, delivered to the isolate that already exists or to a headless one when none does, and never to both; ADR-046's WorkManager dependency and its durable delivery lease are both replaced (2026-08-21) | ADR-046's Layer 1. Nothing was assumed: every Android mechanism that runs without the user was re-derived from primary sources read 2026-08-21, and the scope excludes anything the user must grant, configure or change, which removes the foreground service, the exact alarm and the battery-optimization exemption by definition and leaves deferrable jobs as the only floor. **The dependency is dropped.** `JobInfo` is in the framework at `minSdk` 24 and `setPersisted(true)` survives a reboot with no receiver of this application's own, so `androidx.work` would have added a Room database, a service and a boot receiver to the merged manifest of a security-reviewed artifact in order to schedule one job; the existing test forbidding the `workmanager` package therefore stands and now records a decision rather than an absence. **The durable Drift lease is dropped too, and replaced by something exact.** Verified in the pinned engine source, `DartVMRef::Create` documents that "there can only be one VM running in the process at any given time", the `IsolateNameServer` belongs to that VM, and the job service is declared with no `android:process` — so every delivery owner this design can produce is in one process, on one main looper, and in-process arbitration is not weaker than a heartbeat lease but strictly more precise: a job whose process holds a live activity engine sends `runCatchUp` into that isolate and waits for the reply, and only a process with no engine starts a headless one. The hazard being removed is concrete and now evidenced twice over: two `TokenCoordinator`s rotate one refresh token, the loser presents a retired one, the backend returns 401 `invalid_token` (accounts `API.md`) and `TokenCoordinator._endsSession` clears the session — and `beginNextEnvelopeInspection` selects rows in `received` *or* `inspecting`, so two engines would hand the same envelope to the ratchet twice. A foreground session therefore asks the platform for exclusive ownership *before* it opens storage or reads a token, and waits for a headless run rather than killing one mid-call into the shared native core. **A tick is acknowledged, not fired and forgotten**, because a job that is finished lets the process be frozen again and an unacknowledged tick is a catch-up the platform stops mid-drain. **Arming moved off the lifecycle**: a periodic job restarts its window every time it is registered, so ADR-046's arm-on-background/cancel-on-foreground would have meant a user who opens the app more often than the interval never receives one wake-up, and a process that died while foregrounded would have left nothing scheduled at all; it is armed once for the life of a signed-in session and disarmed on logout, and a headless run that finds no session disarms it for itself. **Both entry points now compose through one `ApplicationRuntime`**, so the provisioned authority, the single token coordinator and the environment-gated crypto core cannot be silently absent from the background path; `MainActivity`'s protected-storage and message-alert channels were Activity-scoped and unreachable from a headless engine, and are now Context-bound classes with one implementation each. The alert path needs no change and asks for no permission in the background, because `ReconcileMessageAlerts` already gates the single automatic prompt on `visible.isForeground`. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; *eventual* backgrounded, fifteen minutes at best and bound to Doze maintenance windows that thin out; **nothing** in the *rare* and *restricted* buckets, where Android disables background network and which Android 13+ applies after eight days without interaction; and nothing whatsoever after a force-stop. ADR-045's disclosure moves to revision 3 in both catalogues, which makes re-delivering the written handover release-blocking again. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched — verified after the change against the built artifact, which packages unsigned, carries the production application ID, exports no beta MLS symbol, and declares exactly one service, bound with `BIND_JOB_SERVICE`, unexported, in the default process, with no foreground-service permission of any kind. |
+| ADR-050 | Accepted; decision C, the rotation repair, deleted by ADR-068 and ADR-083 (2026-10-07), and the gate kept for the envelope | Exactly one part of the application drives delivery, arbitrated in the process and asked for by the *entry point* rather than by the delivery session; the losing owner is asked to stand down and gives way between units of work; and losing a refresh-token rotation to another owner is repaired instead of read as the server ending the session; corrects ADR-049 (2026-08-22) | The hazard ADR-049 named is real and reachable on an ordinary user action - a headless catch-up posts a notification (ADR-048), the user taps it, and two Dart root isolates in one process both rotate one shared refresh token that the backend blacklists on use (`ROTATE_REFRESH_TOKENS` with `BLACKLIST_AFTER_ROTATION`), signing out a user who did nothing. ADR-049 chose the right mechanism and put it in the wrong place: `awaitExclusiveOwnership` was called by `MessageDeliverySession.compose`, which is reached only after `AuthenticationController.restore()` - and that restore *is* the rotation. A test asserted the opposite and passed, because its harness replaced the real `TokenCoordinator`; `sync-engine.md` simultaneously claimed a durable lease ADR-049 had already removed. The gate moves to `bootstrap()`, before storage is opened or a token is read; `attachForeground` now asks an in-flight catch-up to stand down, which `DurableSyncEngine` reads between envelopes, pages and batches, so the foreground waits for one unit of work rather than a whole drain; and the coordinator tells a lost race apart from a real session ending by re-reading the shared durable row rather than its own per-isolate cache. ADR-046's durable lease was re-derived independently and rejected again: every owner is in one process, so a lease coordinates things that always die together while adding an expiry, a clock and a stale-holder window - and it would be *weaker* where it matters, because a headless engine destroyed while the process survives leaves a lease nobody releases, whereas the Kotlin arbiter is the code that destroys it. Nothing durable records ownership and no wait is unbounded, so the mechanism cannot wedge delivery. Proved with two real isolates over one real shared SQLCipher store, in both orderings, under repeated contention, and with a contender killed mid-rotation. Separately corrects a pre-existing defect the work uncovered: `account_session` and `account_identity` were upserted without `singleton_id`, which SQLite treats as a rowid alias and auto-assigns, so every write after the first threw `SqliteException(275)`. Adds no dependency, changes no cryptographic behaviour, touches no backend, opens no production gate, and changes nothing the application says about itself. |
 | ADR-051 | Accepted, distribution clause and delivery claim amended by ADR-053 | Receiving while the application is not in use is an opt-in capability, off by default: a `specialUse` foreground service that keeps the process out of the cached state so the composed delivery path can keep its connection, armed only after the user grants notifications and the battery-optimization exemption, and stopped by the application itself the moment either is withdrawn; builds ADR-046's Layer 2, amends its distribution clause, extends ADR-050 to a third owner, and takes ADR-045's delivery disclosure to revision 4 (2026-08-22) | ADR-046 sketched this layer and left it unbuilt, and ADR-049 recorded the ceiling it was meant to lift: fifteen minutes at best, Doze deferral, and **no background network at all** in the *rare* and *restricted* standby buckets, where Android 13+ puts an app after eight unopened days. Every mechanism was re-derived from primary sources read 2026-08-22, including Android 17, and two facts neither earlier decision recorded changed the arithmetic: apps on the Doze exemption list are exempt from **App Standby Bucket restrictions entirely**, so enabling this repairs the mandatory floor as well as adding a layer above it; and a long-running foreground service by itself keeps the app in the *active* bucket. The manufacturer half is no longer community reporting: Samsung publishes that sleeping apps (3 days unused and poor system health) have "Job, Alarm, and Foreground-service … restricted", publishes the user's exception path and a deep-link intent to it, and states that since One UI 6.0 foreground services of apps targeting Android 14 "will be guaranteed to work as intended"; Xiaomi publishes only a per-app Background autostart permission. That is better evidence than ADR-046 had and still not measurement, so the vendor half stays **unresolved** and the device matrix stays open. `specialUse` is selected because it is accurate: `dataSync` is capped at six hours per twenty-four and forbidden from a boot receiver at `targetSdk` 35+, `remoteMessaging` documents device-to-device message continuity, `systemExempted` is gated on roles this application does not have — and `specialUse` still carries no timeout, no runtime prerequisite and no boot restriction at API 37. The alternative of **building nothing** was evaluated on the same footing and rejected on three findings, the decisive one being that the brief's own failure mode is avoidable by construction: the platform displays the permanent entry only while the service is genuinely running, and the application re-reads every precondition on every resume and stops the service, and says so, whenever the arrangement is incomplete. No dependency is added, no boot receiver is declared, the choice lives in the encrypted preference table and is deleted rather than falsified when turned off, and the socket gains a four-minute keepalive because a connection a carrier's NAT dropped is never heard from again and must not sit behind a notice saying the application is kept open. Full reasoning, the alternatives, the three separated classes of claim and the enumerated outstanding validation are in "ADR-051 in full" below. This decision opens no production gate. |
 | ADR-052 | Accepted | Four user-facing claims were false or read as promising more than the artifact delivers and are corrected; the permanent half of the security notice may no longer name a feature; the disclosure revision becomes a derived value that an edit cannot skip; and the revision a user accepted becomes a durable device-side record that re-presents a corrected statement once — completing the half of ADR-045 that was never built (2026-08-23) | ADR-045 established the disclosure and rejected periodic re-consent correctly, on evidence that still holds. What it did not build was the device side: nothing recorded which revision a user had accepted, so when the revision moved at ADR-048, ADR-049 and ADR-051 the only thing reaching an existing recipient was a release-checklist step a human had to remember, and their install could not distinguish "accepted the current statement" from "accepted one that is no longer true". Auditing the composed artifact rather than its documentation found **four wrong claims, two of them outside the disclosure**. `settingsNotificationsOn` said an alert "can only reach you while this app is running" — false since ADR-049: `deferred_delivery_catch_up.dart` and `sustained_delivery_run.dart` both call `ReconcileMessageAlerts` from isolates with no activity in the process, and the string had never been edited since ADR-048 wrote it. `disclosureUnbuiltSurfaces` said search "do[es] nothing" — false: the chat list filters on title and last-message preview, and a conversation's own search reads that conversation's entire local history, because `watchMessages` applies no limit. `enrollmentProtectsBody` promised that "messages, files, and voice audio" were unreadable to the server, in an artifact that can send no file and carry no audio; it is a **permanent** section, so the fix is structural — it now describes the boundary and names no feature at all, and a test forbids feature words in it, because an enumeration goes stale every time the feature set moves. `chatsSearchHint` promised "chats and messages on this device" for a box that matches names and one preview line. Two further statements were true but read as promising more: `disclosureBestEffortDelivery` described delivery as slow, which a reader takes to mean *eventual*, while the server prunes undelivered envelopes on a retention timer clients are never told (`ENVELOPE_TTL_DAYS`, default 7) — late and never are different outcomes and only one was disclosed, so a new point states it, and states that the client will not name what was lost, because `SyncProjection.isSecurityBlocked` is dead code and a one-to-one queue gap surfaces nowhere; and the same point omitted Data Saver, which blocks the catch-up's `NETWORK_TYPE_ANY` request on exactly the metered connection this audience pays for, and which the written handover had been stating while the application did not. `enrollmentDoesNotProtectBody` stated a real limitation in vocabulary the reader cannot decode — "social graph", "out of band", "compare fingerprints" — while the screen it instructs them to use is titled *Safety number*; a limitation a reader cannot act on is a limitation that was not disclosed. **The mechanism is corrected rather than the strings.** Each `DisclosurePoint` now carries the revision at which its wording last moved, `DeploymentDisclosure.revision` must equal the highest of them, and the pinned-text test fails on any edit — so an edit forces a `since` bump and a `since` bump forces the revision, and the bump can no longer be forgotten by a person, which is how three revisions shipped with nothing checking them. The accepted revision is recorded in the encrypted preference table as one integer and nothing else — no timestamp, no identifier — never lowered, written by enrollment before the session opens, and read by a gate that wraps the routed child above the router, so no route, deep link or notification tap reaches the application without passing it. A reader from revision 4 sees the statement again with the four moved points badged; a reader with no record at all — every recipient who enrolled before this — sees the whole statement with nothing badged, because 0 means the application does not know what they saw and may assume nothing read. Periodic re-consent stays rejected on the evidence ADR-045 cited and on newer evidence that strengthens it: Vance et al. (MIS Quarterly 2018) show attention to a repeated warning collapsing within days and polymorphic variation restoring adherence at three weeks, and Vance et al. (MIS Quarterly 2025, "The Fog of Warnings") show habituation *generalising* from ordinary notifications to security warnings never seen before, which is decisive here because this artifact now posts message alerts and a permanent foreground-service notice — so the correction is a full screen the application shows nowhere else, and the "changed" mark is a labelled badge rather than a colour. It **fails open** in exactly one direction: an unreadable preference row withholds the gate rather than the application, because an honesty mechanism must not become a denial of service, and a failed write costs one extra showing. The written re-delivery stays release-blocking and is corrected too — `deployment-and-release.md` claimed "the same seven facts" while listing six, omitted the unbuilt surfaces and the ADR-051 opt-in, and is now generated from the same point list. Language parity is enforced catalogue-wide instead of by three hand-maintained key lists that a new English-only key passed. Adds no dependency, changes no feature behaviour, touches no backend file, opens no production gate, and leaves the Beta/Production boundary untouched: production and development still carry no disclosure and cannot render Private Experimental wording. Disclosure revision moves 4 → 5. Full audit, evidence, alternatives and sources in "ADR-052 in full" below. |
 | ADR-053 | Accepted | Sustained delivery is withheld from every build that reaches a user until it has been measured on real phones: a source-only evidence ledger with seven mandatory matrix cells, admissibility rules that refuse an emulator, a short run or a single observation, and ten falsifiable criteria fixed before anything was measured; amends ADR-051 and restores ADR-046's distribution clause in an enforced form (2026-08-23) | ADR-046 required the physical-device matrix before this layer could be enabled in a distributed artifact; ADR-051 removed that clause because the matrix could not be run in the available environment. It still cannot: there is no physical Android device of any kind here, and behind that the capability cannot start on any target without an operator-activated account, because `runSustainedDelivery` refuses anything short of a full device-bound session. So **no cell of the matrix has been run**, and "we cannot measure this" is a reason to withhold a capability, never a reason to ship it — the failure it risks is a person who was told messages would arrive and was not told about one for hours, a failure whose entire signature is absence. The gate is a compile-time constant with an empty ledger: beta and production resolve `withheld`, development resolves `measurementOnly` so the matrix can be run at all. A withheld build never asks the platform for anything, never writes the durable choice, never starts the service, and **stops** one an earlier build left running. Opening it needs seven records that each pass `isAdmissible` — not emulated, a strict ISO date, a committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3 repetitions — and an inadmissible record simply does not count rather than being refused. Two fleet figures ADR-051 recorded are corrected on a re-read of Statcounter (2026-08-23): Samsung and Xiaomi are **90%** of the *Android* fleet rather than 77% of all mobile, and Android 13-or-earlier is **60%** rather than "roughly half", so the fraction covered by no vendor statement is about 78%. One user-facing claim is withdrawn: `sustainedWhatItDoes` promised delivery "within seconds" in a build where nothing had ever been timed. Measured, on two AOSP emulator images only: every observation surface works unrooted, and their Doze constants differ by a factor of thirty with the freezer off at API 30 and on at API 35 — so the procedure reads constants per device, and whether the freezer even exists on Android 11–12 is now an explicit question for two cells. `docs/sustained-delivery-validation.md` holds the criteria, the matrix and the results; `tool/measure_sustained_delivery.sh` is the instrument |
@@ -75,7 +75,7 @@ is not silently edited out of history.
 | ADR-062 | Accepted | The conversation timeline reads a bounded, cursor-anchored window instead of its whole history, its three per-message queries become three set-based ones, and the schema gains its first six indexes (2026-08-27) | Opening a conversation cost what had been said in it. `watchMessages` had no `LIMIT` and ran a reactions, a receipts and an attachments query for **every** message on **every** emission: measured at **3601 statements** for one emission of a 1200-message conversation, against **6** now, equal at eight messages and at twelve hundred. `watchConversations` had the same shape one level up and is now two statements rather than one per conversation. The window is a keyset range anchored at the oldest loaded message rather than a count from the newest, so a message arriving cannot push the line the reader is on out of the other end, and `OFFSET` is rejected because it re-scans what it skips. Separately, the schema declared 43 tables and **zero** indexes, so every lookup by a non-leading key column was a full scan under SQLCipher: six indexes (schema 16 -> 17, additive, no table dropped or re-keyed) chosen from `EXPLAIN QUERY PLAN` and asserted against the planner, including a partial index for pins that only works because both callers spell the predicate unbound, and a foreign-key child index on `attachments` that takes one rebuild of a 1200-message conversation from 96 ms to 27 ms. `LoadOlderMessagesIntent` and the three hardcoded pagination fields become real, and a jump to a message outside the window loads it instead of doing nothing. |
 | ADR-063 | Accepted | Applying an application event re-folds only the messages that event is a fact about, and the full rebuild becomes the recovery path it always was (2026-08-27) | The last and largest term ADR-061 and ADR-062 left behind: every authenticated event re-projected its whole conversation from the whole event log, so the cost of *receiving* anything was set by how long the conversation was — worst for an inbound receipt, which is one event per batch of messages. Measured end to end, one such rebuild of a 1200-message conversation is **6556 statements and 283 ms**; applying one event now costs **14-16 statements and about 1.1 ms**, equal at 48 messages and at 1200, and a receipt covering thirty-two messages costs thirty-two folds rather than twelve hundred. A new derived-state table, `application_event_targets` (schema 17 -> 18, additive, back-filled), gives the projector the direction the log lacks: which facts a message has. The fold is spelled `CROSS JOIN` because the ordinary form is the same statement count and a linear number of rows, visible only in `EXPLAIN QUERY PLAN`. Conversation aggregates get one definition both paths call, plus a covering partial index for the unread count. The rebuild is kept, made publicly reachable, and deliberately left folding each message against the whole fact set, because it is the oracle a differential equivalence test compares against and it must not come to share the incremental path's idea of which facts belong to which message. |
 | ADR-064 | Accepted | A rebuild re-derives the messages that changed and redraws the rows that changed, the reading anchor comes from the rows that are mounted, and a keystroke costs a timer instead of a database write and a page rebuild (2026-08-28) | The last three terms ADR-061, ADR-062 and ADR-063 left behind, all of them on the main isolate. Measured on the A56 in a 219-message conversation with the whole thing drawn: typing goes from **5.25 ms median / 8.13 p90 / 9.89 worst** of build time per frame to **2.33 / 3.76 / 6.57**, and produces 38 frames for thirty characters where it produced 55, because the page is no longer one of the things that rebuild; a message arriving goes from **1.77 / 5.02 / 7.49** to **0.82 / 3.23 / 5.97**. On the host, where a long conversation could be driven, the frame that draws an arrival went from 36.7 ms median at 1200 messages (19.7 at 48) to 10.9 (13.7 at 48), and a keystroke from 32.7 (16.8 at 48) to 4.0 (5.1 at 48) — before, both roughly doubled with conversation length; after, neither grows. `ChatMessageProjection` returns the identical view model for every message whose row cannot have changed, keyed on the whole `ConversationMessage` plus the positional inputs grouping and reply quotes actually depend on, so one arrival derives **2** elements and one reaction **1**, equal at a 48-message window and a 240-message one, against the whole window on every emission before; the timeline retains the built row behind it, so `Element.updateChild` skips it outright, and every row is keyed with a `findChildIndexCallback` so an arrival relocates elements instead of re-parenting a `GlobalKey` per row. `_messageKeys` becomes a registry of *mounted* rows — bounded by construction, and always the only set an anchor could come from — and the anchor is captured in `didUpdateWidget`, in `didChangeDependencies` and at scroll end, rather than additionally on every build and every scroll tick. The draft is debounced 500 ms and flushed on blur, route pop, leaving `resumed`, dispose and send, and the cascade that made a keystroke rebuild the page is cut in the provider layer — the draft becomes a one-shot read, typing narrows to a boolean through `select`, and the forward targets become a callback — because the draft must keep living in the `conversations` row. Also: `DateTime.now()` leaves `build` for a clock refreshed exactly when the earliest mute on screen expires, a jump no longer has its own scroll cancelled by the reading anchor it was leaving, and a jump to a target already inside the drawn range asks for the frame nothing else was going to schedule. Schema stays at 18; no repository, projector, outbox, sync-engine or backend file is touched. |
-| ADR-065 | Accepted | A delivery cycle asks the network once per person instead of two to four times, through a thirty-second process-local cache that sits below every authentication gate and never touches a prekey claim; and the device-log gossip a send owes becomes a debt the cycle records and pays after the outbox instead of a second fan-out awaited in front of the first one's ciphertext; closes the RCA ADR-060 opened (2026-08-28) | `ClientAuthenticationService` was entirely uncached, so one `prepareOwedSend` fetched a peer's identity — an unconditional full `200`, because `/identity` offers no ETag — twice, three times when a session had to be started, and again for the gossip owed to the same peer moments later, against a round trip ADR-060 measured at **107-137 ms**. Measured on the composed send path with a synthetic 122 ms round trip: a first contact and its gossip fall from **14 round trips / 1828 ms to 6 / 788**, a send and its gossip from **8 / 1051 to 4 / 528**, two sends to one peer from **8 / 1037 to 4 / 522**, and the time from `prepare` starting to a postable ciphertext from **8 / 1028 to 4 / 512** — the last of those is F7 alone, because half of it was a fan-out owed to somebody else. The cache decorates `PeerIdentityRemotePort` rather than memoizing `AuthenticatedPeer`, so a hit is the *same* verification over the same bytes: the master-key comparison, the unsigned-device rejection, the transition check, the hash chain, `requireCurrentLiveSet`, the trust states and the global fork gate all still run, and a suite proves each rejection is reproduced on a hit with zero further requests. `claimPrekeyBundles` reaches no map, no in-flight entry and no bypass check, because it consumes one-time prekeys and is `ReplaySafety.never`. The device log is coalesced but never stored: a stored page outlives the head that said what to expect, and a mismatched head is read as a fork, which would withhold every send to every peer. `refreshPeer` and `confirmOutOfBand` are forced live by the service itself, which is what makes user verification and the `stale_devices` path bypass it with no call site changed. Gossip's failure isolation stops being a swallowed `try`/`catch` and becomes a `void` return with no future to await; a bare `unawaited` was rejected because a headless catch-up (ADR-049/ADR-050) disposes its container and closes its database the moment `synchronize()` returns. Schema stays at 18; no migration, table, column or index, no endpoint, header or status-code change, no cryptographic construction touched, and no `backend/` file. |
+| ADR-065 | Accepted; the peer cache superseded by ADR-082 (2026-10-06) | A delivery cycle asks the network once per person instead of two to four times, through a thirty-second process-local cache that sits below every authentication gate and never touches a prekey claim; and the device-log gossip a send owes becomes a debt the cycle records and pays after the outbox instead of a second fan-out awaited in front of the first one's ciphertext; closes the RCA ADR-060 opened (2026-08-28) | `ClientAuthenticationService` was entirely uncached, so one `prepareOwedSend` fetched a peer's identity — an unconditional full `200`, because `/identity` offers no ETag — twice, three times when a session had to be started, and again for the gossip owed to the same peer moments later, against a round trip ADR-060 measured at **107-137 ms**. Measured on the composed send path with a synthetic 122 ms round trip: a first contact and its gossip fall from **14 round trips / 1828 ms to 6 / 788**, a send and its gossip from **8 / 1051 to 4 / 528**, two sends to one peer from **8 / 1037 to 4 / 522**, and the time from `prepare` starting to a postable ciphertext from **8 / 1028 to 4 / 512** — the last of those is F7 alone, because half of it was a fan-out owed to somebody else. The cache decorates `PeerIdentityRemotePort` rather than memoizing `AuthenticatedPeer`, so a hit is the *same* verification over the same bytes: the master-key comparison, the unsigned-device rejection, the transition check, the hash chain, `requireCurrentLiveSet`, the trust states and the global fork gate all still run, and a suite proves each rejection is reproduced on a hit with zero further requests. `claimPrekeyBundles` reaches no map, no in-flight entry and no bypass check, because it consumes one-time prekeys and is `ReplaySafety.never`. The device log is coalesced but never stored: a stored page outlives the head that said what to expect, and a mismatched head is read as a fork, which would withhold every send to every peer. `refreshPeer` and `confirmOutOfBand` are forced live by the service itself, which is what makes user verification and the `stale_devices` path bypass it with no call site changed. Gossip's failure isolation stops being a swallowed `try`/`catch` and becomes a `void` return with no future to await; a bare `unawaited` was rejected because a headless catch-up (ADR-049/ADR-050) disposes its container and closes its database the moment `synchronize()` returns. Schema stays at 18; no migration, table, column or index, no endpoint, header or status-code change, no cryptographic construction touched, and no `backend/` file. |
 | ADR-066 | Accepted | Supersedes ADR-007: the conversation timeline is an app-owned reversed sliver because Flyer requires mutable controller-owned message state and ADR-002 puts that state in drift, not because a package was slow; custom ownership is bounded to the timeline surface and Material keeps every surface the user types into or selects within; and the first thing owning it costs is a first-strong direction resolver that is correct where neither the previous regex nor `intl`'s `Bidi` is (2026-08-30) | ADR-007 named a package `pubspec.yaml` has not carried since ADR-054, and it did so for the whole interval between piece 15 replacing the adapter's contents and this row. The reason on the checklist is the durable one and was never promoted into the register: Flyer 2.11.1 keeps messages in a mutable controller it owns, and ADR-002 makes drift the single source of truth, so the two want the same state in two places — an architectural conflict, decided before any frame was measured. **The performance record is corrected rather than inherited**: ADR-062, ADR-063 and ADR-064 fixed F8's whole-window mapper re-derivation, F9's unpruned `GlobalKey` walk and F10's per-keystroke draft write, and all three were application-layer costs that no package choice caused and no package choice would have fixed. Custom rendering did not buy that performance; measuring the mapper, the key registry and the provider cascade did. **The boundary is stated so "custom" cannot drift into "from scratch"**: app-owned covers the timeline surface — the reversed sliver, the keys and `findChildIndexCallback`, pagination, author grouping and bubble geometry — while Material remains the foundation for text fields, sheets, menus, dialogs, selection and focus traversal, because IME composition, RTL caret placement, selection handles and TalkBack semantics are not being re-implemented here. ADR-006's rule for Forui and the assertion in `design_system_boundary_test.dart` are unchanged and still the thing that keeps the package out of `lib/features`. **What owning the bubble actually costs is measured on its first bill.** `_contentDirection` was not first-strong: its class was the block range `֐-ࣿ`, which contains Arabic-Indic (U+0660-U+0669, class AN) and Persian (U+06F0-U+06F9, class EN) digits, so `۱۲۳ hello` resolved RTL where UAX #9 P2 skips both and answers LTR, and it contained neither Arabic Presentation Forms block, so a `ﻲ` pasted from a legacy Windows source resolved to nothing at all. `intl` 0.20.2 was read in the pub cache rather than recalled and **rejected as a replacement on evidence**: its `Bidi.startsWithRtl` is structurally first-strong but its `_RTL_CHARS` is `֑-߿`, which repeats the digit defect exactly, while its `_LTR_CHARS` claims `ࠀ-῿` wholesale and hands Samaritan, Mandaic, Syriac Supplement and Arabic Extended-A to LTR; `Bidi.detectRtlDirectionality` is not first-strong at all but a whitespace-token count against a 0.40 threshold, with a `^http://` special case a `https://` URL does not meet. The two implementations are wrong on **different** inputs and neither is a superset, so `resolveFirstStrongDirection` replaces both, on R/AL/L ranges from `DerivedBidiClass` with the weak, neutral, mark and format classes falling through, plus P2's isolate-run skipping; 29 tests hold it, including the executable comparison against both predecessors. **The isolation half of the finding was tested and half of it did not exist**: an embedded Latin URL with trailing punctuation inside Persian needs no FSI/PDI, because Flutter runs UAX #9 per paragraph and there is no second direction spliced into that string, and that non-defect is recorded so it is not re-fixed; the real one is the composer's character counter, where `20 / 500` is two EN runs around a neutral and N1 resolves the separator to an RTL base, reversing the pair to `500 / 20`. It is pinned to LTR, which is how the expression reads in either locale. A fourth golden, `chat_medium_rtl_mixed.png`, holds all three mixed-direction cases in one RTL frame; the existing three were not regenerated. Schema stays at 18; no migration, table, column or index, no repository, projector, outbox or delivery behaviour, no endpoint, header or status code, no cryptographic construction, no protocol, no wire format and no `backend/` file. **Opens no production gate.** |
 | ADR-067 | Accepted | Supersedes ADR-042: the serving origin becomes `chat.orviniq.com` and the flavors move to `com.orviniq.chat{,.beta,.development}`, the Beta signing identity is reissued under a matching subject, and the private CA is reused rather than replaced — but the leaf reissue moved the primary SPKI pin, which is the one thing in this migration that would have been unrecoverable a day later (2026-09-07) | ADR-042 froze the application ID on a premise that has since become false: the flavors took `dev.nimashadloo.chat{,.beta,.development}` "under a domain the project already operates", and the project no longer operates that domain. **Its reasoning is not what failed — only its premise.** Everything ADR-042 says about why the identity must be frozen is unchanged and now governs the new one: Android accepts an update only when the application ID and the signing certificate both match, the only path past a mismatch is uninstall, and uninstall destroys the SQLCipher database and the `no_backup` envelope holding its key with `allowBackup="false"` and a non-exportable AndroidKeyStore key behind them. **The freeze was breakable here because it had not yet bound.** No external install existed — no device, no emulator outside CI, no archived artifact in anyone's hands — so there was no update path to break and no local history to destroy. That is a fact about 2026-09-07 and not a property of the decision: the freeze re-binds from this point, and the next time this question is asked the answer is no. **The private CA is untouched and did not need touching**: it is hostname-agnostic by construction — subject `CN=chat private root CA`, `CA:TRUE, pathlen:0`, no `nameConstraints` and no SAN of its own — so it signs for the new host unchanged, and `BETA_PRIVATE_CA_SHA256` and `BETA_PRIVATE_CA_PEM_BASE64` keep their values. Verified rather than assumed: `ca.crt` and `ca.key` carry their original 2026-08-19 mtimes, and the reissue archive holds a leaf pair and no CA. **One pin moved, and the premise that neither would was wrong.** A pin covers a key, not a hostname, so a leaf reissued for a new name over the same key would have held both pins — but `ops/tls/make_ca.sh` does not reissue that way. It guards `ca.key` and `backup.key` behind `if [ ! -f ]` and mints `server.key` unconditionally on every run, so reissuing the leaf regenerated the server key and the **primary** SPKI pin with it; the backup pin, keyed to the untouched `backup.key`, did not move. Measured off the archived and current certificates, not argued. `BETA_PRIMARY_SPKI_SHA256` must therefore be re-read before the next Beta build, and a client carrying the old primary pin cannot complete a handshake against the new leaf at all. Today that costs nothing, for the same reason the identity move costs nothing; on any later day it locks out every provisioned device, which is the sharper half of ADR-043's two-pin rule and the reason the second pin exists. **The Beta signing identity was reissued as coherence, not correctness.** Nothing in Android, Gradle or `verify_release_apk.sh` enforces a match between a certificate subject and an application ID; a key reading `CN=dev.nimashadloo.chat.beta` would have kept signing `com.orviniq.chat.beta` artifacts indefinitely and no check would have objected. It was reissued because the freeze could still be broken safely and would not be again, so the incoherence would have been permanent. Created 2026-09-07, certificate SHA-256 `a1189203…fb9a7ba9`, subject `CN=com.orviniq.chat.beta`, valid to 2054-01-23, read back out of the keystore and matching `android/beta-release-identity.properties` exactly. The previous keystore is **archived, not destroyed**, under `archived-nimashadloo-` names beside the live one. Off-site encrypted backups do not exist for the reissued key: the reissue reset that obligation rather than inheriting it, and `docs/release-signing.md` still requires two of them before the first external install. **Every artifact built before this date is superseded and may not be distributed** — each carries the old origin, the old application ID, the old signing certificate and the old primary pin, and any one of the four is disqualifying on its own. |
 | ADR-068 | Accepted | Client-side record of server ADR-0023, which supersedes server ADR-0006: there is one session token and nothing rotates, so the login body reads `token` and `expires_in` rather than `access`, device registration sends no `keypackages` field to a request that refuses extras, and the retired anonymous `POST /api/v1/auth/refresh` becomes an authenticated bodiless `POST /api/v1/auth/renew` (2026-09-08) | Three independent breaks presented together as "a fresh install cannot log in", and fixing the field names alone would have left the harder half standing. A renewal now writes nothing and retires nothing, so the race the rotating pair was guarded against — two owners renewing at once, the loser presenting a token the winner retired, the session ending for both — cannot occur: single-flight renewal survives as an optimization rather than a safety property, and a refused token is simply a refused session. Revocation stays immediate through the device row's `token_generation` counter, which is what the pair's short access lifetime had been buying. The protected row now holds the credential itself instead of a refresh token beside an expired placeholder, so a restore returns a token that is ready to use rather than one that must rotate before the first request after every cold start; a pair-era row has no readable shape and is deleted, which costs every existing user exactly one sign-in and nothing else. Two bugs were found in making that true and are recorded in full: the renewal asks itself for its own header token, which must be answered from a zone value rather than joined to the in-flight future or it deadlocks; and `/auth/renew` answers no identity, so replacing the durable record verbatim erased the user the session is bound to and signed the account out on the next cold start with a valid session. |
@@ -90,6 +90,479 @@ is not silently edited out of history.
 | ADR-077 | Accepted (2026-09-20), on the owner's answers to D1, D2, D3 and D5; its open conflict decided B (2026-09-30); one open question (2026-10-01) | Client-side record of server ADR-0021 and ADR-0022: voice is a relayed WebRTC mesh with no server room, so a room becomes client state on the group's own signed-control machinery and a call becomes volatile `signal` frames between devices. Two wire formats, split by the channel each needs — `CPVRV001` for the room's control events over durable envelopes, `CPVSV001` for the call's signalling over `signal` frames — and a payload is refused from the other channel. A volatile frame rides the durable pairwise session's own Double Ratchet rather than a second session or a new key schedule, and pays for it in dead skipped keys that the retry bound caps. Supersedes the voice prerequisites P1 to P7 of ADR-058, which name three things that no longer exist, and deletes the `voice_rooms` table (2026-09-20) | Server ADR-0021 decides the architecture and stops at the edge of the client: a room is client state "carried by client-signed control events over ordinary envelopes, exactly as a group is", and ephemeral room text and join and leave announcements are `signal` frames. No source defines the room model or the signalling payload, and `CLIENT_CONTRACT.md` §N says so in as many words — "Everything below is therefore yours to build, and none of it is checked by anything upstream." **The split by channel is the load-bearing decision.** A roster has to survive a device being offline and an offer must not: a durable offer is a call invitation that arrives an hour late, and a volatile roster is a room that forgets who was removed. So membership is durable and signalling is volatile, and each is refused from the other's channel, because without that rule the volatile path is a way to write durable state and the durable queue is a way to replay a call's signalling hours later. **The room reuses the group's machinery down to the byte.** The same hash chain, the same six apply outcomes, the same transcript, state-request and queue-gap rules, under its own two signing domains so that no event of one kind can be replayed as the other. That machinery is built, reviewed and tested; inventing a second one for the same problem would be a defect, not a design. **The volatile seal is the one place this costs something real, and the cost is stated rather than engineered away.** §N rule 6 binds the signalling to the pairwise session of §F, and `pairwise-transport-v1.md` is frozen and under independent review, so there is no second session and no signalling-only key schedule. A frame the server drops is never redelivered, so it leaves a hole the receiver fills with a dead skipped key on the next message that does arrive — and at 2,000 per pair the bound's failure mode is a repair that interrupts the *text* conversation with that device too. The retry bound is therefore the budget: 32 sealed frames per peer per call, 62 wholly undelivered calls before a pair reaches the bound, and a peer already reported unreachable is sealed nothing further until it announces itself again. **What was measured rather than assumed**: an audio-only, relay-only, max-bundle offer from libwebrtc is 1,363 bytes over 46 lines (Chromium 152.0.7977.76, 2026-09-20). With this framing an offer is about 1,516 bytes, which clears bucket 4096's regular-header budget of 4,014 by 2,498 and its worst-case initial-header budget of 1,554 by 38 — so an SDP is never the first message to a peer, and a device with no session sends its small `join` first. A margin of 38 bytes is one `a=extmap` line from a frame that goes off-bucket and is dropped without a word. Adds no dependency, changes no `backend/` file, and opens no production gate: nothing under `lib/` implements a byte of it. **Four questions went to the owner** and were answered A on 2026-09-20, as written out under "Owner questions": every member may remove every other, the ceiling counts devices, no group or DM hosts a call, and the volatile seal shares the durable ratchet. **Open conflict, dated 2026-09-30 by prompt 4, decided B by the owner the same day:** a volatile frame cannot start a session, because the core writes an initial header on a session's first message only and a first frame the relay drops leaves a session only the sender holds, on which its later messages, durable ones included, are refused. So a volatile frame still never starts one, and the room's own durable payloads start every session a call needs: a `CPVRV001` state request, the room's existing kind 2, sent to each live device of each active member this device has no session with, which the durable queue holds until that device fetches it. No new wire format; the choice of payload and moment, and its costs, are written under *Decided 2026-09-30* at the end of the record. |
 | ADR-078 | Accepted (2026-09-28) | Voice's media package is `flutter_webrtc` **1.6.2+hotfix.3**, pinned exactly. Its two native parts are libwebrtc 150.7871.01 from Maven Central and Twilio's `audioswitch` in David Liu's fork at commit `039a35ae`, which only JitPack publishes, so JitPack serves this build that one module and nothing else. The merged manifest gains `RECORD_AUDIO`, `FOREGROUND_SERVICE_MICROPHONE` and `MODIFY_AUDIO_SETTINGS` and refuses the `BLUETOOTH` permission `audioswitch` merges in, and the `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of ADR-054 hold (2026-09-28) | ADR-077 designed voice on `flutter_webrtc` and left the dependency review to a record of its own; this is it. **The version is the newest because its native parts are 1.6.1's**: the Android build file is byte-for-byte the same, so every fact gathered for 1.6.1 holds, and what came after is fixes to data-channel and camera paths this design never takes, plus two opt-in field trials that stay off. **What it costs is one native library**: an unsigned production release grows from 88,199,375 to 123,703,796 bytes, and 35,263,068 of the 35,504,421 bytes added are `libjingle_peerconnection_so.so` for three ABIs, the emulator's x86_64 copy alone 16,166,352. That library is libwebrtc with third-party code of its own — BoringSSL, libsrtp, Opus, libvpx, libaom, dav1d and more — and it will open a call's sockets itself, outside `dart:io` and outside the provisioned trust store, which is what server ADR-0021 means by DTLS-SRTP between two endpoints; `platform-android.md`'s claim that every byte leaves through `dart:io` is corrected. **JitPack is restricted in both directions, and the restriction was proven**, because JitPack builds whatever public repository a coordinate names and `flutter_webrtc`'s build script adds it, unfiltered, to every project. **`BLUETOOTH` goes because nothing on the path `flutter_webrtc` takes checks it**: the package builds `audioswitch`'s `AudioSwitch`, which routes through `AudioManager`, and the one class that checks a Bluetooth permission keys on the target SDK and would check `BLUETOOTH_CONNECT` at 36. No Dart code imports the package, no service is declared and no permission is asked for yet. Found on the way: the Gradle lock writer drops `kotlin-stdlib-common` from both runtime classpaths on the unmodified tree too, while validation still resolves it there, so the committed line is kept; and libwebrtc's third-party notices exist nowhere for this build (F1). |
 | ADR-079 | Accepted (2026-10-05) | Phase 6 closes on a call between two real devices: on signed production build 5, APK SHA-256 `20a010b41eb43c5eb5a34d1c007d58fa84548408e707e20685043b68010a37dd`, each of the seven call steps of phase 6 prompt 10 passed — a room made on one device reached the other, both joined and connected through the relay, audio crossed both ways, mute silenced one side, the call ran on with a device out of view, a leave stopped that device's call service and was dropped by the other, and a rejoin carried audio again. Two corrections came first: a signed group or room change counts in the outbox depth until it is routed, so creating one starts a delivery cycle (D2); and a leave stops the call service only when no join has started since (D3) | Every voice test so far ran between fakes. On the owner's phone and emulator, build 3 found that a room reached the invited device only when something unrelated woke the creator's delivery cycle, more than six minutes after it was signed, and build 4 found that a rejoin made while a leave was still finishing lost its call service, so the new call lost its microphone and its network the moment the app left the screen. Build 4 corrected the first and build 5 the second, and the owner confirmed every audio step by ear against the devices' own audio levels ([`docs/validation/voice-mesh/2026-10-05/`](validation/voice-mesh/2026-10-05/README.md)). |
+| ADR-080 | Accepted (2026-10-06); the identity tag of D3 and the cache of D4 amended by ADR-082 (2026-10-06) | A send verifies its recipients with one `POST /api/v1/peers` for each 64 users instead of up to three per-user reads for each. Every answer goes through the same `_refresh` checks the per-user answers feed; `unchanged` is a shape decided by its presence; a user the route leaves out is blocked as the identity read's `404` is; and the batched tag is stored and sent apart from the device list's `ETag`. The round-trip cache passes the batched read through and forgets every peer it found moved | A send read the identity, the device list and, when its head had moved, the device log of every recipient before it sealed one copy, against a round trip ADR-060 and ADR-065 measured at 107-137 ms: a group of fifty was up to a hundred and fifty round trips. ADR-065's cache stopped a cycle asking twice, never the first time. The server answers up to 64 peers in four queries, and `CLIENT_CONTRACT.md` §L names that route the one to poll on. Counted on the composed send path: a send is one call where it was four, a send and its gossip two where they were four, and a first contact with its gossip stays at six. Adds one call to a route the server already serves; changes no cryptographic construction, protocol, local schema or backend file. |
+| ADR-082 | Accepted (2026-10-06) | Every resolution asks the server: ADR-065's thirty-second peer cache is deleted, so a send is verified against the state its recipients hold when it is made. The per-user identity read becomes conditional on its own `ETag`; a `304` stands for the stored identity and is verified again, an identity never published stays `404 not_found` whatever tag is sent, and the three tags stay on three routes. Supersedes ADR-065's cache and amends ADR-080 D3 and D4 | The cache existed because a fan-out cost three reads for each recipient. ADR-080 made a fan-out one call, the `accounts` scope allows 300 calls a minute, and `/identity` serves a tag now, so all the cache still bought was the second re-read of a peer on the claim path, at the price of a send sealed to state nobody had checked again for up to thirty seconds. Counted on the composed send path: a first contact and its gossip go from six requests to eight, five of them answered with no body. Changes no wire format, local schema or backend file. |
+| ADR-083 | Accepted (2026-10-07) | A download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped: the next attempt for the same capability sends `Range: bytes=<bytes already written>-` and `If-Range` with the first answer's strong `ETag`, accepts `206` beside `200` only as an exact continuation, counts from the offset, and ends with exactly one bucket on disk. A `200` to a range starts the file again, a tag that moved reports the attachment gone, and the bytes are kept only after a dropped connection, a cancellation or a refusal, one partial at a time and in memory. The token coordinator's single flight is kept as a contention control and documented as one, and `SessionTokenStore.readDurable` is deleted | A dropped 64 MiB download cost the whole bucket again, although nginx serves a range of the stored file and `backend/attachments/API.md` now documents it. Phase 7 answers server ADR-0024's contract cost; these are the last two items `CLIENT_WORK.md` left optional, which ADR-0024 itself did not decide: the resume rests on what the attachments API published in the run of server ADR-0025, and the coordinator on server ADR-0023, after which nothing retires a token. The single flight protects nothing now, but it still turns every caller in the renewal window into one renewal on the `accounts` scope, and deleting it would leave the zone marker and the session generation beside it as they are. `readDurable` had no caller after ADR-068 deleted the rotation repair, under a contract that said session-ending decisions were made against it. Below 16 MiB the bookkeeping costs more than the bytes. Changes no wire format, local schema, cryptographic construction or backend file. |
+
+## ADR-083 in full — a download takes up where it stopped, and the single flight is kept for what it saves (2026-10-07)
+
+**Status:** Accepted, 2026-10-07. Client-side decision, phase 7 prompt 3, the last of the phase.
+Phase 7 is the client's answer to server ADR-0024, which set out to take the contract's cost off
+the client: ADR-080 and ADR-082 removed the per-recipient reads and the peer cache. This record
+takes the two items the server's `CLIENT_WORK.md` left optional that ADR-0024 itself did not
+decide. The `Range` resume rests on what `backend/attachments/API.md` published in the run of
+server ADR-0025, and the token coordinator on server ADR-0023. **Changes no wire format, local
+schema, cryptographic construction or backend file**; the download's port hands back a file
+instead of writing into a sink. **Opens no production gate.**
+
+**Cites:** ADR-049 and ADR-050 (the arbitration), ADR-068 (one session token), the
+[attachments API](../../backend/attachments/API.md) under **Resuming**,
+[`CLIENT_WORK.md`](../../CLIENT_WORK.md) § "Optional — resume an attachment download" and
+§ "Optional — the arbitration the rotation forced", and RFC 9110 §8.8.3.2, §13.1.5, §14.1.2,
+§14.4 and §15.3.7 (<https://www.rfc-editor.org/rfc/rfc9110.txt>, read 2026-10-07).
+
+### The question
+
+> A download that dropped part-way started again from zero, and the token coordinator still
+> carries the single flight a rotating refresh token once needed. Can a download take up where
+> it stopped, and what does the single flight still do?
+
+### D1. The two largest buckets resume
+
+nginx serves a download from an internal location, and its static handler has always honoured a
+`Range` there; the application never sees one. `backend/attachments/API.md` now documents it,
+and `GROUND-TRUTH.md` §4 measured it on 2026-09-06: `Range: bytes=10-19` answered `206` with
+`Content-Range: bytes 10-19/65536`, and the whole answer carries `Accept-Ranges: bytes`, an
+`ETag` and a `Last-Modified`. `backend/openapi.json` lists no `206` for the route, by design: it
+describes what the route answers, and the route always answers `200` with an empty body.
+
+`DioAttachmentTransport.download` changes in four places:
+
+| Part | Now |
+|---|---|
+| The call | When a partial file exists for the capability, it sends `Range: bytes=<bytes already written>-` and `If-Range: <the first answer's ETag>` |
+| The status check | `206` is accepted beside `200`, and only as an exact continuation: `Content-Range: bytes <offset>-<bucket - 1>/<bucket>`. A `200` to a range is the whole object, so the partial file is emptied and the answer written from its first byte |
+| The length check | Counted from the resume offset. What ends on disk is exactly one bucket, however many answers it took |
+| The partial file | Kept only while the tag matches. An answer under another tag, a `200` or a `206`, means the retention sweep deleted the object, so the file is deleted and the attachment reported gone: `BackendFailure(notFound)`, as a `404` reports it |
+
+The tag is kept only when it is strong, because RFC 9110 §13.1.5 forbids a weak one in
+`If-Range`, and it is kept exactly as it arrived, because the server compares the two character
+by character (§8.8.3.2). An answer without a strong tag can be downloaded and cannot be resumed.
+The open range is RFC 9110's `bytes=9500-` form (§14.1.2): the rest of the object from the
+offset. A `206` must repeat the tag (§15.3.7), and one that names another is a moved tag.
+
+Only 16 MiB and 64 MiB resume. The largest of the four buckets below them is 4 MiB, a quarter of
+the smallest that resumes, and fetching it again costs less than the bookkeeping. The set is the
+two largest of `AttachmentCryptoProtocolV1.buckets`, so it follows the protocol rather than a
+deployment's published list.
+
+### D2. What keeps the bytes and what deletes them
+
+The bytes stay only after an ending that leaves the object as it was and them a true prefix of
+it: a dropped connection, a cancellation, or a refusal, which carries no byte of the object —
+any status from `400` up but two. Everything else deletes them: a `404`; a tag that moved; a
+`416`, which nginx answers a range that does not fit the object and which these bytes would ask
+for again every time; a continuation that starts anywhere but where they stop; a body that runs
+past the bucket or ends short of it; and a write to disk that fails.
+
+A dropped connection is the case this exists for, and before this change it escaped `download`
+as an exception. dart:io reports it on the body stream as an `HttpException`, and Dio 5.11.0
+passes an error on that stream through as it is (`handleResponseStream` in
+`lib/src/response/response_stream_handler.dart` of the pinned package), so it never arrived as
+the `DioException` the transport caught. The transport now catches `IOException` and reports it
+as `offline`, after `FileSystemException`, which is the disk and is reported as storage.
+
+### D3. One partial, in memory
+
+The record of a partial download names a capability, and a capability lives only in protected
+local state (`attachments.md`, Security model). A file named after it would put it on disk
+outside SQLCipher, and the client has no hash it can reach from Dart to name a file from it:
+`package:crypto` is not a dependency, and the crypto core's ports offer none. So the transport
+holds one record in memory — the capability, the bucket, the file and the tag — and a second
+download that stops replaces it, which bounds what resuming keeps on disk to one bucket. The
+record is taken out before the request, so a second download of the same capability running at
+the same time starts a file of its own rather than writing this one.
+
+What that costs: a process that dies takes the record with it, so the download after a restart
+begins at zero, and its partial file stays in the private cache directory as any temporary file
+of a killed process already did. A process the system froze and thawed keeps the record.
+Freezing a cached application terminates its sockets (the AOSP freezer documentation ADR-050
+quotes), which the transport sees as a dropped connection; that is argued here, not measured on a
+device.
+
+The port changed to fit. `download` answers the file it filled instead of writing into a sink
+the caller owned, because the transport has to keep that file between attempts.
+`AttachmentTransferService` decrypts the file it is handed and deletes it, and never sees a
+partial one.
+
+### D4. The single flight stays, as a contention control
+
+Chosen: keep it, and call it what it is.
+
+Server ADR-0023 retires nothing on a renewal, so the race the single flight was built for — two
+owners presenting one rotating refresh token, the loser presenting a retired one, the session
+ending for both — cannot happen. Each owner in the process has its own coordinator, and two of
+them renew independently and both keep working tokens; `delivery_owner_contention_test.dart`
+shows it with two real isolates over one shared store. Nothing depends on the single flight for
+correctness.
+
+It still saves requests. Every caller that asks for a token inside the renewal window joins the
+one renewal in flight: one `POST /api/v1/auth/renew`, one write of the session row and one new
+token, where each caller would otherwise make its own, on the `accounts` scope that the peer
+reads of ADR-080 and ADR-082 share at 300 a minute. Deleting it buys almost nothing: it is a
+field and one short method. The zone marker beside it stays either way, because the renewal is
+itself an authenticated request that asks the coordinator for its header token, and without the
+marker that question would start another renewal. So does the session generation, because a
+renewal answered after a logout must not write the session back.
+
+**Rejected: delete it.** Every caller in the window would renew on its own, to remove a field and
+a method, and the coordinator's two other mechanisms would stay exactly as they are.
+
+**Deleted beside it: `SessionTokenStore.readDurable`.** It was the read ADR-050's decision C made
+its two decisions against, the success path's comparison and the wait for another owner's
+rotation. ADR-068 deleted both on 2026-09-08 (`d58f4d9`) and left the read with no caller in
+`lib`, under a contract that still said every decision that could end a session was made against
+it. It goes from the port, the adapter and three test doubles, and
+`delivery_owner_contention_test.dart` reads the shared row through an adapter with nothing cached
+instead.
+
+### D5. The records that called it a safeguard
+
+ADR-049 and ADR-050 gain dated notes and new statuses, and their text stays as history.
+ADR-050's gate stands, decisions A and B, for the envelope two owners would hand to the ratchet
+twice. `sync-engine.md` gets a token lifecycle with one token, the single flight named a
+contention control, and no close `4001` or `4403`, which ADR-069 retired; its ownership and
+composition sections stop citing the token race. So do the comments on the ownership wait in
+`message_delivery.dart`, `sync_ports.dart`, `sync_platform_adapters.dart` and
+`platform_deferred_delivery_scheduler.dart`, and the line of `testing-strategy.md` that listed a
+rotating refresh.
+
+### What it costs
+
+| A download, then a retry | Fetched before | Fetched now |
+|---|---|---|
+| 64 MiB, dropped at 48 MiB | 112 MiB | 64 MiB |
+| 16 MiB, cancelled at 1 MiB | 17 MiB | 16 MiB |
+| 4 MiB, dropped at 2 MiB | 6 MiB | 6 MiB, by design |
+
+The transport keeps at most one file of up to 64 MiB in the private cache between attempts.
+
+### Correctness
+
+- **`attachment_pipeline_test.dart`** drives `DioAttachmentTransport` against a fake server whose
+  bodies can drop part-way, over a 16 MiB object whose every byte depends on its offset. A
+  dropped download resumes from the byte it stopped at with the two headers, counts from there,
+  and ends with the object exactly; a `200` to a range starts the file again; a moved tag on a
+  `200` or a `206` reports the attachment gone and keeps nothing; a cancellation and a `429` keep
+  the bytes for the next attempt; a `404` and a `416` keep nothing; a continuation from the wrong
+  offset, or one byte past the bucket, keeps nothing; the four small buckets and an answer
+  without a strong tag start again from zero; and the transfer service decrypts and deletes the
+  file a download hands it.
+- Each was run against a deliberate defect, one at a time: counting from zero, appending after a
+  whole answer, ignoring a moved tag, resuming every bucket, accepting a weak tag, keeping the
+  bytes after a `416`, keeping them after a `404`, missing a dropped connection, and ignoring
+  `Content-Range`. The tests caught all nine.
+- **`token_coordinator_test.dart`** still pins one renewal for concurrent callers, and
+  **`delivery_owner_contention_test.dart`** still shows two owners keeping two working tokens.
+
+### What is not done
+
+- **No run against nginx.** Every check is a fake server. A development client that talks to the
+  application directly cannot test the resume at all: the range is nginx's work, from the
+  internal location the download redirects to, and the application answers `200` with an empty
+  body and does nothing with `Range`. `GROUND-TRUTH.md` measured a closed range; the open one
+  the client sends is RFC 9110's and unmeasured here.
+- **No screen downloads yet.** `AttachmentTransferService` is still composed by no provider, so
+  the resume waits, like the rest of the pipeline, for the piece that composes it.
+- **A restart forgets the partial**, as D3 says, and nothing sweeps the file it leaves.
+- **The download's `500` and `503`** are still read as malformed answers by its status mapping,
+  although `backend/openapi.json` lists both for this route. The bytes survive either; only the
+  failure reported is wrong.
+- **Found in passing: the renewal window is two and a half minutes of a thirty-day token.** The
+  coordinator renews only inside `proactiveRenewalWindow` plus `clockSkewAllowance` before the
+  token expires, and `/auth/renew` answers an expired token `401 invalid_token`, so a device that
+  makes no request in those minutes is signed out by its next one. Not changed here.
+
+## ADR-082 in full — every send asks, and the identity read is conditional (2026-10-06)
+
+**Status:** Accepted, 2026-10-06. Client-side correctness decision, phase 7 prompt 2.
+**Supersedes ADR-065's peer cache** (its D1 to D5; the gossip half, D6 and D7, stands) and
+**amends ADR-080** D3, whose identity tag is sent now, and D4, whose cache is gone. Sends
+`If-None-Match` to `GET /api/v1/users/{user_id}/identity`, which the server already answers
+with `304` (devices API, "Fetch a user's cross-signing identity"; `peer_identity` in
+`backend/openapi.json`), and changes no cryptographic construction, protocol or backend file.
+**The local schema does not move:** the identity tag is one more optional key,
+`identity_etag`, in the trust record's JSON value. **Opens no production gate.** Numbered after
+ADR-081, which records the unsigned peer device and lands with its own change.
+
+**Cites:** ADR-060 (the round trip), ADR-065 (the cache), ADR-080 (the batched read and its
+tags), [`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §C and §L, and the
+[devices API](../../backend/devices/API.md).
+
+### The question
+
+> ADR-065 put a thirty-second cache under the authentication service because a fan-out cost
+> three reads for each recipient. What is left of that reason, and what does the cache still
+> cost?
+
+Nothing is left of the reason. ADR-080 made a fan-out one `POST /api/v1/peers` for each 64
+recipients, a read the cache already passed through. The `accounts` scope those reads count
+against allows 300 calls a minute (`THROTTLE_ACCOUNTS` in `backend/config/settings/base.py`).
+And `/identity`, which ADR-065 could only cache because "the endpoint offers no ETag", serves
+one now. What the cache still did was answer the per-user reads from memory: the prekey claim's
+re-resolution of a peer, and `resolveLiveDevices` for the sender of an inbound envelope, session
+repair and voice. For thirty seconds after each of those, a send could be sealed to a device set
+or an identity this client had not checked again.
+
+### D1. The cache is deleted
+
+`PeerIdentityRoundTripCache`, `PeerResolutionCachePort`, `NoPeerResolutionCache` and the provider
+that composed them are gone, and `ClientAuthenticationService` is composed against
+`DioContactRepository` directly. `refreshPeer` and `confirmOutOfBand` no longer need forcing
+live, because no entry point is anything else: every one asks the server, every time, so a send
+is verified against the state its recipients hold when it is made.
+
+The deletion takes two things with it. One is the exposure ADR-065 D2 stated and accepted: a
+device revoked or added with no local signal stayed invisible for up to thirty seconds longer.
+The other is the machinery ADR-080 D4 had to add so the cache could not manufacture a fork:
+forgetting a peer the batched read moved, and a floor under answers still in flight.
+
+The rule now lives on the port. `PeerIdentityRemotePort` says that every call is a request and
+that nothing between it and the server may answer one from memory, and
+`contact_composition_test.dart` holds the composition root to it: the service the application
+composes must hold the network repository itself as its remote port. Run against the tree
+before this change, that test fails on `PeerIdentityRoundTripCache`.
+
+### D2. The identity read sends its tag
+
+`fetchIdentity` takes the tag stored beside the identity and sends it as `If-None-Match`. The
+server derives the tag from the four public byte fields and the version, and answers `304` with
+an empty body while they are unchanged, or `200` with the bytes and a new tag. A `304` is read
+as the stored identity, which then goes through every check a `200` does: the signature chain,
+the own-identity comparison and the confirmed master key. It saves the body and never a check.
+
+The tag is sent under the rule ADR-080 D3 set for the device list's: only beside the identity
+it was issued for, and never for a record this client refused. A `304` to a read that carried
+no tag answers nothing, and is refused as a malformed answer that blocks the record as
+`identityUnavailable`. Every identity body must carry its `etag`, which the contract makes
+required, whether `/identity` serves it or a batched answer carries it.
+
+### D3. A `404` stays a `404`
+
+An identity that was never published has no row, and the server has no tag for a row that does
+not exist. `peer_identity` looks the row up before it compares any tag, so it answers
+`404 not_found` whatever `If-None-Match` holds
+(`test_an_absent_identity_is_still_a_404_whatever_tag_is_offered`). The client keeps `404` out
+of the statuses it accepts from this route, so the answer stays `BackendFailure(notFound)` and
+blocks the record as `identityUnavailable`, exactly as before, and `_persistBlocked` drops every
+tag with it. The next read asks for the identity whole.
+
+### D4. Three tags, three routes
+
+The identity read's tag is stored as `identityEtag` and sent only to `/identity`. It covers the
+identity alone, so unlike the other two it does not depend on which route answered: it is
+written beside whichever identity is stored. That is the new tag of a `200`, the tag a `304`
+confirmed, the tag a full batched answer carries inside its identity, or the stored tag when the
+batched answer is `unchanged`. A batched answer therefore carries two tags, its own and the
+identity's, and they go to two sides of the record.
+
+ADR-080 D3's rule for the device list's tag and the batched read's is unchanged: the other
+route's tag survives only when nothing it vouched for moved. A refused record sends none of the
+three. A record blocked over a changed master key stores the new identity with the tag issued
+for it, and never sends that tag while it is blocked.
+
+So a claim right after a batched read asks for the identity with the tag that read stored, and
+is answered `304`. No tag is ever sent to a route that did not issue it, which
+`client_authentication_service_test.dart` checks across all three.
+
+### What it costs
+
+Requests, counted on the composed send path in `send_rechecks_peer_state_test.dart`, against a
+fake server whose tags move with its state:
+
+| Shape | ADR-080, through the cache | Now | Answered with no body now |
+|---|---|---|---|
+| Two sends to one peer | 2 | 2 | the second read, `unchanged` |
+| A first contact and its gossip | 6 | 8 | 5: one `unchanged`, two identity `304`s, two device-list `304`s |
+
+A send that starts no session never reached the cache, since its one read is the batched read
+the cache passed through, and it costs what ADR-080 counted. The shape that grows is the one
+with a claim: each establishment re-reads the peer through the per-user routes before it claims,
+and the second re-read no longer comes from memory. Both re-reads are conditional now, so the
+two requests the cache saved come back without a body, and so does the identity the first claim
+used to fetch in full. Six of the eight count against the `accounts` scope's 300 calls a
+minute; the two claims count against the `claim` scope, as they always did.
+
+### Correctness
+
+- **`send_rechecks_peer_state_test.dart`** drives the real `PairwiseFanoutCoordinator` over the
+  real `ClientAuthenticationService`, with nothing between the service and a fake server, and
+  asserts on the devices `prepareOutbound` was called with. A device revoked, a device added, a
+  master key replaced and a fork recorded between two sends are each seen by the second send
+  with no other signal. Each claim re-reads the peer with the tags it holds, and a device
+  revoked between two claims is not claimed.
+- **`contact_composition_test.dart`** pins the network repository as the composed service's
+  remote port.
+- **`client_authentication_service_test.dart`** covers the conditional read: the tag sent and
+  kept on a `304`; a `304` verified again, and refused with its tag dropped; a moved identity
+  read whole with its new tag; the `404` kept whatever was sent, and recovered from without a
+  tag; a `304` to an unconditional read refused; a refused record sending no identity tag; and
+  every route sent only its own tag.
+- **`dio_contact_repository_test.dart`** checks the wire: the `If-None-Match` header, none
+  without a tag, a bodiless `304`, and a `404` that stays `BackendFailure(notFound)` with a tag
+  sent. **`contact_api_dtos_test.dart`** checks the tag in the identity body and inside a
+  batched answer, and **`drift_contact_repository_test.dart`** checks it stored and read back
+  apart, and a record without one.
+- Each check was run against a deliberate defect: the batched tag stored as the identity's, the
+  identity tag never sent, a `304` accepted that answered no tag, and the `404` accepted as an
+  answer. The tests caught each one.
+
+### What is not done
+
+- **No run against the live server.** Every check is a fake, or a mock-adapter test against
+  `backend/openapi.json`, and the counts above are requests, not timings.
+- **The own-account identity read stays unconditional.** `IdentityResponseDto` in the devices
+  feature reads `/identity` during enrollment and identity rotation. It ignores the new `etag`
+  field, so nothing broke, and it runs too rarely to gain from a tag.
+- **ADR-060 is unchanged.** Its 107 to 137 ms is still what one request costs, and it describes
+  no cache.
+
+## ADR-080 in full — a fan-out verified in one call (2026-10-06)
+
+**Status:** Accepted, 2026-10-06. Client-side cost decision, phase 7 prompt 1. Adds one call to
+`POST /api/v1/peers`, a route the server already serves (devices API, "Peer state for a set of
+users"), and changes no cryptographic construction, protocol, wire format or backend file.
+**The local schema does not move:** the batched tag is one more optional key in the trust
+record's JSON value. **Opens no production gate.**
+
+**Cites:** ADR-060 and ADR-065 (the round trip and the cache), ADR-075 (a group message is one
+copy for each device of each member),
+[`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §L, and the
+[devices API](../../backend/devices/API.md).
+
+### The question
+
+> A send reads three things about every recipient before it seals one copy: the identity, the
+> device list and the device log. What may one call replace, and what may it not?
+
+`PairwiseFanoutCoordinator` resolved each recipient in turn, then this account, and each
+resolution read `GET /api/v1/users/{user_id}/identity`, `GET /api/v1/users/{user_id}/devices`
+and, when the head had moved, pages of `GET /api/v1/users/{user_id}/devicelog`. A group of fifty
+was up to a hundred and fifty round trips before its first copy, against a round trip ADR-060
+measured at 107 to 137 ms. ADR-065's cache stopped one cycle asking the same question twice; it
+never stopped the first ask.
+
+### D1. One read, the same checks
+
+`ClientAuthenticationService.resolveLiveDevicesForUsers` reads every user through
+`PeerIdentityRemotePort.fetchPeerStates` and hands each answer to `_refresh`, the method the
+per-user reads have always fed. `_refresh` takes the identity and the device list either from
+the two per-user reads, made where they always were, or from the batched answer. Everything
+between and after the two reads is one code path: the identity signature, the own-identity
+comparison, the confirmed master key, the unsigned-device rule, the device transition rule, the
+same-head pending window, the hash chain, `requireCurrentLiveSet`, the attestation and the
+persisted trust states. There is no second verifier, and the answer's identity and devices are
+read by the parsers the per-user answers are read by.
+
+The device log is not in the batched answer. A peer whose head moved still has its new records
+read page by page and verified before anything is stored.
+
+Order and failure are kept. The fan-out asks for its peers sorted and then this account, which
+is the order the per-user loop ran. Each user is verified behind the global fork gate that
+`resolveLiveDevices` puts in front of one user, so a fork found in one withholds every user
+after it. The fan-out fails with the first failure in that order, as the loop did. One
+difference is deliberate: users after a failing one are still verified and stored, where the
+loop never asked about them.
+
+### D2. The answer's two shapes, and the user it leaves out
+
+- **`unchanged` is decided by its presence.** It marks the short shape — `user_id`, `etag`,
+  `unchanged` — and its value is always `true`. Any other value, a body field beside it, or a
+  tag other than the one the request sent for that user is a malformed answer rather than the
+  other shape. It stands for the stored identity, device list and head, exactly as a `304` from
+  the device-list read stands for the stored list, and they are verified again.
+- **Items are matched to the request by `user_id`**, ignoring case because the server writes
+  ids in lower case, and never by position or count. An item about a user nobody asked about,
+  or a second item about one user, is malformed.
+- **A user the route leaves out** does not exist, is not activated or was deactivated, and the
+  route does not say which. That is what the per-user identity read answers `404 not_found` for,
+  together with a user who has published no identity, which the batched read says with
+  `identity: null`. All of them become that `404` and are blocked as it is: the record goes to
+  `identityUnavailable` and the failure is `BackendFailure(notFound)`, a settled failure that
+  retires the send. A send to such a member ends as it did before; it is reached in one call
+  instead of three.
+
+### D3. Three tags, kept apart
+
+The identity read's `ETag` is never sent. The device list's is the record's `etag`, sent as
+`If-None-Match` to that route alone. The batched read's is the new `peerStateEtag`, stored under
+`peer_etag` and sent in the request body to that route alone. The routes derive their tags from
+different inputs, so a tag sent to the wrong route costs a full answer and never a wrong `304`.
+The rule here is about the client's own state.
+
+A tag vouches for the state stored beside it. When one route answers, its tag is written. The
+other route's tag survives only if this answer left the stored identity, device list and head
+exactly as they were and the record was not blocked. Kept past a change, it would name a state
+the client no longer holds, and an answer confirming that state would then stand for bytes the
+route never sent. Nothing an honest server does brings an old state back, since heads only grow
+and identity versions only rise, so the rule costs at most one full answer and buys a guarantee
+that does not rest on the server: `unchanged` and `304` only ever stand for the bytes stored
+beside their tag. A refused record sends neither tag, and `_persistBlocked` drops both, for the
+reason it already dropped the device list's.
+
+A verified record used to require the device list's tag when it was decoded. It now requires the
+tag of either route, because a batched read that moved the stored state drops the device list's.
+
+> **Amended by ADR-082 (2026-10-06).** The identity read's `ETag` is sent now, as
+> `If-None-Match` to `/identity` alone. It is the record's third tag, `identityEtag`, written
+> beside whichever identity is stored; the batched answer carries it inside its identity, beside
+> its own tag, which stays `peerStateEtag`. A refused record sends none of the three, and
+> `_persistBlocked` drops all three. What a verified record needs when it is decoded is
+> unchanged: the tag of the device list or of the batched read.
+
+### D4. The cache passes the batched read through
+
+`PeerIdentityRoundTripCache` neither remembers nor joins `fetchPeerStates`. One call answers for
+everybody a fan-out names, and what is worth keeping from it is already kept, as a tag, in each
+record.
+
+What it changes is the rest of the cache. ADR-065 relied on every answer that becomes stored
+state passing through the cache, so that nothing older than the stored state could be served.
+A batched answer becomes stored state without passing through it. A remembered per-user answer
+from before it, served afterwards, would hand `_refresh` a head below the one just stored, which
+is read as a fork and withholds every send to everybody. So a peer the batched read found moved
+is forgotten, and no per-user answer asked before the batched answer landed, one still in
+flight included, is remembered for that peer. A peer found `unchanged` stored nothing new and
+keeps what is remembered about it, which is what holds the first-contact shape below at six.
+
+Round trips, counted on the composed send path in `peer_resolution_cache_test.dart`:
+
+| Shape | ADR-065 | Now |
+|---|---|---|
+| One send | 4 | 1 |
+| A send and its gossip | 4 | 2 |
+| Two sends to one peer | 4 | 2 |
+| A first contact and its gossip | 6 | 6 |
+| A group of fifty, first send | up to 150 | 1, plus log pages for moved heads and the claim path for each new session |
+
+> **Superseded by ADR-082 (2026-10-06).** The cache is deleted, and with it the forgetting and
+> the floor described here; `peer_resolution_cache_test.dart` went with it, and the counts are
+> taken in `send_rechecks_peer_state_test.dart` now. A first contact and its gossip cost eight
+> requests, five of them answered with no body. The other rows stand: a send that starts no
+> session never reached the cache.
+
+### D5. What stays per user
+
+`refreshPeer` and `confirmOutOfBand` (the safety number and the `stale_devices` refresh),
+`refreshPeerForDevices` (the prekey claim, which is per user anyway) and `resolveLiveDevices`
+for the single-peer paths (the sender of an inbound envelope, session repair and voice) still
+read the per-user routes, which the contract keeps and does not deprecate. So does
+`PairwiseVolatileSealer`, which resolves each target user of a voice signal on its own: it needs
+an outcome for each device, to refuse one and seal the rest, where the batched resolution fails
+a fan-out as a whole. Moving it is a separate change.
+
+### What is not done, and what was found
+
+- **No run against the live server.** Every check is a fake, or a mock-adapter test against
+  `backend/openapi.json`, and the counts above are requests, not timings.
+- **Found, not changed.** Both device parsers require `bundle_version` to be null when
+  `cross_sig` is, but the server serves an unsigned device as `cross_sig: null,
+  bundle_version: 0` (`backend/devices/tests/test_cross_signing.py` and `test_peer_state.py`).
+  A peer with a device between its registration and its cross-signature therefore makes its
+  device-list answer malformed, `malformedServerResponse` rather than a list refused as
+  `invalidDevice`: on the per-user read as before, and on the batched read now, where it fails
+  the whole call. Either way the send fails as it did. This change shares the parsers and
+  leaves that rule to a change of its own.
 
 ## ADR-079 in full — a call on two devices, and the two things it took (2026-10-05)
 
@@ -2301,6 +2774,13 @@ shape, no accepted status code, no cryptographic construction, no ciphersuite id
 protocol, no wire format, no transport trust anchor and no backend file. **Opens no production
 gate.** This ADR closes the RCA ADR-060 opened.
 
+> **Superseded in part by ADR-082 (2026-10-06).** D1 to D5, the peer cache, are deleted.
+> ADR-080 made a fan-out one read, and `/identity` now serves an `ETag` and answers a matching
+> `If-None-Match` with `304`, so two things below no longer hold: that the endpoint "offers no
+> ETag", and that reducing identity round trips is therefore "a caching problem". D6 and D7,
+> gossip as a debt the cycle pays after the outbox, stand. The measurements below were taken
+> through the cache and are kept as history.
+
 ### The question
 
 > Nothing a user waits on is slow any more. What is left is redundant network work *inside*
@@ -2600,6 +3080,9 @@ composes exactly what it composed before.
   `PairwiseCryptoOperation`, no `backend/` file.
 - **No change to what gossip says.** It advertises this device's verified log heads to a peer
   it is talking to, exactly as before. Only when it runs has changed.
+
+> **Corrected by ADR-082 (2026-10-06).** The server offers that `ETag` now, and the client
+> sends it back as `If-None-Match`. The cache this ADR built for want of it is deleted.
 
 ### What is explicitly left undone
 
@@ -7556,6 +8039,15 @@ row safe when the arbitration cannot run at all. Reaffirms ADR-049's *choice* of
 on re-derived evidence. Adds no dependency, changes no cryptographic behaviour, touches no
 backend, opens no production gate.
 
+> **Corrected by ADR-083 (2026-10-07).** The first row of the hazard table and decision C
+> describe a server that no longer runs. Since server ADR-0023 a renewal retires nothing, so the
+> loser of a race holds a second working token rather than a retired one, and nobody is signed
+> out. ADR-068 deleted C's wait and its re-read budget on 2026-09-08 without saying so here;
+> ADR-083 deletes `SessionTokenStore.readDurable`, the read both made their decisions against,
+> which had no caller after that, and keeps the single-flight renewal as a contention control.
+> Decisions A and B stand, for the envelope two owners would hand to the ratchet twice, and so
+> does correction D. The text below is kept as history.
+
 ### The question
 
 > More than one part of this application may be capable of driving the same delivery work
@@ -7828,6 +8320,10 @@ device clock can move backwards and a wait that cannot terminate is the failure 
 piece exists to avoid. `readDurable()` is a new `SessionTokenStore` method; it reads the row
 without disturbing the in-memory access token, which the durable row never holds.
 
+> **Deleted by ADR-068 and ADR-083.** Nothing retires a token, so there is no rotation to lose
+> and nothing to repair: the wait and its budget went on 2026-09-08, and `readDurable()` on
+> 2026-10-07.
+
 **D (correction, separately reported).** `singletonId: const Value(1)` is now stated
 explicitly in the `account_session` and `account_identity` upserts. Without it the second
 write to either table on any device throws.
@@ -8035,6 +8531,13 @@ existing claims true rather than making new ones.
 mechanisms** — the `WorkManager` dependency and the durable Drift delivery lease — on
 evidence recorded below. Amends ADR-045's delivery disclosure to revision 3. Opens no
 production gate.
+
+> **Corrected by ADR-083 (2026-10-07).** The token hazard below is gone. Since server
+> ADR-0023 a renewal retires nothing, so two `TokenCoordinator`s renewing at once both keep
+> working tokens and nobody is signed out; the single-flight renewal stays, as a contention
+> control and not a safeguard. What exclusion still protects is the envelope: two engines would
+> hand one ciphertext to the ratchet twice, and the post-inbox work has no established
+> concurrency properties. The text below is kept as history.
 
 ### The question
 

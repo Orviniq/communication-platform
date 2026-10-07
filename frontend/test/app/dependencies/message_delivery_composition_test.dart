@@ -93,8 +93,8 @@ void main() {
       harness.http.authorizationHeaders.toSet(),
       {'Bearer ${harness.tokens.current!.accessToken.value}'},
       reason:
-          'one coordinator serves REST and the socket; a second one would '
-          'rotate the refresh token behind the first',
+          'one coordinator serves REST and the socket, so both present the '
+          'one token it holds',
     );
   });
 
@@ -953,9 +953,6 @@ final class InMemoryTokenStore implements SessionTokenStore {
 
   @override
   Future<SessionTokens?> read() async => current;
-
-  @override
-  Future<SessionTokens?> readDurable() async => current;
 
   @override
   Future<void> replace(SessionTokens tokens) async => current = tokens;

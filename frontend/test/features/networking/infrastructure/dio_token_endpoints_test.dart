@@ -180,9 +180,6 @@ final class MemoryTokenStore implements SessionTokenStore {
   Future<SessionTokens?> read() async => current;
 
   @override
-  Future<SessionTokens?> readDurable() async => current;
-
-  @override
   Future<void> replace(SessionTokens tokens) async {
     current = tokens;
     replacements += 1;

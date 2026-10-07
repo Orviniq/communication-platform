@@ -30,14 +30,15 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   /// The one renewal in flight, so that N callers arriving inside the renewal
   /// window cost one call rather than N.
   ///
-  /// It is no longer a safety property. Against this server a renewal writes
-  /// nothing and moves no generation, so the race this guard was built for —
-  /// two owners renewing at once, the loser presenting a token the winner had
-  /// retired, and the session ending for both — cannot happen: two concurrent
-  /// renewals simply produce two working tokens (ADR-0023). What remains is
-  /// the saving, and the coordinator's own reentrancy below. Whether a
-  /// coordinator is still the right shape for that is a later phase's
-  /// decision, not this one's.
+  /// It is a contention control and not a safety property (ADR-083). Against
+  /// this server a renewal writes nothing and moves no generation, so the race
+  /// this guard was built for — two owners renewing at once, the loser
+  /// presenting a token the winner had retired, and the session ending for
+  /// both — cannot happen: two concurrent renewals simply produce two working
+  /// tokens (ADR-0023). What it still saves is the requests: one
+  /// `POST /auth/renew`, one write of the session row and one new token, where
+  /// every caller in the window would otherwise make its own against the
+  /// `accounts` scope the peer reads share.
   Future<Result<AccessToken>>? _renewalInFlight;
 
   /// Marks the work of one renewal, so that a question asked from inside it is

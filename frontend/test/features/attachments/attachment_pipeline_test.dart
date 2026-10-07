@@ -10,6 +10,7 @@ import 'package:communication_platform/core/protocol/attachment_crypto_model.dar
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
+import 'package:communication_platform/features/attachments/application/attachment_transfer_service.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_allowance_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
@@ -271,6 +272,7 @@ void main() {
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
           clock: const _FixedClock(),
+          storage: PrivateAttachmentStorage(),
           dio: dio,
         );
         final root = await Directory.systemTemp.createTemp('cp_quota_test_');
@@ -338,6 +340,7 @@ void main() {
           config: const FixedServerConfig.fallback(),
           allowance: allowance,
           clock: const _FixedClock(),
+          storage: PrivateAttachmentStorage(),
           dio: dio,
         );
 
@@ -373,6 +376,7 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
+        storage: PrivateAttachmentStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_allowance_test_');
@@ -408,6 +412,7 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
+        storage: PrivateAttachmentStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_bucket_test_');
@@ -428,7 +433,11 @@ void main() {
       expect(allowance.recorded, isEmpty);
     });
 
-    test('maps expired capability to not-found and writes no bytes', () async {
+    test('maps expired capability to not-found and keeps no bytes', () async {
+      final root = await Directory.systemTemp.createTemp('cp_expired_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
       final dio = Dio();
       dio.httpClientAdapter = _QueueAdapter([
         (options, requestStream, cancelFuture) async =>
@@ -440,17 +449,15 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: _RecordingAllowance(),
         clock: const _FixedClock(),
+        storage: PrivateAttachmentStorage(root: root),
         dio: dio,
       );
-      final sink = _CollectingSink();
       final result = await transport.download(
         capabilityId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-        destination: sink,
         expectedBucketSize: 65536,
       );
-      await sink.close();
 
-      final failure = (result as FailureResult<void>).failure;
+      final failure = (result as FailureResult<File>).failure;
       expect(
         failure,
         isA<BackendFailure>().having(
@@ -459,7 +466,408 @@ void main() {
           BackendFailureCode.notFound,
         ),
       );
-      expect(sink.bytes, isEmpty);
+      expect(root.listSync(), isEmpty);
+    });
+  });
+
+  group('a large download resumes where it stopped (ADR-083)', () {
+    const capability = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const bucket = 16777216;
+    const tag = '"66f9a1b2-1000000"';
+    const moved = '"66f9c3d4-1000000"';
+    const dropped = HttpException('Connection closed while receiving data');
+    late Directory root;
+    late Uint8List object;
+
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('cp_resume_test_');
+      // Every byte depends on its position, so bytes continued from the wrong
+      // offset cannot come out equal by accident.
+      object = Uint8List(bucket);
+      for (var index = 0; index < bucket; index += 1) {
+        object[index] = (index ^ (index >> 8) ^ (index >> 16)) & 0xff;
+      }
+    });
+
+    tearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+
+    ({DioAttachmentTransport transport, _QueueAdapter server}) serve(
+      List<_AdapterHandler> answers,
+    ) {
+      final server = _QueueAdapter(answers);
+      return (
+        transport: DioAttachmentTransport(
+          serverOrigin: Uri.parse('https://chat.example.test'),
+          tokens: _FullTokenCoordinator(),
+          config: const FixedServerConfig.fallback(),
+          allowance: _RecordingAllowance(),
+          clock: const _FixedClock(),
+          storage: PrivateAttachmentStorage(root: root),
+          dio: Dio()..httpClientAdapter = server,
+        ),
+        server: server,
+      );
+    }
+
+    // The whole object under [etag], cut off after [bytes] by a connection
+    // that drops.
+    _AdapterHandler dropsAfter(int bytes, {String? etag = tag}) =>
+        (options, requestStream, cancelFuture) async => _streamed(
+          [Uint8List.sublistView(object, 0, bytes)],
+          200,
+          headers: {
+            'accept-ranges': ['bytes'],
+            if (etag != null) 'etag': [etag],
+          },
+          thenFail: dropped,
+        );
+
+    // The rest of the object from [offset], as nginx answers a range.
+    _AdapterHandler continuesFrom(
+      int offset, {
+      String etag = tag,
+      String? range,
+    }) =>
+        (options, requestStream, cancelFuture) async => _streamed(
+          [Uint8List.sublistView(object, offset)],
+          206,
+          headers: {
+            'etag': [etag],
+            'content-range': [range ?? 'bytes $offset-${bucket - 1}/$bucket'],
+          },
+        );
+
+    _AdapterHandler whole({String etag = tag}) =>
+        (options, requestStream, cancelFuture) async => _streamed(
+          [object],
+          200,
+          headers: {
+            'etag': [etag],
+          },
+        );
+
+    _AdapterHandler refuses(int status) =>
+        (options, requestStream, cancelFuture) async =>
+            ResponseBody.fromString('', status);
+
+    Future<Result<File>> fetch(
+      DioAttachmentTransport transport, {
+      CancellationSignal? cancellation,
+      void Function(int bytes)? onProgress,
+    }) => transport.download(
+      capabilityId: capability,
+      expectedBucketSize: bucket,
+      cancellation: cancellation,
+      onProgress: onProgress,
+    );
+
+    List<String> kept() => [
+      for (final entry in root.listSync()) entry.uri.pathSegments.last,
+    ];
+
+    test('only the two largest buckets resume', () {
+      expect(DioAttachmentTransport.resumableBuckets, {16777216, 67108864});
+    });
+
+    test(
+      'a dropped download is taken up from the byte it stopped at',
+      () async {
+        const stoppedAt = 5 * 1048576;
+        final (:transport, :server) = serve([
+          dropsAfter(stoppedAt),
+          continuesFrom(stoppedAt),
+        ]);
+
+        final first = await fetch(transport);
+
+        expect(
+          (first as FailureResult<File>).failure,
+          isA<TransportFailure>().having(
+            (failure) => failure.kind,
+            'kind',
+            TransportFailureKind.offline,
+          ),
+        );
+        expect(server.requests.single.headers['Range'], isNull);
+        expect(kept(), hasLength(1), reason: 'the bytes it fetched are kept');
+
+        final progress = <int>[];
+        final second = await fetch(transport, onProgress: progress.add);
+
+        final file = (second as Success<File>).value;
+        expect(server.requests[1].headers['Range'], 'bytes=$stoppedAt-');
+        expect(server.requests[1].headers['If-Range'], tag);
+        expect(progress, [bucket], reason: 'counted from where it stopped');
+        expect(await file.length(), bucket);
+        expect(listEquals(await file.readAsBytes(), object), isTrue);
+        expect(kept(), [file.uri.pathSegments.last]);
+      },
+    );
+
+    test('a whole answer to a range starts the file again', () async {
+      final (:transport, :server) = serve([dropsAfter(1048576), whole()]);
+      await fetch(transport);
+
+      final second = await fetch(transport);
+
+      // Appended to what was kept, the object would run a mebibyte past the
+      // bucket and be refused as too large.
+      final file = (second as Success<File>).value;
+      expect(server.requests[1].headers['Range'], 'bytes=1048576-');
+      expect(await file.length(), bucket);
+      expect(listEquals(await file.readAsBytes(), object), isTrue);
+    });
+
+    test(
+      'a tag that moved reports the attachment gone and keeps nothing',
+      () async {
+        for (final answer in [
+          whole(etag: moved),
+          continuesFrom(1048576, etag: moved),
+        ]) {
+          final (:transport, :server) = serve([
+            dropsAfter(1048576),
+            answer,
+            refuses(404),
+          ]);
+          await fetch(transport);
+
+          final second = await fetch(transport);
+
+          expect(
+            (second as FailureResult<File>).failure,
+            isA<BackendFailure>().having(
+              (failure) => failure.code,
+              'code',
+              BackendFailureCode.notFound,
+            ),
+          );
+          expect(kept(), isEmpty);
+          await fetch(transport);
+          expect(server.requests[2].headers['Range'], isNull);
+        }
+      },
+    );
+
+    test('a refusal or a cancellation keeps the bytes', () async {
+      const stoppedAt = 1048576;
+      final cancellation = CancellationSignal();
+      final (:transport, :server) = serve([
+        (options, requestStream, cancelFuture) async => _streamed(
+          [
+            Uint8List.sublistView(object, 0, stoppedAt),
+            Uint8List.sublistView(object, stoppedAt),
+          ],
+          200,
+          headers: {
+            'etag': [tag],
+          },
+        ),
+        refuses(429),
+        continuesFrom(stoppedAt),
+      ]);
+
+      // Cancelled as soon as the first mebibyte is on disk.
+      final cancelled = await fetch(
+        transport,
+        cancellation: cancellation,
+        onProgress: (_) => cancellation.cancel(),
+      );
+      final throttled = await fetch(transport);
+      final resumed = await fetch(transport);
+
+      expect(
+        (cancelled as FailureResult<File>).failure,
+        isA<CancellationFailure>(),
+      );
+      expect(
+        (throttled as FailureResult<File>).failure,
+        isA<BackendFailure>().having(
+          (failure) => failure.code,
+          'code',
+          BackendFailureCode.throttled,
+        ),
+      );
+      expect(server.requests[1].headers['Range'], 'bytes=$stoppedAt-');
+      expect(server.requests[2].headers['Range'], 'bytes=$stoppedAt-');
+      final file = (resumed as Success<File>).value;
+      expect(listEquals(await file.readAsBytes(), object), isTrue);
+    });
+
+    test('a 404 or a 416 to a resume keeps nothing', () async {
+      for (final status in [404, 416]) {
+        final (:transport, :server) = serve([
+          dropsAfter(1048576),
+          refuses(status),
+          refuses(404),
+        ]);
+        await fetch(transport);
+
+        final second = await fetch(transport);
+
+        expect(second, isA<FailureResult<File>>(), reason: '$status');
+        expect(server.requests[1].headers['Range'], 'bytes=1048576-');
+        expect(kept(), isEmpty, reason: '$status');
+        await fetch(transport);
+        expect(server.requests[2].headers['Range'], isNull, reason: '$status');
+      }
+    });
+
+    test('a continuation that breaks the length rule keeps nothing', () async {
+      const stoppedAt = 1048576;
+      final continuations = <(_AdapterHandler, Matcher)>[
+        // Bytes from the start of the object, offered as a continuation.
+        (
+          continuesFrom(stoppedAt, range: 'bytes 0-${bucket - 1}/$bucket'),
+          isA<SecurityFailure>().having(
+            (failure) => failure.kind,
+            'kind',
+            SecurityFailureKind.malformedServerResponse,
+          ),
+        ),
+        // The right range, and one byte past the bucket.
+        (
+          (options, requestStream, cancelFuture) async => _streamed(
+            [Uint8List.sublistView(object, stoppedAt), Uint8List(1)],
+            206,
+            headers: {
+              'etag': [tag],
+              'content-range': ['bytes $stoppedAt-${bucket - 1}/$bucket'],
+            },
+          ),
+          isA<TransportFailure>().having(
+            (failure) => failure.kind,
+            'kind',
+            TransportFailureKind.responseTooLarge,
+          ),
+        ),
+      ];
+      for (final (answer, failure) in continuations) {
+        final (:transport, :server) = serve([dropsAfter(stoppedAt), answer]);
+        await fetch(transport);
+
+        final second = await fetch(transport);
+
+        expect((second as FailureResult<File>).failure, failure);
+        expect(kept(), isEmpty);
+      }
+    });
+
+    test('the four small buckets start again from zero', () async {
+      for (final small in [65536, 262144, 1048576, 4194304]) {
+        final smallObject = Uint8List.sublistView(object, 0, small);
+        final (:transport, :server) = serve([
+          (options, requestStream, cancelFuture) async => _streamed(
+            [Uint8List.sublistView(smallObject, 0, small ~/ 2)],
+            200,
+            headers: {
+              'etag': [tag],
+            },
+            thenFail: dropped,
+          ),
+          (options, requestStream, cancelFuture) async => _streamed(
+            [smallObject],
+            200,
+            headers: {
+              'etag': [tag],
+            },
+          ),
+        ]);
+
+        final first = await transport.download(
+          capabilityId: capability,
+          expectedBucketSize: small,
+        );
+
+        expect(first, isA<FailureResult<File>>(), reason: '$small');
+        expect(kept(), isEmpty, reason: '$small');
+        final second = await transport.download(
+          capabilityId: capability,
+          expectedBucketSize: small,
+        );
+        expect(server.requests[1].headers['Range'], isNull, reason: '$small');
+        final file = (second as Success<File>).value;
+        expect(await file.length(), small);
+        await file.delete();
+      }
+    });
+
+    test('an answer without a strong tag cannot be taken up again', () async {
+      for (final etag in [null, 'W/"66f9a1b2-1000000"']) {
+        final (:transport, :server) = serve([
+          dropsAfter(1048576, etag: etag),
+          whole(),
+        ]);
+        await fetch(transport);
+
+        expect(kept(), isEmpty, reason: '$etag');
+        final second = await fetch(transport);
+        expect(server.requests[1].headers['Range'], isNull, reason: '$etag');
+        expect(server.requests[1].headers['If-Range'], isNull, reason: '$etag');
+        await (second as Success<File>).value.delete();
+      }
+    });
+  });
+
+  group('the transfer service and the file a download hands it', () {
+    late Directory root;
+
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('cp_transfer_test_');
+    });
+
+    tearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+
+    test('decrypts the file it is handed, then deletes it', () async {
+      final crypto = AttachmentCryptoService(_RecordingCryptoPort());
+      final plaintext = Uint8List(70000);
+      for (var index = 0; index < plaintext.length; index += 1) {
+        plaintext[index] = index & 0xff;
+      }
+      final fetched = File('${root.path}/fetched.bin');
+      final encrypted = await crypto.encryptToFile(
+        source: AttachmentSource(
+          length: plaintext.length,
+          displayName: 'notes.txt',
+          mimeType: 'text/plain',
+          openRead: () => Stream.value(plaintext),
+        ),
+        destination: fetched,
+      );
+      final descriptor = (encrypted as Success<AttachmentDescriptor>).value
+          .withCapability('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+      final service = AttachmentTransferService(
+        crypto: crypto,
+        transport: _HandingTransport(Result.success(fetched)),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(descriptor: descriptor);
+
+      final decrypted = (result as Success<File>).value;
+      expect(await decrypted.readAsBytes(), plaintext);
+      expect(await fetched.exists(), isFalse);
+    });
+
+    test('leaves what a failed download fetched to the transport', () async {
+      final service = AttachmentTransferService(
+        crypto: AttachmentCryptoService(_RecordingCryptoPort()),
+        transport: _HandingTransport(
+          const Result.failure(TransportFailure(TransportFailureKind.offline)),
+        ),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(
+        descriptor: _descriptor(plaintextSize: 10),
+      );
+
+      expect((result as FailureResult<File>).failure, isA<TransportFailure>());
+      expect(root.listSync(), isEmpty);
     });
   });
 }
@@ -663,6 +1071,7 @@ final class _QueueAdapter implements HttpClientAdapter {
   _QueueAdapter(this.handlers);
 
   final List<_AdapterHandler> handlers;
+  final List<RequestOptions> requests = [];
   int calls = 0;
 
   @override
@@ -670,7 +1079,10 @@ final class _QueueAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => handlers[calls++](options, requestStream, cancelFuture);
+  ) {
+    requests.add(options);
+    return handlers[calls++](options, requestStream, cancelFuture);
+  }
 
   @override
   void close({bool force = false}) {}
@@ -698,51 +1110,47 @@ final class _FullTokenCoordinator implements AccessTokenCoordinator {
   Future<void> logout() async {}
 }
 
-final class _CollectingSink implements IOSink {
-  final BytesBuilder _builder = BytesBuilder(copy: false);
-
-  Uint8List get bytes => _builder.toBytes();
-
-  @override
-  void add(List<int> data) => _builder.add(data);
-
-  @override
-  void addError(Object error, [StackTrace? stackTrace]) {}
-
-  @override
-  Future<void> addStream(Stream<List<int>> stream) async {
-    await for (final chunk in stream) {
-      add(chunk);
+/// An answer whose body is [chunks], followed by [thenFail] when one is given:
+/// the way a connection that drops part-way reaches the transport, because
+/// Dio passes an error on the body stream through as it is.
+ResponseBody _streamed(
+  List<Uint8List> chunks,
+  int status, {
+  Map<String, List<String>> headers = const {},
+  Exception? thenFail,
+}) {
+  Stream<Uint8List> body() async* {
+    for (final chunk in chunks) {
+      yield chunk;
+    }
+    if (thenFail != null) {
+      throw thenFail;
     }
   }
 
-  @override
-  Future<void> close() async {}
+  return ResponseBody(body(), status, headers: headers);
+}
+
+/// Hands the transfer service one fixed answer to every download.
+final class _HandingTransport implements AttachmentTransportPort {
+  _HandingTransport(this.answer);
+
+  final Result<File> answer;
 
   @override
-  Future<void> get done async {}
+  Future<Result<File>> download({
+    required String capabilityId,
+    required int expectedBucketSize,
+    CancellationSignal? cancellation,
+    void Function(int bytes)? onProgress,
+  }) async => answer;
 
   @override
-  Future<void> flush() async {}
-
-  @override
-  Encoding get encoding => utf8;
-
-  @override
-  set encoding(Encoding value) {}
-
-  @override
-  void write(Object? object) => add(utf8.encode('$object'));
-
-  @override
-  void writeAll(Iterable<Object?> objects, [String separator = '']) =>
-      write(objects.join(separator));
-
-  @override
-  void writeCharCode(int charCode) => add([charCode]);
-
-  @override
-  void writeln([Object? object = '']) => write('$object\n');
+  Future<Result<AttachmentUploadResponse>> upload({
+    required File encryptedFile,
+    required int bucketSize,
+    CancellationSignal? cancellation,
+  }) => throw UnimplementedError('this test only downloads');
 }
 
 /// A day's count held in memory, so a test can say what has already been spent.

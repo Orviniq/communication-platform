@@ -68,7 +68,10 @@ void main() {
       );
 
       expect(first, isA<Success<DurablePairwiseOperation>>());
-      expect(resolver.calls, [uuid(peerUserNumber), uuid(currentUserNumber)]);
+      expect(resolver.batches, [
+        [uuid(peerUserNumber), uuid(currentUserNumber)],
+      ]);
+      expect(resolver.calls, isEmpty);
       expect(claims.calls, {
         uuid(peerUserNumber): [uuid(2)],
         uuid(currentUserNumber): [uuid(3)],
@@ -106,7 +109,7 @@ void main() {
       );
 
       expect(retry, isA<Success<DurablePairwiseOperation>>());
-      expect(resolver.calls, hasLength(2));
+      expect(resolver.batches, hasLength(1));
       expect(crypto.calls, hasLength(4));
       expect(store.commits, hasLength(1));
       final firstBytes = (first as Success<DurablePairwiseOperation>)
@@ -295,6 +298,7 @@ void main() {
     expect(echoed, isA<Success<void>>());
     expect(store.localCommits, hasLength(1));
     expect(resolver.calls, isEmpty);
+    expect(resolver.batches, isEmpty);
     expect(claims.calls, isEmpty);
     expect(crypto.calls, isEmpty);
     expect(store.commits, isEmpty);
@@ -334,6 +338,16 @@ void main() {
       );
 
       expect(result, isA<Success<void>>());
+      // Every member, then this account, verified from one read rather than
+      // one round of reads for each of them.
+      expect(resolver.batches, [
+        [
+          uuid(peerUserNumber),
+          uuid(secondMemberNumber),
+          uuid(currentUserNumber),
+        ],
+      ]);
+      expect(resolver.calls, isEmpty);
       // One operation, under the one event id the message reads its transport
       // state from, however many members the group has.
       final commit = store.commits.single;
@@ -445,6 +459,43 @@ void main() {
     expect(result, isA<Success<void>>());
     expect(store.settled, ['application:missing']);
     expect(resolver.calls, isEmpty);
+    expect(resolver.batches, isEmpty);
+  });
+
+  test('a member that fails verification withholds the whole copy', () async {
+    const secondMemberNumber = 1002;
+    resolver
+      ..devices[uuid(secondMemberNumber)] = [live(secondMemberNumber, 5)]
+      ..failures[uuid(secondMemberNumber)] = const SecurityFailure(
+        SecurityFailureKind.policyBlocked,
+      );
+    store.durable['application:group'] = DurablePairwiseOperation(
+      operationId: 'application:group',
+      eventId: 'group-event',
+      currentDeviceId: uuid(currentDeviceNumber),
+      openedLocalPayload: bytes(16, 15),
+      targets: const [],
+    );
+
+    final result = await coordinator.prepareOwedSend(
+      OwedSendPreparation(
+        operationId: 'application:group',
+        eventId: 'group-event',
+        currentUserId: uuid(currentUserNumber),
+        currentDeviceId: uuid(currentDeviceNumber),
+        peerUserId: uuid(peerUserNumber),
+        audienceUserIds: [uuid(peerUserNumber), uuid(secondMemberNumber)],
+      ),
+    );
+
+    expect(
+      (result as FailureResult<void>).failure,
+      const SecurityFailure(SecurityFailureKind.policyBlocked),
+    );
+    expect(resolver.batches, hasLength(1));
+    expect(claims.calls, isEmpty);
+    expect(crypto.calls, isEmpty);
+    expect(store.commits, isEmpty);
   });
 }
 
@@ -562,7 +613,13 @@ final class FakeLiveResolver implements PairwiseLiveDeviceResolverPort {
   FakeLiveResolver(this.devices);
 
   final Map<String, List<VerifiedPairwiseLiveDevice>> devices;
+  final Map<String, Failure> failures = {};
+
+  /// One entry for each user resolved on its own.
   final List<String> calls = [];
+
+  /// One entry for each set of users resolved together.
+  final List<List<String>> batches = [];
 
   @override
   Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
@@ -570,6 +627,20 @@ final class FakeLiveResolver implements PairwiseLiveDeviceResolverPort {
   ) async {
     calls.add(userId);
     return Result.success(List.of(devices[userId]!));
+  }
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async {
+    batches.add(List.of(userIds));
+    for (final userId in userIds) {
+      if (failures[userId] case final failure?) {
+        return Result.failure(failure);
+      }
+    }
+    return Result.success({
+      for (final userId in userIds) userId: List.of(devices[userId]!),
+    });
   }
 }
 

@@ -88,8 +88,39 @@ final class ContactPairwiseLiveDeviceResolverAdapter
   @override
   Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
     String userId,
-  ) async {
-    final result = await delegate.resolveLiveDevices(userId: userId);
+  ) async =>
+      _verified(userId, await delegate.resolveLiveDevices(userId: userId));
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async {
+    final result = await delegate.resolveLiveDevicesForUsers(userIds: userIds);
+    if (result case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final peers =
+        (result as Success<Map<String, Result<AuthenticatedPeer>>>).value;
+    final resolved = <String, List<VerifiedPairwiseLiveDevice>>{};
+    for (final userId in userIds) {
+      final peer = peers[userId];
+      final verified = peer == null
+          ? const Result<List<VerifiedPairwiseLiveDevice>>.failure(
+              SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+            )
+          : _verified(userId, peer);
+      if (verified case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      resolved[userId] =
+          (verified as Success<List<VerifiedPairwiseLiveDevice>>).value;
+    }
+    return Result.success(Map.unmodifiable(resolved));
+  }
+
+  Result<List<VerifiedPairwiseLiveDevice>> _verified(
+    String userId,
+    Result<AuthenticatedPeer> result,
+  ) {
     if (result case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }

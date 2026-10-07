@@ -76,33 +76,28 @@ final class AttachmentTransferService {
     CancellationSignal? cancellation,
     void Function(AttachmentProgress progress)? onProgress,
   }) async {
-    final encrypted = await storage.createEncryptedTemp();
-    final decrypted = await storage.createDecryptedTemp(
-      safeName: descriptor.displayName,
+    final downloaded = await transport.download(
+      capabilityId: descriptor.capabilityId,
+      expectedBucketSize: descriptor.bucketSize,
+      cancellation: cancellation,
+      onProgress: (bytes) => onProgress?.call(
+        AttachmentProgress(
+          state: AttachmentTransferState.downloading,
+          completedBytes: bytes,
+          totalBytes: descriptor.bucketSize,
+        ),
+      ),
     );
+    if (downloaded case FailureResult(failure: final failure)) {
+      // Whatever the attempt fetched stays with the transport, which takes it
+      // up again on the next call when it can (ADR-083).
+      return Result.failure(failure);
+    }
+    final encrypted = (downloaded as Success<File>).value;
     try {
-      final encryptedSink = encrypted.openWrite();
-      try {
-        final downloaded = await transport.download(
-          capabilityId: descriptor.capabilityId,
-          destination: encryptedSink,
-          expectedBucketSize: descriptor.bucketSize,
-          cancellation: cancellation,
-          onProgress: (bytes) => onProgress?.call(
-            AttachmentProgress(
-              state: AttachmentTransferState.downloading,
-              completedBytes: bytes,
-              totalBytes: descriptor.bucketSize,
-            ),
-          ),
-        );
-        await encryptedSink.close();
-        if (downloaded case FailureResult(failure: final failure)) {
-          return Result.failure(failure);
-        }
-      } finally {
-        await encryptedSink.close();
-      }
+      final decrypted = await storage.createDecryptedTemp(
+        safeName: descriptor.displayName,
+      );
       final encryptedStream = encrypted.openRead();
       final decryptedResult = await crypto.decryptStreamToFile(
         descriptor: descriptor,

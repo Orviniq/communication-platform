@@ -11,6 +11,11 @@ import 'package:communication_platform/features/contacts/domain/contact_model.da
 ///
 /// Backend listings are treated as untrusted inputs. A successful result chains exact
 /// response bytes through master, self-signing, device, prekey, and device-log checks.
+///
+/// Every entry point asks the server, every time. Nothing here or under
+/// [remote] remembers an answer, so a send is verified against the state its
+/// recipients hold when it is made, and a safety number or a `stale_devices`
+/// refresh reads exactly what a fan-out reads.
 final class ClientAuthenticationService
     implements
         PeerAuthenticationService,
@@ -20,40 +25,21 @@ final class ClientAuthenticationService
     required this.remote,
     required this.local,
     required this.crypto,
-    this.resolutionCache = const NoPeerResolutionCache(),
   });
 
   final PeerIdentityRemotePort remote;
   final ContactLocalPort local;
   final IdentityCryptoPort crypto;
 
-  /// Which of this service's entry points may be served a remembered server
-  /// answer, decided here because this is where that is known.
-  ///
-  /// [refreshPeer] and [confirmOutOfBand] may not. Both exist to answer the
-  /// question *is this device's idea of that peer still right* — one is asked
-  /// by a person looking at a safety number, the other by the delivery cycle
-  /// acting on a `stale_devices` response — and a cache is the one thing that
-  /// cannot answer it. They run under [PeerResolutionCachePort.live], which
-  /// forgets the peer and keeps it forgotten for the whole resolution.
-  ///
-  /// [resolveLiveDevices] and [refreshPeerForDevices] may, because they are the
-  /// fan-out asking the same question of the same peer two to four times inside
-  /// one cycle. Nothing they verify is skipped by a hit; only the round trip is.
-  final PeerResolutionCachePort resolutionCache;
-
   @override
   Future<Result<AuthenticatedPeer>> refreshPeer({
     required String userId,
     required bool requirePrekeys,
-  }) => resolutionCache.live(
-    userId,
-    () => _refresh(
-      userId: userId,
-      requirePrekeys: requirePrekeys,
-      claimDeviceIds: null,
-      allowMasterReplacement: false,
-    ),
+  }) => _refresh(
+    userId: userId,
+    requirePrekeys: requirePrekeys,
+    claimDeviceIds: null,
+    allowMasterReplacement: false,
   );
 
   @override
@@ -83,14 +69,9 @@ final class ClientAuthenticationService
   Future<Result<AuthenticatedPeer>> resolveLiveDevices({
     required String userId,
   }) async {
-    final globalFork = await local.hasAnyDeviceLogFork();
-    if (globalFork case FailureResult(failure: final failure)) {
+    final gate = await _forkGate();
+    if (gate case FailureResult(failure: final failure)) {
       return Result.failure(failure);
-    }
-    if ((globalFork as Success<bool>).value) {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.policyBlocked),
-      );
     }
     return _refresh(
       userId: userId,
@@ -100,21 +81,107 @@ final class ClientAuthenticationService
     );
   }
 
+  /// One read of every user in [userIds], then [resolveLiveDevices]'s checks
+  /// for each of them in turn.
+  ///
+  /// The read is `POST /api/v1/peers`, which answers with the bytes the
+  /// per-user identity and device-list reads serve, so `_refresh` judges them
+  /// unchanged: what this saves is round trips, never a check. The device log
+  /// is still read page by page, and only for a peer whose head moved.
+  ///
+  /// Users are verified in the order asked, each behind the global fork gate
+  /// [resolveLiveDevices] puts in front of one user, so a fork found in one
+  /// withholds every user after it exactly as it did when each was a call of
+  /// its own.
+  @override
+  Future<Result<Map<String, Result<AuthenticatedPeer>>>>
+  resolveLiveDevicesForUsers({required List<String> userIds}) async {
+    if (userIds.isEmpty ||
+        userIds.map((userId) => userId.toLowerCase()).toSet().length !=
+            userIds.length ||
+        userIds.any((userId) => _uuidBytes(userId) == null)) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final gate = await _forkGate();
+    if (gate case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    // Read before the request, because the request carries each record's tag
+    // and the answer is a statement about that tag: every peer is judged
+    // against the record its tag came from.
+    final previous = <String, ContactTrustRecord?>{};
+    for (final userId in userIds) {
+      final read = await local.readTrust(userId);
+      if (read case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      previous[userId] = (read as Success<ContactTrustRecord?>).value;
+    }
+    final answered = await remote.fetchPeerStates([
+      for (final userId in userIds)
+        PeerStateQuery(userId: userId, etag: _peerStateTag(previous[userId])),
+    ]);
+    if (answered case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final reads = (answered as Success<Map<String, PeerStateRead>>).value;
+    final peers = <String, Result<AuthenticatedPeer>>{};
+    for (final userId in userIds) {
+      final read = reads[userId];
+      final gate = await _forkGate();
+      if (gate case FailureResult(failure: final failure)) {
+        peers[userId] = Result.failure(failure);
+      } else if (read == null) {
+        peers[userId] = const Result.failure(
+          SecurityFailure(SecurityFailureKind.malformedServerResponse),
+        );
+      } else {
+        peers[userId] = await _refresh(
+          userId: userId,
+          requirePrekeys: false,
+          claimDeviceIds: null,
+          allowMasterReplacement: false,
+          batched: (previous: previous[userId], read: read),
+        );
+      }
+    }
+    return Result.success(Map.unmodifiable(peers));
+  }
+
+  /// The global device-log fork gate (CLIENT_CONTRACT.md §E): while any fork
+  /// is recorded, no resolution feeds a send.
+  Future<Result<void>> _forkGate() async {
+    final globalFork = await local.hasAnyDeviceLogFork();
+    if (globalFork case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    if ((globalFork as Success<bool>).value) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+    }
+    return const Result.success(null);
+  }
+
+  /// Resolves one peer from its identity and device-list answers.
+  ///
+  /// With [batched] absent, the answers are the per-user reads, made here in
+  /// the order they always were. With it, they are what the batched read
+  /// already said about this peer, judged against the record that read was
+  /// asked with. Everything between and after the two reads is one code path.
   Future<Result<AuthenticatedPeer>> _refresh({
     required String userId,
     required bool requirePrekeys,
     required List<String>? claimDeviceIds,
     required bool allowMasterReplacement,
+    _BatchedRead? batched,
   }) async {
     if (requirePrekeys) {
-      final globalFork = await local.hasAnyDeviceLogFork();
-      if (globalFork case FailureResult(failure: final failure)) {
+      final gate = await _forkGate();
+      if (gate case FailureResult(failure: final failure)) {
         return Result.failure(failure);
-      }
-      if ((globalFork as Success<bool>).value) {
-        return const Result.failure(
-          SecurityFailure(SecurityFailureKind.policyBlocked),
-        );
       }
     }
     final userBytes = _uuidBytes(userId);
@@ -129,13 +196,20 @@ final class ClientAuthenticationService
     }
     final localIdentity =
         (localIdentityResult as Success<LocalAccountIdentity>).value;
-    final previousResult = await local.readTrust(userId);
-    if (previousResult case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
+    final ContactTrustRecord? previous;
+    if (batched != null) {
+      previous = batched.previous;
+    } else {
+      final previousResult = await local.readTrust(userId);
+      if (previousResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      previous = (previousResult as Success<ContactTrustRecord?>).value;
     }
-    final previous = (previousResult as Success<ContactTrustRecord?>).value;
-    final identityResult = await remote.fetchIdentity(userId: userId);
-    if (identityResult case FailureResult(failure: final failure)) {
+    final identityRead = batched == null
+        ? await _readIdentity(userId, previous)
+        : _batchedIdentity(batched);
+    if (identityRead case FailureResult(failure: final failure)) {
       await _persistBlocked(
         previous,
         userId,
@@ -143,7 +217,8 @@ final class ClientAuthenticationService
       );
       return Result.failure(failure);
     }
-    final identity = (identityResult as Success<PeerIdentityPublic>).value;
+    final (:identity, tag: identityTag) =
+        (identityRead as Success<_IdentityRead>).value;
     final verifiedIdentity = await crypto.verifyIdentity(
       userId: userBytes,
       identity: identity,
@@ -191,6 +266,9 @@ final class ClientAuthenticationService
               .copyWith(
                 state: ContactTrustState.masterKeyChanged,
                 identity: identity,
+                // Never sent while the record is blocked, and still the tag
+                // of the identity stored beside it.
+                identityEtag: identityTag,
               );
       await local.writeTrust(changed);
       return const Result.failure(
@@ -204,32 +282,14 @@ final class ClientAuthenticationService
     }
     final cachedDevices =
         (cachedDevicesResult as Success<List<PeerPublicDevice>>).value;
-    // Only a peer whose last answer this client accepted may be revalidated
-    // conditionally. A blocked record names an answer that was read and
-    // refused, while the stored device list is the one from before it — so a
-    // `304` hands back the copy that is already known to be wrong, and the
-    // record blocks itself again on it forever. Records written before
-    // [_persistBlocked] stopped keeping the tag still carry one, and this is
-    // what lets those installs read the corrected list on their first attempt
-    // rather than their second.
-    final devicesResult = await remote.fetchDevices(
-      userId: userId,
-      etag: _isBlocked(previous?.state) ? null : previous?.etag,
-    );
-    if (devicesResult case FailureResult(failure: final failure)) {
+    final deviceRead = batched == null
+        ? await _readDeviceList(userId, previous, cachedDevices)
+        : _batchedDevices(batched, cachedDevices);
+    if (deviceRead case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    final refresh = (devicesResult as Success<PeerDeviceRefresh>).value;
-    final (devices, etag, advertisedHead, listChanged) = switch (refresh) {
-      PeerDevicesNotModified() => (
-        cachedDevices,
-        previous?.etag,
-        previous?.logHeadSequence,
-        false,
-      ),
-      PeerDevicesUpdated(:final devices, :final etag, :final logHeadSequence) =>
-        (devices, etag, logHeadSequence, !_sameDevices(cachedDevices, devices)),
-    };
+    final (:devices, :advertisedHead, :listChanged, :tag) =
+        (deviceRead as Success<_DeviceRead>).value;
     if (devices.isEmpty || devices.any((device) => device.isUnsigned)) {
       await _persistBlocked(
         previous,
@@ -385,13 +445,31 @@ final class ClientAuthenticationService
         nextState = ContactTrustState.verified;
       }
     }
+    // Each tag vouches for the stored state it was read with, and goes back
+    // only to the route that issued it. The identity's covers the identity
+    // alone and arrives with it from either read, so it is written beside the
+    // identity stored here. Of the other two, the route that just answered
+    // writes its own, and the other route's tag survives only when this answer
+    // left the stored identity, device list and log head exactly as they
+    // were: kept past a change, it would name a state this client no longer
+    // holds, and its route could confirm that state rather than send the new
+    // one.
+    final stateHeld =
+        !_isBlocked(previous?.state) &&
+        !listChanged &&
+        advertisedHead == previous?.logHeadSequence &&
+        _sameIdentity(previous?.identity, identity);
     final trust = ContactTrustRecord(
       userId: userId,
       state: nextState,
       identity: identity,
       confirmedMasterPublic: confirmedMaster,
       attestation: previous?.attestation,
-      etag: etag,
+      etag: batched == null ? tag : (stateHeld ? previous?.etag : null),
+      peerStateEtag: batched == null
+          ? (stateHeld ? previous?.peerStateEtag : null)
+          : tag,
+      identityEtag: identityTag,
       logHeadSequence: advertisedHead,
       logHeadHash: verifiedRecords.isEmpty
           ? previous?.logHeadHash
@@ -423,15 +501,6 @@ final class ClientAuthenticationService
 
   @override
   Future<Result<ContactTrustRecord>> confirmOutOfBand({
-    required String userId,
-    required Uint8List exactMasterPublic,
-  }) => resolutionCache.live(
-    userId,
-    () =>
-        _confirmOutOfBand(userId: userId, exactMasterPublic: exactMasterPublic),
-  );
-
-  Future<Result<ContactTrustRecord>> _confirmOutOfBand({
     required String userId,
     required Uint8List exactMasterPublic,
   }) async {
@@ -472,6 +541,8 @@ final class ClientAuthenticationService
       confirmedMasterPublic: identity.masterPublic,
       attestation: (attested as Success<UserSigningAttestation>).value,
       etag: peer.trust.etag,
+      peerStateEtag: peer.trust.peerStateEtag,
+      identityEtag: peer.trust.identityEtag,
       logHeadSequence: peer.trust.logHeadSequence,
       logHeadHash: peer.trust.logHeadHash,
     );
@@ -549,7 +620,7 @@ final class ClientAuthenticationService
     ContactTrustState.identityUnavailable => true,
   };
 
-  /// Records why this peer is blocked, and forgets the cache validator.
+  /// Records why this peer is blocked, and forgets every tag.
   ///
   /// An `ETag` is a claim about the answer a client is *holding*. Every caller
   /// here refused the answer it read and left the stored device list alone, so
@@ -557,11 +628,14 @@ final class ClientAuthenticationService
   /// client does not have: the server replied `304`, the refused list came back
   /// out of local storage, and it was refused again. Nothing else changed for
   /// as long as the deployment served that representation — which, for an own
-  /// device blocked over its first cross-signature, is forever.
+  /// device blocked over its first cross-signature, is forever. The batched
+  /// read's tag would do the same through `unchanged`. The identity's goes
+  /// too, because the identity stored here may be the one just refused, which
+  /// that tag was never issued for.
   ///
-  /// Dropping the tag costs one unconditional device read the next time this
-  /// peer is resolved, and is what lets a client that has already blocked
-  /// itself read the corrected list and recover.
+  /// Dropping the tags costs one full answer the next time this peer is
+  /// resolved, and is what lets a client that has already blocked itself read
+  /// the corrected list and recover.
   Future<void> _persistBlocked(
     ContactTrustRecord? previous,
     String userId,
@@ -580,6 +654,160 @@ final class ClientAuthenticationService
       ),
     );
   }
+
+  /// The per-user device-list read, conditional on the stored tag.
+  Future<Result<_DeviceRead>> _readDeviceList(
+    String userId,
+    ContactTrustRecord? previous,
+    List<PeerPublicDevice> stored,
+  ) async {
+    // Only a peer whose last answer this client accepted may be revalidated
+    // conditionally. A blocked record names an answer that was read and
+    // refused, while the stored device list is the one from before it — so a
+    // `304` hands back the copy that is already known to be wrong, and the
+    // record blocks itself again on it forever. Records written before
+    // [_persistBlocked] stopped keeping the tag still carry one, and this is
+    // what lets those installs read the corrected list on their first attempt
+    // rather than their second.
+    final devicesResult = await remote.fetchDevices(
+      userId: userId,
+      etag: _isBlocked(previous?.state) ? null : previous?.etag,
+    );
+    if (devicesResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return Result.success(switch ((devicesResult as Success<PeerDeviceRefresh>)
+        .value) {
+      PeerDevicesNotModified() => (
+        devices: stored,
+        advertisedHead: previous?.logHeadSequence,
+        listChanged: false,
+        tag: previous?.etag,
+      ),
+      PeerDevicesUpdated(:final devices, :final etag, :final logHeadSequence) =>
+        (
+          devices: devices,
+          advertisedHead: logHeadSequence,
+          listChanged: !_sameDevices(stored, devices),
+          tag: etag,
+        ),
+    });
+  }
+
+  /// The per-user identity read, conditional on the stored identity tag.
+  ///
+  /// A `304` stands for the identity stored beside the tag that was sent, and
+  /// that identity is then verified exactly as a `200` would be. A `404` says
+  /// nothing about the tag: the route has none for an identity that was never
+  /// published and answers `404` whatever was sent, so it stays the failure
+  /// that blocks the record.
+  Future<Result<_IdentityRead>> _readIdentity(
+    String userId,
+    ContactTrustRecord? previous,
+  ) async {
+    final sent = _identityTag(previous);
+    final read = await remote.fetchIdentity(userId: userId, etag: sent);
+    if (read case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return switch ((read as Success<PeerIdentityRefresh>).value) {
+      PeerIdentityUpdated(:final identity, :final etag) => Result.success((
+        identity: identity,
+        tag: etag,
+      )),
+      // Only the tag that was sent can still hold, so a `304` to a read that
+      // carried none answers nothing.
+      PeerIdentityNotModified() => switch (previous?.identity) {
+        final identity? when sent != null => Result.success((
+          identity: identity,
+          tag: sent,
+        )),
+        _ => const Result.failure(
+          SecurityFailure(SecurityFailureKind.malformedServerResponse),
+        ),
+      },
+    };
+  }
+
+  /// The tag a per-user identity read sends: the one stored beside the
+  /// identity it was issued for, and none for a record this client refused,
+  /// for the reason [_readDeviceList] gives.
+  static String? _identityTag(ContactTrustRecord? previous) =>
+      previous == null ||
+          _isBlocked(previous.state) ||
+          previous.identity == null
+      ? null
+      : previous.identityEtag;
+
+  /// The identity the batched read gave, as the per-user identity read would
+  /// have answered it, with that read's tag.
+  ///
+  /// That read answers `404` alike for a user with no published identity, an
+  /// unknown user and a deactivated one. The batched read says the first with
+  /// `identity: null` and the other two by leaving the user out, so all three
+  /// become that `404` here and are blocked exactly as it is.
+  Result<_IdentityRead> _batchedIdentity(_BatchedRead batched) =>
+      switch (batched.read) {
+        // The identity carries the identity read's tag. The answer's own tag
+        // is the batched read's, and is stored apart as `peerStateEtag`.
+        PeerStateUpdated(identity: final identity?, :final identityEtag) =>
+          Result.success((identity: identity, tag: identityEtag)),
+        // A tag is only ever sent beside the identity it was stored with, and
+        // that identity's own tag was stored beside it.
+        PeerStateUnchanged() => switch (batched.previous) {
+          ContactTrustRecord(identity: final identity?, :final identityEtag) =>
+            Result.success((identity: identity, tag: identityEtag)),
+          _ => const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          ),
+        },
+        PeerStateUpdated() || PeerStateAbsent() => const Result.failure(
+          BackendFailure(BackendFailureCode.notFound),
+        ),
+      };
+
+  /// The device list the batched read gave. `unchanged` is the stored list
+  /// and head, exactly as a `304` from the device-list read is.
+  Result<_DeviceRead> _batchedDevices(
+    _BatchedRead batched,
+    List<PeerPublicDevice> stored,
+  ) => switch (batched.read) {
+    PeerStateUnchanged(:final etag) => Result.success((
+      devices: stored,
+      advertisedHead: batched.previous?.logHeadSequence,
+      listChanged: false,
+      tag: etag,
+    )),
+    PeerStateUpdated(:final devices, :final logHeadSequence, :final etag) =>
+      Result.success((
+        devices: devices,
+        advertisedHead: logHeadSequence,
+        listChanged: !_sameDevices(stored, devices),
+        tag: etag,
+      )),
+    // Not reached: a user left out has no identity, and stops there.
+    PeerStateAbsent() => const Result.failure(
+      BackendFailure(BackendFailureCode.notFound),
+    ),
+  };
+
+  /// The tag a batched read sends for this peer: the one stored beside the
+  /// state it vouches for, and none for a record this client refused, whose
+  /// stored state is not the one that tag was read with.
+  static String? _peerStateTag(ContactTrustRecord? previous) =>
+      previous == null ||
+          _isBlocked(previous.state) ||
+          previous.identity == null
+      ? null
+      : previous.peerStateEtag;
+
+  bool _sameIdentity(PeerIdentityPublic? left, PeerIdentityPublic right) =>
+      left != null &&
+      left.version == right.version &&
+      _same(left.masterPublic, right.masterPublic) &&
+      _same(left.selfSigningPublic, right.selfSigningPublic) &&
+      _same(left.userSigningPublic, right.userSigningPublic) &&
+      _same(left.masterSignature, right.masterSignature);
 
   bool _bundleMatches(PeerPublicDevice device, ClaimedPrekeyBundle bundle) =>
       device.deviceId == bundle.deviceId &&
@@ -678,3 +906,19 @@ final class ClientAuthenticationService
     ]);
   }
 }
+
+/// What the batched read said about one peer, and the record whose tag the
+/// request carried for it.
+typedef _BatchedRead = ({ContactTrustRecord? previous, PeerStateRead read});
+
+/// One peer's identity as a read gave it, with the identity read's tag for it.
+typedef _IdentityRead = ({PeerIdentityPublic identity, String? tag});
+
+/// One peer's live devices as a read gave them, with the tag of the route that
+/// read them.
+typedef _DeviceRead = ({
+  List<PeerPublicDevice> devices,
+  int? advertisedHead,
+  bool listChanged,
+  String? tag,
+});

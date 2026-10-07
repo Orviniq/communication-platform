@@ -17,8 +17,23 @@ abstract interface class ProfileRemotePort implements Port {
   Future<Result<void>> publishOwnProfile(ProfileCiphertext profile);
 }
 
+/// What the server says about a peer now.
+///
+/// Every call is a request. Nothing may stand between this port and the
+/// server to answer one from memory: a send verifies the state its recipients
+/// hold at that moment, and a remembered answer is state this client did not
+/// check again. What a repeat read may save is the body, through the tag the
+/// stored state was read with, and never the request.
 abstract interface class PeerIdentityRemotePort implements Port {
-  Future<Result<PeerIdentityPublic>> fetchIdentity({required String userId});
+  /// Reads [userId]'s published identity, sending [etag] as `If-None-Match`.
+  ///
+  /// An identity that was never published is `404 not_found` whatever [etag]
+  /// holds: there is no tag for a row that does not exist, so that answer is
+  /// never [PeerIdentityNotModified].
+  Future<Result<PeerIdentityRefresh>> fetchIdentity({
+    required String userId,
+    String? etag,
+  });
 
   Future<Result<PeerDeviceRefresh>> fetchDevices({
     required String userId,
@@ -34,6 +49,16 @@ abstract interface class PeerIdentityRemotePort implements Port {
     required String userId,
     int? after,
   });
+
+  /// Reads the identity, live devices and log head of every peer in [peers]
+  /// through `POST /api/v1/peers`, in as few calls as its 64-peer ceiling
+  /// allows.
+  ///
+  /// Every queried user has an entry, keyed as it was asked. A user the route
+  /// left out is [PeerStateAbsent].
+  Future<Result<Map<String, PeerStateRead>>> fetchPeerStates(
+    List<PeerStateQuery> peers,
+  );
 }
 
 abstract interface class ContactLocalPort implements Port {
@@ -98,54 +123,14 @@ abstract interface class VerifiedLiveDeviceResolverPort implements Port {
   Future<Result<AuthenticatedPeer>> resolveLiveDevices({
     required String userId,
   });
-}
 
-/// Control over whatever remembers a peer's server answers for a short while.
-///
-/// An implementation of this sits *below* [PeerIdentityRemotePort] and never
-/// above it, so nothing it does can shorten the authentication that reads those
-/// answers: every signature, hash-chain link, sequence and transition check runs
-/// again, against the same bytes. What it removes is the round trip, not the
-/// verification.
-///
-/// [live] exists because two callers must never be served a remembered answer.
-/// A user asking to verify a contact, and the sync engine acting on a
-/// `stale_devices` response, are both saying *this device's idea of that peer
-/// may be wrong* — which is exactly the belief a cache would confirm.
-abstract interface class PeerResolutionCachePort implements Port {
-  /// Forgets everything remembered about [userId], including answers already
-  /// in flight, which no later caller may join.
-  void invalidate(String userId);
-
-  /// Forgets everything remembered about everybody.
-  void invalidateAll();
-
-  /// Runs [resolve] with [userId] forgotten, and kept forgotten throughout.
+  /// [resolveLiveDevices] for each of [userIds], from one read of all of them.
   ///
-  /// Bypassing for the whole of [resolve] rather than only at its first
-  /// request is what makes this a *live resolution* instead of a cache miss:
-  /// an identity, a device set and a device-log page fetched under it are all
-  /// from this moment, and no concurrent resolution of the same user can be
-  /// served an answer that predates the reason [resolve] was asked for.
-  Future<T> live<T>(String userId, Future<T> Function() resolve);
-}
-
-/// The composition of [PeerResolutionCachePort] that remembers nothing.
-///
-/// Every round trip happens exactly where the code makes it. This is the
-/// default a [PeerAuthenticationService] is constructed with, so a build or a
-/// test that composes no cache behaves as though none existed.
-final class NoPeerResolutionCache implements PeerResolutionCachePort {
-  const NoPeerResolutionCache();
-
-  @override
-  void invalidate(String userId) {}
-
-  @override
-  void invalidateAll() {}
-
-  @override
-  Future<T> live<T>(String userId, Future<T> Function() resolve) => resolve();
+  /// A failure belongs to the read itself, and nobody was verified. Otherwise
+  /// every user has a result of its own, keyed as it was asked, reached in the
+  /// order asked by the same checks [resolveLiveDevices] applies.
+  Future<Result<Map<String, Result<AuthenticatedPeer>>>>
+  resolveLiveDevicesForUsers({required List<String> userIds});
 }
 
 final class VerifiedDeviceLogRecord {

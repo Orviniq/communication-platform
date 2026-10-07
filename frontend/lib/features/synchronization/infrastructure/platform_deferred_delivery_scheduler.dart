@@ -172,9 +172,11 @@ final class DeliveryOwnershipGate {
   /// Giving up is not fail-open by accident. Refusing to start would turn a
   /// platform that stopped answering into an application that cannot be opened,
   /// which is a permanent availability failure in place of an intermittent
-  /// correctness one. What makes starting anyway survivable is that the
-  /// rotating refresh token — the one piece of shared state a lost race
-  /// destroys — repairs itself rather than ending the session (ADR-050).
+  /// correctness one. What makes starting anyway survivable is what two owners
+  /// can do to each other: hand one envelope to the ratchet twice, which fails
+  /// and is retried, and send one outbox batch twice, which recipients
+  /// deduplicate (ADR-050). The session is no part of it, because nothing
+  /// retires a token (ADR-083).
   final Duration deadline;
 
   Future<void> awaitExclusiveOwnership() async {

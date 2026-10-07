@@ -184,26 +184,24 @@ final class PairwiseFanoutCoordinator {
   }) async {
     final singlePeer = peerUserIds.length == 1;
     final peerOrder = peerUserIds.toList(growable: false)..sort();
-    final peerDevices = <String, List<VerifiedPairwiseLiveDevice>>{};
-    for (final peerUserId in peerOrder) {
-      final peerDevicesResult = await liveDevices.resolveVerifiedLiveDevices(
-        peerUserId,
-      );
-      if (peerDevicesResult case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
-      }
-      peerDevices[peerUserId] =
-          (peerDevicesResult as Success<List<VerifiedPairwiseLiveDevice>>)
-              .value;
-    }
-    final ownDevicesResult = await liveDevices.resolveVerifiedLiveDevices(
-      currentUserId,
+    // Every recipient is verified from one read: each peer, then this account
+    // for its own other devices, in the order the per-recipient reads used to
+    // run. Those were three for each recipient, so a group of fifty cost a
+    // hundred and fifty round trips before its first copy was sealed.
+    final resolvedResult = await liveDevices.resolveVerifiedLiveDevicesForUsers(
+      {...peerOrder, currentUserId}.toList(growable: false),
     );
-    if (ownDevicesResult case FailureResult(failure: final failure)) {
+    if (resolvedResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    final ownDevices =
-        (ownDevicesResult as Success<List<VerifiedPairwiseLiveDevice>>).value;
+    final resolved =
+        (resolvedResult
+                as Success<Map<String, List<VerifiedPairwiseLiveDevice>>>)
+            .value;
+    final peerDevices = {
+      for (final peerUserId in peerOrder) peerUserId: resolved[peerUserId]!,
+    };
+    final ownDevices = resolved[currentUserId]!;
     final targetResult = _canonicalTargets(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
