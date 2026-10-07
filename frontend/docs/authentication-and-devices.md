@@ -73,15 +73,24 @@ There is one token. Login and device registration each answer a session token an
 The server issues no second credential to hold, so there is no pair to keep in step, no
 rotation, and no route named `refresh` — server-side ADR-0023 retired all three, and
 `frontend/docs/decisions.md` ADR-068 records what that costs this client.
+*Corrected 2026-10-07 (ADR-083):* this section said a decision that could end a session
+read the durable row instead of the cached token, because that row is shared with every
+other delivery owner in the process (ADR-050). That read, `SessionTokenStore.readDurable`,
+had no caller after ADR-068 deleted the rotation repair, and ADR-083 deleted it.
+*Corrected 2026-10-07 (server ADR-0020):* it also said the Web stored token material under
+the origin's non-extractable wrapping key. There is no Web client: the server serves no
+browser surface, and the client's web target was removed on 2026-09-08
+(`implementation-checklist.md`, The web target).
 
 - Android stores the session token encrypted under a Keystore-wrapped storage key. It is
   the credential itself, not a placeholder: nothing retires it, and a token outlives a
   cold start, so a restore returns a token that is ready to use.
-- Web stores encrypted token material under the origin's non-extractable wrapping key;
-  page code can still use it while trusted code is running.
 - The token is cached in memory per isolate to spare an ordinary request a SQLCipher read.
-  Any decision that could *end* a session reads the durable row instead, because that row
-  is shared with every other delivery owner in the process (ADR-050).
+  A read answers from that copy, else from the session row and keeps what the row held.
+  The coordinator takes the token from that read for every decision, one that could *end*
+  a session included. The row is shared with every other delivery owner in the process and
+  each caches its own copy, so a renewal by one leaves another's copy as it was, and that
+  token still works: nothing retires a token (ADR-083).
 - Dio authentication, proactive renewal, retry, logout, and WebSocket reconnect share one
   token coordinator.
 - A session token is renewed from half its lifetime, behind the request that finds it due,
