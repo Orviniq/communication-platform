@@ -301,12 +301,320 @@ void main() {
     expect(store.current?.username, 'test2');
     expect(store.current?.accessToken.value, 'new-token');
   });
+
+  group('renewal from half the lifetime (ADR-085)', () {
+    // A session token as `SESSION_TOKEN_DAYS` issues it by default.
+    const lifetime = Duration(days: 30);
+    final issuedAt = DateTime.utc(2026, 10, 1, 12);
+    final expiresAt = issuedAt.add(lifetime);
+
+    test(
+      'a device idle through a token’s final minutes keeps its session',
+      () async {
+        // The defect. Renewal began two and a half minutes before expiry,
+        // and the route refuses a token past its `exp`, so a device that
+        // made no request in those minutes was signed out by its next one.
+        final clock = MutableTimeSource(issuedAt);
+        final server = ExpiringRenewServer(clock, lifetime: lifetime);
+        final store = MemoryTokenStore(server.issue());
+        final termination = RecordingTerminationHandler();
+        final coordinator = TokenCoordinator(
+          store: store,
+          renewExchange: server,
+          terminationHandler: termination,
+          timeSource: clock,
+        );
+        server.coordinator = coordinator;
+
+        // A request on the first day, one on the twentieth, then nothing
+        // until a day after the first token's thirtieth.
+        for (final day in const [1, 20, 31]) {
+          clock.value = issuedAt.add(Duration(days: day));
+          final result = await coordinator.accessToken();
+          await Future<void>.delayed(Duration.zero);
+          expect(result, isA<Success<AccessToken>>(), reason: 'day $day');
+        }
+
+        expect(termination.reasons, isEmpty);
+        expect(server.refused, isEmpty);
+        expect(server.issued, hasLength(2), reason: 'a login and a renewal');
+        expect(store.current?.accessToken.value, server.issued.last);
+      },
+    );
+
+    test(
+      'a token past half its lifetime is renewed behind the request',
+      () async {
+        final now = issuedAt.add(const Duration(days: 16));
+        final store = MemoryTokenStore(
+          session('old-token', expiresAt, lifetime: lifetime),
+        );
+        final exchange = ControlledRenewExchange();
+        final termination = RecordingTerminationHandler();
+        final coordinator = TokenCoordinator(
+          store: store,
+          renewExchange: exchange,
+          terminationHandler: termination,
+          timeSource: FixedTimeSource(now),
+        );
+
+        // Fourteen days from expiry the token in hand is good, so the request
+        // goes out with it rather than after the renewal it started.
+        final result = await coordinator.accessToken();
+        expect((result as Success<AccessToken>).value.value, 'old-token');
+        expect(exchange.calls, 1);
+
+        exchange.completer.complete(
+          Result.success(
+            session('new-token', now.add(lifetime), lifetime: lifetime),
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(store.current?.accessToken.value, 'new-token');
+        final next = await coordinator.accessToken();
+        expect((next as Success<AccessToken>).value.value, 'new-token');
+        expect(exchange.calls, 1, reason: 'the new token is not due');
+        expect(termination.reasons, isEmpty);
+      },
+    );
+
+    test('a token short of half its lifetime is answered as it is', () async {
+      final store = MemoryTokenStore(
+        session('old-token', expiresAt, lifetime: lifetime),
+      );
+      final exchange = ControlledRenewExchange();
+      final coordinator = TokenCoordinator(
+        store: store,
+        renewExchange: exchange,
+        terminationHandler: RecordingTerminationHandler(),
+        timeSource: FixedTimeSource(issuedAt.add(const Duration(days: 14))),
+      );
+
+      final result = await coordinator.accessToken();
+
+      expect((result as Success<AccessToken>).value.value, 'old-token');
+      expect(exchange.calls, 0);
+    });
+
+    test('the half is of the token’s own lifetime', () async {
+      // A deployment that issues ten-day tokens. Six days left is not due,
+      // although it would be under the thirty-day default.
+      const tenDays = Duration(days: 10);
+      final clock = MutableTimeSource(issuedAt.add(const Duration(days: 4)));
+      final exchange = ControlledRenewExchange();
+      final coordinator = TokenCoordinator(
+        store: MemoryTokenStore(
+          session('old-token', issuedAt.add(tenDays), lifetime: tenDays),
+        ),
+        renewExchange: exchange,
+        terminationHandler: RecordingTerminationHandler(),
+        timeSource: clock,
+      );
+
+      await coordinator.accessToken();
+      expect(exchange.calls, 0);
+
+      clock.value = issuedAt.add(const Duration(days: 6));
+      await coordinator.accessToken();
+      expect(exchange.calls, 1);
+    });
+
+    test('a token restored without a lifetime is given the default', () async {
+      // A row written before the lifetime was stored. Thirty days is
+      // `SESSION_TOKEN_DAYS` as this build states it.
+      final clock = MutableTimeSource(
+        expiresAt.subtract(const Duration(days: 16)),
+      );
+      final exchange = ControlledRenewExchange();
+      final coordinator = TokenCoordinator(
+        store: MemoryTokenStore(session('old-token', expiresAt)),
+        renewExchange: exchange,
+        terminationHandler: RecordingTerminationHandler(),
+        timeSource: clock,
+      );
+
+      await coordinator.accessToken();
+      expect(exchange.calls, 0);
+
+      clock.value = expiresAt.subtract(const Duration(days: 14));
+      await coordinator.accessToken();
+      expect(exchange.calls, 1);
+    });
+
+    test('every caller past half its lifetime shares one renewal', () async {
+      final now = issuedAt.add(const Duration(days: 20));
+      final store = MemoryTokenStore(
+        session('old-token', expiresAt, lifetime: lifetime),
+      );
+      final exchange = ControlledRenewExchange();
+      final coordinator = TokenCoordinator(
+        store: store,
+        renewExchange: exchange,
+        terminationHandler: RecordingTerminationHandler(),
+        timeSource: FixedTimeSource(now),
+      );
+
+      final results = await Future.wait(
+        List.generate(20, (_) => coordinator.accessToken()),
+      );
+
+      // Nobody waited for the renewal, and it was started once.
+      expect(
+        results.map((result) => (result as Success<AccessToken>).value.value),
+        everyElement('old-token'),
+      );
+      expect(exchange.calls, 1);
+
+      exchange.completer.complete(
+        Result.success(
+          session('new-token', now.add(lifetime), lifetime: lifetime),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.replacements, 1);
+      expect(store.current?.accessToken.value, 'new-token');
+    });
+
+    test('an early renewal that fails keeps the token and waits', () async {
+      final clock = MutableTimeSource(issuedAt.add(const Duration(days: 20)));
+      final store = MemoryTokenStore(
+        session('old-token', expiresAt, lifetime: lifetime),
+      );
+      final exchange = CountingRenewExchange(
+        const Result.failure(TransportFailure(TransportFailureKind.offline)),
+      );
+      final termination = RecordingTerminationHandler();
+      final coordinator = TokenCoordinator(
+        store: store,
+        renewExchange: exchange,
+        terminationHandler: termination,
+        timeSource: clock,
+      );
+
+      final first = await coordinator.accessToken();
+      await Future<void>.delayed(Duration.zero);
+      expect((first as Success<AccessToken>).value.value, 'old-token');
+      expect(exchange.calls, 1);
+
+      // Ten days from expiry the token still carries every request, and the
+      // next attempt waits out the retry interval.
+      clock.value = clock.value.add(const Duration(seconds: 59));
+      final second = await coordinator.accessToken();
+      await Future<void>.delayed(Duration.zero);
+      expect((second as Success<AccessToken>).value.value, 'old-token');
+      expect(exchange.calls, 1);
+
+      clock.value = clock.value.add(const Duration(seconds: 1));
+      await coordinator.accessToken();
+      await Future<void>.delayed(Duration.zero);
+      expect(exchange.calls, 2);
+
+      expect(store.current?.accessToken.value, 'old-token');
+      expect(store.replacements, 0);
+      expect(termination.reasons, isEmpty);
+    });
+
+    test('an early renewal the server refuses ends the session', () async {
+      // The route re-checks the device and the account, so a refusal ten
+      // days before expiry is the session ending, not a token wearing out.
+      final store = MemoryTokenStore(
+        session('old-token', expiresAt, lifetime: lifetime),
+      );
+      final termination = RecordingTerminationHandler();
+      final coordinator = TokenCoordinator(
+        store: store,
+        renewExchange: const ImmediateRenewExchange(
+          Result.failure(BackendFailure(BackendFailureCode.invalidToken)),
+        ),
+        terminationHandler: termination,
+        timeSource: FixedTimeSource(issuedAt.add(const Duration(days: 20))),
+      );
+
+      await coordinator.accessToken();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.current, isNull);
+      expect(termination.reasons, [SessionTerminationReason.expired]);
+      expect(
+        await coordinator.accessToken(),
+        isA<FailureResult<AccessToken>>(),
+      );
+    });
+
+    test(
+      'the early renewal presents the token in hand instead of deadlocking',
+      () async {
+        final now = issuedAt.add(const Duration(days: 20));
+        final store = MemoryTokenStore(
+          session('old-token', expiresAt, lifetime: lifetime),
+        );
+        final exchange = ReentrantRenewExchange(
+          Result.success(
+            session('new-token', now.add(lifetime), lifetime: lifetime),
+          ),
+        );
+        final coordinator = TokenCoordinator(
+          store: store,
+          renewExchange: exchange,
+          terminationHandler: RecordingTerminationHandler(),
+          timeSource: FixedTimeSource(now),
+        );
+        exchange.coordinator = coordinator;
+
+        final result = await coordinator.accessToken();
+        await Future<void>.delayed(Duration.zero);
+
+        expect((result as Success<AccessToken>).value.value, 'old-token');
+        expect(exchange.presented, ['old-token']);
+        expect(store.current?.accessToken.value, 'new-token');
+      },
+    );
+
+    test('a register token past half its lifetime is never renewed', () async {
+      const tenMinutes = Duration(minutes: 10);
+      final exchange = ControlledRenewExchange();
+      final termination = RecordingTerminationHandler();
+      final coordinator = TokenCoordinator(
+        store: MemoryTokenStore(
+          SessionTokens(
+            accessToken: AccessToken(
+              value: 'register-token',
+              expiresAt: issuedAt.add(tenMinutes),
+              scope: SessionScope.register,
+              lifetime: tenMinutes,
+            ),
+          ),
+        ),
+        renewExchange: exchange,
+        terminationHandler: termination,
+        timeSource: FixedTimeSource(issuedAt.add(const Duration(minutes: 6))),
+      );
+
+      final result = await coordinator.accessToken();
+      await Future<void>.delayed(Duration.zero);
+
+      expect((result as Success<AccessToken>).value.value, 'register-token');
+      expect(exchange.calls, 0);
+      expect(termination.reasons, isEmpty);
+    });
+  });
 }
 
 final class FixedTimeSource implements TimeSource {
   const FixedTimeSource(this.value);
 
   final DateTime value;
+
+  @override
+  DateTime now() => value;
+}
+
+final class MutableTimeSource implements TimeSource {
+  MutableTimeSource(this.value);
+
+  DateTime value;
 
   @override
   DateTime now() => value;
@@ -351,6 +659,54 @@ final class ImmediateRenewExchange implements RenewTokenExchange {
 
   @override
   Future<Result<SessionTokens>> renew() async => result;
+}
+
+final class CountingRenewExchange implements RenewTokenExchange {
+  CountingRenewExchange(this.result);
+
+  final Result<SessionTokens> result;
+  int calls = 0;
+
+  @override
+  Future<Result<SessionTokens>> renew() async {
+    calls += 1;
+    return result;
+  }
+}
+
+/// `POST /auth/renew` against the clock: it issues tokens of [lifetime], and
+/// refuses one past its expiry as `401 invalid_token`, because the route sits
+/// behind the verifier every authenticated route uses.
+final class ExpiringRenewServer implements RenewTokenExchange {
+  ExpiringRenewServer(this.clock, {required this.lifetime});
+
+  final MutableTimeSource clock;
+  final Duration lifetime;
+  final List<String> issued = [];
+  final List<String> refused = [];
+  final Map<String, DateTime> _expiries = {};
+  late final AccessTokenCoordinator coordinator;
+
+  SessionTokens issue() {
+    final value = 'token-${issued.length}';
+    final expiresAt = clock.now().add(lifetime);
+    _expiries[value] = expiresAt;
+    issued.add(value);
+    return session(value, expiresAt, lifetime: lifetime);
+  }
+
+  @override
+  Future<Result<SessionTokens>> renew() async {
+    final header = await coordinator.accessToken();
+    final presented = (header as Success<AccessToken>).value.value;
+    if (!clock.now().isBefore(_expiries[presented]!)) {
+      refused.add(presented);
+      return const Result.failure(
+        BackendFailure(BackendFailureCode.invalidToken),
+      );
+    }
+    return Result.success(issue());
+  }
 }
 
 /// Asks the coordinator for a header token the way `DioRestClient` does for
@@ -405,10 +761,12 @@ final class ThrowingLogoutExchange implements LogoutTokenExchange {
   }
 }
 
-SessionTokens session(String token, DateTime expiresAt) => SessionTokens(
-  accessToken: AccessToken(
-    value: token,
-    expiresAt: expiresAt,
-    scope: SessionScope.full,
-  ),
-);
+SessionTokens session(String token, DateTime expiresAt, {Duration? lifetime}) =>
+    SessionTokens(
+      accessToken: AccessToken(
+        value: token,
+        expiresAt: expiresAt,
+        scope: SessionScope.full,
+        lifetime: lifetime,
+      ),
+    );

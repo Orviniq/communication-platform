@@ -128,6 +128,7 @@ final class LoginAccountResponseDto {
   AccountSessionGrant toDomain({DateTime? receivedAt}) => AccountSessionGrant(
     accessToken: token,
     accessExpiresAt: (receivedAt ?? DateTime.now()).toUtc().add(expiresIn),
+    accessLifetime: expiresIn,
     userId: userId,
     deviceId: deviceId,
     scope: scope,

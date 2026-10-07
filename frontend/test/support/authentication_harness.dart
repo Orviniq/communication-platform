@@ -25,6 +25,7 @@ final class AuthenticationHarness {
                AccountSessionGrant(
                  accessToken: 'register-access',
                  accessExpiresAt: DateTime.utc(2026, 7, 28, 12),
+                 accessLifetime: const Duration(minutes: 10),
                  userId: userId,
                  scope: AccountSessionScope.register,
                ),

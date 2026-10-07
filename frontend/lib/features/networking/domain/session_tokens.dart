@@ -10,11 +10,20 @@ final class AccessToken {
     required this.value,
     required this.expiresAt,
     required this.scope,
+    this.lifetime,
   });
 
   final String value;
   final DateTime expiresAt;
   final SessionScope scope;
+
+  /// `expires_in` of the answer that issued this token: its whole life,
+  /// counted from its issue, which ends at [expiresAt] on this device's clock.
+  ///
+  /// Null only when this client was never told: a token restored from a row
+  /// written before the lifetime was stored beside it. A session token is
+  /// renewed once half of its lifetime has passed (ADR-085).
+  final Duration? lifetime;
 }
 
 /// One device-bound session. A renewal issues another token and retires none,

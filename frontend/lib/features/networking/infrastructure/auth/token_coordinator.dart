@@ -7,6 +7,7 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
 import 'package:communication_platform/features/networking/domain/session_tokens.dart';
+import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
 
 final class TokenCoordinator implements AccessTokenCoordinator {
   TokenCoordinator({
@@ -17,6 +18,7 @@ final class TokenCoordinator implements AccessTokenCoordinator {
     this.logoutExchange,
     this.proactiveRenewalWindow = const Duration(minutes: 2),
     this.clockSkewAllowance = const Duration(seconds: 30),
+    this.earlyRenewalRetryInterval = const Duration(minutes: 1),
   });
 
   final SessionTokenStore store;
@@ -24,11 +26,38 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   final LogoutTokenExchange? logoutExchange;
   final SessionTerminationHandler terminationHandler;
   final TimeSource timeSource;
+
+  /// With [clockSkewAllowance], the final stretch of a session token's life,
+  /// in which a request waits for the renewal instead of going out with the
+  /// token in hand. Renewal begins long before it, at half the token's
+  /// lifetime; this is where a renewal that has still not landed stops being
+  /// one that can wait (ADR-085).
   final Duration proactiveRenewalWindow;
   final Duration clockSkewAllowance;
 
-  /// The one renewal in flight, so that N callers arriving inside the renewal
-  /// window cost one call rather than N.
+  /// How long an early renewal that failed leaves the next one alone.
+  ///
+  /// The token in hand stays good meanwhile, so this only sets how often a
+  /// device with no way to the server spends a request finding that out. A
+  /// minute also outlasts a refusal from the `accounts` scope, which counts
+  /// calls in a minute.
+  final Duration earlyRenewalRetryInterval;
+
+  /// The lifetime assumed for a token restored without one, from a row written
+  /// before the lifetime was stored beside the token: `SESSION_TOKEN_DAYS` as
+  /// this build states it, the deployment default of 30 (server ADR-0023).
+  ///
+  /// It is not the published value because this coordinator is built before
+  /// the configuration is read, and outside the scope that follows it. The
+  /// assumption lasts one token: the renewal it times answers a token whose
+  /// own lifetime is stored.
+  static final _assumedLifetime = Duration(
+    days: ServerConfig.fallback.sessionTokenDays,
+  );
+
+  /// The one renewal in flight, so that N callers that find the token due cost
+  /// one call rather than N: in the early stretch they start no renewal of
+  /// their own while it runs, and in the final window they wait for it.
   ///
   /// It is a contention control and not a safety property (ADR-083). Against
   /// this server a renewal writes nothing and moves no generation, so the race
@@ -53,13 +82,34 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   /// the token this renewal exists to present.
   ///
   /// The zone is what keeps the answer to that question from reaching anybody
-  /// else. A caller outside the renewal is in no such trouble and still joins
-  /// the flight, so an ordinary request that arrives mid-renewal waits for the
-  /// new token exactly as it did before.
+  /// else. A caller outside the renewal is in no such trouble: in the final
+  /// window it joins the flight and waits for the new token, and before that it
+  /// is answered the token in hand, which is still good.
   static const _renewalMarker = #tokenCoordinatorRenewal;
 
   int _sessionGeneration = 0;
 
+  /// Until when no early renewal starts, after one that failed.
+  DateTime? _earlyRenewalPausedUntil;
+
+  /// The token to send now, renewed when it is due.
+  ///
+  /// `POST /auth/renew` sits behind the verifier every authenticated route
+  /// uses, so a token past its `exp` is refused there as `401 invalid_token`
+  /// and the session ends. A device can go days without a request, so a
+  /// session token is renewed from half its lifetime, while any request can
+  /// still do it (ADR-085):
+  ///
+  /// - **Before half its lifetime** it is answered as it is.
+  /// - **From half its lifetime** the first caller starts one renewal and every
+  ///   caller is answered the token in hand, which is still good. Nobody waits
+  ///   for that renewal, and one that fails without ending the session is
+  ///   tried again [earlyRenewalRetryInterval] later.
+  /// - **In the final [proactiveRenewalWindow] plus [clockSkewAllowance]**, and
+  ///   whenever [forceRefresh] asks, the caller waits for the renewal and is
+  ///   answered what it answers.
+  ///
+  /// A register token is never renewed.
   @override
   Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async {
     final presenting = Zone.current[_renewalMarker];
@@ -72,28 +122,34 @@ final class TokenCoordinator implements AccessTokenCoordinator {
         AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
       );
     }
-    final renewAt = tokens.accessToken.expiresAt.subtract(
-      proactiveRenewalWindow + clockSkewAllowance,
-    );
-    if (!forceRefresh && timeSource.now().toUtc().isBefore(renewAt)) {
-      return Result.success(tokens.accessToken);
-    }
-    if (tokens.accessToken.scope != SessionScope.full) {
+    final token = tokens.accessToken;
+    final now = timeSource.now().toUtc();
+    if (token.scope != SessionScope.full) {
       // A register token names no device, so there is no session to renew and
       // `POST /auth/renew` answers `403 scope_forbidden`. Its ten minutes are
       // the whole of its life: it is spent on `POST /me/devices`, which
       // answers the session token that replaces it.
-      if (timeSource.now().toUtc().isBefore(
-        tokens.accessToken.expiresAt.subtract(clockSkewAllowance),
-      )) {
-        return Result.success(tokens.accessToken);
+      if (now.isBefore(token.expiresAt.subtract(clockSkewAllowance))) {
+        return Result.success(token);
       }
       await _terminate(SessionTerminationReason.expired);
       return const Result.failure(
         AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
       );
     }
-    return _singleFlightRenewal(tokens.accessToken);
+    final renewBy = token.expiresAt.subtract(
+      proactiveRenewalWindow + clockSkewAllowance,
+    );
+    if (forceRefresh || !now.isBefore(renewBy)) {
+      return _singleFlightRenewal(token);
+    }
+    final renewFrom = token.expiresAt.subtract(
+      (token.lifetime ?? _assumedLifetime) ~/ 2,
+    );
+    if (!now.isBefore(renewFrom)) {
+      _startEarlyRenewal(token, now);
+    }
+    return Result.success(token);
   }
 
   @override
@@ -119,6 +175,32 @@ final class TokenCoordinator implements AccessTokenCoordinator {
       return Result.success(current.accessToken);
     }
     return accessToken(forceRefresh: true);
+  }
+
+  /// Starts a renewal of [held] that no caller waits for, unless one is in
+  /// flight already or the last early one failed under
+  /// [earlyRenewalRetryInterval] ago.
+  void _startEarlyRenewal(AccessToken held, DateTime now) {
+    final pausedUntil = _earlyRenewalPausedUntil;
+    if (_renewalInFlight != null ||
+        (pausedUntil != null && now.isBefore(pausedUntil))) {
+      return;
+    }
+    unawaited(_renewEarly(held));
+  }
+
+  Future<void> _renewEarly(AccessToken held) async {
+    var renewed = false;
+    try {
+      final result = await _singleFlightRenewal(held);
+      renewed = result is Success<AccessToken>;
+    } on Object {
+      // No caller waits on this renewal, so a throw here would reach nobody.
+      // The token in hand is still good; the pause below is all it changes.
+    }
+    _earlyRenewalPausedUntil = renewed
+        ? null
+        : timeSource.now().toUtc().add(earlyRenewalRetryInterval);
   }
 
   Future<Result<AccessToken>> _singleFlightRenewal(AccessToken presented) {

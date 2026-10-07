@@ -88,6 +88,7 @@ void main() {
           userId: userId,
           accessToken: 'durable-session-token',
           accessExpiresAt: DateTime.utc(2030),
+          accessLifetime: const Duration(days: 30),
         ),
       );
       expect(persisted, isA<Success<void>>());
@@ -104,6 +105,8 @@ void main() {
 
       expect(session?.accessToken.value, 'durable-session-token');
       expect(session?.accessToken.expiresAt, DateTime.utc(2030));
+      // What the coordinator times this token's renewal from (ADR-085).
+      expect(session?.accessToken.lifetime, const Duration(days: 30));
       expect(session?.deviceId, deviceId);
       expect(
         (restored as Success<EnrollmentJournal?>).value?.phase,

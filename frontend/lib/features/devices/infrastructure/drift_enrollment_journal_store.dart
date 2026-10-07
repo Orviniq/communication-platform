@@ -115,6 +115,7 @@ final class DriftEnrollmentJournalStore
         value: response.accessToken,
         expiresAt: response.accessExpiresAt,
         scope: SessionScope.full,
+        lifetime: response.accessLifetime,
       ),
       userId: response.userId,
       deviceId: response.deviceId,

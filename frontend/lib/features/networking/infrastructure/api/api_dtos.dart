@@ -56,6 +56,7 @@ final class SessionTokenResponseDto {
       value: token,
       expiresAt: (receivedAt ?? DateTime.now()).toUtc().add(expiresIn),
       scope: SessionScope.full,
+      lifetime: expiresIn,
     ),
   );
 }

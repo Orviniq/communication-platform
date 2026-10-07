@@ -72,6 +72,7 @@ final class RegisterDeviceResponseDto {
         userId: userId,
         accessToken: token,
         accessExpiresAt: (receivedAt ?? DateTime.now()).toUtc().add(expiresIn),
+        accessLifetime: expiresIn,
       );
 }
 

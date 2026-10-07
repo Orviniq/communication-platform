@@ -645,6 +645,7 @@ final class _MemoryEnrollmentRepository implements DeviceEnrollmentRepository {
           userId: userId,
           accessToken: 'access',
           accessExpiresAt: nullDate,
+          accessLifetime: const Duration(days: 30),
         ),
       ),
     );

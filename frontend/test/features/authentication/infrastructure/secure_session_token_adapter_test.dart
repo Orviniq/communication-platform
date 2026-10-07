@@ -88,6 +88,113 @@ void main() {
       },
     );
 
+    test('a login keeps its token lifetime across a restart', () async {
+      final adapter = SecureSessionTokenAdapter(harness.runtime);
+      final session = CoordinatedAuthenticationSession(
+        tokens: adapter,
+        coordinator: const ThrowingAccessTokenCoordinator(),
+        runtime: harness.runtime,
+      );
+
+      final accepted = await session.acceptLogin(
+        username: 'alice',
+        grant: AccountSessionGrant(
+          accessToken: 'session-secret',
+          accessExpiresAt: DateTime.utc(2026, 8, 27, 12),
+          accessLifetime: const Duration(days: 30),
+          userId: userId,
+          deviceId: deviceId,
+          scope: AccountSessionScope.full,
+        ),
+        replacedKnownDevice: false,
+      );
+      expect(accepted, isA<Success<AccountSessionBoundary>>());
+
+      // The coordinator renews from half of this, so a cold start must not
+      // lose it (ADR-085).
+      final restored = await SecureSessionTokenAdapter(harness.runtime).read();
+      expect(restored?.accessToken.value, 'session-secret');
+      expect(restored?.accessToken.expiresAt, DateTime.utc(2026, 8, 27, 12));
+      expect(restored?.accessToken.lifetime, const Duration(days: 30));
+    });
+
+    test(
+      'a row written before the lifetime was stored restores without one',
+      () async {
+        final adapter = SecureSessionTokenAdapter(harness.runtime);
+        await adapter.replace(fullTokens());
+        final database =
+            (await harness.runtime.open() as Success<LocalDatabase>).value;
+        // What every build before ADR-085 wrote. The session is still good,
+        // so it restores, and the coordinator assumes the deployment default
+        // for this one token.
+        await database
+            .update(database.accountSessions)
+            .write(
+              AccountSessionsCompanion(
+                tokenMetadataCiphertext: Value(
+                  Uint8List.fromList(
+                    utf8.encode(
+                      jsonEncode(<String, Object?>{
+                        'version': 1,
+                        'token': 'session-secret',
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+        final restored = await SecureSessionTokenAdapter(
+          harness.runtime,
+        ).read();
+        expect(restored?.accessToken.value, 'session-secret');
+        expect(restored?.accessToken.lifetime, isNull);
+      },
+    );
+
+    test(
+      'a lifetime that is not whole positive seconds is unreadable',
+      () async {
+        final adapter = SecureSessionTokenAdapter(harness.runtime);
+        final database =
+            (await harness.runtime.open() as Success<LocalDatabase>).value;
+        for (final lifetime in const <Object?>[0, -1, 2592000.5, '2592000']) {
+          await adapter.replace(fullTokens());
+          await database
+              .update(database.accountSessions)
+              .write(
+                AccountSessionsCompanion(
+                  tokenMetadataCiphertext: Value(
+                    Uint8List.fromList(
+                      utf8.encode(
+                        jsonEncode(<String, Object?>{
+                          'version': 1,
+                          'token': 'session-secret',
+                          'lifetime': lifetime,
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+
+          // This build never writes one, so the row is not one it wrote, and
+          // the guard treats it like any other field it cannot read.
+          expect(
+            await SecureSessionTokenAdapter(harness.runtime).read(),
+            isNull,
+            reason: 'lifetime: $lifetime',
+          );
+          expect(
+            await database.select(database.accountSessions).getSingleOrNull(),
+            isNull,
+            reason: 'lifetime: $lifetime',
+          );
+        }
+      },
+    );
+
     test(
       'register-scope access is memory-only and has no durable session row',
       () async {

@@ -33,6 +33,7 @@ final class AccountSessionGrant {
   const AccountSessionGrant({
     required this.accessToken,
     required this.accessExpiresAt,
+    required this.accessLifetime,
     required this.userId,
     required this.scope,
     this.deviceId,
@@ -40,6 +41,9 @@ final class AccountSessionGrant {
 
   final String accessToken;
   final DateTime accessExpiresAt;
+
+  /// `expires_in`: how long [accessToken] lives, counted from its issue.
+  final Duration accessLifetime;
   final String userId;
   final String? deviceId;
   final AccountSessionScope scope;

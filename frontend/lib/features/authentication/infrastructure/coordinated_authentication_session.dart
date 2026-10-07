@@ -82,6 +82,7 @@ final class CoordinatedAuthenticationSession
           value: grant.accessToken,
           expiresAt: grant.accessExpiresAt,
           scope: _networkScope(grant.scope),
+          lifetime: grant.accessLifetime,
         ),
         userId: grant.userId,
         deviceId: grant.deviceId,

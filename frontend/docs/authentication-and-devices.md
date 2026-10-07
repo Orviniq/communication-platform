@@ -84,6 +84,10 @@ rotation, and no route named `refresh` — server-side ADR-0023 retired all thre
   is shared with every other delivery owner in the process (ADR-050).
 - Dio authentication, proactive renewal, retry, logout, and WebSocket reconnect share one
   token coordinator.
+- A session token is renewed from half its lifetime, behind the request that finds it due,
+  because `POST /api/v1/auth/renew` refuses a token past its `exp`. The lifetime is the
+  issuing answer's `expires_in`, stored beside the token (ADR-085; `sync-engine.md`, Token
+  lifecycle).
 - A renewal carries its token in the `Authorization` header and sends no body. It writes
   nothing and moves no generation, so it is safe to repeat: a renewal whose answer was
   lost costs a retry rather than the session, and two that race simply produce two working
