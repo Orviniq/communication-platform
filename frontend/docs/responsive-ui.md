@@ -184,9 +184,13 @@ that have different guarantees.
 
 ## Accessibility and internationalization gates
 
+*Corrected 2026-10-07 (server ADR-0020):* this list held a gate that keyboard-only
+navigation works on web, including context menus and dialogs. There is no Web client: the
+server serves no browser surface, and the client's web target was removed on 2026-09-08
+(`implementation-checklist.md`, The web target).
+
 - Screen-reader traversal, labels, live regions, and focus restoration pass on all core
   flows.
-- Keyboard-only navigation works on web, including context menus and dialogs.
 - Text at maximum supported scale does not hide primary/destructive actions.
 - Persian RTL and English LTR goldens cover every shell and message direction mixture.
 - Timestamps/numbers use localized presentation while protocol values remain locale-free.

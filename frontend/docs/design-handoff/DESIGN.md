@@ -175,6 +175,11 @@ against these, and name them in annotations so the implementation maps 1:1.
 
 ## 7a. Accessibility — these are release gates, not polish
 
+*Corrected 2026-10-07 (server ADR-0020):* this list held a gate for keyboard-only
+operation on web, including context menus and dialogs. There is no Web client: the server
+serves no browser surface, and the client's web target was removed on 2026-09-08
+(`implementation-checklist.md`, The web target).
+
 - **Color is never the only carrier** of verification, failure, mute, speaking, or receipt
   state. Every one of those needs shape, icon, or text alongside.
 - **Text at maximum supported scale must not hide primary or destructive actions.** Scale
@@ -182,7 +187,6 @@ against these, and name them in annotations so the implementation maps 1:1.
 - Screen-reader traversal, labels, live regions, and focus restoration pass on all core
   flows. Where a screen has frequent state churn, the live-region policy is a design
   decision to state explicitly, not a default to inherit.
-- Keyboard-only operation on web, including context menus and dialogs.
 - Touch targets at least 48; pointer targets additionally carry hover, focus, and
   right-click behaviour.
 - The global error and toast host announces accessibly and carries **no sensitive detail**.

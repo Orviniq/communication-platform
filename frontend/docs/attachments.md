@@ -36,6 +36,12 @@ immediate server deletion of abandoned uploads.
 
 ## Receive pipeline
 
+*Corrected 2026-10-07 (server ADR-0020):* this section said Web downloads used blob URLs,
+a download disposition, an allowlist of inline image and audio formats, and timely URL
+revocation. There is no Web client: the server serves no browser surface, and the
+client's web target was removed on 2026-09-08 (`implementation-checklist.md`, The web
+target).
+
 1. Validate the descriptor and bucket before allocating.
 2. Download ciphertext as a stream; development direct-to-Daphne empty-body behavior is
    not treated as a valid production download. A download of the two largest buckets
@@ -45,9 +51,8 @@ immediate server deletion of abandoned uploads.
 5. Verify authenticated declared length and metadata.
 6. Render only through safe, platform-owned decoders with bounded dimensions/resources.
 
-Never open active content directly in the application origin. Web downloads use safe
-blob URLs, download disposition, a strict allowlist for inline image/audio formats, and
-timely URL revocation. Android shares files through a scoped content URI, not a raw path.
+Never open active content directly in the application origin. Android shares files
+through a scoped content URI, not a raw path.
 
 ## Resuming a download
 

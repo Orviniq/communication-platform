@@ -8393,6 +8393,11 @@ timing, battery, vendor behaviour, service survival or notification appearance w
 - **Credentials.** One coordinator, one single-flight refresh, one durable token store, and
   ADR-050's repair underneath. The third owner does not change that; it participates in the
   same arbitration.
+  > **Corrected 2026-10-07.** No repair is underneath. Nothing retires a token, so there is
+  > no rotation to lose: ADR-068 deleted the wait in ADR-050's decision C on 2026-09-08, and
+  > ADR-083 deleted its `readDurable()` on 2026-10-07. The single flight now renews the one
+  > session token and is kept as a contention control (ADR-083). The bullet is kept as
+  > written.
 - **What a longer-lived connection tells the server.** The backend already sees when a device
   drains and already touches `last_active_date`. Holding a socket makes this device's online
   periods more continuous and therefore more legible to a relay the threat model already
