@@ -282,18 +282,33 @@ with the backend/proxy configuration and a REST health probe only when necessary
 One device-bound session token, and nothing retires it (server ADR-0023, ADR-068).
 *Corrected 2026-10-07 (ADR-083):* this section described a rotating refresh token, a repair
 for losing its race, and ADR-050's ownership gate as what kept two coordinators from racing
-it. None of the three is true of this server.
+it. None of the three is true of this server. *Corrected 2026-10-07 (ADR-085):* renewal began
+two and a half minutes before expiry, and a device that made no request in them was signed out
+by its next one.
 
 - Expiry is the issuing answer's `expires_in`, counted on this device's clock with a
-  clock-skew allowance. The client never reads the token's claims.
-- Renewal begins shortly before expiry: `POST /api/v1/auth/renew` presents the token held
-  and answers another, retiring none, so a renewal is safe to repeat.
-- One renewal is in flight per coordinator, and every caller inside the renewal window joins
-  it. That single flight is a **contention control** and nothing more (ADR-083): it turns
-  the callers in the window into one renewal, one write of the session row and one new token
-  on the `accounts` scope. Nothing depends on it for correctness. Two owners in this process
-  each hold a coordinator; they may renew at once, both keep working tokens, and the shared
-  row holds whichever write landed last.
+  clock-skew allowance, and `expires_in` itself is kept beside it as the token's lifetime, in
+  memory and in the session row. The client never reads the token's claims.
+- Renewal begins at half the token's lifetime (ADR-085): day fifteen of a thirty-day token,
+  which leaves fifteen days in which any request renews it. `POST /api/v1/auth/renew`
+  presents the token held and answers another, retiring none, so a renewal is safe to repeat,
+  but it refuses a token past its `exp` as `invalid_token`, so a token nobody renews ends the
+  session. A token restored from a row written before the lifetime was stored is given
+  `SESSION_TOKEN_DAYS` as this build states it, 30.
+- From the half to the final two and a half minutes, the first caller that finds the token
+  due starts one renewal, and every caller is answered the token in hand; nobody waits for
+  the renewal. One that fails without ending the session is tried again a minute later. In
+  the final window, and after a `401`, the caller waits for the renewal and is answered what
+  it answers.
+- One renewal is in flight per coordinator: before the final window no caller starts a second
+  while it runs, and in the window every caller joins it. That single flight is a
+  **contention control** and nothing more (ADR-083): it turns the callers that find the token
+  due into one renewal, one write of the session row and one new token on the `accounts`
+  scope. Nothing depends on it for correctness. Two owners in this process each hold a
+  coordinator; they may renew at once, both keep working tokens, and the shared row holds
+  whichever write landed last.
+- A register token is never renewed. Its ten minutes are spent on `POST /me/devices`, and the
+  session ends after them.
 - A renewal the server refuses as `invalid_token` or `token_revoked` ends the session.
   Nothing but a logout, a device revocation or a deactivated account ends a token before
   its own expiry, so either is a session that is over, never a lost race to repair. A

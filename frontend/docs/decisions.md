@@ -95,6 +95,192 @@ is not silently edited out of history.
 | ADR-082 | Accepted (2026-10-06) | Every resolution asks the server: ADR-065's thirty-second peer cache is deleted, so a send is verified against the state its recipients hold when it is made. The per-user identity read becomes conditional on its own `ETag`; a `304` stands for the stored identity and is verified again, an identity never published stays `404 not_found` whatever tag is sent, and the three tags stay on three routes. Supersedes ADR-065's cache and amends ADR-080 D3 and D4 | The cache existed because a fan-out cost three reads for each recipient. ADR-080 made a fan-out one call, the `accounts` scope allows 300 calls a minute, and `/identity` serves a tag now, so all the cache still bought was the second re-read of a peer on the claim path, at the price of a send sealed to state nobody had checked again for up to thirty seconds. Counted on the composed send path: a first contact and its gossip go from six requests to eight, five of them answered with no body. Changes no wire format, local schema or backend file. |
 | ADR-083 | Accepted (2026-10-07) | A download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped: the next attempt for the same capability sends `Range: bytes=<bytes already written>-` and `If-Range` with the first answer's strong `ETag`, accepts `206` beside `200` only as an exact continuation, counts from the offset, and ends with exactly one bucket on disk. A `200` to a range starts the file again, a tag that moved reports the attachment gone, and the bytes are kept only after a dropped connection, a cancellation or a refusal, one partial at a time and in memory. The token coordinator's single flight is kept as a contention control and documented as one, and `SessionTokenStore.readDurable` is deleted | A dropped 64 MiB download cost the whole bucket again, although nginx serves a range of the stored file and `backend/attachments/API.md` now documents it. Phase 7 answers server ADR-0024's contract cost; these are the last two items `CLIENT_WORK.md` left optional, which ADR-0024 itself did not decide: the resume rests on what the attachments API published in the run of server ADR-0025, and the coordinator on server ADR-0023, after which nothing retires a token. The single flight protects nothing now, but it still turns every caller in the renewal window into one renewal on the `accounts` scope, and deleting it would leave the zone marker and the session generation beside it as they are. `readDurable` had no caller after ADR-068 deleted the rotation repair, under a contract that said session-ending decisions were made against it. Below 16 MiB the bookkeeping costs more than the bytes. Changes no wire format, local schema, cryptographic construction or backend file. |
 | ADR-084 | Accepted (2026-10-07) | This account's two live-set checks, Linked Devices and the own device log, read a list the head record does not cover as **pending** when the head covers it less changes to at most two devices that have not reached the log: a device dropped, because the record does not cover it, or a signed device put back unsigned, because an earlier append covered it before it cross-signed. Pending refuses with `policyBlocked` and leaves the global posture alone. A logged device gone with no record, a changed key or registration id, a changed signature or version on a logged signed device and a third device in flight still latch `deviceLogFork`. A list head that disagrees with the verified chain is a `conflict`, not a fork. With that in place, `PublicDeviceDto` reads `cross_sig: null, bundle_version: 0` as unsigned and refuses every other pair as ADR-081 D2 does. Does ADR-081 D3 | A record carries only the hash of its live set, so the client can only ask whether a candidate built from the list is the set it covers. Every honest append covers the whole list, and between appends a device registers, cross-signs, or is removed before its `DELETE` lands, with no record covering the change yet. Latching on those latched a fork that nothing clears, because only a confirmed own mutation resets the posture and each refuses to start unless it is `normal`. Two devices was the owner's choice: it covers overlapping enrollments, or an enrollment during a removal, at no more than 2n² + 1 inspections. Left open: the prekey-rotation gap still latches, because a record's hash cannot rebuild the old version, and an unsigned device that never finishes blocks every removal. Changes no wire format, protocol, cryptographic construction, local schema or backend file. |
+| ADR-085 | Accepted (2026-10-07) | A session token is renewed from half its lifetime instead of in its last two and a half minutes. The first request past the half starts one renewal and goes out with the token in hand; nothing waits for that renewal, and one that fails without ending the session is tried again a minute later. The final window still makes a request wait, as before. The lifetime is the issuing answer's `expires_in`, now kept beside the token in memory and in the session row, and a row written before that is read with `SESSION_TOKEN_DAYS` as this build states it, 30. A register token is still never renewed, and the single flight, the zone marker and the session generation stay. Closes the defect ADR-083 found in passing | `POST /api/v1/auth/renew` sits behind the verifier every authenticated route uses, so an expired token is `401 invalid_token` and the session ends (server ADR-0023, `backend/core/API.md`). Renewing only inside `proactiveRenewalWindow` plus `clockSkewAllowance` signed out a device that made no request in those minutes of a thirty-day token, at its next request: about once a month for an ordinary user, and the deferred catch-up, waking every fifteen minutes at most, landed inside them about one time in six. The server's own text says to renew well before expiry. Half the lifetime leaves fifteen days in which any request renews, scales with the deployment, and cannot loop, because no token is due when it is issued. Renewing behind the request means a cold start never waits on a renewal and no request fails because one did. Adds one optional key to the session row's encrypted metadata; changes no table, wire format, protocol, cryptographic construction or backend file. |
+
+## ADR-085 in full — a session token is renewed from half its life, not in its last minutes (2026-10-07)
+
+**Status:** Accepted, 2026-10-07. Client-side correctness decision, on server ADR-0023, which
+issues one session token of `SESSION_TOKEN_DAYS` and renews it on demand. Closes the defect
+ADR-083 found in passing. Changes when the token coordinator renews, and keeps each session
+token's lifetime beside its expiry, in memory and as one optional key of the session row's
+encrypted metadata. **Changes no table, column, wire format, protocol, cryptographic
+construction or backend file. Opens no production gate.**
+
+**Cites:** server ADR-0023
+([`0023-one-device-bound-session-token.md`](../../docs/architecture/decisions/0023-one-device-bound-session-token.md)),
+ADR-068, ADR-083, the [accounts API](../../backend/accounts/API.md) ("Renew the session
+token"), [`backend/core/API.md`](../../backend/core/API.md) (the `401 invalid_token` row and
+`session_token_days`), the `POST /api/v1/auth/renew` row of
+[`API_CHANGES.md`](../../API_CHANGES.md), and `issue_session` and `decode` in
+`backend/api/auth.py`.
+
+### The question
+
+> The coordinator renews a session token only inside `proactiveRenewalWindow` plus
+> `clockSkewAllowance` before it expires: two and a half minutes of a thirty-day token. The
+> server will not renew a token that has expired. When should the client renew, how does it
+> know when that is without reading the token, and what may a renewal that fails cost a
+> request?
+
+### What the server allows
+
+- Every session token, whether from a login that names a device, from `POST /me/devices` or
+  from a renewal, is cut by `issue_session` with a lifetime of `SESSION_TOKEN_DAYS` days,
+  default 30, and every answer states that lifetime as `expires_in`, in seconds.
+  `GET /api/v1/config` publishes the same number as `session_token_days`.
+- `POST /api/v1/auth/renew` takes the token as its bearer credential, through the verifier
+  every authenticated route uses. PyJWT checks `exp` there with no leeway, and an expired
+  token is `401 invalid_token` (`backend/core/API.md`). `_endsSession` reads that, correctly,
+  as a session that is over.
+- A renewal retires nothing: the presented token stays valid until its own `exp`, and a repeat
+  is safe. It counts against the `accounts` scope, 300 calls a minute per account by default.
+- The route's own text says clients renew well before expiry, and `API_CHANGES.md` says to call
+  it "well before `expires_in` runs out".
+
+So a token can be renewed at any moment of its life, and one that reaches the end of it
+unrenewed is a sign-out.
+
+### What the window cost
+
+A request inside the last two and a half minutes renewed. Any request after them ended the
+session. Nothing arranges for a request to fall inside those minutes, so a user who opens the
+application every day was signed out about once a month, by whatever came first after day
+thirty: a cold start's restore, a drain, a socket reconnect. The background owners did not save
+it. The deferred catch-up wakes every fifteen minutes at most (`deferredCatchUpInterval`, the
+platform's floor), and a wake every fifteen minutes falls inside two and a half minutes about one
+time in six.
+
+### D1. Renewal begins at half the token's lifetime
+
+A session token is due once half its lifetime has passed: at `expiresAt` less half of its
+`lifetime`. At the default that is day fifteen, which leaves fifteen days in which any request
+renews it. The half scales with the deployment, so a ten-day token is due on day five, and no
+token is due when it is issued, so a renewal cannot answer a token that is already due and start
+a loop.
+
+**Rejected: a fixed span before expiry, such as fifteen days.** Under a `SESSION_TOKEN_DAYS` of
+fifteen or less every token would be issued due, and each renewal would answer another: one
+renewal for every request.
+
+**Rejected: the published `session_token_days` alone.** A configuration read while the operator
+had a different value would loop the same way, or renew late, and every answer that issues a
+token states that token's own lifetime anyway (D4).
+
+**Rejected: the token's `iat` and `exp`.** The client never reads the claims, and the server
+publishes `expires_in` so that it need not (server ADR-0023).
+
+### D2. The early renewal runs behind the request
+
+From half its lifetime to the final window, the first caller that finds the token due starts one
+renewal, and every caller, that one included, is answered the token in hand, which is still
+good. Nobody waits for the renewal. Once it lands the next caller gets the new token; until
+then the old one goes out, and both work, because a renewal retires nothing.
+
+The final `proactiveRenewalWindow` plus `clockSkewAllowance` keeps its rule: the caller waits for
+the renewal and is answered what it answers, and so does a caller that a `401` sends back with
+`forceRefresh`. A token reaches that window only if no early renewal landed in the half before
+it.
+
+**Rejected: the caller waits for the early renewal as well.** It would cost one round trip a
+fortnight, but the restore at a cold start is one such caller, and on a network that drops
+packets a renewal takes two connect timeouts, twenty seconds of a restore screen that has no
+button and no timeout, before the restore falls back. A renewal refused for any reason that does
+not end the session would also fail a request whose token is good for another fortnight.
+
+**Rejected: a timer set for the half.** A process that is not running holds no timer, and one
+that is running is already making requests.
+
+### D3. What a failed early renewal costs
+
+- **A refusal that ends the session**, `invalid_token` or `token_revoked`, ends it, as in the
+  final window. The route re-checks the device and the account, so this is a revoked device, a
+  deactivated account or a token the server no longer accepts, and every other route would say
+  the same.
+- **Anything else**, whether no route, a timeout, a `429`, a `5xx`, a body the client cannot
+  read or a store that throws, keeps the token in hand and changes only when the next early
+  renewal may start: a minute later, `earlyRenewalRetryInterval`. That bounds how often a device
+  with no way to the server spends a request finding out, and it outlasts an `accounts` refusal,
+  which counts calls in a minute.
+
+The pause is held in memory, so a new process tries at its first request.
+
+### D4. The lifetime is kept beside the expiry
+
+`AccessToken.lifetime` is the `expires_in` of the answer that issued the token. All three answers
+that issue a session token carry it in: `SessionTokenResponseDto` for a renewal,
+`LoginAccountResponseDto` through `AccountSessionGrant.accessLifetime` for a login, and
+`RegisterDeviceResponseDto` through `DeviceRegistrationResponse.accessLifetime` for a
+registration. `SecureSessionTokenAdapter` writes it into the session row's encrypted metadata as
+`lifetime`, in whole seconds, beside `token` and under the same format version, and reads it
+back. A `lifetime` that is not a positive integer is refused like any other malformed field: the
+row is deleted and the user signs in again. A build without this change reads only `version`
+and `token`, so a row this one writes still restores there.
+
+A row written before this change has no `lifetime`. It restores as before, and the coordinator
+assumes `SESSION_TOKEN_DAYS` as this build states it, `ServerConfig.fallback.sessionTokenDays`,
+which is 30. The assumption lasts one token, because the renewal it times answers a token whose
+lifetime is stored. It is not the published value: `NetworkingFoundation.create` builds the
+coordinator from `ApplicationRuntime.create`, before the published configuration is read and
+outside the provider scope that follows it, and wiring the value in would serve one token per
+device. A deployment with another value moves only that first renewal, and never closer to
+expiry than fifteen days: at fifteen days or fewer the restored token is due at once, up to
+thirty it is due at or before its true half, and above thirty it is due fifteen days before it
+expires.
+
+### D5. What stays
+
+- **A register token is never renewed.** `POST /auth/renew` answers it `403 scope_forbidden`.
+  It is answered until `clockSkewAllowance` before its ten minutes end, and the session ends
+  after.
+- **The single flight** (ADR-083 D4). An early renewal starts only when none is in flight, so any
+  number of callers past the half cost one renewal, and a caller in the final window joins
+  whatever renewal is in flight, early or not.
+- **The zone marker** (ADR-068 D3). The renewal's own request is answered the token it presents,
+  early or not.
+- **The session generation.** A renewal answered after a logout, a revocation or an expiry writes
+  nothing.
+
+### What it costs
+
+One `POST /api/v1/auth/renew` per device for each half lifetime in use: every fifteen days at the
+default, twice the rate server ADR-0023's scale band counted, about 33 a day at its 500 devices,
+on the `accounts` scope. The session row gains one key.
+
+What it does not fix: a device that makes no request reaching the server through the whole
+second half of a token's life is still signed out at its next one, because the server will not
+renew a token past its `exp`. That is fifteen idle days at the default, where it used to be any
+two and a half minutes.
+
+### Correctness
+
+- **`token_coordinator_test.dart`** gains ten tests in the group *renewal from half the lifetime
+  (ADR-085)*. Run against the coordinator at `dcd7abb`, eight fail, all because nothing renews
+  before the final window: the device idle through the final minutes is signed out on day
+  thirty-one; nothing renews at day sixteen of a thirty-day token, at day six of a ten-day token,
+  at fourteen days left of a token restored without a lifetime, or for twenty concurrent callers;
+  nothing is retried after a failure and the retry interval; the server's refusal ends nothing;
+  and the zone marker answers no renewal's request. The other two pass on both versions and
+  guard the other side: nothing renews a token short of half its lifetime, or a register token
+  past half of its ten minutes. The eleven tests that were there pass unchanged, so the final
+  window still waits, still returns the failure of a renewal that cannot reach the server, and
+  still ends the session on a refusal.
+- **`secure_session_token_adapter_test.dart`**: a login's lifetime survives a restart, a row
+  without one restores with none, and a lifetime that is not whole positive seconds makes the row
+  unreadable. **`drift_enrollment_journal_store_test.dart`**: a registration's lifetime survives
+  a restart. The three DTO tests check that each answer's `expires_in` becomes the lifetime.
+
+### What is not done, and what was found
+
+- **No run against the live server or a device.** Every check is a fake exchange or an in-memory
+  database. That an expired token cannot renew rests on server ADR-0023, `decode` in
+  `backend/api/auth.py` and the server's `test_an_expired_token_is_refused`.
+- **Nothing shows it.** A device whose early renewals have failed for days looks like one that
+  renewed, and nothing warns the user before a sign-out.
+- **Found in passing: a renewal refused as `token_revoked` ends the session twice.**
+  `DioRestClient` calls `handleRevocation` when it reads that code on the renewal's own request,
+  and `_performRenewal` ends the session again on the failure it then returns, so the revocation
+  wipe runs twice and `revoked` is emitted twice. A throwaway test through the real client
+  recorded `[revoked, revoked]` for one refusal. It predates this change and is not changed here.
 
 ## ADR-084 in full — a device the log does not cover yet is pending, not a fork (2026-10-07)
 
@@ -375,6 +561,11 @@ it. It goes from the port, the adapter and three test doubles, and
 `delivery_owner_contention_test.dart` reads the shared row through an adapter with nothing cached
 instead.
 
+> **Amended by ADR-085 (2026-10-07).** Renewal begins at half the token's lifetime now. Before the
+> final window a caller is answered the token in hand and does not wait for the flight, which
+> only keeps a second renewal from starting; in the final window callers still join it, as
+> described here.
+
 ### D5. The records that called it a safeguard
 
 ADR-049 and ADR-050 gain dated notes and new statuses, and their text stays as history.
@@ -430,7 +621,8 @@ The transport keeps at most one file of up to 64 MiB in the private cache betwee
 - **Found in passing: the renewal window is two and a half minutes of a thirty-day token.** The
   coordinator renews only inside `proactiveRenewalWindow` plus `clockSkewAllowance` before the
   token expires, and `/auth/renew` answers an expired token `401 invalid_token`, so a device that
-  makes no request in those minutes is signed out by its next one. Not changed here.
+  makes no request in those minutes is signed out by its next one. Not changed here. **Done
+  2026-10-07 — ADR-085**: renewal begins at half the token's lifetime.
 
 ## ADR-082 in full — every send asks, and the identity read is conditional (2026-10-06)
 
