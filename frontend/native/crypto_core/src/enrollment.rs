@@ -1716,6 +1716,81 @@ mod tests {
     }
 
     #[test]
+    fn a_logged_unsigned_device_is_covered_only_in_its_unsigned_form() {
+        // An append covers every listed device, a device that has not
+        // cross-signed itself included, which the Dart client's canonical set
+        // writes as an empty signature frame at version 0. The own live-set
+        // checks rebuild that form for a device listed signed since (ADR-084).
+        let identity =
+            prepare_first_identity_with_provider(&deterministic_provider(16_000), &USER_ID)
+                .unwrap();
+        let parsed_identity = parse_identity_package(&identity).unwrap();
+        let mut unsigned_id = DEVICE_ID;
+        unsigned_id[15] ^= 1;
+        let signed: super::PublicLogDevice = (DEVICE_ID, [3; 64], 7, Some([5; 64]), 1);
+        let unsigned: super::PublicLogDevice = (unsigned_id, [4; 64], 8, None, 0);
+
+        let mut canonical_live_set = Vec::new();
+        canonical_live_set.extend_from_slice(b"chat:v1:device-set");
+        super::push_u32(&mut canonical_live_set, 2);
+        canonical_live_set.extend_from_slice(&unsigned_id);
+        super::framed(&mut canonical_live_set, &[4; 64]).unwrap();
+        super::push_u32(&mut canonical_live_set, 8);
+        super::framed(&mut canonical_live_set, &[]).unwrap();
+        super::push_u32(&mut canonical_live_set, 0);
+        canonical_live_set.extend_from_slice(&DEVICE_ID);
+        super::framed(&mut canonical_live_set, &[3; 64]).unwrap();
+        super::push_u32(&mut canonical_live_set, 7);
+        super::framed(&mut canonical_live_set, &[5; 64]).unwrap();
+        super::push_u32(&mut canonical_live_set, 1);
+        let record = create_device_log_record_with_provider(
+            &deterministic_provider(512),
+            &identity,
+            &USER_ID,
+            0,
+            &[],
+            &canonical_live_set,
+            1,
+            20_302,
+        )
+        .unwrap();
+        let inspect = |devices: &[super::PublicLogDevice]| {
+            let mut request = Vec::new();
+            request.extend_from_slice(VERIFY_LOG_MAGIC);
+            request.extend_from_slice(&USER_ID);
+            request.extend_from_slice(&parsed_identity.self_signing_public);
+            request.push(1);
+            super::push_u32(&mut request, u32::try_from(devices.len()).unwrap());
+            for (device_id, ik_public, registration_id, cross_signature, version) in devices {
+                request.extend_from_slice(device_id);
+                request.extend_from_slice(ik_public);
+                super::push_u32(&mut request, *registration_id);
+                match cross_signature {
+                    Some(signature) => {
+                        request.push(1);
+                        request.extend_from_slice(signature);
+                    }
+                    None => request.push(0),
+                }
+                super::push_u32(&mut request, *version);
+            }
+            request.extend_from_slice(&record);
+            inspect_peer_device_log_record(&request)
+        };
+
+        inspect(&[signed, unsigned]).unwrap();
+        let cross_signed: super::PublicLogDevice = (unsigned_id, [4; 64], 8, Some([6; 64]), 1);
+        assert_eq!(
+            inspect(&[signed, cross_signed]).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+        assert_eq!(
+            inspect(&[signed]).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+    }
+
+    #[test]
     fn peer_identity_and_attestation_bind_the_exact_master_key() {
         let provider = deterministic_provider(16_000);
         let identity = prepare_first_identity_with_provider(&provider, &USER_ID).unwrap();

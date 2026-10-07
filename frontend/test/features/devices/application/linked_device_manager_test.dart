@@ -14,6 +14,8 @@ import 'package:communication_platform/features/devices/domain/device_enrollment
 import 'package:communication_platform/features/devices/domain/linked_device_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/own_live_set_fakes.dart';
+
 const _userId = '10000000-0000-4000-8000-000000000001';
 const _currentDeviceId = '10000000-0000-4000-8000-000000000002';
 const _otherDeviceId = '10000000-0000-4000-8000-000000000003';
@@ -76,7 +78,92 @@ void main() {
       expect(cleanup.calls, 1);
     },
   );
+
+  group('a Linked Devices refresh against the head record (ADR-084)', () {
+    final current = signedDevice(_currentDeviceId, key: 1);
+    final other = signedDevice(_otherDeviceId, key: 2);
+
+    Future<(Result<List<LinkedDevice>>, _Local)> refresh({
+      required List<PublicDevice> head,
+      required List<PublicDevice> listed,
+    }) async {
+      final local = _Local();
+      final manager = _manager(
+        local: local,
+        remote: _Remote(
+          OwnDevicesUpdated(
+            devices: [for (final device in listed) _row(device.deviceId)],
+            etag: '"own-v2"',
+            logHeadSequence: 0,
+          ),
+        ),
+        cleanup: _Cleanup(),
+        enrollment: _Enrollment(devices: listed),
+        enrollmentCrypto: _EnrollmentCrypto(),
+        identityCrypto: HeadLiveSetCrypto(head),
+      );
+      return (await manager.refresh(), local);
+    }
+
+    test('the set the head covers is stored', () async {
+      final (result, local) = await refresh(
+        head: [current, other],
+        listed: [current, other],
+      );
+
+      expect(result, isA<Success<List<LinkedDevice>>>());
+      expect(local.replaced?.map((row) => row.deviceId), [
+        _currentDeviceId,
+        _otherDeviceId,
+      ]);
+      expect(local.securityState, GlobalSecurityState.normal);
+    });
+
+    for (final (name, newcomer) in [
+      ('unsigned and not logged', unsignedDevice(newcomerId, key: 3)),
+      ('signed but not logged', signedDevice(newcomerId, key: 3)),
+    ]) {
+      test('another own device $name is pending, not a fork', () async {
+        final (result, local) = await refresh(
+          head: [current, other],
+          listed: [current, other, newcomer],
+        );
+
+        expect(
+          result,
+          isA<FailureResult<List<LinkedDevice>>>().having(
+            (value) => value.failure,
+            'failure',
+            const SecurityFailure(SecurityFailureKind.policyBlocked),
+          ),
+        );
+        expect(local.securityState, GlobalSecurityState.normal);
+        expect(local.evidence, isNull);
+        expect(local.replaced, isNull);
+      });
+    }
+
+    test('a changed identity key still latches the fork', () async {
+      final (result, local) = await refresh(
+        head: [current, other],
+        listed: [current, signedDevice(_otherDeviceId, key: 9)],
+      );
+
+      expect(result, isA<FailureResult<List<LinkedDevice>>>());
+      expect(local.securityState, GlobalSecurityState.deviceLogFork);
+      expect(local.evidence, DeviceLogEvidenceKind.liveSetMismatch);
+      expect(local.replaced, isNull);
+    });
+  });
 }
+
+LinkedDevice _row(String deviceId) => LinkedDevice(
+  deviceId: deviceId,
+  label: null,
+  labelState: LinkedDeviceLabelState.notSet,
+  createdDate: DateTime.utc(2026, 10, 7),
+  thisDevice: deviceId == _currentDeviceId,
+);
 
 LinkedDeviceManager _manager({
   required _Local local,
@@ -126,6 +213,8 @@ final class _Local implements LinkedDeviceLocalPort {
   final IdentityKeyPackage identity;
   PendingDeviceLogMutation? pending;
   GlobalSecurityState securityState = GlobalSecurityState.normal;
+  DeviceLogEvidenceKind? evidence;
+  List<LinkedDevice>? replaced;
 
   @override
   Future<Result<PendingDeviceLogMutation?>> readPendingMutation() async =>
@@ -152,12 +241,28 @@ final class _Local implements LinkedDeviceLocalPort {
     DeviceLogEvidenceKind? evidence,
   }) async {
     securityState = state;
+    this.evidence = evidence;
     return const Result.success(null);
   }
 
   @override
   Future<Result<String?>> readOwnDevicesEtag(String userId) async =>
       const Result.success(null);
+
+  @override
+  Future<Result<void>> replaceOwnDevices({
+    required String userId,
+    required String etag,
+    required List<LinkedDevice> devices,
+  }) async {
+    replaced = devices;
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<void>> markMissingHistorySources(
+    Set<String> liveDeviceIds,
+  ) async => const Result.success(null);
 
   @override
   Future<Result<List<LinkedDevice>>> readOwnDevices(String userId) async =>
@@ -188,25 +293,27 @@ final class _Cleanup implements SelfRevocationCleanupPort {
 }
 
 final class _Enrollment implements DeviceEnrollmentRepository {
+  _Enrollment({List<PublicDevice>? devices})
+    : devices =
+          devices ??
+          [
+            PublicDevice(
+              deviceId: _otherDeviceId,
+              ikPub: Uint8List(64),
+              registrationId: 7,
+              crossSignature: Uint8List(64),
+              bundleVersion: 1,
+            ),
+          ];
+
+  final List<PublicDevice> devices;
   final record = Uint8List(256);
 
   @override
   Future<Result<PublicDeviceList>> fetchPublicDevices({
     required String userId,
   }) async => Result.success(
-    PublicDeviceList(
-      devices: [
-        PublicDevice(
-          deviceId: _otherDeviceId,
-          ikPub: Uint8List(64),
-          registrationId: 7,
-          crossSignature: Uint8List(64),
-          bundleVersion: 1,
-        ),
-      ],
-      logHeadSequence: 0,
-      etag: '"public-v1"',
-    ),
+    PublicDeviceList(devices: devices, logHeadSequence: 0, etag: '"public-v1"'),
   );
 
   @override
