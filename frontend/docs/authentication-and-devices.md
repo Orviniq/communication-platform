@@ -143,6 +143,15 @@ devices are withheld; master-key change or log fork blocks sensitive operations.
 Unknown/foreign/revoked IDs are treated identically in UI to avoid exposing server
 existence distinctions.
 
+A device that has not cross-signed itself is listed as `cross_sig: null` beside
+`bundle_version: 0`, the version the server stores until the follow-up `PUT` names one. On the
+peer routes that pair, and only that pair, is an unsigned device: it is read with no version,
+and the list holding it is refused as `invalidDevice` rather than the answer as malformed. A
+signature below version 1, no signature past version 0, and a negative, null or missing version
+are malformed answers. This account's own list, read for enrollment, Linked Devices and the own
+device log, still refuses the server's pair until its live-set checks treat a device that is
+not in the log yet as pending ([ADR-081](decisions.md)).
+
 ### Verifying a fan-out in one call
 
 A send verifies its recipients — every peer it is for, and this account for its own other
