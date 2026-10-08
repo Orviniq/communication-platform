@@ -116,15 +116,26 @@ edge of the screen.
 
 ### 0.2 Persistent elements
 - **Active voice-room banner.** Whenever the user is in a call, a thin persistent banner
-  sits above the bottom tab bar (mobile) or atop the left rail (desktop): room name, a
-  live mic-state icon, and a "return to room" tap target. It stays on every screen until
-  the user leaves the call; tapping it opens the Live Voice Room (§10). Membership of a
-  room does not raise it — only a call in progress does. As built (2026-10-02), the
-  call's own screen does not show it, because there it would only point at itself, and
-  its microphone icon reads muted or on, in words for a screen reader as well.
+  shows the room name, a live mic-state icon, and a "return to room" tap target. It stays
+  on every screen until the user leaves the call; tapping it opens the Live Voice Room
+  (§10). Membership of a room does not raise it — only a call in progress does. It has
+  three places:
+  - on a tab root at narrow width (§0.1), above the bottom tab bar;
+  - on a tab root at medium and wide width, at the top of the rail;
+  - on every full-screen page (§0.1), at the top of the page: below the status bar, whose
+    inset it takes, and above the page's own top bar.
+
+  The call's own screen (§10) shows no banner, because there it would only point at
+  itself; the call screen of another room shows it. The bootstrap and sign-in screens —
+  Connection (§1), Login (§2), Register and Pending activation (§3), Encryption setup
+  (§4) and the session-restoring screen — show none. As built (2026-10-02), its
+  microphone icon reads muted or on, in words for a screen reader as well. As built
+  (2026-10-08, phase 8 prompt 2), a full-screen page keeps its state when a call starts
+  or ends while it is open, a draft in the composer included.
 - **Connection status strip.** When the client can't reach the server, a strip appears at
   the top of the current screen: "Connecting…" / "No connection to server". It clears only
-  when the connection returns, not by user dismissal.
+  when the connection returns, not by user dismissal. As built (2026-10-08), the shell
+  draws the strip, so it shows on a tab root only: a full-screen page covers it.
 
 ### 0.3 Global "new" affordance
 - **Mobile:** a floating compose button (FAB) on the Chats and Voice Rooms lists; its
