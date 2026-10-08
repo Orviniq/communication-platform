@@ -13,6 +13,7 @@ import 'package:communication_platform/features/groups/presentation/group_chat_p
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/direct_chat_page.dart';
 import 'package:communication_platform/features/settings/presentation/security_settings_page.dart';
 import 'package:communication_platform/features/voice/presentation/create_voice_room_page.dart';
@@ -22,6 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import '../support/authentication_harness.dart';
+import '../support/system_insets.dart';
 
 const _narrow = Size(360, 800);
 const _wide = Size(1440, 900);
@@ -185,6 +187,42 @@ void main() {
     await _settle(tester);
     expect(find.byKey(const ValueKey('settings-screen')), findsOneWidget);
     expect(find.byKey(const ValueKey('shell-narrow')), findsOneWidget);
+  });
+
+  group('a direct chat keeps its composer out of the system insets', () {
+    const location = '/chats/conversation/c-01?peer=peer-01';
+    final composer = find.byType(ChatComposerBuilder);
+    final controls = find
+        .ancestor(
+          of: find.byKey(const ValueKey('chat-composer-field')),
+          matching: find.byType(Row),
+        )
+        .first;
+
+    testWidgets('above the gesture bar, with its colour down to the edge', (
+      tester,
+    ) async {
+      fakeSystemInsets(tester);
+      await _pumpApp(tester, size: _narrow, initialLocation: location);
+
+      expect(tester.getRect(composer).bottom, _narrow.height);
+      expect(
+        tester.getRect(controls).bottom,
+        lessThanOrEqualTo(_narrow.height - 48),
+      );
+    });
+
+    testWidgets('above the keyboard', (tester) async {
+      fakeSystemInsets(tester);
+      await _pumpApp(tester, size: _narrow, initialLocation: location);
+      fakeOpenKeyboard(tester);
+      await _settle(tester);
+
+      expect(
+        tester.getRect(composer).bottom,
+        lessThanOrEqualTo(_narrow.height - 300),
+      );
+    });
   });
 }
 

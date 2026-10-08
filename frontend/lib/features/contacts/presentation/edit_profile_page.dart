@@ -81,7 +81,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         title: Text(strings.profileEditTitle),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.x6),
+        padding: AppInsets.belowAppBar(context, AppSpacing.x6),
         children: [
           Text(strings.profileVisibilityNote),
           // The screen states what this build can do rather than offering a

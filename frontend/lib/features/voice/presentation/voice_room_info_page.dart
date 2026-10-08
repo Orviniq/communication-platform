@@ -163,7 +163,7 @@ class _VoiceRoomInfoViewState extends State<VoiceRoomInfoView> {
       ),
       body: VoiceResponsiveBody(
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.x4),
+          padding: AppInsets.belowAppBar(context, AppSpacing.x4),
           children: [
             if (_room.lifecycle != RoomLifecycle.active) ...[
               VoiceRoomLifecycleNotice(room: _room, people: widget.people),

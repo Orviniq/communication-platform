@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../features/voice/support/call_fakes.dart';
+import '../support/system_insets.dart';
 import '../support/voice_screen_harness.dart';
 
 const _sara = VoiceCallParticipant(
@@ -584,6 +585,45 @@ void main() {
       );
       expect(key('voice-call-mute').hitTestable(), findsOneWidget);
       expect(key('voice-call-leave').hitTestable(), findsOneWidget);
+    });
+
+    testWidgets('the two bars keep their controls inside the safe area, and '
+        'their colour reaches the edges', (tester) async {
+      fakeSystemInsets(tester);
+      call.peers = [_sara];
+      final controller = controllerWith();
+      await pumpCall(tester, controller, size: const Size(360, 800));
+      await tapVisible(tester, key('voice-call-join'));
+
+      final topBar = key('voice-call-top-bar');
+      final controlBar = key('voice-call-control-bar');
+      expect(tester.getRect(topBar).top, 0);
+      expect(tester.getRect(controlBar).bottom, 800);
+      final topRow = find.descendant(of: topBar, matching: find.byType(Row));
+      final controlRow = find.descendant(
+        of: controlBar,
+        matching: find.byType(Row),
+      );
+      expect(tester.getRect(topRow.first).top, greaterThanOrEqualTo(24));
+      expect(tester.getRect(controlRow.first).bottom, lessThanOrEqualTo(752));
+      for (final control in ['voice-call-minimize', 'voice-call-info']) {
+        expect(
+          tester.getRect(key(control)).top,
+          greaterThanOrEqualTo(24),
+          reason: control,
+        );
+      }
+      for (final control in [
+        'voice-call-mute',
+        'voice-call-invite',
+        'voice-call-leave',
+      ]) {
+        expect(
+          tester.getRect(key(control)).bottom,
+          lessThanOrEqualTo(752),
+          reason: control,
+        );
+      }
     });
 
     testWidgets('a wide window puts room text beside the tiles, and resizing '

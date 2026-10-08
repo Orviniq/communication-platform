@@ -50,7 +50,7 @@ final class AboutPage extends ConsumerWidget {
             maxWidth: AppContentWidths.readable,
           ),
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.x4),
+            padding: AppInsets.belowAppBar(context, AppSpacing.x4),
             children: [
               Card(
                 child: Padding(

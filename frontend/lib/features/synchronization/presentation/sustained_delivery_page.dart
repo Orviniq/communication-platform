@@ -159,7 +159,7 @@ class _SustainedDeliveryPageState extends ConsumerState<SustainedDeliveryPage> {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.sustainedTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.x4),
+        padding: AppInsets.belowAppBar(context, AppSpacing.x4),
         children: [
           _Paragraph(l10n.sustainedWhatItDoes),
           _Paragraph(l10n.sustainedWhatItCosts),

@@ -260,14 +260,16 @@ class _VoiceCallViewState extends State<VoiceCallView> {
     final screen = _screen;
     final strings = AppLocalizations.of(context);
     final inCall = screen == VoiceCallScreen.inCall;
+    final controls = inCall || screen == VoiceCallScreen.connecting;
     return Scaffold(
       key: const ValueKey('voice-call-screen'),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _TopBar(
+            key: const ValueKey('voice-call-top-bar'),
             name: widget.room?.name ?? strings.voiceRoomNotFoundTitle,
-            count: inCall || screen == VoiceCallScreen.connecting
+            count: controls
                 ? (widget.signallingConnected
                       ? strings.voiceCallCount(_call.devicesInCall)
                       : strings.voiceCallCountStale(_call.devicesInCall))
@@ -275,9 +277,20 @@ class _VoiceCallViewState extends State<VoiceCallView> {
             roomId: widget.room == null ? null : widget.roomId,
             onMinimize: _minimize,
           ),
-          Expanded(child: _body(context, strings, screen)),
-          if (inCall || screen == VoiceCallScreen.connecting)
+          // The page covers the whole screen (ui-specification.md §0.1). The
+          // top bar takes the top inset, and the control bar the bottom one
+          // when it shows; the body keeps clear of the rest.
+          Expanded(
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              removeBottom: controls,
+              child: SafeArea(child: _body(context, strings, screen)),
+            ),
+          ),
+          if (controls)
             _ControlBar(
+              key: const ValueKey('voice-call-control-bar'),
               muted: _call.muted,
               connecting: !inCall,
               onMute: inCall
@@ -753,12 +766,15 @@ class _VoiceCallViewState extends State<VoiceCallView> {
 /// Room name, the count of devices this one knows in the call, and the two
 /// ways out: the room's info and minimizing to the shell's banner. It grows
 /// with the text rather than truncating the count.
+///
+/// Its colour runs up under the status bar, and its controls stay below it.
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.name,
     required this.count,
     required this.roomId,
     required this.onMinimize,
+    super.key,
   });
 
   final String name;
@@ -778,54 +794,57 @@ class _TopBar extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: colors.border)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.x2,
-            vertical: AppSpacing.x2,
-          ),
-          child: Row(
-            children: [
-              AppIconButton(
-                key: const ValueKey('voice-call-minimize'),
-                icon: AppIcons.minimize,
-                semanticLabel: strings.voiceCallMinimizeAction,
-                kind: AppButtonKind.ghost,
-                onPressed: onMinimize,
-              ),
-              const SizedBox(width: AppSpacing.x2),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Semantics(
-                      header: true,
-                      child: VoiceUserText(
-                        name,
-                        style: context.tokens.typography.section,
-                        maxLines: 2,
-                      ),
-                    ),
-                    if (count != null)
-                      Text(
-                        count!,
-                        key: const ValueKey('voice-call-count'),
-                        style: context.tokens.typography.label.copyWith(
-                          color: colors.textMuted,
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.x2,
+              vertical: AppSpacing.x2,
+            ),
+            child: Row(
+              children: [
+                AppIconButton(
+                  key: const ValueKey('voice-call-minimize'),
+                  icon: AppIcons.minimize,
+                  semanticLabel: strings.voiceCallMinimizeAction,
+                  kind: AppButtonKind.ghost,
+                  onPressed: onMinimize,
+                ),
+                const SizedBox(width: AppSpacing.x2),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Semantics(
+                        header: true,
+                        child: VoiceUserText(
+                          name,
+                          style: context.tokens.typography.section,
+                          maxLines: 2,
                         ),
                       ),
-                  ],
+                      if (count != null)
+                        Text(
+                          count!,
+                          key: const ValueKey('voice-call-count'),
+                          style: context.tokens.typography.label.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              if (roomId case final id?)
-                AppIconButton(
-                  key: const ValueKey('voice-call-info'),
-                  icon: AppIcons.info,
-                  semanticLabel: strings.voiceRoomInfoTitle,
-                  kind: AppButtonKind.ghost,
-                  onPressed: () => context.go('/voice-rooms/$id'),
-                ),
-            ],
+                if (roomId case final id?)
+                  AppIconButton(
+                    key: const ValueKey('voice-call-info'),
+                    icon: AppIcons.info,
+                    semanticLabel: strings.voiceRoomInfoTitle,
+                    kind: AppButtonKind.ghost,
+                    onPressed: () => context.go('/voice-rooms/$id'),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1403,6 +1422,9 @@ class _StatusLine extends StatelessWidget {
 
 /// Mute, Invite and Leave, each an icon and a word. The labels wrap at a large
 /// text scale rather than truncate, so Mute and Leave always stay on screen.
+///
+/// Its colour runs down under the gesture bar or the navigation buttons, and
+/// its controls stay above them.
 class _ControlBar extends StatelessWidget {
   const _ControlBar({
     required this.muted,
@@ -1410,6 +1432,7 @@ class _ControlBar extends StatelessWidget {
     required this.onMute,
     required this.onInvite,
     required this.onLeave,
+    super.key,
   });
 
   final bool muted;
@@ -1428,48 +1451,53 @@ class _ControlBar extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: colors.border)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x3),
-          // One height for the three, the tallest label's, so a label that
-          // wraps at a large text size never leaves its neighbours short.
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _Control(
-                    key: const ValueKey('voice-call-mute'),
-                    icon: muted ? AppIcons.microphoneOff : AppIcons.microphone,
-                    label: muted
-                        ? strings.voiceCallUnmuteAction
-                        : strings.voiceCallMuteAction,
-                    state: muted
-                        ? strings.voiceCallMicMuted
-                        : strings.voiceCallMicOn,
-                    autofocus: !connecting,
-                    onPressed: onMute,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.x3),
+            // One height for the three, the tallest label's, so a label that
+            // wraps at a large text size never leaves its neighbours short.
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _Control(
+                      key: const ValueKey('voice-call-mute'),
+                      icon: muted
+                          ? AppIcons.microphoneOff
+                          : AppIcons.microphone,
+                      label: muted
+                          ? strings.voiceCallUnmuteAction
+                          : strings.voiceCallMuteAction,
+                      state: muted
+                          ? strings.voiceCallMicMuted
+                          : strings.voiceCallMicOn,
+                      autofocus: !connecting,
+                      onPressed: onMute,
+                    ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.x2),
-                Expanded(
-                  child: _Control(
-                    key: const ValueKey('voice-call-invite'),
-                    icon: AppIcons.invite,
-                    label: strings.voiceCallInviteAction,
-                    onPressed: onInvite,
+                  const SizedBox(width: AppSpacing.x2),
+                  Expanded(
+                    child: _Control(
+                      key: const ValueKey('voice-call-invite'),
+                      icon: AppIcons.invite,
+                      label: strings.voiceCallInviteAction,
+                      onPressed: onInvite,
+                    ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.x2),
-                Expanded(
-                  child: _Control(
-                    key: const ValueKey('voice-call-leave'),
-                    icon: AppIcons.leaveCall,
-                    label: strings.voiceCallLeaveAction,
-                    danger: true,
-                    onPressed: onLeave,
+                  const SizedBox(width: AppSpacing.x2),
+                  Expanded(
+                    child: _Control(
+                      key: const ValueKey('voice-call-leave'),
+                      icon: AppIcons.leaveCall,
+                      label: strings.voiceCallLeaveAction,
+                      danger: true,
+                      onPressed: onLeave,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -12,6 +12,7 @@ import 'package:communication_platform/features/voice/presentation/voice_rooms_p
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/system_insets.dart';
 import '../support/voice_screen_harness.dart';
 
 const _otherRoomId =
@@ -570,6 +571,35 @@ void main() {
       expect(find.text('Live now · 2'), findsOneWidget);
       await _tapVisible(tester, _key('voice-room-return-to-call'));
       expect(_key('route-call'), findsOneWidget);
+    });
+
+    testWidgets('at the end of the scroll, Leave rests above the gesture bar', (
+      tester,
+    ) async {
+      fakeSystemInsets(tester);
+      await pumpVoiceRoute(
+        tester,
+        initialLocation: '/voice-rooms/$voiceRoomId',
+        // Short enough that the page scrolls.
+        size: const Size(390, 600),
+        page: (_) => VoiceRoomInfoView(
+          room: voiceRoom(),
+          people: voicePeople(),
+          onStartCall: () {},
+          onMutate: (operation) async => Result.success(voiceRoom()),
+        ),
+      );
+      final position = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      expect(position.maxScrollExtent, greaterThan(0));
+
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(
+        tester.getRect(_key('voice-room-leave')).bottom,
+        lessThanOrEqualTo(600 - 48),
+      );
     });
   });
 

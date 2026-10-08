@@ -185,7 +185,7 @@ class _VoiceRoomInviteViewState extends State<VoiceRoomInviteView> {
       ),
       body: VoiceResponsiveBody(
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.x4),
+          padding: AppInsets.belowAppBar(context, AppSpacing.x4),
           children: [
             ...content,
             if (_failure case final failure?) ...[

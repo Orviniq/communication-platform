@@ -55,7 +55,7 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
             maxWidth: AppContentWidths.readable,
           ),
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.x4),
+            padding: AppInsets.belowAppBar(context, AppSpacing.x4),
             children: [
               SettingsNote(l10n.appearanceLocalOnlyNotice),
               if (_notStored)
