@@ -669,18 +669,26 @@ void main() {
     await tapVisible(tester, key('voice-room-start-call'));
     expect(log, ['microphone', 'start', 'join']);
     expect(key('voice-call-mute'), findsOneWidget);
-    expect(key('active-voice-banner'), findsNothing);
+    // Offstage included: the shell under the call holds no banner either.
+    final banner = find.byKey(
+      const ValueKey('active-voice-banner'),
+      skipOffstage: false,
+    );
+    expect(banner, findsNothing);
 
-    // Minimized, the call goes on, and the shell offers the way back.
+    // Minimized, the call goes on. The room's info covers the shell, and the
+    // shell under it offers the way back.
     await tapVisible(tester, key('voice-call-minimize'));
     expect(key('voice-room-info-screen'), findsOneWidget);
     expect(find.text('Live now · 2'), findsOneWidget);
+    expect(await tester.binding.handlePopRoute(), isTrue);
+    await tester.pumpAndSettle();
     expect(find.text('Return to voice room: Weekly Sync'), findsOneWidget);
     await tapVisible(tester, key('active-voice-banner'));
     expect(key('voice-call-mute'), findsOneWidget);
 
     await tapVisible(tester, key('voice-call-leave'));
     expect(log, ['microphone', 'start', 'join', 'leave', 'stop']);
-    expect(key('active-voice-banner'), findsNothing);
+    expect(banner, findsNothing);
   });
 }
