@@ -4,6 +4,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
 import 'package:communication_platform/features/app_shell/presentation/live_shell_status.dart';
+import 'package:communication_platform/features/app_shell/presentation/voice_room_banner_frame.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
 import 'package:communication_platform/features/authentication/presentation/login_page.dart';
 import 'package:communication_platform/features/authentication/presentation/pending_activation_page.dart';
@@ -59,6 +60,22 @@ GoRouter createAppRouter({
   // One per router rather than a top-level value: a key marks one navigator
   // at a time, and the tests build more than one router.
   final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+  // A page on the root navigator covers the shell and the shell's call banner
+  // with it, so it carries the banner itself (ui-specification.md §0.2). The
+  // bootstrap and sign-in pages do not.
+  Page<void> fullScreen(
+    BuildContext context,
+    GoRouterState state,
+    Widget child,
+  ) => _page(
+    context,
+    state,
+    VoiceRoomBannerFrame(
+      base: status,
+      location: state.matchedLocation,
+      child: child,
+    ),
+  );
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: initialLocation,
@@ -125,7 +142,7 @@ GoRouter createAppRouter({
       GoRoute(
         path: '/security-notice',
         pageBuilder: (context, state) =>
-            _page(context, state, const PreAuthSecurityNoticePage()),
+            fullScreen(context, state, const PreAuthSecurityNoticePage()),
       ),
       if (authenticationRouteState != null) ...[
         GoRoute(
@@ -154,7 +171,7 @@ GoRouter createAppRouter({
       ],
       GoRoute(
         path: '/contacts/:userId',
-        pageBuilder: (context, state) => _page(
+        pageBuilder: (context, state) => fullScreen(
           context,
           state,
           ContactProfilePage(userId: state.pathParameters['userId']!),
@@ -162,7 +179,7 @@ GoRouter createAppRouter({
         routes: [
           GoRoute(
             path: 'safety',
-            pageBuilder: (context, state) => _page(
+            pageBuilder: (context, state) => fullScreen(
               context,
               state,
               SafetyNumberPage(userId: state.pathParameters['userId']!),
@@ -173,11 +190,11 @@ GoRouter createAppRouter({
       GoRoute(
         path: '/groups/new',
         pageBuilder: (context, state) =>
-            _page(context, state, const CreateGroupPage()),
+            fullScreen(context, state, const CreateGroupPage()),
       ),
       GoRoute(
         path: '/groups/:groupId',
-        pageBuilder: (context, state) => _page(
+        pageBuilder: (context, state) => fullScreen(
           context,
           state,
           GroupChatPage(groupId: state.pathParameters['groupId']!),
@@ -185,7 +202,7 @@ GoRouter createAppRouter({
         routes: [
           GoRoute(
             path: 'info',
-            pageBuilder: (context, state) => _page(
+            pageBuilder: (context, state) => fullScreen(
               context,
               state,
               GroupInfoPage(groupId: state.pathParameters['groupId']!),
@@ -193,7 +210,7 @@ GoRouter createAppRouter({
           ),
           GoRoute(
             path: 'edit',
-            pageBuilder: (context, state) => _page(
+            pageBuilder: (context, state) => fullScreen(
               context,
               state,
               EditGroupPage(groupId: state.pathParameters['groupId']!),
@@ -201,7 +218,7 @@ GoRouter createAppRouter({
           ),
           GoRoute(
             path: 'add-members',
-            pageBuilder: (context, state) => _page(
+            pageBuilder: (context, state) => fullScreen(
               context,
               state,
               AddGroupMembersPage(groupId: state.pathParameters['groupId']!),
@@ -211,7 +228,7 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: '/saved-messages',
-        pageBuilder: (context, state) => _page(
+        pageBuilder: (context, state) => fullScreen(
           context,
           state,
           SavedMessagesPage(
@@ -254,12 +271,12 @@ GoRouter createAppRouter({
                     path: 'new',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
-                        _page(context, state, const ContactsNewPage()),
+                        fullScreen(context, state, const ContactsNewPage()),
                   ),
                   GoRoute(
                     path: 'conversation/:conversationId',
                     parentNavigatorKey: rootNavigatorKey,
-                    pageBuilder: (context, state) => _page(
+                    pageBuilder: (context, state) => fullScreen(
                       context,
                       state,
                       DirectChatPage(
@@ -272,7 +289,7 @@ GoRouter createAppRouter({
                   GoRoute(
                     path: 'direct/:userId',
                     parentNavigatorKey: rootNavigatorKey,
-                    pageBuilder: (context, state) => _page(
+                    pageBuilder: (context, state) => fullScreen(
                       context,
                       state,
                       DirectChatPage(
@@ -296,14 +313,14 @@ GoRouter createAppRouter({
                     path: 'new',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
-                        _page(context, state, const CreateVoiceRoomPage()),
+                        fullScreen(context, state, const CreateVoiceRoomPage()),
                   ),
                   // The room's 32-byte id in hex: a fixed path cannot name a
                   // room (ADR-077 D12).
                   GoRoute(
                     path: ':roomId',
                     parentNavigatorKey: rootNavigatorKey,
-                    pageBuilder: (context, state) => _page(
+                    pageBuilder: (context, state) => fullScreen(
                       context,
                       state,
                       VoiceRoomInfoPage(
@@ -311,10 +328,12 @@ GoRouter createAppRouter({
                       ),
                     ),
                     routes: [
+                      // The call's own page shows no banner, which would
+                      // only lead back to it. Another room's shows one.
                       GoRoute(
                         path: 'call',
                         parentNavigatorKey: rootNavigatorKey,
-                        pageBuilder: (context, state) => _page(
+                        pageBuilder: (context, state) => fullScreen(
                           context,
                           state,
                           VoiceCallPage(
@@ -325,7 +344,7 @@ GoRouter createAppRouter({
                       GoRoute(
                         path: 'invite',
                         parentNavigatorKey: rootNavigatorKey,
-                        pageBuilder: (context, state) => _page(
+                        pageBuilder: (context, state) => fullScreen(
                           context,
                           state,
                           VoiceRoomInvitePage(
@@ -350,7 +369,7 @@ GoRouter createAppRouter({
                     path: 'appearance',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
-                        _page(context, state, const AppearancePage()),
+                        fullScreen(context, state, const AppearancePage()),
                   ),
                   // Security and recovery, and the two screens behind it.
                   // Both are reached only from here: neither is ever
@@ -358,20 +377,29 @@ GoRouter createAppRouter({
                   GoRoute(
                     path: 'security',
                     parentNavigatorKey: rootNavigatorKey,
-                    pageBuilder: (context, state) =>
-                        _page(context, state, const SecuritySettingsPage()),
+                    pageBuilder: (context, state) => fullScreen(
+                      context,
+                      state,
+                      const SecuritySettingsPage(),
+                    ),
                     routes: [
                       GoRoute(
                         path: 'recovery',
                         parentNavigatorKey: rootNavigatorKey,
-                        pageBuilder: (context, state) =>
-                            _page(context, state, const RecoveryRotationPage()),
+                        pageBuilder: (context, state) => fullScreen(
+                          context,
+                          state,
+                          const RecoveryRotationPage(),
+                        ),
                       ),
                       GoRoute(
                         path: 'safety-numbers',
                         parentNavigatorKey: rootNavigatorKey,
-                        pageBuilder: (context, state) =>
-                            _page(context, state, const SafetyNumbersPage()),
+                        pageBuilder: (context, state) => fullScreen(
+                          context,
+                          state,
+                          const SafetyNumbersPage(),
+                        ),
                       ),
                     ],
                   ),
@@ -379,13 +407,13 @@ GoRouter createAppRouter({
                     path: 'about',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
-                        _page(context, state, const AboutPage()),
+                        fullScreen(context, state, const AboutPage()),
                     routes: [
                       GoRoute(
                         path: 'diagnostics',
                         parentNavigatorKey: rootNavigatorKey,
                         pageBuilder: (context, state) =>
-                            _page(context, state, const DiagnosticsPage()),
+                            fullScreen(context, state, const DiagnosticsPage()),
                       ),
                     ],
                   ),
@@ -393,13 +421,13 @@ GoRouter createAppRouter({
                     path: 'profile',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
-                        _page(context, state, const EditProfilePage()),
+                        fullScreen(context, state, const EditProfilePage()),
                   ),
                   GoRoute(
                     path: 'linked-devices',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
-                        _page(context, state, const LinkedDevicesPage()),
+                        fullScreen(context, state, const LinkedDevicesPage()),
                   ),
                   // Reached only from Settings, and deliberately not from
                   // anywhere the application can send a user on its own: this
@@ -407,8 +435,11 @@ GoRouter createAppRouter({
                   GoRoute(
                     path: 'receiving-while-closed',
                     parentNavigatorKey: rootNavigatorKey,
-                    pageBuilder: (context, state) =>
-                        _page(context, state, const SustainedDeliveryPage()),
+                    pageBuilder: (context, state) => fullScreen(
+                      context,
+                      state,
+                      const SustainedDeliveryPage(),
+                    ),
                   ),
                 ],
               ),

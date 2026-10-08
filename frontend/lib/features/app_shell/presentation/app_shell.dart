@@ -163,7 +163,8 @@ class _AppShellState extends State<AppShell> {
                 !widget.status.voiceRoomsComposeAvailable)
         ? null
         : _compose;
-    // Above the navigation bar or atop the rail.
+    // Above the navigation bar or atop the rail. A page above a tab root
+    // covers both, and shows a banner of its own (VoiceRoomBannerFrame).
     final banner = widget.status.voiceRoomBannerAt(widget.location);
     final widthClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
     final shortcuts = <ShortcutActivator, VoidCallback>{

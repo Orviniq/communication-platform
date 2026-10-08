@@ -2,6 +2,7 @@ import 'package:communication_platform/app/app.dart';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
+import 'package:communication_platform/features/voice/presentation/voice_call_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -216,10 +217,20 @@ void main() {
     // The call screen shows a spinner in this harness, so it never settles.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    // On the call's own screen the banner would only point at itself: not
-    // even the shell under the screen holds it.
+    // On the call's own screen the banner would only point at itself, and
+    // the shell under the screen holds none. The room's page under it keeps
+    // its own, for the way back.
+    expect(find.byType(VoiceCallPage), findsOneWidget);
+    expect(find.byKey(const ValueKey('active-voice-banner')), findsNothing);
     expect(
-      find.byKey(const ValueKey('active-voice-banner'), skipOffstage: false),
+      find.descendant(
+        of: find.byKey(const ValueKey('shell-narrow'), skipOffstage: false),
+        matching: find.byKey(
+          const ValueKey('active-voice-banner'),
+          skipOffstage: false,
+        ),
+        skipOffstage: false,
+      ),
       findsNothing,
     );
 

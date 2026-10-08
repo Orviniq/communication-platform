@@ -709,26 +709,47 @@ void main() {
     await tapVisible(tester, key('voice-room-start-call'));
     expect(log, ['microphone', 'start', 'join']);
     expect(key('voice-call-mute'), findsOneWidget);
-    // Offstage included: the shell under the call holds no banner either.
-    final banner = find.byKey(
-      const ValueKey('active-voice-banner'),
-      skipOffstage: false,
-    );
+    // The call's own page shows no banner, and the shell under it holds
+    // none either.
+    final banner = key('active-voice-banner');
     expect(banner, findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('shell-narrow'), skipOffstage: false),
+        matching: find.byKey(
+          const ValueKey('active-voice-banner'),
+          skipOffstage: false,
+        ),
+        skipOffstage: false,
+      ),
+      findsNothing,
+    );
 
-    // Minimized, the call goes on. The room's info covers the shell, and the
-    // shell under it offers the way back.
+    // Minimized, the call goes on. The room's info is a full-screen page, and
+    // its own banner leads back.
     await tapVisible(tester, key('voice-call-minimize'));
     expect(key('voice-room-info-screen'), findsOneWidget);
     expect(find.text('Live now · 2'), findsOneWidget);
+    expect(banner, findsOneWidget);
+    expect(find.text('Return to voice room: Weekly Sync'), findsOneWidget);
+    await tapVisible(tester, banner);
+    expect(key('voice-call-mute'), findsOneWidget);
+
+    // So does the shell's, on the room list under it.
+    await tapVisible(tester, key('voice-call-minimize'));
     expect(await tester.binding.handlePopRoute(), isTrue);
     await tester.pumpAndSettle();
-    expect(find.text('Return to voice room: Weekly Sync'), findsOneWidget);
-    await tapVisible(tester, key('active-voice-banner'));
+    expect(key('voice-rooms-screen'), findsOneWidget);
+    expect(banner, findsOneWidget);
+    await tapVisible(tester, banner);
     expect(key('voice-call-mute'), findsOneWidget);
 
     await tapVisible(tester, key('voice-call-leave'));
     expect(log, ['microphone', 'start', 'join', 'leave', 'stop']);
-    expect(banner, findsNothing);
+    // Offstage included: once the call ends, no page holds a banner.
+    expect(
+      find.byKey(const ValueKey('active-voice-banner'), skipOffstage: false),
+      findsNothing,
+    );
   });
 }
