@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
@@ -12,6 +14,7 @@ import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 const _groupId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -242,6 +245,152 @@ void main() {
     expect(find.byKey(const ValueKey('group-fanout-notice')), findsOneWidget);
     expect(find.textContaining('about 150 copies'), findsOneWidget);
   });
+
+  group('back from a group never leaves the application', () {
+    testWidgets('a new group opens above the Chats list, and back returns to '
+        'the list', (tester) async {
+      final router = await _pumpGroupRoutes(tester, '/chats/new');
+      await tester.tap(find.text('New group'));
+      await tester.pumpAndSettle();
+
+      final memberPicker = find.byKey(const ValueKey('group-picker-$_member'));
+      await tester.ensureVisible(memberPicker);
+      await tester.tap(memberPicker);
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const ValueKey('group-next')));
+      await tester.tap(find.byKey(const ValueKey('group-next')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('group-name-field')),
+          matching: find.byType(EditableText),
+        ),
+        'Private Team',
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('group-create')));
+      await tester.tap(find.byKey(const ValueKey('group-create')));
+      await tester.pumpAndSettle();
+      expect(find.text('Group chat $_groupId'), findsOneWidget);
+
+      // Nothing of the steps that made it is left between the chat and the
+      // list.
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Chats list'), findsOneWidget);
+      expect(router.canPop(), isFalse);
+    });
+
+    testWidgets('Search on Group Info returns to the conversation below it', (
+      tester,
+    ) async {
+      final router = await _pumpGroupRoutes(tester, '/chats');
+      unawaited(router.push('/groups/$_groupId'));
+      await tester.pumpAndSettle();
+      unawaited(router.push('/groups/$_groupId/info'));
+      await tester.pumpAndSettle();
+
+      final search = find.byKey(const ValueKey('group-info-search'));
+      await tester.ensureVisible(search);
+      await tester.pumpAndSettle();
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      expect(find.text('Group chat $_groupId'), findsOneWidget);
+
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('Chats list'), findsOneWidget);
+    });
+  });
+}
+
+/// The routes around a group as the application lays them out: the Chats
+/// list in a shell branch with New above it on the root navigator, and the
+/// group routes outside the shell.
+Future<GoRouter> _pumpGroupRoutes(
+  WidgetTester tester,
+  String initialLocation,
+) async {
+  final root = GlobalKey<NavigatorState>();
+  final router = GoRouter(
+    navigatorKey: root,
+    initialLocation: initialLocation,
+    routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => shell,
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/chats',
+                builder: (context, state) =>
+                    const Scaffold(body: Center(child: Text('Chats list'))),
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    parentNavigatorKey: root,
+                    builder: (context, state) => Scaffold(
+                      body: Center(
+                        child: TextButton(
+                          onPressed: () => context.push('/groups/new'),
+                          child: const Text('New group'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/groups/new',
+        builder: (context, state) => CreateGroupPage(
+          injectedContacts: const [
+            GroupPickerContact(userId: _member, name: 'Member', verified: true),
+          ],
+          onCreate: (_, _) async => Result.success(_state()),
+        ),
+      ),
+      GoRoute(
+        path: '/groups/:groupId',
+        builder: (context, state) => Scaffold(
+          body: Center(
+            child: Text('Group chat ${state.pathParameters['groupId']}'),
+          ),
+        ),
+        routes: [
+          GoRoute(
+            path: 'info',
+            builder: (context, state) => GroupInfoPage(
+              groupId: _groupId,
+              injectedState: _state(),
+              currentUserId: _owner,
+              onMutate: (_) async => Result.success(_state()),
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+  addTearDown(router.dispose);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        appEnvironmentProvider.overrideWithValue(AppEnvironment.development),
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        theme: AppTheme.light(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            AppDesignSystem(child: child ?? const SizedBox.shrink()),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return router;
 }
 
 GroupState _state({GroupLifecycle lifecycle = GroupLifecycle.active}) =>

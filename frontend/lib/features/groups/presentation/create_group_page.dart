@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
@@ -236,7 +238,11 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
     if (!mounted) return;
     switch (result) {
       case Success(:final value):
-        context.go('/groups/${value.groupId}');
+        // The new chat takes the place of the steps that made it, above the
+        // Chats list: back from it returns to the list. A `go` to it alone
+        // dropped the list, and back left the application.
+        final router = GoRouter.of(context)..go('/chats');
+        unawaited(router.push('/groups/${value.groupId}'));
       case FailureResult():
         setState(() {
           _busy = false;

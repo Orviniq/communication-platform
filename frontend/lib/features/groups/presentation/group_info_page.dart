@@ -133,8 +133,11 @@ class _GroupInfoViewState extends State<GroupInfoView> {
                 // messages it has loaded. A permanently disabled button
                 // offering it here was a control that could never
                 // succeed, which the UI specification's core rules
-                // forbid.
-                onPressed: () => context.go('/groups/${state.groupId}'),
+                // forbid. Back to the conversation below, when there is
+                // one: a `go` to it dropped the Chats list under it.
+                onPressed: () => context.canPop()
+                    ? context.pop()
+                    : context.go('/groups/${state.groupId}'),
                 kind: AppButtonKind.outline,
               ),
               AppButton(
