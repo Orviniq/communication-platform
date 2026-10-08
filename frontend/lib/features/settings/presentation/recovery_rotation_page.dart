@@ -120,7 +120,7 @@ class _RecoveryRotationPageState extends ConsumerState<RecoveryRotationPage> {
             maxWidth: AppContentWidths.readable,
           ),
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.x6),
+            padding: AppInsets.belowAppBar(context, AppSpacing.x6),
             children: switch (_stage) {
               RecoveryRotationStage.explain => _explain(l10n),
               RecoveryRotationStage.working => [

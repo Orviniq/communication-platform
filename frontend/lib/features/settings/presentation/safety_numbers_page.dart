@@ -62,7 +62,10 @@ final class SafetyNumbersPage extends ConsumerWidget {
                               message: l10n.contactsEmptyMessage,
                             )
                           : ListView(
-                              padding: const EdgeInsets.all(AppSpacing.x4),
+                              padding: AppInsets.belowAppBar(
+                                context,
+                                AppSpacing.x4,
+                              ),
                               children: [
                                 SettingsNote(l10n.safetyNumbersReviewBody),
                                 for (final contact in contacts)

@@ -129,7 +129,7 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
         onRefresh: _refresh,
         child: ListView(
           key: const PageStorageKey('contacts-new-list'),
-          padding: const EdgeInsets.all(AppSpacing.x4),
+          padding: AppInsets.belowAppBar(context, AppSpacing.x4),
           children: [
             if (_offline)
               Notice(

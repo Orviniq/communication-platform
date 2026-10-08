@@ -129,7 +129,7 @@ final class _ReportView extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final message = copyMessage;
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.x4),
+      padding: AppInsets.belowAppBar(context, AppSpacing.x4),
       children: [
         Text(l10n.diagnosticsExplain, style: context.tokens.typography.body),
         const SizedBox(height: AppSpacing.x3),

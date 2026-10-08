@@ -36,7 +36,7 @@ final class SecuritySettingsPage extends StatelessWidget {
             maxWidth: AppContentWidths.readable,
           ),
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.x4),
+            padding: AppInsets.belowAppBar(context, AppSpacing.x4),
             children: [
               SettingsSectionHeader(l10n.securityRecoveryTitle),
               Card(

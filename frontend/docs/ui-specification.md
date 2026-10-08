@@ -94,8 +94,8 @@ These recur across screens. They are stated here so the individual screens can s
 One adaptive shell that changes structure by viewport width.
 
 - **Mobile (narrow):** a **bottom tab bar** with three tabs: **Chats**, **Voice Rooms**,
-  **Settings**. Each tab is a full-screen stack; tapping a list item pushes a detail
-  screen; back gesture/button pops it.
+  **Settings**. Tapping a list item pushes a detail screen over the whole screen, the tab
+  bar included; back gesture/button pops it.
 - **Post-v1 desktop / web (wide):** a **two-pane layout**. A **left rail** holds the same three
   destinations plus the list for the selected one; the **right pane** shows the open
   conversation/room/detail. Selecting a list item swaps the right pane in place.
@@ -103,17 +103,39 @@ One adaptive shell that changes structure by viewport width.
 
 The destination set is identical across form factors; only the container differs.
 
+**The tab bar and the rail belong to the three tab roots** — the Chats list (§6), the Voice
+Rooms list (§13.0) and Settings (§15) — and to no other screen. Every screen above a tab
+root is a **full-screen page**, at every width: a conversation, Saved Messages, a contact,
+a voice room and its call, each Settings screen, and each screen behind those. It covers
+the tab bar, or the rail at medium and wide width, and back returns to the screen below it
+or to the tab root, which keeps its place in its list. As built (2026-10-08), the two panes
+above are not built: a tab root shows the rail beside it at medium and wide width, and a
+screen it opens covers the rail too. A full-screen page keeps its controls clear of the
+status bar, the gesture bar and the navigation buttons, and its colour still reaches every
+edge of the screen.
+
 ### 0.2 Persistent elements
 - **Active voice-room banner.** Whenever the user is in a call, a thin persistent banner
-  sits above the bottom tab bar (mobile) or atop the left rail (desktop): room name, a
-  live mic-state icon, and a "return to room" tap target. It stays on every screen until
-  the user leaves the call; tapping it opens the Live Voice Room (§10). Membership of a
-  room does not raise it — only a call in progress does. As built (2026-10-02), the
-  call's own screen does not show it, because there it would only point at itself, and
-  its microphone icon reads muted or on, in words for a screen reader as well.
+  shows the room name, a live mic-state icon, and a "return to room" tap target. It stays
+  on every screen until the user leaves the call; tapping it opens the Live Voice Room
+  (§10). Membership of a room does not raise it — only a call in progress does. It has
+  three places:
+  - on a tab root at narrow width (§0.1), above the bottom tab bar;
+  - on a tab root at medium and wide width, at the top of the rail;
+  - on every full-screen page (§0.1), at the top of the page: below the status bar, whose
+    inset it takes, and above the page's own top bar.
+
+  The call's own screen (§10) shows no banner, because there it would only point at
+  itself; the call screen of another room shows it. The bootstrap and sign-in screens —
+  Connection (§1), Login (§2), Register and Pending activation (§3), Encryption setup
+  (§4) and the session-restoring screen — show none. As built (2026-10-02), its
+  microphone icon reads muted or on, in words for a screen reader as well. As built
+  (2026-10-08, phase 8 prompt 2), a full-screen page keeps its state when a call starts
+  or ends while it is open, a draft in the composer included.
 - **Connection status strip.** When the client can't reach the server, a strip appears at
   the top of the current screen: "Connecting…" / "No connection to server". It clears only
-  when the connection returns, not by user dismissal.
+  when the connection returns, not by user dismissal. As built (2026-10-08), the shell
+  draws the strip, so it shows on a tab root only: a full-screen page covers it.
 
 ### 0.3 Global "new" affordance
 - **Mobile:** a floating compose button (FAB) on the Chats and Voice Rooms lists; its
@@ -374,7 +396,8 @@ rooms pinned at top. The primary hub.
 - **Search:** tapping the search entry opens Search (§6.5).
 - **Body:** scrollable list. Order: pinned items first (including active voice rooms and
   pinned conversations), then the rest by most recent activity.
-- **Bottom (mobile):** the tab bar (Chats / Voice Rooms / Settings) + FAB.
+- **Bottom (mobile):** the tab bar (Chats / Voice Rooms / Settings) + FAB. Both belong to
+  this list: a screen it opens covers them (§0.1).
 - **Active voice-room banner** (§0.2) sits above the tab bar when applicable.
 
 **Each conversation item shows:**
@@ -390,7 +413,8 @@ rooms pinned at top. The primary hub.
 - Optional delivery/read state on the last outgoing message.
 
 **Item interactions.**
-- **Tap** → DM (§8) or Group (§9) chat screen.
+- **Tap** → DM (§8), Group (§9) or Saved Messages (§14) chat screen, a full-screen page
+  (§0.1). Back returns to the list at the same place.
 - **Long-press (mobile) / right-click (desktop)** → context menu: **Pin/Unpin**,
   **Mute/Unmute** (opens mute options §17), **Mark as read/unread**, **Delete chat**
   (→ confirm; for DMs this clears the conversation locally — honest wording).
@@ -470,7 +494,8 @@ second copy of every message body ([ADR-057](decisions.md)).
 
 **Layout (top → bottom).**
 1. **Top bar:**
-   - Left: back (mobile).
+   - Left: back. The screen is a full-screen page at every width (§0.1): neither the tab
+     bar nor the rail shows on it.
    - Center: contact avatar + name + a presence/last-seen line (**[PRIVACY]** encrypted,
      volatile signal; may lag).
    - Tapping name/avatar → **Contact Profile** (§11).
@@ -603,6 +628,11 @@ accepted. A failed send offers a retry of the same message.
 `/voice-rooms/:roomId/call`, where `:roomId` is the room's 32-byte id in lowercase hex. It
 reads the call through `VoiceCallController`, which owns the join below, and asks for
 nothing when it opens.
+
+**As built, 2026-10-08** (phase 8 prompt 1): the call is a full-screen page (§0.1), and
+neither the tab bar nor the rail shows on it. Its top bar runs up under the status bar and
+its control bar down under the gesture bar or the navigation buttons; the controls of both
+stay clear of them.
 
 **Layout (top → bottom).**
 1. **Top bar:** a **minimize** control that keeps the call and returns to the previous
@@ -816,6 +846,10 @@ cases; none calls the server and none asks for the microphone. A room's route is
 (§13.3) below it. The Chats list (§6) does not pin a room in a call: the banner (§0.2) is
 the way back to it.
 
+**As built, 2026-10-08** (phase 8 prompt 1): the list (§13.0) is the Voice Rooms tab root,
+with the tab bar and the compose button. Create (§13.1), Info (§13.2), the invite picker
+(§13.3) and the call (§10) are full-screen pages (§0.1).
+
 ### 13.0 Voice Rooms list (Voice Rooms tab)
 - **Layout.** A list of the rooms this device holds. Each row: avatar, room name (held
   locally) and a state line that is an icon and words — **Live now · N** for the room of
@@ -930,6 +964,11 @@ appear pinned in the Chats list.
 ## 15. Settings (Settings tab / home)
 
 **Purpose.** Account, security, devices, and app preferences hub.
+
+The list is the Settings tab root, with the tab bar. Every screen it opens, and each screen
+behind those, is a full-screen page (§0.1): Edit profile, Saved Messages, Linked Devices,
+Security settings with the two screens behind it, Receiving while closed, Appearance, the
+Security notice, and About with Diagnostics behind it.
 
 **Layout (top → bottom list):**
 1. **Profile header** — the user's avatar + display name; tap → **Edit profile** (§15.1).

@@ -18,15 +18,27 @@ package-default screen is accepted as the final product design.
 Use measured content constraints rather than device names. Initial breakpoints are tuned
 with golden tests and may move without changing navigation semantics.
 
-| Width class | Structure |
-|---|---|
-| Narrow | Bottom tabs: Chats, Voice Rooms, Settings; list item pushes full-screen detail |
-| Medium | Two panes when content remains usable; otherwise narrow navigation |
-| Wide | Destination rail/list at left and active detail at right; optional details panel |
+| Width class | A tab root | Every screen above a tab root |
+|---|---|---|
+| Narrow | Bottom navigation bar: Chats, Voice Rooms, Settings | Full-screen page |
+| Medium | Compact rail | Full-screen page |
+| Wide | Rail with labels | Full-screen page |
 
-Wide chat layout targets a 300–340 px conversation list and optional 340–400 px
-details/thread panel. The message column has a readable maximum width rather than
-stretching bubbles across the viewport.
+The navigation bar and the rail show on the three tab roots only: `/chats`, `/voice-rooms`
+and `/settings`. Every screen above a tab root is a full-screen page at every width: it
+opens on the root navigator, above the shell, and covers the navigation bar or the rail.
+Back returns to the screen below it or to the tab root, which keeps its state under it,
+scroll position included. A full-screen page keeps its controls clear of the system insets
+— the status bar, the gesture bar and the navigation buttons — while its colour still
+reaches every edge: an app bar takes the top inset, a bar of the page's own takes the inset
+at its edge, and a scrolling body adds the rest to its padding. During a call the active
+voice banner sits at the top of the page and takes the top inset, and the app bar under it
+adds none.
+
+The post-v1 two-pane layout (`ui-specification.md` §0.1) is not built: a 300–340 px
+conversation list beside the open conversation, and an optional 340–400 px details/thread
+panel. The message column has a readable maximum width rather than stretching bubbles
+across the viewport.
 
 The navigation destination set and route identity do not change between widths. Resizing
 preserves the selected conversation, scroll anchor, draft, and active modal intent.
@@ -34,7 +46,9 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 ## Persistent global surfaces
 
 - Connection strip: connecting/offline state; not dismissible while false.
-- Active voice banner: visible across destinations until leave; returns to the room.
+- Active voice banner: visible across destinations until leave; returns to the room. Above
+  the navigation bar or atop the rail on a tab root, at the top of a full-screen page, and
+  not on the call's own screen (`ui-specification.md` §0.2).
 - Context-aware compose: New from Chats, Create Voice Room from Voice Rooms.
 - Global error/toast host with accessible announcements and no sensitive detail.
 - Modal routing that becomes a sheet on narrow layouts and dialog/panel on wide layouts.

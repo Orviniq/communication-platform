@@ -142,7 +142,7 @@ final class _LinkedDevicesPageState extends ConsumerState<LinkedDevicesPage> {
             data: (rows) => RefreshIndicator(
               onRefresh: _refresh,
               child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.x4),
+                padding: AppInsets.belowAppBar(context, AppSpacing.x4),
                 children: [
                   AppStatusBadge(
                     kind: AppStatusKind.information,

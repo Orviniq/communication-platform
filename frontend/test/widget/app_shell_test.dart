@@ -2,6 +2,7 @@ import 'package:communication_platform/app/app.dart';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
+import 'package:communication_platform/features/voice/presentation/voice_call_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,7 @@ void main() {
       find.byKey(const ValueKey('create-voice-room-screen')),
       findsOneWidget,
     );
+    expect(find.byKey(const ValueKey('shell-narrow')), findsNothing);
     await tester.enterText(
       find.descendant(
         of: find.byKey(const ValueKey('voice-room-name-field')),
@@ -41,8 +43,14 @@ void main() {
       'Standup',
     );
 
+    // The page covers the shell at every width; the rail of the wide shell
+    // waits below it.
     await _resize(tester, const Size(1440, 900));
-    expect(find.byKey(const ValueKey('shell-wide')), findsOneWidget);
+    expect(find.byKey(const ValueKey('shell-wide')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('shell-wide'), skipOffstage: false),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('create-voice-room-screen')),
       findsOneWidget,
@@ -87,24 +95,26 @@ void main() {
   ) async {
     await _pumpApp(tester, size: const Size(360, 800));
     expect(find.byTooltip('Start a conversation'), findsOneWidget);
+    final router = GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    );
 
     // A sub-route of the branch, reached by navigating rather than by booting
-    // into it, so this also proves the shell re-reads the location on a push.
-    GoRouter.of(
-      tester.element(find.byKey(const ValueKey('shell-narrow'))),
-    ).go('/voice-rooms/new');
+    // into it. The page covers the shell, and the shell under it re-reads the
+    // location and withdraws compose too.
+    router.go('/voice-rooms/new');
     await tester.pumpAndSettle();
 
     expect(
       find.byKey(const ValueKey('create-voice-room-screen')),
       findsOneWidget,
     );
-    expect(find.byTooltip('Create a voice room'), findsNothing);
-    expect(find.byTooltip('Start a conversation'), findsNothing);
+    expect(find.byKey(const ValueKey('shell-narrow')), findsNothing);
+    for (final compose in ['Create a voice room', 'Start a conversation']) {
+      expect(find.byTooltip(compose, skipOffstage: false), findsNothing);
+    }
 
-    GoRouter.of(
-      tester.element(find.byKey(const ValueKey('shell-narrow'))),
-    ).go('/voice-rooms');
+    router.go('/voice-rooms');
     await tester.pumpAndSettle();
     expect(find.byTooltip('Create a voice room'), findsOneWidget);
   });
@@ -199,17 +209,32 @@ void main() {
       tester.getSemantics(banner).label,
       'Return to voice room: Standup, Muted',
     );
+    final router = GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    );
 
     await tester.tap(banner);
     // The call screen shows a spinner in this harness, so it never settles.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    // On the call's own screen the banner would only point at itself.
+    // On the call's own screen the banner would only point at itself, and
+    // the shell under the screen holds none. The room's page under it keeps
+    // its own, for the way back.
+    expect(find.byType(VoiceCallPage), findsOneWidget);
     expect(find.byKey(const ValueKey('active-voice-banner')), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('shell-narrow'), skipOffstage: false),
+        matching: find.byKey(
+          const ValueKey('active-voice-banner'),
+          skipOffstage: false,
+        ),
+        skipOffstage: false,
+      ),
+      findsNothing,
+    );
 
-    GoRouter.of(
-      tester.element(find.byKey(const ValueKey('shell-narrow'))),
-    ).go('/settings');
+    router.go('/settings');
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('active-voice-banner')), findsOneWidget);
 

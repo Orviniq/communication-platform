@@ -65,6 +65,21 @@ abstract final class AppContentWidths {
   static const double readable = 760;
 }
 
+/// The system insets a full-screen page keeps its controls out of: the status
+/// bar, the gesture bar and the navigation buttons (`ui-specification.md`
+/// §0.1).
+abstract final class AppInsets {
+  /// [spacing] on every side of a scrolling body below an app bar, plus the
+  /// insets the app bar leaves to it: the bottom and the sides. The body
+  /// still scrolls under the gesture bar, and its last item comes to rest
+  /// clear of it.
+  ///
+  /// The app bar takes the top inset itself, so none is added here, even from
+  /// a [context] above the `Scaffold`, where the top inset is still present.
+  static EdgeInsets belowAppBar(BuildContext context, double spacing) =>
+      EdgeInsets.all(spacing) + MediaQuery.paddingOf(context).copyWith(top: 0);
+}
+
 @immutable
 class AppColorTokens {
   const AppColorTokens({

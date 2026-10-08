@@ -96,6 +96,184 @@ is not silently edited out of history.
 | ADR-083 | Accepted (2026-10-07) | A download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped: the next attempt for the same capability sends `Range: bytes=<bytes already written>-` and `If-Range` with the first answer's strong `ETag`, accepts `206` beside `200` only as an exact continuation, counts from the offset, and ends with exactly one bucket on disk. A `200` to a range starts the file again, a tag that moved reports the attachment gone, and the bytes are kept only after a dropped connection, a cancellation or a refusal, one partial at a time and in memory. The token coordinator's single flight is kept as a contention control and documented as one, and `SessionTokenStore.readDurable` is deleted | A dropped 64 MiB download cost the whole bucket again, although nginx serves a range of the stored file and `backend/attachments/API.md` now documents it. Phase 7 answers server ADR-0024's contract cost; these are the last two items `CLIENT_WORK.md` left optional, which ADR-0024 itself did not decide: the resume rests on what the attachments API published in the run of server ADR-0025, and the coordinator on server ADR-0023, after which nothing retires a token. The single flight protects nothing now, but it still turns every caller in the renewal window into one renewal on the `accounts` scope, and deleting it would leave the zone marker and the session generation beside it as they are. `readDurable` had no caller after ADR-068 deleted the rotation repair, under a contract that said session-ending decisions were made against it. Below 16 MiB the bookkeeping costs more than the bytes. Changes no wire format, local schema, cryptographic construction or backend file. |
 | ADR-084 | Accepted (2026-10-07) | This account's two live-set checks, Linked Devices and the own device log, read a list the head record does not cover as **pending** when the head covers it less changes to at most two devices that have not reached the log: a device dropped, because the record does not cover it, or a signed device put back unsigned, because an earlier append covered it before it cross-signed. Pending refuses with `policyBlocked` and leaves the global posture alone. A logged device gone with no record, a changed key or registration id, a changed signature or version on a logged signed device and a third device in flight still latch `deviceLogFork`. A list head that disagrees with the verified chain is a `conflict`, not a fork. With that in place, `PublicDeviceDto` reads `cross_sig: null, bundle_version: 0` as unsigned and refuses every other pair as ADR-081 D2 does. Does ADR-081 D3 | A record carries only the hash of its live set, so the client can only ask whether a candidate built from the list is the set it covers. Every honest append covers the whole list, and between appends a device registers, cross-signs, or is removed before its `DELETE` lands, with no record covering the change yet. Latching on those latched a fork that nothing clears, because only a confirmed own mutation resets the posture and each refuses to start unless it is `normal`. Two devices was the owner's choice: it covers overlapping enrollments, or an enrollment during a removal, at no more than 2n² + 1 inspections. Left open: the prekey-rotation gap still latches, because a record's hash cannot rebuild the old version, and an unsigned device that never finishes blocks every removal. Changes no wire format, protocol, cryptographic construction, local schema or backend file. |
 | ADR-085 | Accepted (2026-10-07) | A session token is renewed from half its lifetime instead of in its last two and a half minutes. The first request past the half starts one renewal and goes out with the token in hand; nothing waits for that renewal, and one that fails without ending the session is tried again a minute later. The final window still makes a request wait, as before. The lifetime is the issuing answer's `expires_in`, now kept beside the token in memory and in the session row, and a row written before that is read with `SESSION_TOKEN_DAYS` as this build states it, 30. A register token is still never renewed, and the single flight, the zone marker and the session generation stay. Closes the defect ADR-083 found in passing | `POST /api/v1/auth/renew` sits behind the verifier every authenticated route uses, so an expired token is `401 invalid_token` and the session ends (server ADR-0023, `backend/core/API.md`). Renewing only inside `proactiveRenewalWindow` plus `clockSkewAllowance` signed out a device that made no request in those minutes of a thirty-day token, at its next request: about once a month for an ordinary user, and the deferred catch-up, waking every fifteen minutes at most, landed inside them about one time in six. The server's own text says to renew well before expiry. Half the lifetime leaves fifteen days in which any request renews, scales with the deployment, and cannot loop, because no token is due when it is issued. Renewing behind the request means a cold start never waits on a renewal and no request fails because one did. Adds one optional key to the session row's encrypted metadata; changes no table, wire format, protocol, cryptographic construction or backend file. |
+| ADR-086 | Accepted (2026-10-08) | The navigation bar and the rail show on the three tab roots, `/chats`, `/voice-rooms` and `/settings`, and on no other screen. Each of the 16 routes below them names the root navigator, whose key `createAppRouter` makes per router, so every page above a tab root is a full-screen page at every width: it covers the shell in its own route transition, and the tab root keeps its state under it. The Chats list pushes a group chat and Saved Messages, and a new group goes to the list and pushes its chat, so back returns to the list at the same place. A full-screen page keeps its controls clear of the system insets: an app bar or a bar of the page's own takes the inset at its edge, and a scrolling body adds the rest through `AppInsets.belowAppBar`. During a call every page on the root navigator but the six bootstrap and sign-in pages carries the call banner at its top, below the status bar and above its app bar, through `VoiceRoomBannerFrame`; the banner is the shell's own `VoiceRoomBanner`, read through `LiveShellStatus`, and the call's own page shows none | `ui-specification.md` §0.1 and `responsive-ui.md` asked for a full-screen detail, but the routes put each detail inside its branch, under the shell: the navigation bar stayed on conversations, voice rooms and Settings pages, and back from a group chat or Saved Messages left the application, because a `go` had replaced the stack. On the root navigator the page itself covers the bar, and the tab root waits under it unchanged, where a bar hidden by location would leave out of step with the page and lay the tab root out again at a new size under it. Covering the shell covered its banner, which §0.2 and `voice-room-states.md` §5.8 require on every screen until the call ends, so each page carries one. Costs: a page covers the rail at medium and wide width, and the shell's environment banner, connection strip and keyboard shortcuts stay on the tab roots. Changes no table, wire format, protocol, dependency or backend file. |
+
+## ADR-086 in full — the tab bar and the rail belong to the tab roots, and every page above one covers them (2026-10-08)
+
+**Status:** Accepted, 2026-10-08. Client UI decision, phase 8: prompt 1 moved the pages, corrected
+back and set the insets, and prompt 2 gave the pages the call banner. Changes the navigator each
+page above a tab root opens on, four navigation calls, the insets of the moved pages and where the
+call banner shows. **Changes no table, wire format, protocol, dependency, cryptographic
+construction or backend file.**
+
+**Cites:** `ui-specification.md` §0.1, §0.2, §6, §8, §10, §13 and §15; `responsive-ui.md`,
+*Adaptive shell* and *Persistent global surfaces*; `design-handoff/voice-room-states.md` §5.8;
+go_router 17.3.0, `_matchByNavigatorKeyForGoRoute` and `RouteMatch.buildState` in
+`lib/src/match.dart`; flutter_riverpod 3.3.2, `Consumer`.
+
+### The defect
+
+- **The navigation bar stayed on every screen.** Every route below `/chats`, `/voice-rooms` and
+  `/settings` rendered in its branch's navigator, inside the shell, so the navigation bar, or the
+  rail at medium and wide width, stayed on screen over conversations, voice rooms and Settings
+  pages. `ui-specification.md` §0.1 and `responsive-ui.md` asked for a full-screen detail, and the
+  routes put the detail inside the branch.
+- **Back from a group chat left the application.** A group chat and Saved Messages are routes
+  outside the Chats branch, and the Chats list reached them with `context.go`, which replaced the
+  whole stack: the chat had no back control, system back left the application, and the list lost
+  its place. Creating a group and Group Info's Search reached the chat the same way.
+
+### D1. The tab bar and the rail belong to the tab roots
+
+The navigation bar and the rail show on the three tab roots, `/chats`, `/voice-rooms` and
+`/settings`, and on no other screen. Every screen above a tab root is a **full-screen page** at
+every width: a conversation, Saved Messages, a contact, a voice room and its call, each Settings
+screen, and each screen behind those. Back returns to the screen below it, or to the tab root,
+which keeps its place in its list.
+
+### D2. The pages open on the root navigator, not under a hidden bar
+
+Each of the 16 routes below the three branches names the root navigator with
+`parentNavigatorKey`, nested routes included: go_router 17.3.0 matches a sub-route that names no
+navigator in its branch even below a parent on the root navigator
+(`_matchByNavigatorKeyForGoRoute`), so it would open in the shell, under its parent, where nobody
+sees it. `createAppRouter` makes the key per router rather than once, because a key marks one
+navigator at a time and the tests build more than one router. The pages outside the branches were
+on the root navigator already.
+
+The page covers the bar in its own route transition, so nothing in the shell moves while a page
+opens or closes, and each tab root waits under the page unchanged, its scroll position included.
+
+**Rejected: keeping the pages in their branches and hiding the bar while one is open.** The bar
+would leave on a change of its own, out of step with the page's transition, and the branch's
+navigator, with the tab root in it, would be laid out again at a new size under the page each
+time one opened or closed: taller without the bar, wider without the rail.
+
+### D3. Back from a group chat and Saved Messages returns to the list
+
+The Chats list pushes a group chat and Saved Messages instead of going to them, so the list stays
+below and back returns to it at the same scroll offset. Creating a group goes to the list and
+pushes the new chat, so back from the chat returns to the list and none of the creation steps is
+left between them. That relies on the router's redirect being synchronous: an asynchronous guard
+would drop the `go`. Group Info's Search pops back to the conversation below it, and goes to the
+conversation only when nothing is below.
+
+### D4. A full-screen page keeps its controls clear of the system insets
+
+The application draws edge to edge (`targetSdk` 36), and a page on the root navigator gets neither
+the shell's top inset nor the navigation bar under it. A full-screen page keeps its controls clear
+of the status bar, the gesture bar and the navigation buttons, and its colour still reaches every
+edge:
+
+- an app bar takes the top inset;
+- a bar of the page's own takes the inset at its edge, inside its own surface: the call page's
+  top bar and control bar pad their controls and keep their colour to the edge;
+- a scrolling body adds the bottom and side insets to its padding through
+  `AppInsets.belowAppBar(context, spacing)`, on 13 lists, and still scrolls under the gesture
+  bar; and
+- the chat composer already padded itself.
+
+During a call the call banner takes the top inset instead of the app bar (D5).
+
+### D5. The call banner on full-screen pages
+
+A full-screen page covers the shell, and with it the shell's call banner, which
+`ui-specification.md` §0.2 and `voice-room-states.md` §5.8 require on every screen until the user
+leaves the call. So during a call each page on the root navigator carries the banner itself:
+
+- **Where.** At the top of the page, below the status bar and above the page's app bar. The
+  banner takes the top inset — its colour runs up under the status bar and its control stays below
+  it — and the page under it sees no top inset, so its app bar adds no second one. The banner now
+  has three places: above the navigation bar on a narrow tab root, at the top of the rail on a
+  medium or wide tab root, and at the top of each full-screen page.
+- **Where not.** The call's own page, `/voice-rooms/<roomId>/call`, shows none, because there it
+  would only lead to itself; the call page of another room shows it. The six bootstrap and
+  sign-in pages, `/connection`, `/login`, `/session-restoring`, `/register`,
+  `/pending-activation` and `/encryption-setup`, show none. `createAppRouter` frames every other
+  page on the root navigator, the Security notice included, and no tab root.
+- **One widget.** `_VoiceRoomBanner` left `app_shell.dart` as `VoiceRoomBanner`, with the same
+  text, microphone state, semantics label, key `active-voice-banner` and target,
+  `go('/voice-rooms/<roomId>/call')`. `AppShellStatus.voiceRoomBannerAt(location)` is the one
+  rule, for the shell and the pages alike.
+- **One source.** `VoiceRoomBannerFrame` reads the call through `LiveShellStatus`, as the shell
+  does, and adds no reader of the call. Without a `ProviderScope` it uses the base status that
+  `createAppRouter` gets, as the shell does.
+- **One banner.** A full-screen page covers the shell, so the screen shows one banner: the page's,
+  or the shell's on a tab root.
+- **The page keeps its state.** The frame keeps the page under the same widgets with the banner or
+  without it: a `Column` whose first slot holds the banner or an empty box, and a `MediaQuery`
+  around the page that removes the top inset only while the banner shows. A call that starts or
+  ends while a page is open updates the page in place, so a draft in the composer stays, and so
+  does its focus.
+- **The page's own path.** The frame reads `GoRouterState.matchedLocation`, not `uri`. go_router
+  builds each page in the stack with the location on top in `uri` (`RouteMatch.buildState`), so a
+  frame reading `uri` would take the banner off the room's page while the call opens over it and
+  the room's page is still on screen.
+- **The size.** The banner keeps `AppFocus.minimumTarget`, and its label wraps to two lines before
+  it is cut, so nothing overflows at twice the text size at 360 × 800.
+
+A covered page does not follow the call while it is covered: flutter_riverpod 3.3.2's `Consumer`
+pauses its subscriptions while its route is offstage (`TickerMode`). A call that starts or ends
+while a page is covered reaches that page when the route above it starts to leave, in the first
+frame of that transition.
+
+**Rejected: one banner above the router**, in the builder of `MaterialApp.router`. It would sit
+above modal sheets and dialogs as well, would have to learn which route is on top to stand aside
+for the call's page and the sign-in pages, and would not travel with a page's transition.
+
+### What it costs
+
+- **A full-screen page covers the rail** at medium and wide width, so a wide window shows one page
+  at a time, with the destinations a back away. The post-v1 two panes of §0.1 are not built.
+- **The shell's environment banner, connection strip and keyboard shortcuts stay on the tab
+  roots.** A full-screen page in a development build shows no "Development configuration" banner,
+  no full-screen page shows the connection strip, and Alt+1, Alt+2 and Alt+3 do nothing on a page
+  opened over a tab root, whose focus is not inside the shell.
+- **The banner takes 48 pixels or more** from the top of each full-screen page during a call, and
+  more at large text.
+- **A transition shows both banners.** While a page opens over a tab root or closes to one, both
+  are drawn, the shell's banner with the page's.
+- **The status bar keeps its style.** The banner sets no `SystemUiOverlayStyle`, so the status bar
+  over it keeps the one the last app bar set; the banner's colour has that brightness in all four
+  themes.
+
+### Correctness
+
+- **`full_screen_pages_test.dart`**, on the real router signed in: every route's navigator, and
+  now every route's frame, the six bootstrap and sign-in pages and the three tab roots unframed and
+  the 25 other pages framed; the cover at 360 and 1440 wide; back from a direct chat, a group chat
+  and Saved Messages to the Chats list at the same place, and from a Settings page to Settings;
+  the composer above the gesture bar and the keyboard. During a call: one banner at the top of a direct chat, a room's
+  info and Security settings at 360 and 1440 wide, below a 24-pixel status bar, with the app bar
+  under it 24 pixels shorter than without a call; none on the call's own page or in the shell
+  under it, while the room's page under the call keeps its own; one on another room's call page;
+  only the shell's on each tab root, narrow and wide; a tap on a page's banner opening the call; a
+  draft kept, in the same editor and still focused, when a call starts and when it ends; the muted
+  label "Return to voice room: Weekly Sync, Muted"; and no overflow at twice the text size at
+  360 × 800 on a tab root and three pages. The tests start and end the call through the call's
+  mirror, as the call service does.
+- **The tests fail without the change they guard.** Three mutations were each run once: a frame
+  that wraps the page in its `MediaQuery` only while the banner shows fails the draft test, because
+  the page is built again; a frame that keeps the top inset fails all six top-of-page tests; and a
+  router that frames a page with `state.uri.path` fails the call-page test, at the room's page
+  under the call.
+- **`group_pages_test.dart`** creates a group and leaves the list under its chat, and backs out of
+  Group Info's Search to the conversation. **`app_shell_test.dart`** and
+  **`voice_call_page_test.dart`** follow the banner from the shell to the call and back, and now
+  from the room's info too.
+
+### What is not done, and what was found
+
+- **No run on a device.** Every check is a widget test; nothing was installed.
+- **Insets still missing.** A centred `AppStatePanel` body gets no inset, the chat timeline ignores
+  the side insets in landscape, as group chats always did, and the pages that were on the root
+  navigator already — a contact, its safety number, Create group and the group screens — still pad
+  their lists without the insets.
+- **Found in passing: the banner offers an accessibility service no action.** Its `Semantics`
+  excludes the semantics of the control under it, and with them the `InkWell`'s tap action, so the
+  node is a labelled button with no action. A throwaway check, `isSemantics(hasTapAction: true)`
+  on the banner, failed with `missing actions: [tap]`. It predates this phase, because
+  `_VoiceRoomBanner` had the same structure, and it is not changed here.
 
 ## ADR-085 in full — a session token is renewed from half its life, not in its last minutes (2026-10-07)
 

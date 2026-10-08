@@ -243,9 +243,13 @@ propose and mark as new.
 
 ### 5.8 Minimized
 
-Collapses to the shell's persistent banner: room name, live mic-state icon, return
-target. Above the bottom tab bar on narrow, atop the rail on wide, on **every** screen
-until leave. Android additionally runs a microphone-type foreground service **with visible
+Collapses to the persistent banner (`ui-specification.md` §0.2): room name, live
+mic-state icon, return target. It shows on **every** screen until leave, in one of three
+places: above the bottom tab bar on a narrow tab root, atop the rail on a medium or wide
+tab root, and at the top of every full-screen page, below the status bar and above the
+page's top bar. The call's own live room shows none, and neither do the connection and
+sign-in screens.
+Android additionally runs a microphone-type foreground service **with visible
 controls** in its notification for the duration of the call.
 
 Minimizing keeps audio **only when the platform can truthfully maintain it**. The

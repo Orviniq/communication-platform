@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../features/voice/support/call_fakes.dart';
+import '../support/system_insets.dart';
 import '../support/voice_screen_harness.dart';
 
 const _sara = VoiceCallParticipant(
@@ -586,6 +587,45 @@ void main() {
       expect(key('voice-call-leave').hitTestable(), findsOneWidget);
     });
 
+    testWidgets('the two bars keep their controls inside the safe area, and '
+        'their colour reaches the edges', (tester) async {
+      fakeSystemInsets(tester);
+      call.peers = [_sara];
+      final controller = controllerWith();
+      await pumpCall(tester, controller, size: const Size(360, 800));
+      await tapVisible(tester, key('voice-call-join'));
+
+      final topBar = key('voice-call-top-bar');
+      final controlBar = key('voice-call-control-bar');
+      expect(tester.getRect(topBar).top, 0);
+      expect(tester.getRect(controlBar).bottom, 800);
+      final topRow = find.descendant(of: topBar, matching: find.byType(Row));
+      final controlRow = find.descendant(
+        of: controlBar,
+        matching: find.byType(Row),
+      );
+      expect(tester.getRect(topRow.first).top, greaterThanOrEqualTo(24));
+      expect(tester.getRect(controlRow.first).bottom, lessThanOrEqualTo(752));
+      for (final control in ['voice-call-minimize', 'voice-call-info']) {
+        expect(
+          tester.getRect(key(control)).top,
+          greaterThanOrEqualTo(24),
+          reason: control,
+        );
+      }
+      for (final control in [
+        'voice-call-mute',
+        'voice-call-invite',
+        'voice-call-leave',
+      ]) {
+        expect(
+          tester.getRect(key(control)).bottom,
+          lessThanOrEqualTo(752),
+          reason: control,
+        );
+      }
+    });
+
     testWidgets('a wide window puts room text beside the tiles, and resizing '
         'keeps the call and the draft', (tester) async {
       call.peers = [_sara];
@@ -669,18 +709,47 @@ void main() {
     await tapVisible(tester, key('voice-room-start-call'));
     expect(log, ['microphone', 'start', 'join']);
     expect(key('voice-call-mute'), findsOneWidget);
-    expect(key('active-voice-banner'), findsNothing);
+    // The call's own page shows no banner, and the shell under it holds
+    // none either.
+    final banner = key('active-voice-banner');
+    expect(banner, findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('shell-narrow'), skipOffstage: false),
+        matching: find.byKey(
+          const ValueKey('active-voice-banner'),
+          skipOffstage: false,
+        ),
+        skipOffstage: false,
+      ),
+      findsNothing,
+    );
 
-    // Minimized, the call goes on, and the shell offers the way back.
+    // Minimized, the call goes on. The room's info is a full-screen page, and
+    // its own banner leads back.
     await tapVisible(tester, key('voice-call-minimize'));
     expect(key('voice-room-info-screen'), findsOneWidget);
     expect(find.text('Live now · 2'), findsOneWidget);
+    expect(banner, findsOneWidget);
     expect(find.text('Return to voice room: Weekly Sync'), findsOneWidget);
-    await tapVisible(tester, key('active-voice-banner'));
+    await tapVisible(tester, banner);
+    expect(key('voice-call-mute'), findsOneWidget);
+
+    // So does the shell's, on the room list under it.
+    await tapVisible(tester, key('voice-call-minimize'));
+    expect(await tester.binding.handlePopRoute(), isTrue);
+    await tester.pumpAndSettle();
+    expect(key('voice-rooms-screen'), findsOneWidget);
+    expect(banner, findsOneWidget);
+    await tapVisible(tester, banner);
     expect(key('voice-call-mute'), findsOneWidget);
 
     await tapVisible(tester, key('voice-call-leave'));
     expect(log, ['microphone', 'start', 'join', 'leave', 'stop']);
-    expect(key('active-voice-banner'), findsNothing);
+    // Offstage included: once the call ends, no page holds a banner.
+    expect(
+      find.byKey(const ValueKey('active-voice-banner'), skipOffstage: false),
+      findsNothing,
+    );
   });
 }

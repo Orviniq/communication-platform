@@ -126,7 +126,7 @@ class _CreateVoiceRoomViewState extends State<CreateVoiceRoomView> {
       body: widget.voiceAvailable
           ? VoiceResponsiveBody(
               child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.x4),
+                padding: AppInsets.belowAppBar(context, AppSpacing.x4),
                 children: [
                   Text(
                     strings.voiceRoomCreateStep(_step + 1),

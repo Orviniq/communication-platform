@@ -344,10 +344,15 @@ class _ChatsListPageState extends State<ChatsListPage> {
       callback(item);
       return;
     }
+    // Saved Messages and groups are routes outside the Chats branch. A `go` to
+    // one replaced the whole stack, so back left the application; a push
+    // keeps the list below, and back returns to it at the same place.
     if (item.savedMessages) {
-      context.go('/saved-messages?conversationId=${item.conversationId}');
+      unawaited(
+        context.push('/saved-messages?conversationId=${item.conversationId}'),
+      );
     } else if (item.group) {
-      context.go('/groups/${item.conversationId}');
+      unawaited(context.push('/groups/${item.conversationId}'));
     } else {
       context.go(
         '/chats/conversation/${item.conversationId}'
