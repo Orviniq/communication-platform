@@ -9,6 +9,7 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/dependencies/voice_room_providers.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -129,6 +130,38 @@ void main() {
     await tester.tap(find.text('peer-20'));
     await _settle(tester);
     expect(find.byKey(const ValueKey('direct-chat-screen')), findsOneWidget);
+    expect(find.byKey(const ValueKey('shell-narrow')), findsNothing);
+
+    expect(await tester.binding.handlePopRoute(), isTrue);
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('chats-list-screen')), findsOneWidget);
+    expect(_chatsOffset(tester), offset);
+  });
+
+  testWidgets('back from a group chat returns to the Chats list at the same '
+      'place', (tester) async {
+    await _pumpApp(tester, size: _narrow, summaries: _summaries());
+    final offset = await _scrollChats(tester);
+
+    await tester.tap(find.text('Weekend plans'));
+    await _settle(tester);
+    expect(find.byType(GroupChatPage), findsOneWidget);
+    expect(find.byKey(const ValueKey('shell-narrow')), findsNothing);
+
+    expect(await tester.binding.handlePopRoute(), isTrue);
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('chats-list-screen')), findsOneWidget);
+    expect(_chatsOffset(tester), offset);
+  });
+
+  testWidgets('back from Saved Messages returns to the Chats list at the same '
+      'place', (tester) async {
+    await _pumpApp(tester, size: _narrow, summaries: _summaries());
+    final offset = await _scrollChats(tester);
+
+    await tester.tap(find.text('Saved Messages'));
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('saved-messages-screen')), findsOneWidget);
     expect(find.byKey(const ValueKey('shell-narrow')), findsNothing);
 
     expect(await tester.binding.handlePopRoute(), isTrue);
