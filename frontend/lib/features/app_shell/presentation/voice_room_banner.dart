@@ -34,6 +34,7 @@ class VoiceRoomBanner extends StatelessWidget {
     };
     final microphone = muted ? l10n.voiceTileMuted : l10n.voiceTileMicOn;
     final colors = context.tokens.colors;
+    void openCall() => context.go('/voice-rooms/$roomId/call');
     return Material(
       color: colors.accentSoft,
       child: SafeArea(
@@ -42,9 +43,14 @@ class VoiceRoomBanner extends StatelessWidget {
           key: const ValueKey('active-voice-banner'),
           button: true,
           label: '$label, $microphone',
+          // `excludeSemantics` drops the InkWell's own tap action with the
+          // rest of what is under this node, so the node carries it: a
+          // service that acts through actions, Switch Access for one, has
+          // nothing to activate on a button without it.
+          onTap: openCall,
           excludeSemantics: true,
           child: InkWell(
-            onTap: () => context.go('/voice-rooms/$roomId/call'),
+            onTap: openCall,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 minHeight: AppFocus.minimumTarget,

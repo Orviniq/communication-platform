@@ -245,6 +245,46 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('the banner above the navigation bar offers a tap action, and '
+      'performing it opens the call', (tester) async {
+    final semantics = tester.ensureSemantics();
+    const roomId =
+        'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00';
+    // Narrow only: at medium and wide width the rail, the banner with it, has
+    // no node in the semantics tree (ADR-086, note of 2026-10-09).
+    await _pumpApp(
+      tester,
+      size: const Size(360, 800),
+      status: const AppShellStatus(
+        activeVoiceRoomId: roomId,
+        activeVoiceRoomName: 'Standup',
+      ),
+    );
+
+    const label = 'Return to voice room: Standup, Microphone on';
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('active-voice-banner'))),
+      isSemantics(label: label, isButton: true, hasTapAction: true),
+    );
+    // One node announces the banner, and none the control under it.
+    expect(
+      find.semantics.byLabel(RegExp('Return to voice room')),
+      findsOneWidget,
+    );
+
+    tester.semantics.tap(find.semantics.byLabel(label));
+    // The call screen shows a spinner in this harness, so it never settles.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(VoiceCallPage), findsOneWidget);
+    final router = GoRouter.of(tester.element(find.byType(VoiceCallPage)));
+    expect(
+      router.routerDelegate.currentConfiguration.uri.path,
+      '/voice-rooms/$roomId/call',
+    );
+    semantics.dispose();
+  });
+
   testWidgets('no call raises no banner, and a server without voice offers no '
       'room to create', (tester) async {
     await _pumpApp(

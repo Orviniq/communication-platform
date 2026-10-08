@@ -541,6 +541,47 @@ void main() {
       semantics.dispose();
     });
 
+    group('the banner offers a tap action that opens the call', () {
+      for (final size in [_narrow, _wide]) {
+        testWidgets('at ${size.width.round()} wide', (tester) async {
+          final semantics = tester.ensureSemantics();
+          final container = await _pumpApp(
+            tester,
+            size: size,
+            initialLocation: directChat,
+          );
+          _startCall(container);
+          await _settle(tester);
+
+          const label = 'Return to voice room: Weekly Sync, Microphone on';
+          expect(
+            tester.getSemantics(find.byKey(_banner)),
+            isSemantics(label: label, isButton: true, hasTapAction: true),
+          );
+          // One node announces the banner, and none the control under it.
+          expect(
+            find.semantics.byLabel(RegExp('Return to voice room')),
+            findsOneWidget,
+          );
+
+          // By the node's action, as a service that does not touch the screen
+          // does it, not by a tap at its centre.
+          tester.semantics.tap(find.semantics.byLabel(label));
+          await _settle(tester);
+          expect(find.byType(VoiceCallPage), findsOneWidget);
+          final router = GoRouter.of(
+            tester.element(find.byType(VoiceCallPage)),
+          );
+          expect(
+            router.routerDelegate.currentConfiguration.uri.path,
+            '/voice-rooms/$voiceRoomId/call',
+          );
+          expect(find.byKey(_banner), findsNothing);
+          semantics.dispose();
+        });
+      }
+    });
+
     group('at twice the text size, 360 by 800, nothing overflows', () {
       for (final location in [
         '/chats',
