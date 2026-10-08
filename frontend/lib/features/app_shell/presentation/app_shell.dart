@@ -2,6 +2,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/features/app_shell/presentation/voice_room_banner.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +43,20 @@ class AppShellStatus {
     activeVoiceMuted: activeVoiceMuted,
     voiceRoomsComposeAvailable: voiceRoomsComposeAvailable,
   );
+
+  /// The banner for the page at [location], the page's own path: none while
+  /// no call runs, and none on the call's own page, where it would only lead
+  /// to itself. Every other page shows it until the call ends.
+  VoiceRoomBanner? voiceRoomBannerAt(String location) =>
+      switch (activeVoiceRoomId) {
+        final roomId? when location != '/voice-rooms/$roomId/call' =>
+          VoiceRoomBanner(
+            roomId: roomId,
+            roomName: activeVoiceRoomName,
+            muted: activeVoiceMuted,
+          ),
+        _ => null,
+      };
 }
 
 enum AppDestination { chats, voiceRooms, settings }
@@ -148,17 +163,8 @@ class _AppShellState extends State<AppShell> {
                 !widget.status.voiceRoomsComposeAvailable)
         ? null
         : _compose;
-    // The banner returns to the call, so the call's own screen does not show
-    // it: everywhere else it stays until the call ends.
-    final callRoomId = widget.status.activeVoiceRoomId;
-    final banner =
-        callRoomId == null || widget.location == '/voice-rooms/$callRoomId/call'
-        ? null
-        : _VoiceRoomBanner(
-            roomId: callRoomId,
-            roomName: widget.status.activeVoiceRoomName,
-            muted: widget.status.activeVoiceMuted,
-          );
+    // Above the navigation bar or atop the rail.
+    final banner = widget.status.voiceRoomBannerAt(widget.location);
     final widthClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
     final shortcuts = <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () =>
@@ -660,73 +666,6 @@ class _ConnectionStrip extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VoiceRoomBanner extends StatelessWidget {
-  const _VoiceRoomBanner({
-    required this.roomId,
-    required this.roomName,
-    required this.muted,
-  });
-
-  final String roomId;
-
-  /// Null until this device has read the room's name.
-  final String? roomName;
-  final bool muted;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final label = switch (roomName) {
-      final name? => l10n.returnToVoiceRoom(name),
-      null => l10n.voiceCallReturnBanner,
-    };
-    final microphone = muted ? l10n.voiceTileMuted : l10n.voiceTileMicOn;
-    final colors = context.tokens.colors;
-    return Semantics(
-      key: const ValueKey('active-voice-banner'),
-      button: true,
-      label: '$label, $microphone',
-      excludeSemantics: true,
-      child: Material(
-        color: colors.accentSoft,
-        child: InkWell(
-          onTap: () => context.go('/voice-rooms/$roomId/call'),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minHeight: AppFocus.minimumTarget,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.x2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AppIcon(
-                    muted ? AppIcons.microphoneOff : AppIcons.microphone,
-                    color: colors.accent,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.x2),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: context.tokens.typography.compact.copyWith(
-                        color: colors.accent,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),
