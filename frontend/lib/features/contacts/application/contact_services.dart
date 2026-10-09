@@ -2,6 +2,7 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/application/ports/contact_ports.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
+import 'package:communication_platform/features/contacts/domain/contact_search.dart';
 
 final class DirectoryService {
   const DirectoryService({required this.remote, required this.local});
@@ -30,14 +31,7 @@ final class DirectoryService {
       final matching = normalized.isEmpty
           ? contacts
           : contacts
-                .where(
-                  (contact) =>
-                      contact.username.contains(normalized) ||
-                      (contact.canUseAuthenticatedProfile &&
-                          contact.presentationName.toLowerCase().contains(
-                            normalized,
-                          )),
-                )
+                .where((contact) => contactMatchesSearch(contact, normalized))
                 .toList(growable: false);
       return DirectoryPage(
         contacts: matching.take(bounded).toList(growable: false),

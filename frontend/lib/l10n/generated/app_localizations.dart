@@ -380,18 +380,6 @@ abstract class AppLocalizations {
   /// **'Create a voice room'**
   String get composeVoiceRoom;
 
-  /// No description provided for @connectingStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'Connecting…'**
-  String get connectingStatus;
-
-  /// No description provided for @offlineStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'No connection to server'**
-  String get offlineStatus;
-
   /// No description provided for @returnToVoiceRoom.
   ///
   /// In en, this message translates to:
@@ -1226,12 +1214,6 @@ abstract class AppLocalizations {
   /// **'Search chats'**
   String get chatsSearchAction;
 
-  /// No description provided for @chatsSearchHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Search names and the latest message'**
-  String get chatsSearchHint;
-
   /// No description provided for @chatsClearSearchAction.
   ///
   /// In en, this message translates to:
@@ -1286,11 +1268,35 @@ abstract class AppLocalizations {
   /// **'This searches only the messages stored on this phone. The server never sees them, or what you search for.'**
   String get chatsDeviceSearchScopeNotice;
 
-  /// The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed.
+  /// No description provided for @chatsSearchFieldLabel.
   ///
   /// In en, this message translates to:
-  /// **'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.'**
-  String get chatsListSearchScopeNotice;
+  /// **'Search chats and contacts'**
+  String get chatsSearchFieldLabel;
+
+  /// The hint of the Chats search page's field. It names what the page matches and nothing more: 'messages' alone would promise a search of the history, which the page does not perform (ADR-052).
+  ///
+  /// In en, this message translates to:
+  /// **'Search names, usernames and latest messages'**
+  String get chatsSearchFieldHint;
+
+  /// The Chats search page matches chat names, the latest message of each chat, and contact names and usernames, and nothing else. A chat's summary carries its latest message only; older messages are read one conversation at a time, by that conversation's own search. The page sends the query nowhere and stores none.
+  ///
+  /// In en, this message translates to:
+  /// **'This searches chat names, the latest message of each chat, and your contacts\' names and usernames. To search older messages, open a conversation and search inside it. Your search stays on this phone.'**
+  String get chatsSearchScopeNotice;
+
+  /// No description provided for @chatsSearchChatsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get chatsSearchChatsHeader;
+
+  /// No description provided for @chatsSearchContactsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get chatsSearchContactsHeader;
 
   /// No description provided for @chatsDeliveryConnectingNotice.
   ///
@@ -1309,12 +1315,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Waiting to reconnect…'**
   String get chatsDeliveryWaitingNotice;
-
-  /// No description provided for @chatsOfflineCachedNotice.
-  ///
-  /// In en, this message translates to:
-  /// **'Offline — showing cached conversations. New messages will queue locally.'**
-  String get chatsOfflineCachedNotice;
 
   /// No description provided for @chatsNoMessagesPreview.
   ///

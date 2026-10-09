@@ -87,7 +87,7 @@ Row: locally decrypted name + state line. The shell owns the tab bar and FAB.
 | Loading | First open, no cache | `AppStatePanel.loading` |
 | Populated | Rooms known locally | Rows: name + **Live now · N** or **Empty** |
 | Empty | No rooms | `AppStatePanel.empty` — one title, one sentence, one action |
-| Offline | Server unreachable | Cached list, shell connection strip above, rows still tappable |
+| Offline | Server unreachable | Cached list, the page's own offline notice above it, rows still tappable |
 | Room waiting for its state | A queue gap may have carried a control event, or an event arrived building on state this device does not hold | Row state line **Asking a member for its state**. The room is visible and tappable; joining waits |
 | Room quarantined | Two valid events at one revision — a fork | Row state line names the conflict and routes to info; joining, inviting, renaming and leaving are paused |
 | No voice on this server | `voice_configured` is false | Destination visible, content explains, the compose button is hidden as well |

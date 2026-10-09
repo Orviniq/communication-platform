@@ -200,7 +200,9 @@ final class ChatListItemViewModel {
 /// timings. It exists because a jammed engine and a slow network were
 /// indistinguishable from the outside — the application looked identical in
 /// both cases, which is how a stall that lasted twenty-seven minutes went
-/// unnoticed by the person it was happening to.
+/// unnoticed by the person it was happening to. The Chats title shows it, in
+/// the place of its own name, once a state other than [settled] has lasted a
+/// second (ADR-087).
 enum ChatDeliveryIndicator {
   /// Nothing to say. The session is connected and the last cycle completed.
   settled,
@@ -220,16 +222,12 @@ final class ChatListViewModel {
   ChatListViewModel({
     required Iterable<ChatListItemViewModel> items,
     required this.loading,
-    required this.offline,
     required this.failed,
-    this.delivery = ChatDeliveryIndicator.settled,
   }) : items = List.unmodifiable(items);
 
   final List<ChatListItemViewModel> items;
   final bool loading;
-  final bool offline;
   final bool failed;
-  final ChatDeliveryIndicator delivery;
 }
 
 typedef ChatIntentCallback = void Function(ChatIntent intent);

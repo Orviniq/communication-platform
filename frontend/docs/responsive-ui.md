@@ -45,7 +45,8 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 
 ## Persistent global surfaces
 
-- Connection strip: connecting/offline state; not dismissible while false.
+- Connection and sync status: the Chats title carries it, after one second and from the
+  engine's live phase (`ui-specification.md` §6). The shell draws no connection strip.
 - Active voice banner: visible across destinations until leave; returns to the room. Above
   the navigation bar or atop the rail on a tab root, at the top of a full-screen page, and
   not on the call's own screen (`ui-specification.md` §0.2).
@@ -144,9 +145,11 @@ boundary; the size-notification anchor path is shared by every row builder.
 
 - **Chats List:** pinned/active rooms, conversations ordered by local activity, unread,
   mute/pin/status, offline cached state, context menu.
-- **Search:** three in-place surfaces, never a merged results screen — the chat-list
-  filter, the shared in-conversation sheet (direct, saved and group), and the contact
-  filter. Jump to message, per-surface scope notice, and a stated result cap.
+- **Search:** three surfaces, each stating its own scope — the Chats search page
+  (`/chats/search`, a full-screen page at every width, opened from the Chats top bar) with a
+  Chats and a Contacts section and no message section; the shared in-conversation sheet
+  (direct, saved and group) with jump to message and a stated result cap; and the contact
+  filter of Contacts/New, which uses the search page's contact rule.
 - **Contacts/New:** New Group, New Voice Room, verified indicator, cached offline state.
 - **Profile bootstrap:** use backend username and deterministic local avatar until an
   authenticated profile key/payload arrives; never render unverified cached identity.

@@ -8,19 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-enum AppConnectionState { connected, connecting, offline }
-
 @immutable
 class AppShellStatus {
   const AppShellStatus({
-    this.connection = AppConnectionState.connected,
     this.activeVoiceRoomId,
     this.activeVoiceRoomName,
     this.activeVoiceMuted = false,
     this.voiceRoomsComposeAvailable = true,
   });
-
-  final AppConnectionState connection;
 
   /// The room of the call in progress: what the banner returns to. The banner
   /// shows while it is set, and only then.
@@ -35,14 +30,6 @@ class AppShellStatus {
   /// Whether the Voice Rooms tab offers to create a room. False when the
   /// deployment serves no voice (`ui-specification.md` §13.0).
   final bool voiceRoomsComposeAvailable;
-
-  AppShellStatus copyWith({AppConnectionState? connection}) => AppShellStatus(
-    connection: connection ?? this.connection,
-    activeVoiceRoomId: activeVoiceRoomId,
-    activeVoiceRoomName: activeVoiceRoomName,
-    activeVoiceMuted: activeVoiceMuted,
-    voiceRoomsComposeAvailable: voiceRoomsComposeAvailable,
-  );
 
   /// The banner for the page at [location], the page's own path: none while
   /// no call runs, and none on the call's own page, where it would only lead
@@ -179,8 +166,8 @@ class _AppShellState extends State<AppShell> {
     // The tab roots' navigators get a semantics container of their own. A
     // route's modal barrier hides from accessibility services whatever was
     // painted before it, up to the nearest container, so without this one
-    // the rail beside the navigators, and the environment banner and the
-    // connection strip above them, had no node (ADR-086, notes of 2026-10-09).
+    // the rail beside the navigators, and the environment banner above them,
+    // had no node (ADR-086, notes of 2026-10-09).
     Widget content = Semantics(
       container: true,
       child: FocusScope(
@@ -192,8 +179,6 @@ class _AppShellState extends State<AppShell> {
       children: [
         if (environmentBanner != null)
           _EnvironmentBanner(label: environmentBanner),
-        if (widget.status.connection != AppConnectionState.connected)
-          _ConnectionStrip(connection: widget.status.connection),
         Expanded(child: content),
       ],
     );
@@ -649,52 +634,4 @@ class _EnvironmentBanner extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _ConnectionStrip extends StatelessWidget {
-  const _ConnectionStrip({required this.connection});
-
-  final AppConnectionState connection;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final label = connection == AppConnectionState.connecting
-        ? l10n.connectingStatus
-        : l10n.offlineStatus;
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      label: label,
-      child: ColoredBox(
-        color: context.tokens.colors.warning,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AppIcon(
-                AppIcons.warning,
-                color: context.tokens.colors.canvas,
-                size: 18,
-              ),
-              const SizedBox(width: AppSpacing.x2),
-              Flexible(
-                child: ExcludeSemantics(
-                  child: Text(
-                    label,
-                    style: context.tokens.typography.compact.copyWith(
-                      color: context.tokens.colors.canvas,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

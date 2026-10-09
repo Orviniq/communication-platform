@@ -89,6 +89,7 @@ void main() {
     }
     expect(pages.keys, [
       '/chats/new',
+      '/chats/search',
       '/chats/conversation/:conversationId',
       '/chats/direct/:userId',
       '/voice-rooms/new',
@@ -205,6 +206,7 @@ void main() {
       '/groups/:groupId/add-members',
       '/saved-messages',
       '/chats/new',
+      '/chats/search',
       '/chats/conversation/:conversationId',
       '/chats/direct/:userId',
       '/voice-rooms/new',

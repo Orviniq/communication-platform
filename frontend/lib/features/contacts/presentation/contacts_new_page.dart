@@ -10,6 +10,7 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/application/contact_services.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
+import 'package:communication_platform/features/contacts/domain/contact_search.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_components.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -105,13 +106,7 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
     final voiceAvailable = ref.watch(voiceAvailabilityProvider);
     final normalized = _search.text.trim().toLowerCase();
     final filtered = (contacts ?? const <ContactProjection>[])
-        .where(
-          (contact) =>
-              normalized.isEmpty ||
-              contact.username.contains(normalized) ||
-              (contact.canUseAuthenticatedProfile &&
-                  contact.presentationName.toLowerCase().contains(normalized)),
-        )
+        .where((contact) => contactMatchesSearch(contact, normalized))
         .toList(growable: false);
     final shown = filtered.take(_visible).toList(growable: false);
     return Scaffold(

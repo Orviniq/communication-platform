@@ -325,13 +325,18 @@ void main() {
 
   test('the disclosure may not call a built surface unbuilt', () {
     // Revision 5 removed "search" from the unbuilt list. Search is composed:
-    // the chat list filters on title and preview, and a conversation's own
-    // search reads that conversation's whole local history. If either
-    // filter is still here, the disclosure may not deny it.
+    // the Chats search page, which the Chats list opens, filters on chat
+    // name and latest message, and a conversation's own search reads that
+    // conversation's whole local history. If either filter is still here,
+    // the disclosure may not deny it.
+    final chatsSearch = File(
+      'lib/features/messaging/presentation/chats_search.dart',
+    ).readAsStringSync();
+    expect(chatsSearch, contains('chat.title.toLowerCase().contains(needle)'));
     final chats = File(
       'lib/features/messaging/presentation/chats_list_page.dart',
     ).readAsStringSync();
-    expect(chats, contains('item.title.toLowerCase().contains(query)'));
+    expect(chats, contains("context.push('/chats/search')"));
     // The in-conversation filter moved into one shared surface after
     // ADR-052, so that a group conversation gets the same search rather
     // than a disabled button offering one. It is still the same filter
@@ -371,19 +376,46 @@ void main() {
     );
   });
 
-  test('the chat list states the scope it actually searches', () {
-    // It matches title and last-message preview, so it may not borrow the
-    // in-conversation notice, which promises this device's history (ADR-052).
+  test('the Chats search page states the scope it actually searches', () {
+    // It matches chat names, each chat's latest message, and contact names
+    // and usernames (`chats_search.dart`), and nothing older, so its words
+    // say exactly that. It may not borrow the in-conversation notice, which
+    // promises this device's history (ADR-052). The Chats list no longer
+    // searches, so it states no search scope at all.
+    final page = File(
+      'lib/features/messaging/presentation/chats_search_page.dart',
+    ).readAsStringSync();
+    expect(page, contains('chatsSearchFieldHint'));
+    expect(page, contains('chatsSearchScopeNotice'));
+    expect(page, isNot(contains('chatsDeviceSearchScopeNotice')));
     final chats = File(
       'lib/features/messaging/presentation/chats_list_page.dart',
     ).readAsStringSync();
-    expect(chats, contains('chatsListSearchScopeNotice'));
+    expect(chats, isNot(contains('SearchScopeNotice')));
+    expect(chats, isNot(contains('SearchFieldHint')));
+
     final english = _catalogue('lib/l10n/app_en.arb');
     expect(
-      english['chatsListSearchScopeNotice'],
-      contains('names and the latest message only'),
+      english['chatsSearchFieldHint'],
+      'Search names, usernames and latest messages',
     );
-    expect(english['chatsSearchHint'], 'Search names and the latest message');
+    expect(
+      english['chatsSearchScopeNotice'],
+      'This searches chat names, the latest message of each chat, and your '
+      "contacts' names and usernames. To search older messages, open a "
+      'conversation and search inside it. Your search stays on this phone.',
+    );
+    final persian = _catalogue('lib/l10n/app_fa.arb');
+    expect(
+      persian['chatsSearchFieldHint'],
+      'جست‌وجو در نام‌ها، نام‌های کاربری و آخرین پیام‌ها',
+    );
+    expect(
+      persian['chatsSearchScopeNotice'],
+      'نام گفت‌وگوها، آخرین پیام هر گفت‌وگو و نام و نام کاربری مخاطبانتان '
+      'جست‌وجو می‌شود. برای جست‌وجو در پیام‌های قدیمی‌تر، گفت‌وگو را باز '
+      'کنید و داخل آن جست‌وجو کنید. جست‌وجوی شما روی همین گوشی می‌ماند.',
+    );
   });
 
   test('the permanent sections name no feature this build cannot do', () {

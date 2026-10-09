@@ -8,10 +8,9 @@ import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
-import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_list_row.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -35,56 +34,7 @@ class ChatsListPage extends StatefulWidget {
   State<ChatsListPage> createState() => _ChatsListPageState();
 }
 
-class _ChatsListPageState extends State<ChatsListPage> {
-  final TextEditingController _search = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
-
-  /// The reading of the clock the muted state is decided against.
-  ///
-  /// `DateTime.now()` inside `build` made every conversation's view model
-  /// depend on the frame it happened to be built in, which is not something a
-  /// mapper that has to be idempotent may do. Held here instead, and refreshed
-  /// on a schedule the list can state: exactly when the earliest mute on
-  /// screen expires, and never otherwise.
-  DateTime _mutedAsOf = DateTime.now();
-  DateTime? _scheduledMuteExpiry;
-  Timer? _muteExpiry;
-
-  @override
-  void dispose() {
-    _muteExpiry?.cancel();
-    _search.dispose();
-    _searchFocus.dispose();
-    super.dispose();
-  }
-
-  /// Schedules the one refresh the mute clock owes, and no others.
-  ///
-  /// Idempotent, so calling it from `build` costs a walk of the list and
-  /// nothing else when the answer has not moved. A list with nothing muted
-  /// holds no timer at all.
-  void _trackMuteExpiry(List<ConversationSummary> summaries) {
-    DateTime? earliest;
-    for (final summary in summaries) {
-      final until = summary.mutedUntil;
-      if (until == null || !until.isAfter(_mutedAsOf)) continue;
-      if (earliest == null || until.isBefore(earliest)) earliest = until;
-    }
-    if (earliest == _scheduledMuteExpiry) return;
-    _scheduledMuteExpiry = earliest;
-    _muteExpiry?.cancel();
-    _muteExpiry = null;
-    if (earliest == null) return;
-    final wait = earliest.difference(DateTime.now());
-    _muteExpiry = Timer(wait.isNegative ? Duration.zero : wait, () {
-      if (!mounted) return;
-      setState(() {
-        _mutedAsOf = DateTime.now();
-        _scheduledMuteExpiry = null;
-      });
-    });
-  }
-
+class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
   @override
   Widget build(BuildContext context) {
     final injected = widget.model;
@@ -97,12 +47,7 @@ class _ChatsListPageState extends State<ChatsListPage> {
     } on StateError {
       return _scaffold(
         context,
-        ChatListViewModel(
-          items: const [],
-          loading: false,
-          offline: false,
-          failed: false,
-        ),
+        ChatListViewModel(items: const [], loading: false, failed: false),
       );
     }
     return Consumer(builder: (context, ref, _) => _projected(context, ref));
@@ -114,55 +59,28 @@ class _ChatsListPageState extends State<ChatsListPage> {
     if (currentUserId == null) {
       return _scaffold(
         context,
-        ChatListViewModel(
-          items: [],
-          loading: false,
-          offline: false,
-          failed: false,
-        ),
+        ChatListViewModel(items: [], loading: false, failed: false),
       );
     }
     final summaries = ref.watch(conversationSummariesProvider(currentUserId));
-    _trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
+    trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
     final contacts = ref.watch(contactListProvider(currentUserId));
-    // A jammed engine and a slow network used to look identical from here,
-    // because nothing in this application read the phase the engine has been
-    // writing all along.
-    final delivery = _deliveryIndicator(
-      ref.watch(syncProjectionProvider).value?.connectionPhase,
-    );
-    final names = {
-      for (final contact in contacts.value ?? const <ContactProjection>[])
-        contact.userId: contact.presentationName,
-    };
     final strings = AppLocalizations.of(context);
     final model = summaries.when(
       data: (items) => ChatListViewModel(
-        items: ChatViewModelMapper.summaries(
+        items: chatListItems(
           items,
-          now: _mutedAsOf,
-          savedMessagesTitle: strings.savedMessagesTitle,
-          peerTitle: (id) => names[id] ?? chatShortIdentity(id),
+          contacts: contacts.value ?? const <ContactProjection>[],
+          now: mutedAsOf,
+          strings: strings,
         ),
         loading: false,
-        offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
         failed: false,
-        delivery: delivery,
       ),
-      loading: () => ChatListViewModel(
-        items: const [],
-        loading: true,
-        offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
-        failed: false,
-        delivery: delivery,
-      ),
-      error: (_, _) => ChatListViewModel(
-        items: const [],
-        loading: false,
-        offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
-        failed: true,
-        delivery: delivery,
-      ),
+      loading: () =>
+          ChatListViewModel(items: const [], loading: true, failed: false),
+      error: (_, _) =>
+          ChatListViewModel(items: const [], loading: false, failed: true),
     );
     return _scaffold(context, model, ref: ref);
   }
@@ -173,52 +91,30 @@ class _ChatsListPageState extends State<ChatsListPage> {
     WidgetRef? ref,
   }) {
     final strings = AppLocalizations.of(context);
-    final body = Column(
-      children: [
-        if (model.offline)
-          _InlineNotice(
-            key: const ValueKey('chats-offline-notice'),
-            label: strings.chatsOfflineCachedNotice,
-            kind: AppStatusKind.warning,
-          )
-        else if (_deliveryNotice(model.delivery, strings) case final label?)
-          _InlineNotice(
-            key: const ValueKey('chats-delivery-notice'),
-            label: label,
-            kind: AppStatusKind.neutral,
-          ),
-        // The query belongs to the field. Rebuilding the page for it re-mapped
-        // every conversation summary on every keystroke, to filter a list that
-        // had not changed.
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _search,
-          builder: (context, value, _) =>
-              _searchField(context, strings, value.text.trim()),
-        ),
-        Expanded(
-          child: ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _search,
-            builder: (context, value, _) => _results(
-              context,
-              model,
-              strings,
-              value.text.trim().toLowerCase(),
-              ref,
-            ),
-          ),
-        ),
-      ],
-    );
+    // The list, and nothing above it: the engine's status is the title's.
+    final body = _results(context, model, strings, ref);
     if (widget.compact) return body;
     return Scaffold(
       key: const ValueKey('chats-list-screen'),
       appBar: AppBar(
-        title: Text(strings.chatsTitle),
+        // Without a ProviderScope there is no engine to ask, and the title is
+        // its own name.
+        title: ref == null
+            ? Text(
+                strings.chatsTitle,
+                key: const ValueKey('chats-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : const _ChatsTitle(key: ValueKey('chats-title')),
         actions: [
+          // Search is a page of its own (ui-specification.md §6.5): the list
+          // keeps its whole height for the conversations.
           AppIconButton(
+            key: const ValueKey('chats-search-action'),
             icon: AppIcons.search,
             semanticLabel: strings.chatsSearchAction,
-            onPressed: _searchFocus.requestFocus,
+            onPressed: () => unawaited(context.push('/chats/search')),
             kind: AppButtonKind.ghost,
           ),
         ],
@@ -227,66 +123,16 @@ class _ChatsListPageState extends State<ChatsListPage> {
     );
   }
 
-  Widget _searchField(
-    BuildContext context,
-    AppLocalizations strings,
-    String query,
-  ) => Padding(
-    padding: const EdgeInsets.fromLTRB(
-      AppSpacing.x4,
-      AppSpacing.x3,
-      AppSpacing.x4,
-      AppSpacing.x2,
-    ),
-    child: TextField(
-      key: const ValueKey('chats-search-field'),
-      controller: _search,
-      focusNode: _searchFocus,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: strings.chatsSearchHint,
-        prefixIcon: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x3),
-          child: AppIcon(AppIcons.search),
-        ),
-        suffixIcon: query.isEmpty
-            ? null
-            : AppIconButton(
-                icon: AppIcons.close,
-                semanticLabel: strings.chatsClearSearchAction,
-                onPressed: _search.clear,
-                kind: AppButtonKind.ghost,
-              ),
-        filled: true,
-        fillColor: context.tokens.colors.surfaceRaised,
-        border: const OutlineInputBorder(
-          borderRadius: AppRadii.control,
-          borderSide: BorderSide.none,
-        ),
-      ),
-    ),
-  );
-
   Widget _results(
     BuildContext context,
     ChatListViewModel model,
     AppLocalizations strings,
-    String query,
     WidgetRef? ref,
   ) {
-    final items = model.items
-        .where(
-          (item) =>
-              query.isEmpty ||
-              item.title.toLowerCase().contains(query) ||
-              item.preview.toLowerCase().contains(query),
-        )
-        .toList(growable: false);
-    return switch ((model.loading, model.failed, items.isEmpty, query)) {
-      (true, _, _, _) => AppStatePanel.loading(
-        title: strings.chatsLoadingTitle,
-      ),
-      (_, true, _, _) => AppStatePanel.error(
+    final items = model.items;
+    return switch ((model.loading, model.failed, items.isEmpty)) {
+      (true, _, _) => AppStatePanel.loading(title: strings.chatsLoadingTitle),
+      (_, true, _) => AppStatePanel.error(
         title: strings.chatsErrorTitle,
         message: strings.chatsErrorMessage,
         actionLabel: strings.retryAction,
@@ -297,41 +143,25 @@ class _ChatsListPageState extends State<ChatsListPage> {
           }
         },
       ),
-      (_, _, true, '') => AppStatePanel.empty(
+      (_, _, true) => AppStatePanel.empty(
         title: strings.chatsEmptyTitle,
         message: strings.chatsEmptyMessage,
         actionLabel: strings.chatsStartAction,
         onAction: () => context.go('/chats/new'),
       ),
-      // This list filters on title and last-message preview and nothing
-      // else, so it says so. Borrowing the in-conversation notice here
-      // promised a search of this device's history that the list has
-      // never performed (ADR-052).
-      (_, _, true, _) => AppStatePanel.empty(
-        title: strings.chatsNoSearchResultsTitle,
-        message: strings.chatsListSearchScopeNotice,
-      ),
       _ => ListView.builder(
         key: const PageStorageKey('chats-list'),
-        itemCount: items.length + (query.isEmpty ? 0 : 1),
+        itemCount: items.length,
         itemBuilder: (context, index) {
-          if (index == items.length) {
-            return Padding(
-              padding: const EdgeInsets.all(AppSpacing.x4),
-              child: Text(
-                strings.chatsListSearchScopeNotice,
-                textAlign: TextAlign.center,
-                style: context.tokens.typography.label.copyWith(
-                  color: context.tokens.colors.textMuted,
-                ),
-              ),
-            );
-          }
           final item = items[index];
-          return _ConversationRow(
+          return ChatListRow(
             item: item,
             onTap: () => _open(item),
-            onAction: (action) => _handleConversationAction(item, action, ref),
+            onMenu: () => _showConversationMenu(
+              context,
+              item,
+              (action) => _handleConversationAction(item, action, ref),
+            ),
           );
         },
       ),
@@ -347,17 +177,11 @@ class _ChatsListPageState extends State<ChatsListPage> {
     // Saved Messages and groups are routes outside the Chats branch. A `go` to
     // one replaced the whole stack, so back left the application; a push
     // keeps the list below, and back returns to it at the same place.
-    if (item.savedMessages) {
-      unawaited(
-        context.push('/saved-messages?conversationId=${item.conversationId}'),
-      );
-    } else if (item.group) {
-      unawaited(context.push('/groups/${item.conversationId}'));
+    final location = chatListItemLocation(item);
+    if (item.savedMessages || item.group) {
+      unawaited(context.push(location));
     } else {
-      context.go(
-        '/chats/conversation/${item.conversationId}'
-        '?peer=${item.peerUserId ?? ''}',
-      );
+      context.go(location);
     }
   }
 
@@ -418,222 +242,187 @@ class _ChatsListPageState extends State<ChatsListPage> {
   }
 }
 
-class _ConversationRow extends StatelessWidget {
-  const _ConversationRow({
-    required this.item,
-    required this.onTap,
-    required this.onAction,
-  });
+/// The Chats list's menu for one conversation: pin, mute, read state and
+/// delete.
+Future<void> _showConversationMenu(
+  BuildContext context,
+  ChatListItemViewModel item,
+  ValueChanged<_ConversationAction> onAction,
+) async {
+  final strings = AppLocalizations.of(context);
+  await showAppSheet<void>(
+    context: context,
+    semanticLabel: strings.chatsConversationActionsLabel,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ChatMenuRow(
+          label: item.pinned ? strings.chatUnpinAction : strings.chatPinAction,
+          icon: AppIcons.pin,
+          onTap: () {
+            popAppModal(context);
+            onAction(_ConversationAction.pin);
+          },
+        ),
+        ChatMenuRow(
+          label: item.muted
+              ? strings.chatsUnmuteAction
+              : strings.chatsMuteAction,
+          icon: AppIcons.muted,
+          onTap: () {
+            popAppModal(context);
+            onAction(_ConversationAction.mute);
+          },
+        ),
+        if (!item.savedMessages)
+          ChatMenuRow(
+            label: item.unreadCount > 0
+                ? strings.chatsMarkReadAction
+                : strings.chatsMarkUnreadAction,
+            icon: AppIcons.delivered,
+            onTap: () {
+              popAppModal(context);
+              onAction(
+                item.unreadCount > 0
+                    ? _ConversationAction.markRead
+                    : _ConversationAction.markUnread,
+              );
+            },
+          ),
+        ChatMenuRow(
+          label: strings.chatsDeleteAction,
+          icon: AppIcons.delete,
+          danger: true,
+          onTap: () {
+            popAppModal(context);
+            onAction(_ConversationAction.delete);
+          },
+        ),
+      ],
+    ),
+  );
+}
 
-  final ChatListItemViewModel item;
-  final VoidCallback onTap;
-  final ValueChanged<_ConversationAction> onAction;
+enum _ConversationAction { pin, mute, markRead, markUnread, delete }
+
+/// How long the engine must stay in a state other than settled, without a
+/// break, before the title says so.
+const _statusDelay = Duration(seconds: 1);
+
+final _connectionPhase = syncProjectionProvider.select(
+  (projection) => projection.value?.connectionPhase,
+);
+
+/// The Chats title, which is also where the delivery engine says what it is
+/// doing (ADR-087, moving the line of ADR-060 D11 out of the list).
+///
+/// "Chats" while the session is settled. Once the engine has been in a state
+/// other than settled for [_statusDelay] without a break, the title is that
+/// state instead (connecting, syncing or waiting to reconnect), and it is the
+/// name again the moment the engine settles. An ordinary cycle is over well
+/// within the delay and moves nothing; a stalled engine is still there after
+/// it, and that is the day the title exists for. The delay runs from the moment
+/// the session stops being settled, and a change between two other states does
+/// not restart it. Once the title has left its name, such a change shows at
+/// once.
+///
+/// It reads the live phase and nothing else. How the session was opened
+/// (`offlineFullScope`) does not change when the connection returns, so it
+/// cannot say what the connection is doing.
+class _ChatsTitle extends ConsumerStatefulWidget {
+  const _ChatsTitle({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final strings = AppLocalizations.of(context);
-    final semanticLabel = strings.chatsItemSemantics(
-      item.title,
-      item.preview,
-      item.unreadCount,
-    );
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: () => _showMenu(context),
-        onSecondaryTapUp: (_) => _showMenu(context),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 76),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.x4,
-              vertical: AppSpacing.x2,
-            ),
-            child: Row(
-              children: [
-                if (item.savedMessages)
-                  CircleAvatar(
-                    backgroundColor: context.tokens.colors.accentSoft,
-                    child: const AppIcon(AppIcons.saved),
-                  )
-                else
-                  ContactAvatar(
-                    username: item.title,
-                    semanticLabel: item.title,
-                  ),
-                const SizedBox(width: AppSpacing.x3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.tokens.typography.body.copyWith(
-                                fontWeight: item.unreadCount > 0
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            MaterialLocalizations.of(context).formatTimeOfDay(
-                              TimeOfDay.fromDateTime(item.timestamp),
-                            ),
-                            style: context.tokens.typography.label.copyWith(
-                              color: context.tokens.colors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.x1),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.preview.isEmpty
-                                  ? strings.chatsNoMessagesPreview
-                                  : item.preview,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.tokens.typography.compact.copyWith(
-                                color: context.tokens.colors.textMuted,
-                              ),
-                            ),
-                          ),
-                          if (item.muted)
-                            AppIcon(
-                              AppIcons.muted,
-                              color: context.tokens.colors.textMuted,
-                              size: 16,
-                            ),
-                          if (item.pinned)
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(
-                                start: AppSpacing.x1,
-                              ),
-                              child: AppIcon(
-                                AppIcons.pin,
-                                color: context.tokens.colors.textMuted,
-                                size: 16,
-                              ),
-                            ),
-                          if (item.unreadCount > 0)
-                            Container(
-                              margin: const EdgeInsetsDirectional.only(
-                                start: AppSpacing.x2,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 24,
-                                minHeight: 24,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.x1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: context.tokens.colors.accent,
-                                borderRadius: AppRadii.pill,
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${item.unreadCount}',
-                                style: context.tokens.typography.label.copyWith(
-                                  color: context.tokens.colors.canvas,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+  ConsumerState<_ChatsTitle> createState() => _ChatsTitleState();
+}
+
+class _ChatsTitleState extends ConsumerState<_ChatsTitle> {
+  late final ProviderSubscription<SyncConnectionPhase?> _phase;
+  Timer? _clock;
+  ChatDeliveryIndicator _state = ChatDeliveryIndicator.settled;
+  bool _showsStatus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _follow(ref.read(_connectionPhase));
+    // Not a watch in `build`: Riverpod pauses a watch while a conversation
+    // covers this page, and the delay would then run from the moment the page
+    // is uncovered rather than from the moment the engine stopped settling.
+    _phase = ref.listenManual(
+      _connectionPhase,
+      (_, phase) => setState(() => _follow(phase)),
     );
   }
 
-  Future<void> _showMenu(BuildContext context) async {
-    final strings = AppLocalizations.of(context);
-    await showAppSheet<void>(
-      context: context,
-      semanticLabel: strings.chatsConversationActionsLabel,
-      child: Column(
+  @override
+  void dispose() {
+    _phase.close();
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  void _follow(SyncConnectionPhase? phase) {
+    _state = _deliveryIndicator(phase);
+    if (_state == ChatDeliveryIndicator.settled) {
+      _clock?.cancel();
+      _clock = null;
+      _showsStatus = false;
+    } else if (!_showsStatus) {
+      _clock ??= Timer(_statusDelay, () {
+        _clock = null;
+        setState(() => _showsStatus = true);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _showsStatus ? _state : ChatDeliveryIndicator.settled;
+    final text = Text(
+      _statusText(state, AppLocalizations.of(context)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    if (state == ChatDeliveryIndicator.settled) return text;
+    // Only the status is a live region, so a screen reader announces each
+    // change of it once. The name is not one: it would be announced again each
+    // time the engine settled.
+    return Semantics(
+      liveRegion: true,
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ChatMenuRow(
-            label: item.pinned
-                ? strings.chatUnpinAction
-                : strings.chatPinAction,
-            icon: AppIcons.pin,
-            onTap: () {
-              popAppModal(context);
-              onAction(_ConversationAction.pin);
-            },
-          ),
-          ChatMenuRow(
-            label: item.muted
-                ? strings.chatsUnmuteAction
-                : strings.chatsMuteAction,
-            icon: AppIcons.muted,
-            onTap: () {
-              popAppModal(context);
-              onAction(_ConversationAction.mute);
-            },
-          ),
-          if (!item.savedMessages)
-            ChatMenuRow(
-              label: item.unreadCount > 0
-                  ? strings.chatsMarkReadAction
-                  : strings.chatsMarkUnreadAction,
-              icon: AppIcons.delivered,
-              onTap: () {
-                popAppModal(context);
-                onAction(
-                  item.unreadCount > 0
-                      ? _ConversationAction.markRead
-                      : _ConversationAction.markUnread,
-                );
-              },
-            ),
-          ChatMenuRow(
-            label: strings.chatsDeleteAction,
-            icon: AppIcons.delete,
-            danger: true,
-            onTap: () {
-              popAppModal(context);
-              onAction(_ConversationAction.delete);
-            },
-          ),
+          if (state != ChatDeliveryIndicator.waiting) ...[
+            const _StatusGlyph(),
+            const SizedBox(width: AppSpacing.x2),
+          ],
+          Flexible(child: text),
         ],
       ),
     );
   }
 }
 
-enum _ConversationAction { pin, mute, markRead, markUnread, delete }
+/// What stands before "Connecting…" and "Syncing…": a small spinner, or its
+/// still image when animations are off.
+class _StatusGlyph extends StatelessWidget {
+  const _StatusGlyph();
 
-class _InlineNotice extends StatelessWidget {
-  const _InlineNotice({required this.label, required this.kind, super.key});
-
-  final String label;
-  final AppStatusKind kind;
+  static const _size = 16.0;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(AppSpacing.x2),
-    child: AppStatusBadge(kind: kind, label: label),
-  );
+  Widget build(BuildContext context) {
+    final color = context.tokens.colors.accent;
+    return ExcludeSemantics(
+      child: MediaQuery.disableAnimationsOf(context)
+          ? AppIcon(AppIcons.connecting, color: color, size: _size)
+          : SizedBox.square(
+              dimension: _size,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            ),
+    );
+  }
 }
 
 /// Reduces the engine's connection phase to the four states a screen may show.
@@ -655,18 +444,15 @@ ChatDeliveryIndicator _deliveryIndicator(SyncConnectionPhase? phase) =>
       SyncConnectionPhase.originRejected => ChatDeliveryIndicator.waiting,
     };
 
-/// The line for a delivery state, or nothing at all when there is nothing to
-/// say.
+/// The words the title shows for a delivery state.
 ///
-/// A settled session renders no notice. An indicator that is always on screen
-/// is one nobody reads, and this one exists precisely to be noticed on the day
-/// it stops changing.
-String? _deliveryNotice(
-  ChatDeliveryIndicator indicator,
-  AppLocalizations strings,
-) => switch (indicator) {
-  ChatDeliveryIndicator.settled => null,
-  ChatDeliveryIndicator.connecting => strings.chatsDeliveryConnectingNotice,
-  ChatDeliveryIndicator.syncing => strings.chatsDeliverySyncingNotice,
-  ChatDeliveryIndicator.waiting => strings.chatsDeliveryWaitingNotice,
-};
+/// A settled session says nothing about the engine: the title is its own name.
+/// An indicator that is always on screen is one nobody reads, and this one
+/// exists precisely to be noticed on the day it stops changing.
+String _statusText(ChatDeliveryIndicator state, AppLocalizations strings) =>
+    switch (state) {
+      ChatDeliveryIndicator.settled => strings.chatsTitle,
+      ChatDeliveryIndicator.connecting => strings.chatsDeliveryConnectingNotice,
+      ChatDeliveryIndicator.syncing => strings.chatsDeliverySyncingNotice,
+      ChatDeliveryIndicator.waiting => strings.chatsDeliveryWaitingNotice,
+    };

@@ -162,12 +162,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get composeVoiceRoom => 'Create a voice room';
 
   @override
-  String get connectingStatus => 'Connecting…';
-
-  @override
-  String get offlineStatus => 'No connection to server';
-
-  @override
   String returnToVoiceRoom(String roomName) {
     return 'Return to voice room: $roomName';
   }
@@ -657,9 +651,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatsSearchAction => 'Search chats';
 
   @override
-  String get chatsSearchHint => 'Search names and the latest message';
-
-  @override
   String get chatsClearSearchAction => 'Clear search';
 
   @override
@@ -690,8 +681,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'This searches only the messages stored on this phone. The server never sees them, or what you search for.';
 
   @override
-  String get chatsListSearchScopeNotice =>
-      'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.';
+  String get chatsSearchFieldLabel => 'Search chats and contacts';
+
+  @override
+  String get chatsSearchFieldHint =>
+      'Search names, usernames and latest messages';
+
+  @override
+  String get chatsSearchScopeNotice =>
+      'This searches chat names, the latest message of each chat, and your contacts\' names and usernames. To search older messages, open a conversation and search inside it. Your search stays on this phone.';
+
+  @override
+  String get chatsSearchChatsHeader => 'Chats';
+
+  @override
+  String get chatsSearchContactsHeader => 'Contacts';
 
   @override
   String get chatsDeliveryConnectingNotice => 'Connecting…';
@@ -701,10 +705,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatsDeliveryWaitingNotice => 'Waiting to reconnect…';
-
-  @override
-  String get chatsOfflineCachedNotice =>
-      'Offline — showing cached conversations. New messages will queue locally.';
 
   @override
   String get chatsNoMessagesPreview => 'No messages yet';

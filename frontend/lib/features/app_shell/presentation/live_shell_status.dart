@@ -46,7 +46,6 @@ class LiveShellStatus extends StatelessWidget {
             ref.watch(voiceAvailabilityProvider);
         return builder(
           AppShellStatus(
-            connection: base.connection,
             activeVoiceRoomId: roomId ?? base.activeVoiceRoomId,
             activeVoiceRoomName: roomId == null
                 ? base.activeVoiceRoomName

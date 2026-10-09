@@ -292,25 +292,20 @@ void main() {
   }
 
   for (final size in const [Size(360, 800), Size(1440, 900)]) {
-    testWidgets('the environment banner and the connection strip reach a '
-        'service at ${size.width.round()} wide', (tester) async {
+    testWidgets('the environment banner reaches a service at '
+        '${size.width.round()} wide', (tester) async {
       final semantics = tester.ensureSemantics();
       await _pumpApp(
         tester,
         size: size,
         environment: AppEnvironment.development,
-        status: const AppShellStatus(connection: AppConnectionState.offline),
       );
 
-      // Both sit above the tab root's navigator, whose route barrier hides
+      // It sits above the tab root's navigator, whose route barrier hides
       // from a service whatever was painted before it, up to the nearest
       // semantics container.
       expect(
         find.semantics.byLabel('Development configuration'),
-        findsOneWidget,
-      );
-      expect(
-        find.semantics.byLabel(RegExp('^No connection to server')),
         findsOneWidget,
       );
       semantics.dispose();
@@ -322,15 +317,11 @@ void main() {
     (Size(800, 900), 'shell-medium'),
     (Size(1440, 900), 'shell-wide'),
   ]) {
-    testWidgets('the destinations, compose and the connection strip say their '
-        'text once, and the destinations keep their actions and state, at '
+    testWidgets('the destinations and compose say their text once, and the '
+        'destinations keep their actions and state, at '
         '${size.width.round()} wide', (tester) async {
       final semantics = tester.ensureSemantics();
-      await _pumpApp(
-        tester,
-        size: size,
-        status: const AppShellStatus(connection: AppConnectionState.offline),
-      );
+      await _pumpApp(tester, size: size);
       expect(find.byKey(ValueKey(shell)), findsOneWidget);
 
       // Each of these wraps a `Text` of its label in a `Semantics` with the
@@ -362,12 +353,6 @@ void main() {
           isButton: true,
           hasTapAction: true,
         ),
-      );
-      final strip = find.semantics.byLabel(RegExp('^No connection to server'));
-      expect(strip, findsOneWidget);
-      expect(
-        strip.evaluate().single,
-        isSemantics(label: 'No connection to server', isLiveRegion: true),
       );
       // The wide rail's title is a brand mark, as decorative as the medium
       // rail's icon, and no longer joins the shell's keyboard hint.

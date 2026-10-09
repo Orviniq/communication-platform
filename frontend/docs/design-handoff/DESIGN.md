@@ -21,7 +21,7 @@ implementation is Flutter widgets built on app-owned wrappers over the `forui` p
 redesign. It owns, on every screen:
 
 - the three-destination navigation — Chats, Voice Rooms, Settings
-- the environment banner and the connection status strip (top of content)
+- the environment banner (top of content)
 - the compose affordance (FAB on narrow, list-header "+" on wide)
 - the persistent active-voice-room banner
 

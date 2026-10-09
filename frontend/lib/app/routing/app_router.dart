@@ -27,6 +27,7 @@ import 'package:communication_platform/features/groups/presentation/edit_group_p
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_info_page.dart';
 import 'package:communication_platform/features/messaging/presentation/chats_list_page.dart';
+import 'package:communication_platform/features/messaging/presentation/chats_search_page.dart';
 import 'package:communication_platform/features/messaging/presentation/direct_chat_page.dart';
 import 'package:communication_platform/features/settings/presentation/about_page.dart';
 import 'package:communication_platform/features/settings/presentation/appearance_page.dart';
@@ -109,9 +110,7 @@ GoRouter createAppRouter({
                   case BootstrapDestination.login:
                     context.go('/login', extra: navigation);
                   case BootstrapDestination.application:
-                    context.go(
-                      navigation.offline ? '/chats?offline=true' : '/chats',
-                    );
+                    context.go('/chats');
                 }
               },
             ),
@@ -237,22 +236,16 @@ GoRouter createAppRouter({
         ),
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          final bootstrapOffline =
-              state.uri.queryParameters['offline'] == 'true';
-          return LiveShellStatus(
-            base: bootstrapOffline
-                ? status.copyWith(connection: AppConnectionState.offline)
-                : status,
+        builder: (context, state, navigationShell) => LiveShellStatus(
+          base: status,
+          location: state.uri.path,
+          builder: (status) => AppShell(
+            environment: environment,
+            navigationShell: navigationShell,
             location: state.uri.path,
-            builder: (status) => AppShell(
-              environment: environment,
-              navigationShell: navigationShell,
-              location: state.uri.path,
-              status: status,
-            ),
-          );
-        },
+            status: status,
+          ),
+        ),
         // A branch shows its tab root in the shell, and nothing else: every
         // route below a tab root names the root navigator, so it covers the
         // shell, the navigation bar and the rail. Nested routes name it too.
@@ -272,6 +265,12 @@ GoRouter createAppRouter({
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
                         fullScreen(context, state, const ContactsNewPage()),
+                  ),
+                  GoRoute(
+                    path: 'search',
+                    parentNavigatorKey: rootNavigatorKey,
+                    pageBuilder: (context, state) =>
+                        fullScreen(context, state, const ChatsSearchPage()),
                   ),
                   GoRoute(
                     path: 'conversation/:conversationId',

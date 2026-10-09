@@ -162,12 +162,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get composeVoiceRoom => 'ساخت اتاق صوتی';
 
   @override
-  String get connectingStatus => 'در حال اتصال…';
-
-  @override
-  String get offlineStatus => 'ارتباط با سرور برقرار نیست';
-
-  @override
   String returnToVoiceRoom(String roomName) {
     return 'بازگشت به اتاق صوتی: $roomName';
   }
@@ -654,9 +648,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatsSearchAction => 'جست‌وجوی گفت‌وگوها';
 
   @override
-  String get chatsSearchHint => 'جست‌وجو در نام‌ها و آخرین پیام';
-
-  @override
   String get chatsClearSearchAction => 'پاک کردن جست‌وجو';
 
   @override
@@ -686,8 +677,21 @@ class AppLocalizationsFa extends AppLocalizations {
       'فقط پیام‌های ذخیره‌شده روی همین گوشی جست‌وجو می‌شوند. سرور نه آن‌ها را می‌بیند و نه آنچه را جست‌وجو می‌کنید.';
 
   @override
-  String get chatsListSearchScopeNotice =>
-      'این فهرست فقط نام‌ها و آخرین پیام را می‌گردد. برای جست‌وجو در تاریخچهٔ یک گفت‌وگو، آن را باز کنید و داخل آن جست‌وجو کنید.';
+  String get chatsSearchFieldLabel => 'جست‌وجوی گفت‌وگوها و مخاطبان';
+
+  @override
+  String get chatsSearchFieldHint =>
+      'جست‌وجو در نام‌ها، نام‌های کاربری و آخرین پیام‌ها';
+
+  @override
+  String get chatsSearchScopeNotice =>
+      'نام گفت‌وگوها، آخرین پیام هر گفت‌وگو و نام و نام کاربری مخاطبانتان جست‌وجو می‌شود. برای جست‌وجو در پیام‌های قدیمی‌تر، گفت‌وگو را باز کنید و داخل آن جست‌وجو کنید. جست‌وجوی شما روی همین گوشی می‌ماند.';
+
+  @override
+  String get chatsSearchChatsHeader => 'گفت‌وگوها';
+
+  @override
+  String get chatsSearchContactsHeader => 'مخاطبان';
 
   @override
   String get chatsDeliveryConnectingNotice => 'در حال اتصال…';
@@ -697,10 +701,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatsDeliveryWaitingNotice => 'در انتظار اتصال دوباره…';
-
-  @override
-  String get chatsOfflineCachedNotice =>
-      'آفلاین — گفت‌وگوهای ذخیره‌شده نمایش داده می‌شوند. پیام‌های جدید در صف محلی می‌مانند.';
 
   @override
   String get chatsNoMessagesPreview => 'هنوز پیامی نیست';
