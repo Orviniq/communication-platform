@@ -410,10 +410,14 @@ class _ProjectedConversationPageState
     }
     if (intent case OpenAttachmentIntent(:final attachment)) {
       if (context.mounted) {
-        await showModalBottomSheet<void>(
+        await showAppSheet<void>(
           context: context,
-          showDragHandle: true,
-          builder: (_) => AttachmentSheet(descriptor: attachment),
+          // The sheet's own title: the file's name, or "Attach" when the
+          // composer opened it with nothing to open.
+          semanticLabel:
+              attachment?.displayName ??
+              AppLocalizations.of(context).chatAttachAction,
+          child: AttachmentSheet(descriptor: attachment),
         );
       }
       return;

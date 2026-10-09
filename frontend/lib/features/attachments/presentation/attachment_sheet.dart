@@ -25,71 +25,67 @@ final class AttachmentSheet extends StatelessWidget {
     final strings = AppLocalizations.of(context);
     final colors = context.tokens.colors;
     final composing = descriptor == null;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.x3),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              composing ? strings.chatAttachAction : descriptor!.displayName,
-              style: context.tokens.typography.title,
-            ),
-            const SizedBox(height: AppSpacing.x1),
-            Text(
-              switch ((composing, _pickerAvailable)) {
-                (true, true) => strings.attachmentChoosePrompt,
-                (true, false) => strings.attachmentsNotBuiltNotice,
-                (false, _) => strings.attachmentDetails(
-                  descriptor!.mimeType,
-                  descriptor!.plaintextSize,
-                ),
-              },
-              style: context.tokens.typography.compact.copyWith(
-                color: colors.textMuted,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.x2),
-            if (composing && !_pickerAvailable)
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: AppStatusBadge(
-                  kind: AppStatusKind.warning,
-                  label: SurfaceMaturity.notBuilt.label(strings),
-                ),
-              )
-            else if (composing) ...[
-              _AttachmentChoice(
-                icon: AppIcons.attach,
-                label: strings.attachmentPhotoOption,
-                onPressed: onCancelled,
-              ),
-              _AttachmentChoice(
-                icon: AppIcons.attach,
-                label: strings.attachmentFileOption,
-                onPressed: onCancelled,
-              ),
-              _AttachmentChoice(
-                icon: AppIcons.attach,
-                label: strings.attachmentCameraOption,
-                onPressed: onCancelled,
-              ),
-            ] else
-              AppButton(
-                label: strings.chatAttachmentsUnavailable,
-                kind: AppButtonKind.outline,
-                onPressed: onCancelled,
-              ),
-            const SizedBox(height: AppSpacing.x1),
-            AppButton(
-              label: strings.chatCancelAction,
-              kind: AppButtonKind.ghost,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
+    // The margin and the system insets are the sheet's (`showAppSheet`).
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          composing ? strings.chatAttachAction : descriptor!.displayName,
+          style: context.tokens.typography.title,
         ),
-      ),
+        const SizedBox(height: AppSpacing.x1),
+        Text(
+          switch ((composing, _pickerAvailable)) {
+            (true, true) => strings.attachmentChoosePrompt,
+            (true, false) => strings.attachmentsNotBuiltNotice,
+            (false, _) => strings.attachmentDetails(
+              descriptor!.mimeType,
+              descriptor!.plaintextSize,
+            ),
+          },
+          style: context.tokens.typography.compact.copyWith(
+            color: colors.textMuted,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.x2),
+        if (composing && !_pickerAvailable)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: AppStatusBadge(
+              kind: AppStatusKind.warning,
+              label: SurfaceMaturity.notBuilt.label(strings),
+            ),
+          )
+        else if (composing) ...[
+          _AttachmentChoice(
+            icon: AppIcons.attach,
+            label: strings.attachmentPhotoOption,
+            onPressed: onCancelled,
+          ),
+          _AttachmentChoice(
+            icon: AppIcons.attach,
+            label: strings.attachmentFileOption,
+            onPressed: onCancelled,
+          ),
+          _AttachmentChoice(
+            icon: AppIcons.attach,
+            label: strings.attachmentCameraOption,
+            onPressed: onCancelled,
+          ),
+        ] else
+          AppButton(
+            label: strings.chatAttachmentsUnavailable,
+            kind: AppButtonKind.outline,
+            onPressed: onCancelled,
+          ),
+        const SizedBox(height: AppSpacing.x1),
+        AppButton(
+          label: strings.chatCancelAction,
+          kind: AppButtonKind.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
     );
   }
 }
