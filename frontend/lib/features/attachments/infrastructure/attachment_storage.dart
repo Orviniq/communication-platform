@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:communication_platform/core/result/failure.dart';
-import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
 import 'package:flutter/services.dart';
@@ -62,37 +60,6 @@ final class PrivateAttachmentStorage implements AttachmentStoragePort {
     return File(
       '${_root.path}/communication_attachment_${prefix}_$_counter.tmp',
     );
-  }
-}
-
-/// Shares only a fully verified file through Android's scoped content URI.
-/// The native side rejects paths outside its private cache directory and
-/// applies a MIME allowlist before granting a one-shot read permission.
-final class AndroidAttachmentSharePort {
-  const AndroidAttachmentSharePort();
-
-  Future<Result<void>> shareVerifiedFile({
-    required File file,
-    required String mimeType,
-  }) async {
-    if (!Platform.isAndroid) {
-      return const Result.failure(
-        UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
-      );
-    }
-    try {
-      await const MethodChannel(
-        'communication_platform/attachments',
-      ).invokeMethod<void>('shareVerifiedFile', <String, Object?>{
-        'path': file.path,
-        'mime': safeMimeType(mimeType),
-      });
-      return const Result<void>.success(null);
-    } on PlatformException {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.policyBlocked),
-      );
-    }
   }
 }
 
