@@ -8,10 +8,9 @@ import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
-import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_list_row.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -35,54 +34,15 @@ class ChatsListPage extends StatefulWidget {
   State<ChatsListPage> createState() => _ChatsListPageState();
 }
 
-class _ChatsListPageState extends State<ChatsListPage> {
+class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
   final TextEditingController _search = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
-  /// The reading of the clock the muted state is decided against.
-  ///
-  /// `DateTime.now()` inside `build` made every conversation's view model
-  /// depend on the frame it happened to be built in, which is not something a
-  /// mapper that has to be idempotent may do. Held here instead, and refreshed
-  /// on a schedule the list can state: exactly when the earliest mute on
-  /// screen expires, and never otherwise.
-  DateTime _mutedAsOf = DateTime.now();
-  DateTime? _scheduledMuteExpiry;
-  Timer? _muteExpiry;
-
   @override
   void dispose() {
-    _muteExpiry?.cancel();
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
-  }
-
-  /// Schedules the one refresh the mute clock owes, and no others.
-  ///
-  /// Idempotent, so calling it from `build` costs a walk of the list and
-  /// nothing else when the answer has not moved. A list with nothing muted
-  /// holds no timer at all.
-  void _trackMuteExpiry(List<ConversationSummary> summaries) {
-    DateTime? earliest;
-    for (final summary in summaries) {
-      final until = summary.mutedUntil;
-      if (until == null || !until.isAfter(_mutedAsOf)) continue;
-      if (earliest == null || until.isBefore(earliest)) earliest = until;
-    }
-    if (earliest == _scheduledMuteExpiry) return;
-    _scheduledMuteExpiry = earliest;
-    _muteExpiry?.cancel();
-    _muteExpiry = null;
-    if (earliest == null) return;
-    final wait = earliest.difference(DateTime.now());
-    _muteExpiry = Timer(wait.isNegative ? Duration.zero : wait, () {
-      if (!mounted) return;
-      setState(() {
-        _mutedAsOf = DateTime.now();
-        _scheduledMuteExpiry = null;
-      });
-    });
   }
 
   @override
@@ -123,7 +83,7 @@ class _ChatsListPageState extends State<ChatsListPage> {
       );
     }
     final summaries = ref.watch(conversationSummariesProvider(currentUserId));
-    _trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
+    trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
     final contacts = ref.watch(contactListProvider(currentUserId));
     // A jammed engine and a slow network used to look identical from here,
     // because nothing in this application read the phase the engine has been
@@ -131,18 +91,14 @@ class _ChatsListPageState extends State<ChatsListPage> {
     final delivery = _deliveryIndicator(
       ref.watch(syncProjectionProvider).value?.connectionPhase,
     );
-    final names = {
-      for (final contact in contacts.value ?? const <ContactProjection>[])
-        contact.userId: contact.presentationName,
-    };
     final strings = AppLocalizations.of(context);
     final model = summaries.when(
       data: (items) => ChatListViewModel(
-        items: ChatViewModelMapper.summaries(
+        items: chatListItems(
           items,
-          now: _mutedAsOf,
-          savedMessagesTitle: strings.savedMessagesTitle,
-          peerTitle: (id) => names[id] ?? chatShortIdentity(id),
+          contacts: contacts.value ?? const <ContactProjection>[],
+          now: mutedAsOf,
+          strings: strings,
         ),
         loading: false,
         offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
@@ -328,10 +284,14 @@ class _ChatsListPageState extends State<ChatsListPage> {
             );
           }
           final item = items[index];
-          return _ConversationRow(
+          return ChatListRow(
             item: item,
             onTap: () => _open(item),
-            onAction: (action) => _handleConversationAction(item, action, ref),
+            onMenu: () => _showConversationMenu(
+              context,
+              item,
+              (action) => _handleConversationAction(item, action, ref),
+            ),
           );
         },
       ),
@@ -347,17 +307,11 @@ class _ChatsListPageState extends State<ChatsListPage> {
     // Saved Messages and groups are routes outside the Chats branch. A `go` to
     // one replaced the whole stack, so back left the application; a push
     // keeps the list below, and back returns to it at the same place.
-    if (item.savedMessages) {
-      unawaited(
-        context.push('/saved-messages?conversationId=${item.conversationId}'),
-      );
-    } else if (item.group) {
-      unawaited(context.push('/groups/${item.conversationId}'));
+    final location = chatListItemLocation(item);
+    if (item.savedMessages || item.group) {
+      unawaited(context.push(location));
     } else {
-      context.go(
-        '/chats/conversation/${item.conversationId}'
-        '?peer=${item.peerUserId ?? ''}',
-      );
+      context.go(location);
     }
   }
 
@@ -418,207 +372,65 @@ class _ChatsListPageState extends State<ChatsListPage> {
   }
 }
 
-class _ConversationRow extends StatelessWidget {
-  const _ConversationRow({
-    required this.item,
-    required this.onTap,
-    required this.onAction,
-  });
-
-  final ChatListItemViewModel item;
-  final VoidCallback onTap;
-  final ValueChanged<_ConversationAction> onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppLocalizations.of(context);
-    final semanticLabel = strings.chatsItemSemantics(
-      item.title,
-      item.preview,
-      item.unreadCount,
-    );
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: () => _showMenu(context),
-        onSecondaryTapUp: (_) => _showMenu(context),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 76),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.x4,
-              vertical: AppSpacing.x2,
-            ),
-            child: Row(
-              children: [
-                if (item.savedMessages)
-                  CircleAvatar(
-                    backgroundColor: context.tokens.colors.accentSoft,
-                    child: const AppIcon(AppIcons.saved),
-                  )
-                else
-                  ContactAvatar(
-                    username: item.title,
-                    semanticLabel: item.title,
-                  ),
-                const SizedBox(width: AppSpacing.x3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.tokens.typography.body.copyWith(
-                                fontWeight: item.unreadCount > 0
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            MaterialLocalizations.of(context).formatTimeOfDay(
-                              TimeOfDay.fromDateTime(item.timestamp),
-                            ),
-                            style: context.tokens.typography.label.copyWith(
-                              color: context.tokens.colors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.x1),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.preview.isEmpty
-                                  ? strings.chatsNoMessagesPreview
-                                  : item.preview,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.tokens.typography.compact.copyWith(
-                                color: context.tokens.colors.textMuted,
-                              ),
-                            ),
-                          ),
-                          if (item.muted)
-                            AppIcon(
-                              AppIcons.muted,
-                              color: context.tokens.colors.textMuted,
-                              size: 16,
-                            ),
-                          if (item.pinned)
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(
-                                start: AppSpacing.x1,
-                              ),
-                              child: AppIcon(
-                                AppIcons.pin,
-                                color: context.tokens.colors.textMuted,
-                                size: 16,
-                              ),
-                            ),
-                          if (item.unreadCount > 0)
-                            Container(
-                              margin: const EdgeInsetsDirectional.only(
-                                start: AppSpacing.x2,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 24,
-                                minHeight: 24,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.x1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: context.tokens.colors.accent,
-                                borderRadius: AppRadii.pill,
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${item.unreadCount}',
-                                style: context.tokens.typography.label.copyWith(
-                                  color: context.tokens.colors.canvas,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+/// The Chats list's menu for one conversation: pin, mute, read state and
+/// delete.
+Future<void> _showConversationMenu(
+  BuildContext context,
+  ChatListItemViewModel item,
+  ValueChanged<_ConversationAction> onAction,
+) async {
+  final strings = AppLocalizations.of(context);
+  await showAppSheet<void>(
+    context: context,
+    semanticLabel: strings.chatsConversationActionsLabel,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ChatMenuRow(
+          label: item.pinned ? strings.chatUnpinAction : strings.chatPinAction,
+          icon: AppIcons.pin,
+          onTap: () {
+            popAppModal(context);
+            onAction(_ConversationAction.pin);
+          },
         ),
-      ),
-    );
-  }
-
-  Future<void> _showMenu(BuildContext context) async {
-    final strings = AppLocalizations.of(context);
-    await showAppSheet<void>(
-      context: context,
-      semanticLabel: strings.chatsConversationActionsLabel,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+        ChatMenuRow(
+          label: item.muted
+              ? strings.chatsUnmuteAction
+              : strings.chatsMuteAction,
+          icon: AppIcons.muted,
+          onTap: () {
+            popAppModal(context);
+            onAction(_ConversationAction.mute);
+          },
+        ),
+        if (!item.savedMessages)
           ChatMenuRow(
-            label: item.pinned
-                ? strings.chatUnpinAction
-                : strings.chatPinAction,
-            icon: AppIcons.pin,
+            label: item.unreadCount > 0
+                ? strings.chatsMarkReadAction
+                : strings.chatsMarkUnreadAction,
+            icon: AppIcons.delivered,
             onTap: () {
               popAppModal(context);
-              onAction(_ConversationAction.pin);
+              onAction(
+                item.unreadCount > 0
+                    ? _ConversationAction.markRead
+                    : _ConversationAction.markUnread,
+              );
             },
           ),
-          ChatMenuRow(
-            label: item.muted
-                ? strings.chatsUnmuteAction
-                : strings.chatsMuteAction,
-            icon: AppIcons.muted,
-            onTap: () {
-              popAppModal(context);
-              onAction(_ConversationAction.mute);
-            },
-          ),
-          if (!item.savedMessages)
-            ChatMenuRow(
-              label: item.unreadCount > 0
-                  ? strings.chatsMarkReadAction
-                  : strings.chatsMarkUnreadAction,
-              icon: AppIcons.delivered,
-              onTap: () {
-                popAppModal(context);
-                onAction(
-                  item.unreadCount > 0
-                      ? _ConversationAction.markRead
-                      : _ConversationAction.markUnread,
-                );
-              },
-            ),
-          ChatMenuRow(
-            label: strings.chatsDeleteAction,
-            icon: AppIcons.delete,
-            danger: true,
-            onTap: () {
-              popAppModal(context);
-              onAction(_ConversationAction.delete);
-            },
-          ),
-        ],
-      ),
-    );
-  }
+        ChatMenuRow(
+          label: strings.chatsDeleteAction,
+          icon: AppIcons.delete,
+          danger: true,
+          onTap: () {
+            popAppModal(context);
+            onAction(_ConversationAction.delete);
+          },
+        ),
+      ],
+    ),
+  );
 }
 
 enum _ConversationAction { pin, mute, markRead, markUnread, delete }
