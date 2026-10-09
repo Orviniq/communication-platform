@@ -290,17 +290,78 @@ becomes a second labelled button under the first.
   opens `/voice-rooms/<roomId>/call`. Three mutations were each run once and each fails all three
   tests: no `onTap` on the node (`missing actions: [tap]`), an `onTap` that opens the room's page
   instead of its call, and no `excludeSemantics` (a second node for the control under the first).
-- **Found on the way, and not changed: the rail is not in the semantics tree at medium and wide
-  width.** A probe at 800 and 1440 wide, with a call running, found no node for the rail: not the
-  banner and not the three destinations. The tab root's `Navigator` puts a `ModalBarrier`, which
-  is a `BlockSemantics`, in its `Overlay`, and the rail is painted before it in the same `Row`;
-  with no semantics boundary between the two, the barrier drops the rail's nodes (Flutter 3.44.7,
-  `SemanticsConfiguration.isBlockingSemanticsOfPreviouslyPaintedNodes`). `Semantics(container:
-  true)` around the page area in `_TwoPaneShell` brought the destinations and the banner back,
-  the banner with its tap action. It was not kept, because it regroups every page for a screen
-  reader and wants a decision and tests of its own. `_TwoPaneShell` is as phase 8 found it. So the
-  tap action reaches a service on the narrow tab roots and on every full-screen page at any
-  width, and not yet on the rail.
+- **Found on the way: the rail was not in the semantics tree at medium and wide width.** A probe
+  at 800 and 1440 wide, with a call running, found no node for the rail: not the banner and not
+  the three destinations. The tab root's `Navigator` puts a `ModalBarrier`, which is a
+  `BlockSemantics`, in its `Overlay`, and the rail is painted before it in the same `Row`; with no
+  semantics boundary between the two, the barrier drops the rail's nodes (Flutter 3.44.7,
+  `SemanticsConfiguration.isBlockingSemanticsOfPreviouslyPaintedNodes`). Fixed the same day, in
+  the next note, so the tap action now reaches a service on every tab root and every full-screen
+  page at any width.
+
+### Done 2026-10-09 — the tab roots' navigators sit in a semantics container of their own
+
+`_AppShellState.build` wraps the tab roots' navigators, `StatefulNavigationShell` with the focus
+scope around it, in `Semantics(container: true)` at every width. A route's barrier now hides
+only what its own navigator painted before it, and what the shell paints beside and above the
+navigators is back in the semantics tree:
+
+- **The rail**, at medium and wide width: the three destinations, the compose button, and the
+  call banner with its tap action. In traversal order the rail comes first, the banner at its top,
+  and then the page, in English and in Persian, where the rail stands on the right.
+- **The environment banner and the connection strip**, at every width, narrow included, which
+  the earlier note did not find. Both are painted in the column above the navigators, before the
+  barrier, so a development build's "Development configuration" and the strip's "No connection to
+  server" had no node, and their live regions nothing to announce.
+
+**What else it changes.** A probe dumped the semantics tree at 360, 800 and 1440 wide with a call
+running, at 800 in Persian, in a development build and offline. Before and after, with the node
+numbers set aside, the trees differ only by the nodes above, by the rail's title (below), and by
+one node around the navigators with no label, flag or action, of the kind the tree already holds
+around each route.
+The page was grouped already, under its route's `scopesRoute` node, so nothing inside a page
+moves, and at narrow width the page, the compose button, the banner and the navigation bar keep
+their order. A semantics container takes no part in focus: the shell's `FocusTraversalGroup`, the
+destinations' focus scopes and Alt+1–3 are as they were. The shell's own `Semantics(container:
+true, label: keyboardNavigationHint)` still holds every node; at wide width the rail's title,
+"Communication Platform", is text with no node of its own and now joins that node's label. The
+shell goldens compare pixels, which a `Semantics` widget does not paint, and pass unchanged.
+
+**Rejected:**
+
+- *A container around the page area in `_TwoPaneShell` only*, the experiment of the earlier note.
+  Its tree at 800 and 1440 wide is this one's, but the environment banner and the connection
+  strip are inside it, above the navigator, and stay hidden at every width.
+- *A container around the rail.* The barrier drops every node painted before it, a container's
+  too (`_RenderObjectSemantics._getNonBlockedChildren`); only a container around the barrier
+  stops it.
+- *Painting the rail after the page*, with the `Row`'s children reversed or in a `Stack`. It holds
+  only while nothing else is painted before the navigators, which the environment banner and the
+  strip already are, and it ties the semantics tree to a paint order nothing else depends on.
+- *A tab root route whose barrier blocks nothing.* Inside a navigator the barrier is right: it
+  hides a route that another covers. Turning it off means replacing go_router's page for each
+  branch root.
+
+**The rule.** Whatever the shell paints beside or above a navigator relies on this container. A
+pane with a navigator of its own, such as the post-v1 two panes of `ui-specification.md` §0.1,
+needs one too.
+
+- **Tests.** `full_screen_pages_test.dart`, on the real router with the call started through its
+  mirror, on the Chats tab root at 800 and 1440 wide: each destination and the rail's compose
+  button is a button with a tap action; the banner matches `isSemantics(label: ..., isButton:
+  true, hasTapAction: true)`, one node announces it, and performing its semantics tap opens
+  `/voice-rooms/<roomId>/call`. `app_shell_test.dart`: the shell's banner test runs at 360, 800
+  and 1440 wide, and the environment banner and the connection strip each have a node at 360 and
+  1440 wide. Without the container the six new or widened tests fail, and the banner test at 360
+  still passes; with a container around `_TwoPaneShell`'s page area instead, the four rail tests
+  pass and the two banner-and-strip tests fail.
+- **Found on the way, and not changed.** The destinations, the wide rail's compose button and the
+  connection strip say their text twice: each has a `Semantics` label and a `Text` that both reach
+  its node, so "Chats" reads "Chats Chats", in the navigation bar too. The rail's title joins the
+  keyboard hint, as above.
+- **No ADR of its own.** It restores what the accessibility gates of `responsive-ui.md` already
+  require and decides where one widget goes. Changes no route, layout, table, wire format,
+  protocol, dependency or backend file.
 
 ## ADR-085 in full — a session token is renewed from half its life, not in its last minutes (2026-10-07)
 
