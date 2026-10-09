@@ -109,6 +109,9 @@ final class _AttachmentChoice extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: label,
+    // The tile's own tap action goes with `excludeSemantics`, so the node
+    // carries it.
+    onTap: onPressed,
     excludeSemantics: true,
     child: ListTile(
       leading: AppIcon(icon, decorative: true),

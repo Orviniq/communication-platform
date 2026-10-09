@@ -645,6 +645,144 @@ void main() {
       expect(find.text('half a thought'), findsOneWidget);
       expect(log, ['microphone', 'start', 'join']);
     });
+
+    // By a node's action, as a service that does not touch the screen does it
+    // (Switch Access, Voice Access), not by a tap at its centre.
+    testWidgets('Mute, Invite and Leave offer a tap action, and performing it '
+        'does what a touch does', (tester) async {
+      final semantics = tester.ensureSemantics();
+      call.peers = [_sara];
+      final controller = controllerWith();
+      await pumpCall(tester, controller);
+      await tapVisible(tester, key('voice-call-join'));
+
+      expect(
+        tester.getSemantics(key('voice-call-mute')),
+        isSemantics(
+          label: 'Mute',
+          value: 'Your microphone is on',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+      expect(
+        tester.getSemantics(key('voice-call-invite')),
+        isSemantics(label: 'Invite', isButton: true, hasTapAction: true),
+      );
+      expect(
+        tester.getSemantics(key('voice-call-leave')),
+        isSemantics(label: 'Leave', isButton: true, hasTapAction: true),
+      );
+      // One node announces each control, and none the control under it.
+      for (final label in ['Mute', 'Invite', 'Leave']) {
+        expect(find.semantics.byLabel(label), findsOneWidget, reason: label);
+      }
+
+      tester.semantics.tap(find.semantics.byLabel('Mute'));
+      await tester.pumpAndSettle();
+      expect(log.last, 'mute true');
+      expect(
+        tester.getSemantics(key('voice-call-mute')),
+        isSemantics(
+          label: 'Unmute',
+          value: 'You are muted',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+
+      tester.semantics.tap(find.semantics.byLabel('Invite'));
+      await tester.pumpAndSettle();
+      expect(key('route-invite'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+      expect(key('voice-call-screen'), findsOneWidget);
+
+      log.clear();
+      tester.semantics.tap(find.semantics.byLabel('Leave'));
+      await tester.pumpAndSettle();
+      expect(log, ['leave', 'stop']);
+      expect(key('route-info'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('Mute, while the call connects, is a disabled button with no '
+        'tap action', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final controller = controllerWith();
+      await pumpCall(tester, controller);
+      // The connecting panel's progress bar never settles, so the call is
+      // moved there after the page has settled, and pumped by hand.
+      call.emit(
+        VoiceCallState(phase: VoiceCallPhase.announcing, roomId: voiceRoomId),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(key('voice-call-connecting'), findsOneWidget);
+
+      expect(
+        tester.getSemantics(key('voice-call-mute')),
+        isSemantics(
+          label: 'Mute',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          hasTapAction: false,
+        ),
+      );
+      // Leave and Invite stay available while it connects.
+      expect(
+        tester.getSemantics(key('voice-call-leave')),
+        isSemantics(label: 'Leave', isButton: true, hasTapAction: true),
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('the People and Room chat tabs offer a tap action, and '
+        'performing it switches the pane', (tester) async {
+      final semantics = tester.ensureSemantics();
+      call.peers = [_sara];
+      final controller = controllerWith();
+      await pumpCall(tester, controller);
+      await tapVisible(tester, key('voice-call-join'));
+
+      expect(key('voice-room-text-field'), findsNothing);
+      expect(
+        tester.getSemantics(key('voice-call-tab-people')),
+        isSemantics(
+          label: 'People',
+          isButton: true,
+          isSelected: true,
+          hasTapAction: true,
+        ),
+      );
+      expect(
+        tester.getSemantics(key('voice-call-tab-chat')),
+        isSemantics(
+          label: 'Room chat',
+          isButton: true,
+          isSelected: false,
+          hasTapAction: true,
+        ),
+      );
+      // One node announces each tab, and none the control under it.
+      for (final label in ['People', 'Room chat']) {
+        expect(find.semantics.byLabel(label), findsOneWidget, reason: label);
+      }
+
+      tester.semantics.tap(find.semantics.byLabel('Room chat'));
+      await tester.pumpAndSettle();
+      expect(key('voice-room-text-field'), findsOneWidget);
+      expect(
+        tester.getSemantics(key('voice-call-tab-chat')),
+        isSemantics(label: 'Room chat', isSelected: true, hasTapAction: true),
+      );
+
+      tester.semantics.tap(find.semantics.byLabel('People'));
+      await tester.pumpAndSettle();
+      expect(key('voice-room-text-field'), findsNothing);
+      semantics.dispose();
+    });
   });
 
   testWidgets('from start-up to a call, nothing asks for the microphone until '

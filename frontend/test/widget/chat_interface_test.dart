@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show SemanticsAction;
 
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_emoji_picker.dart';
@@ -252,6 +253,77 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('the selector offers each reaction a tap action, and performing '
+      'it sets or takes off the reaction', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: intents.add),
+    );
+    intents.clear();
+
+    // message-5 carries this user's own thumbs up in the default fixture.
+    await _openMessageSurface(tester, find.text('message-5'));
+    const remove = 'Remove your 👍 reaction';
+    const fire = 'React with 🔥';
+    expect(
+      tester.getSemantics(find.bySemanticsLabel(remove)),
+      isSemantics(
+        label: remove,
+        isButton: true,
+        isSelected: true,
+        hasTapAction: true,
+      ),
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsLabel(fire)),
+      isSemantics(
+        label: fire,
+        isButton: true,
+        isSelected: false,
+        hasTapAction: true,
+      ),
+    );
+    // One node announces each reaction, and none the control under it: the
+    // panel holds one node with a tap action per control, the expand control
+    // included, not a second for the InkResponse beneath each.
+    for (final label in [remove, fire]) {
+      expect(find.semantics.byLabel(label), findsOneWidget, reason: label);
+    }
+    expect(
+      find.semantics.descendant(
+        of: find.semantics.byLabel('Choose a reaction'),
+        matching: find.semantics.byAction(SemanticsAction.tap),
+      ),
+      findsNWidgets(chatQuickReactions.length + 1),
+    );
+
+    // By the node's action, as a service that does not touch the screen
+    // does it, not by a tap at its centre.
+    tester.semantics.tap(find.semantics.byLabel(fire));
+    await tester.pumpAndSettle();
+    expect(
+      intents.whereType<SetReactionIntent>().single,
+      isA<SetReactionIntent>()
+          .having((intent) => intent.messageId, 'messageId', _id(5))
+          .having((intent) => intent.emoji, 'emoji', '🔥'),
+    );
+    expect(find.bySemanticsLabel('Choose a reaction'), findsNothing);
+
+    intents.clear();
+    await _openMessageSurface(tester, find.text('message-5'));
+    tester.semantics.tap(find.semantics.byLabel(remove));
+    await tester.pumpAndSettle();
+    expect(
+      intents.whereType<SetReactionIntent>().single,
+      isA<SetReactionIntent>()
+          .having((intent) => intent.messageId, 'messageId', _id(5))
+          .having((intent) => intent.emoji, 'emoji', isNull),
+    );
+    semantics.dispose();
+  });
+
   testWidgets(
     'a double tap sets and removes the default reaction, opening nothing',
     (tester) async {
@@ -310,6 +382,41 @@ void main() {
     );
     expect(find.byType(AppEmojiPicker), findsNothing);
     expect(find.bySemanticsLabel('Choose a reaction'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('the expand control offers a tap action, and performing it '
+      'opens the full picker', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: intents.add),
+    );
+    intents.clear();
+
+    await _openMessageSurface(tester, find.text('message-4'));
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('More emoji')),
+      isSemantics(label: 'More emoji', isButton: true, hasTapAction: true),
+    );
+    // One node announces the control, and none the tooltip or the control
+    // under it: the panel holds one node with a tap action per control.
+    expect(find.semantics.byLabel('More emoji'), findsOneWidget);
+    expect(
+      find.semantics.descendant(
+        of: find.semantics.byLabel('Choose a reaction'),
+        matching: find.semantics.byAction(SemanticsAction.tap),
+      ),
+      findsNWidgets(chatQuickReactions.length + 1),
+    );
+
+    // By the node's action, as a service that does not touch the screen
+    // does it, not by a tap at its centre.
+    tester.semantics.tap(find.semantics.byLabel('More emoji'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppEmojiPicker), findsOneWidget);
+    expect(intents.whereType<SetReactionIntent>(), isEmpty);
     semantics.dispose();
   });
 

@@ -97,6 +97,36 @@ void main() {
       expect(_key('route-info'), findsOneWidget);
     });
 
+    testWidgets('a row offers a tap action, and performing it opens the '
+        'room', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final router = await pumpVoiceRoute(
+        tester,
+        initialLocation: '/voice-rooms',
+        page: (_) =>
+            VoiceRoomsView(rows: VoiceRoomRow.fromRooms([voiceRoom()])),
+      );
+
+      const label = 'Weekly Sync, Empty';
+      expect(
+        tester.getSemantics(_key('voice-room-row-$voiceRoomId')),
+        isSemantics(label: label, isButton: true, hasTapAction: true),
+      );
+      // One node announces the row, and none the tile under it.
+      expect(find.semantics.byLabel(RegExp('Weekly Sync')), findsOneWidget);
+
+      // By the node's action, as a service that does not touch the screen
+      // does it, not by a tap at its centre.
+      tester.semantics.tap(find.semantics.byLabel(label));
+      await tester.pumpAndSettle();
+      expect(_key('route-info'), findsOneWidget);
+      expect(
+        router.routerDelegate.currentConfiguration.uri.path,
+        '/voice-rooms/$voiceRoomId',
+      );
+      semantics.dispose();
+    });
+
     testWidgets('an empty list offers to create a room', (tester) async {
       await pumpVoiceRoute(
         tester,
@@ -365,6 +395,33 @@ void main() {
         expect(find.text(role), findsNothing);
       }
       expect(find.textContaining('The server stores neither'), findsOneWidget);
+    });
+
+    testWidgets('a member row offers a tap action that opens the member, and '
+        'this account\'s own row offers none', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpInfo(tester);
+
+      const label = 'mehdi, Not verified';
+      expect(
+        tester.getSemantics(_key('voice-room-member-$voiceMehdi')),
+        isSemantics(label: label, isButton: true, hasTapAction: true),
+      );
+      // One node announces the row, and none the tile under it.
+      expect(find.semantics.byLabel(RegExp('^mehdi')), findsOneWidget);
+      // This account has nothing to verify, so its row is no button.
+      expect(
+        tester.getSemantics(_key('voice-room-member-$voiceSelf')),
+        isSemantics(label: 'You', isButton: false, hasTapAction: false),
+      );
+
+      // By the node's action, as a service that does not touch the screen
+      // does it, not by a tap at its centre.
+      tester.semantics.tap(find.semantics.byLabel(label));
+      await tester.pumpAndSettle();
+      await _tapVisible(tester, _key('voice-room-remove-member'));
+      expect(find.text('Remove mehdi?'), findsOneWidget);
+      semantics.dispose();
     });
 
     testWidgets('Start a call starts the join and opens the call', (
