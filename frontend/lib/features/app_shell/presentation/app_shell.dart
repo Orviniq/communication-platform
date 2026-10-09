@@ -176,9 +176,17 @@ class _AppShellState extends State<AppShell> {
           _selectDestination(2),
     };
 
-    Widget content = FocusScope(
-      node: _destinationFocusScopes[selected],
-      child: widget.navigationShell,
+    // The tab roots' navigators get a semantics container of their own. A
+    // route's modal barrier hides from accessibility services whatever was
+    // painted before it, up to the nearest container, so without this one
+    // the rail beside the navigators, and the environment banner and the
+    // connection strip above them, had no node (ADR-086, notes of 2026-10-09).
+    Widget content = Semantics(
+      container: true,
+      child: FocusScope(
+        node: _destinationFocusScopes[selected],
+        child: widget.navigationShell,
+      ),
     );
     content = Column(
       children: [
