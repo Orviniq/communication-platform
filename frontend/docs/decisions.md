@@ -275,6 +275,33 @@ for the call's page and the sign-in pages, and would not travel with a page's tr
   on the banner, failed with `missing actions: [tap]`. It predates this phase, because
   `_VoiceRoomBanner` had the same structure, and it is not changed here.
 
+### Done 2026-10-09 — the banner's node carries the tap action
+
+`VoiceRoomBanner`'s `Semantics` takes `onTap`, the call its `InkWell` makes,
+`go('/voice-rooms/<roomId>/call')`, and keeps `excludeSemantics`. The node is still one button
+with the same label ("Return to voice room: <name>, Muted" or "..., Microphone on"), key
+`active-voice-banner` and target, and a service that acts through actions rather than touch,
+Switch Access for one, can now activate it. `excludeSemantics` stays: without it the `InkWell`
+becomes a second labelled button under the first.
+
+- **Tests.** On a direct chat at 360 and 1440 wide (`full_screen_pages_test.dart`) and on the
+  narrow shell (`app_shell_test.dart`), the banner matches `isSemantics(label: ..., isButton:
+  true, hasTapAction: true)`, exactly one node announces it, and performing the semantics tap
+  opens `/voice-rooms/<roomId>/call`. Three mutations were each run once and each fails all three
+  tests: no `onTap` on the node (`missing actions: [tap]`), an `onTap` that opens the room's page
+  instead of its call, and no `excludeSemantics` (a second node for the control under the first).
+- **Found on the way, and not changed: the rail is not in the semantics tree at medium and wide
+  width.** A probe at 800 and 1440 wide, with a call running, found no node for the rail: not the
+  banner and not the three destinations. The tab root's `Navigator` puts a `ModalBarrier`, which
+  is a `BlockSemantics`, in its `Overlay`, and the rail is painted before it in the same `Row`;
+  with no semantics boundary between the two, the barrier drops the rail's nodes (Flutter 3.44.7,
+  `SemanticsConfiguration.isBlockingSemanticsOfPreviouslyPaintedNodes`). `Semantics(container:
+  true)` around the page area in `_TwoPaneShell` brought the destinations and the banner back,
+  the banner with its tap action. It was not kept, because it regroups every page for a screen
+  reader and wants a decision and tests of its own. `_TwoPaneShell` is as phase 8 found it. So the
+  tap action reaches a service on the narrow tab roots and on every full-screen page at any
+  width, and not yet on the rail.
+
 ## ADR-085 in full — a session token is renewed from half its life, not in its last minutes (2026-10-07)
 
 **Status:** Accepted, 2026-10-07. Client-side correctness decision, on server ADR-0023, which
