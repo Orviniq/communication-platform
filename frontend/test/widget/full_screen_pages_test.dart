@@ -33,6 +33,7 @@ import 'package:communication_platform/features/voice/presentation/create_voice_
 import 'package:communication_platform/features/voice/presentation/voice_call_page.dart';
 import 'package:communication_platform/features/voice/presentation/voice_room_info_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -43,6 +44,7 @@ import '../support/system_insets.dart';
 import '../support/voice_screen_harness.dart';
 
 const _narrow = Size(360, 800);
+const _medium = Size(800, 900);
 const _wide = Size(1440, 900);
 const _banner = ValueKey('active-voice-banner');
 
@@ -582,6 +584,53 @@ void main() {
       }
     });
 
+    group('a service reaches the rail of a tab root, and the banner atop it '
+        'opens the call', () {
+      for (final size in [_medium, _wide]) {
+        testWidgets('at ${size.width.round()} wide', (tester) async {
+          final semantics = tester.ensureSemantics();
+          final container = await _pumpApp(tester, size: size);
+          _startCall(container);
+          await _settle(tester);
+          final shell = size == _medium ? 'shell-medium' : 'shell-wide';
+          expect(find.byKey(ValueKey(shell)), findsOneWidget);
+
+          // Painted before the tab root's navigator, whose route barrier
+          // hides from a service whatever was painted before it, up to the
+          // nearest semantics container.
+          for (final name in [
+            'Chats',
+            'Voice Rooms',
+            'Settings',
+            'Start a conversation',
+          ]) {
+            expect(_button(name), findsOneWidget, reason: name);
+          }
+          const label = 'Return to voice room: Weekly Sync, Microphone on';
+          expect(
+            tester.getSemantics(find.byKey(_banner)),
+            isSemantics(label: label, isButton: true, hasTapAction: true),
+          );
+          expect(
+            find.semantics.byLabel(RegExp('Return to voice room')),
+            findsOneWidget,
+          );
+
+          tester.semantics.tap(find.semantics.byLabel(label));
+          await _settle(tester);
+          expect(find.byType(VoiceCallPage), findsOneWidget);
+          final router = GoRouter.of(
+            tester.element(find.byType(VoiceCallPage)),
+          );
+          expect(
+            router.routerDelegate.currentConfiguration.uri.path,
+            '/voice-rooms/$voiceRoomId/call',
+          );
+          semantics.dispose();
+        });
+      }
+    });
+
     group('at twice the text size, 360 by 800, nothing overflows', () {
       for (final location in [
         '/chats',
@@ -650,6 +699,21 @@ void _expectDestinations(WidgetTester tester) {
     expect(find.text(label).hitTestable(), findsWidgets, reason: label);
   }
 }
+
+/// The node of a control a service can activate: a button with a tap action
+/// whose label is [name], said once.
+SemanticsFinder _button(String name) => find.semantics.byPredicate(
+  (node) {
+    final data = node.getSemanticsData();
+    return data.label == name &&
+        data.flagsCollection.isButton &&
+        data.hasAction(SemanticsAction.tap);
+  },
+  describeMatch: (plurality) => switch (plurality) {
+    Plurality.one => '"$name" button with a tap action',
+    Plurality.zero || Plurality.many => '"$name" buttons with a tap action',
+  },
+);
 
 /// Forty conversations, newest first: a group at 24 and Saved Messages at 26,
 /// and a direct conversation with `peer-NN` at every other place.

@@ -245,45 +245,145 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('the banner above the navigation bar offers a tap action, and '
-      'performing it opens the call', (tester) async {
-    final semantics = tester.ensureSemantics();
-    const roomId =
-        'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00';
-    // Narrow only: at medium and wide width the rail, the banner with it, has
-    // no node in the semantics tree (ADR-086, note of 2026-10-09).
-    await _pumpApp(
-      tester,
-      size: const Size(360, 800),
-      status: const AppShellStatus(
-        activeVoiceRoomId: roomId,
-        activeVoiceRoomName: 'Standup',
-      ),
-    );
+  for (final (size, shell) in const [
+    (Size(360, 800), 'shell-narrow'),
+    (Size(800, 900), 'shell-medium'),
+    (Size(1440, 900), 'shell-wide'),
+  ]) {
+    testWidgets('the banner above the navigation bar or atop the rail offers '
+        'a tap action, and performing it opens the call, at '
+        '${size.width.round()} wide', (tester) async {
+      final semantics = tester.ensureSemantics();
+      const roomId =
+          'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00';
+      await _pumpApp(
+        tester,
+        size: size,
+        status: const AppShellStatus(
+          activeVoiceRoomId: roomId,
+          activeVoiceRoomName: 'Standup',
+        ),
+      );
+      expect(find.byKey(ValueKey(shell)), findsOneWidget);
 
-    const label = 'Return to voice room: Standup, Microphone on';
-    expect(
-      tester.getSemantics(find.byKey(const ValueKey('active-voice-banner'))),
-      isSemantics(label: label, isButton: true, hasTapAction: true),
-    );
-    // One node announces the banner, and none the control under it.
-    expect(
-      find.semantics.byLabel(RegExp('Return to voice room')),
-      findsOneWidget,
-    );
+      const label = 'Return to voice room: Standup, Microphone on';
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('active-voice-banner'))),
+        isSemantics(label: label, isButton: true, hasTapAction: true),
+      );
+      // One node announces the banner, and none the control under it.
+      expect(
+        find.semantics.byLabel(RegExp('Return to voice room')),
+        findsOneWidget,
+      );
 
-    tester.semantics.tap(find.semantics.byLabel(label));
-    // The call screen shows a spinner in this harness, so it never settles.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(VoiceCallPage), findsOneWidget);
-    final router = GoRouter.of(tester.element(find.byType(VoiceCallPage)));
-    expect(
-      router.routerDelegate.currentConfiguration.uri.path,
-      '/voice-rooms/$roomId/call',
-    );
-    semantics.dispose();
-  });
+      tester.semantics.tap(find.semantics.byLabel(label));
+      // The call screen shows a spinner in this harness, so it never settles.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(VoiceCallPage), findsOneWidget);
+      final router = GoRouter.of(tester.element(find.byType(VoiceCallPage)));
+      expect(
+        router.routerDelegate.currentConfiguration.uri.path,
+        '/voice-rooms/$roomId/call',
+      );
+      semantics.dispose();
+    });
+  }
+
+  for (final size in const [Size(360, 800), Size(1440, 900)]) {
+    testWidgets('the environment banner and the connection strip reach a '
+        'service at ${size.width.round()} wide', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pumpApp(
+        tester,
+        size: size,
+        environment: AppEnvironment.development,
+        status: const AppShellStatus(connection: AppConnectionState.offline),
+      );
+
+      // Both sit above the tab root's navigator, whose route barrier hides
+      // from a service whatever was painted before it, up to the nearest
+      // semantics container.
+      expect(
+        find.semantics.byLabel('Development configuration'),
+        findsOneWidget,
+      );
+      expect(
+        find.semantics.byLabel(RegExp('^No connection to server')),
+        findsOneWidget,
+      );
+      semantics.dispose();
+    });
+  }
+
+  for (final (size, shell) in const [
+    (Size(360, 800), 'shell-narrow'),
+    (Size(800, 900), 'shell-medium'),
+    (Size(1440, 900), 'shell-wide'),
+  ]) {
+    testWidgets('the destinations, compose and the connection strip say their '
+        'text once, and the destinations keep their actions and state, at '
+        '${size.width.round()} wide', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pumpApp(
+        tester,
+        size: size,
+        status: const AppShellStatus(connection: AppConnectionState.offline),
+      );
+      expect(find.byKey(ValueKey(shell)), findsOneWidget);
+
+      // Each of these wraps a `Text` of its label in a `Semantics` with the
+      // same label; both reached one node, which read "Chats\nChats".
+      for (final name in ['Chats', 'Voice Rooms', 'Settings']) {
+        final destination = _buttonStartingWith(name);
+        expect(destination, findsOneWidget, reason: name);
+        expect(
+          destination.evaluate().single,
+          isSemantics(
+            label: name,
+            isButton: true,
+            hasTapAction: true,
+            hasFocusAction: true,
+            isFocusable: true,
+            hasSelectedState: true,
+            isSelected: name == 'Chats',
+          ),
+          reason: name,
+        );
+      }
+      final compose = _buttonStartingWith('Start a conversation');
+      expect(compose, findsOneWidget);
+      expect(
+        compose.evaluate().single,
+        isSemantics(
+          label: 'Start a conversation',
+          tooltip: '',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+      final strip = find.semantics.byLabel(RegExp('^No connection to server'));
+      expect(strip, findsOneWidget);
+      expect(
+        strip.evaluate().single,
+        isSemantics(label: 'No connection to server', isLiveRegion: true),
+      );
+      // The wide rail's title is a brand mark, as decorative as the medium
+      // rail's icon, and no longer joins the shell's keyboard hint.
+      expect(
+        find.semantics.byLabel(
+          'Keyboard: Alt+1 Chats, Alt+2 Voice Rooms, Alt+3 Settings',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.semantics.byLabel(RegExp('Communication Platform')),
+        findsNothing,
+      );
+      semantics.dispose();
+    });
+  }
 
   testWidgets('no call raises no banner, and a server without voice offers no '
       'room to create', (tester) async {
@@ -308,6 +408,7 @@ void main() {
 Future<void> _pumpApp(
   WidgetTester tester, {
   required Size size,
+  AppEnvironment environment = AppEnvironment.production,
   ThemeMode themeMode = ThemeMode.light,
   String initialLocation = '/chats',
   bool guardSettings = false,
@@ -319,7 +420,7 @@ Future<void> _pumpApp(
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(
     CommunicationPlatformApp(
-      environment: AppEnvironment.production,
+      environment: environment,
       locale: const Locale('en'),
       themeMode: themeMode,
       initialLocation: initialLocation,
@@ -337,3 +438,16 @@ Future<void> _resize(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
   await tester.pumpAndSettle();
 }
+
+/// The button nodes whose label starts with [name], so that a label said
+/// twice is still found and the label itself checked exactly.
+SemanticsFinder _buttonStartingWith(String name) => find.semantics.byPredicate(
+  (node) =>
+      node.label.startsWith(name) &&
+      node.getSemanticsData().flagsCollection.isButton,
+  describeMatch: (plurality) => switch (plurality) {
+    Plurality.one => 'button whose label starts with "$name"',
+    Plurality.zero ||
+    Plurality.many => 'buttons whose labels start with "$name"',
+  },
+);
