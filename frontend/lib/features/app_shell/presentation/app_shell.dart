@@ -387,10 +387,14 @@ class _DestinationRail extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.x3),
           child: compact
               ? AppIcon(AppIcons.security, color: context.tokens.colors.accent)
-              : Text(
-                  l10n.appTitle,
-                  style: context.tokens.typography.section,
-                  maxLines: 2,
+              // The brand mark in words, as decorative as the icon above it;
+              // left in the tree it joins the shell's keyboard hint.
+              : ExcludeSemantics(
+                  child: Text(
+                    l10n.appTitle,
+                    style: context.tokens.typography.section,
+                    maxLines: 2,
+                  ),
                 ),
         ),
         for (final destination in AppDestination.values)
@@ -509,15 +513,19 @@ class _DestinationControlState extends State<_DestinationControl> {
                             : colors.textMuted,
                       ),
                       const SizedBox(height: AppSpacing.x1),
-                      Text(
-                        label,
-                        style: context.tokens.typography.label.copyWith(
-                          color: widget.selected
-                              ? colors.accent
-                              : colors.textMuted,
+                      // The node above carries the label; the text would
+                      // say it a second time.
+                      ExcludeSemantics(
+                        child: Text(
+                          label,
+                          style: context.tokens.typography.label.copyWith(
+                            color: widget.selected
+                                ? colors.accent
+                                : colors.textMuted,
+                          ),
+                          textAlign: TextAlign.center,
+                          softWrap: true,
                         ),
-                        textAlign: TextAlign.center,
-                        softWrap: true,
                       ),
                     ],
                   )
@@ -531,15 +539,17 @@ class _DestinationControlState extends State<_DestinationControl> {
                       ),
                       const SizedBox(width: AppSpacing.x3),
                       Expanded(
-                        child: Text(
-                          label,
-                          style: context.tokens.typography.body.copyWith(
-                            color: widget.selected
-                                ? colors.accent
-                                : colors.textPrimary,
-                            fontWeight: widget.selected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
+                        child: ExcludeSemantics(
+                          child: Text(
+                            label,
+                            style: context.tokens.typography.body.copyWith(
+                              color: widget.selected
+                                  ? colors.accent
+                                  : colors.textPrimary,
+                              fontWeight: widget.selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
                           ),
                         ),
                       ),
@@ -569,6 +579,9 @@ class _ComposeButton extends StatelessWidget {
     label: label,
     child: Tooltip(
       message: label,
+      // Below Android 9 a tooltip joins the node's content description,
+      // after the label it repeats.
+      excludeFromSemantics: true,
       child: Material(
         color: context.tokens.colors.accent,
         borderRadius: AppRadii.control,
@@ -591,11 +604,13 @@ class _ComposeButton extends StatelessWidget {
                   if (!compact) ...[
                     const SizedBox(width: AppSpacing.x2),
                     Flexible(
-                      child: Text(
-                        label,
-                        style: context.tokens.typography.compact.copyWith(
-                          color: context.tokens.colors.canvas,
-                          fontWeight: FontWeight.w500,
+                      child: ExcludeSemantics(
+                        child: Text(
+                          label,
+                          style: context.tokens.typography.compact.copyWith(
+                            color: context.tokens.colors.canvas,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
@@ -665,13 +680,15 @@ class _ConnectionStrip extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.x2),
               Flexible(
-                child: Text(
-                  label,
-                  style: context.tokens.typography.compact.copyWith(
-                    color: context.tokens.colors.canvas,
-                    fontWeight: FontWeight.w500,
+                child: ExcludeSemantics(
+                  child: Text(
+                    label,
+                    style: context.tokens.typography.compact.copyWith(
+                      color: context.tokens.colors.canvas,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
             ],

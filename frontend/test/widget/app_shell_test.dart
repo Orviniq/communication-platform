@@ -317,6 +317,74 @@ void main() {
     });
   }
 
+  for (final (size, shell) in const [
+    (Size(360, 800), 'shell-narrow'),
+    (Size(800, 900), 'shell-medium'),
+    (Size(1440, 900), 'shell-wide'),
+  ]) {
+    testWidgets('the destinations, compose and the connection strip say their '
+        'text once, and the destinations keep their actions and state, at '
+        '${size.width.round()} wide', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pumpApp(
+        tester,
+        size: size,
+        status: const AppShellStatus(connection: AppConnectionState.offline),
+      );
+      expect(find.byKey(ValueKey(shell)), findsOneWidget);
+
+      // Each of these wraps a `Text` of its label in a `Semantics` with the
+      // same label; both reached one node, which read "Chats\nChats".
+      for (final name in ['Chats', 'Voice Rooms', 'Settings']) {
+        final destination = _buttonStartingWith(name);
+        expect(destination, findsOneWidget, reason: name);
+        expect(
+          destination.evaluate().single,
+          isSemantics(
+            label: name,
+            isButton: true,
+            hasTapAction: true,
+            hasFocusAction: true,
+            isFocusable: true,
+            hasSelectedState: true,
+            isSelected: name == 'Chats',
+          ),
+          reason: name,
+        );
+      }
+      final compose = _buttonStartingWith('Start a conversation');
+      expect(compose, findsOneWidget);
+      expect(
+        compose.evaluate().single,
+        isSemantics(
+          label: 'Start a conversation',
+          tooltip: '',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+      final strip = find.semantics.byLabel(RegExp('^No connection to server'));
+      expect(strip, findsOneWidget);
+      expect(
+        strip.evaluate().single,
+        isSemantics(label: 'No connection to server', isLiveRegion: true),
+      );
+      // The wide rail's title is a brand mark, as decorative as the medium
+      // rail's icon, and no longer joins the shell's keyboard hint.
+      expect(
+        find.semantics.byLabel(
+          'Keyboard: Alt+1 Chats, Alt+2 Voice Rooms, Alt+3 Settings',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.semantics.byLabel(RegExp('Communication Platform')),
+        findsNothing,
+      );
+      semantics.dispose();
+    });
+  }
+
   testWidgets('no call raises no banner, and a server without voice offers no '
       'room to create', (tester) async {
     await _pumpApp(
@@ -370,3 +438,16 @@ Future<void> _resize(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
   await tester.pumpAndSettle();
 }
+
+/// The button nodes whose label starts with [name], so that a label said
+/// twice is still found and the label itself checked exactly.
+SemanticsFinder _buttonStartingWith(String name) => find.semantics.byPredicate(
+  (node) =>
+      node.label.startsWith(name) &&
+      node.getSemanticsData().flagsCollection.isButton,
+  describeMatch: (plurality) => switch (plurality) {
+    Plurality.one => 'button whose label starts with "$name"',
+    Plurality.zero ||
+    Plurality.many => 'buttons whose labels start with "$name"',
+  },
+);

@@ -701,12 +701,11 @@ void _expectDestinations(WidgetTester tester) {
 }
 
 /// The node of a control a service can activate: a button with a tap action
-/// whose label starts with the line [name]. A destination says its name twice
-/// today, its own label and its text's.
+/// whose label is [name], said once.
 SemanticsFinder _button(String name) => find.semantics.byPredicate(
   (node) {
     final data = node.getSemanticsData();
-    return data.label.split('\n').first == name &&
+    return data.label == name &&
         data.flagsCollection.isButton &&
         data.hasAction(SemanticsAction.tap);
   },
