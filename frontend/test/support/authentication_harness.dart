@@ -17,6 +17,7 @@ final class AuthenticationHarness {
     Result<AccountSessionGrant>? loginResult,
     Result<AccountRegistration>? registrationResult,
     List<Result<void>> eraseResults = const [],
+    bool offline = false,
   }) : repository = WidgetAuthenticationRepository(
          eraseResults: eraseResults,
          loginResult:
@@ -34,7 +35,7 @@ final class AuthenticationHarness {
              registrationResult ??
              const Result.success(AccountRegistration(userId: userId)),
        ),
-       session = WidgetAuthenticationSession(),
+       session = WidgetAuthenticationSession(offline: offline),
        lifecycle = WidgetLifecycle() {
     useCases = AuthenticationUseCases(
       register: RegisterAccount(repository),
@@ -120,6 +121,12 @@ final class WidgetAuthenticationRepository
 }
 
 final class WidgetAuthenticationSession implements AuthenticationSessionPort {
+  WidgetAuthenticationSession({this.offline = false});
+
+  /// Whether the session it accepts opened without the server, as one that
+  /// starts offline does (`AuthenticationRouteAccess.offlineFullScope`).
+  final bool offline;
+
   @override
   Future<Result<AccountSessionBoundary>> acceptLogin({
     required String username,
@@ -130,7 +137,7 @@ final class WidgetAuthenticationSession implements AuthenticationSessionPort {
       userId: grant.userId,
       deviceId: grant.deviceId,
       scope: grant.scope,
-      offline: false,
+      offline: offline,
     ),
   );
 

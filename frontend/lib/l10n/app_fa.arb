@@ -215,7 +215,6 @@
   "chatsDeliveryConnectingNotice": "در حال اتصال…",
   "chatsDeliverySyncingNotice": "در حال همگام‌سازی…",
   "chatsDeliveryWaitingNotice": "در انتظار اتصال دوباره…",
-  "chatsOfflineCachedNotice": "آفلاین — گفت‌وگوهای ذخیره‌شده نمایش داده می‌شوند. پیام‌های جدید در صف محلی می‌مانند.",
   "chatsNoMessagesPreview": "هنوز پیامی نیست",
   "chatsConversationActionsLabel": "عملیات گفت‌وگو",
   "chatsMuteAction": "بی‌صدا برای ۸ ساعت",

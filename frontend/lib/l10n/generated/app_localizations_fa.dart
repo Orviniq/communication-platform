@@ -709,10 +709,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatsDeliveryWaitingNotice => 'در انتظار اتصال دوباره…';
 
   @override
-  String get chatsOfflineCachedNotice =>
-      'آفلاین — گفت‌وگوهای ذخیره‌شده نمایش داده می‌شوند. پیام‌های جدید در صف محلی می‌مانند.';
-
-  @override
   String get chatsNoMessagesPreview => 'هنوز پیامی نیست';
 
   @override

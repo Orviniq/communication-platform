@@ -920,7 +920,7 @@ void main() {
     expect(find.text('Write a note to yourself'), findsOneWidget);
   });
 
-  testWidgets('Chats List exposes loading, empty, error, offline and rows', (
+  testWidgets('Chats List exposes loading, empty, error and rows', (
     tester,
   ) async {
     await _pump(
@@ -941,14 +941,12 @@ void main() {
             ),
           ],
           loading: false,
-          offline: true,
           failed: false,
         ),
       ),
     );
     expect(find.text('Peer'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
-    expect(find.textContaining('showing cached conversations'), findsOneWidget);
 
     await _pump(
       tester,
@@ -956,7 +954,6 @@ void main() {
         model: ChatListViewModel(
           items: const [],
           loading: false,
-          offline: false,
           failed: false,
         ),
       ),
@@ -966,12 +963,7 @@ void main() {
     await _pump(
       tester,
       ChatsListPage(
-        model: ChatListViewModel(
-          items: const [],
-          loading: false,
-          offline: false,
-          failed: true,
-        ),
+        model: ChatListViewModel(items: const [], loading: false, failed: true),
       ),
     );
     expect(find.text('Chats are unavailable'), findsOneWidget);

@@ -1328,12 +1328,6 @@ abstract class AppLocalizations {
   /// **'Waiting to reconnect…'**
   String get chatsDeliveryWaitingNotice;
 
-  /// No description provided for @chatsOfflineCachedNotice.
-  ///
-  /// In en, this message translates to:
-  /// **'Offline — showing cached conversations. New messages will queue locally.'**
-  String get chatsOfflineCachedNotice;
-
   /// No description provided for @chatsNoMessagesPreview.
   ///
   /// In en, this message translates to:

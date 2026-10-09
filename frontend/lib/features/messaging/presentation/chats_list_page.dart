@@ -47,12 +47,7 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
     } on StateError {
       return _scaffold(
         context,
-        ChatListViewModel(
-          items: const [],
-          loading: false,
-          offline: false,
-          failed: false,
-        ),
+        ChatListViewModel(items: const [], loading: false, failed: false),
       );
     }
     return Consumer(builder: (context, ref, _) => _projected(context, ref));
@@ -64,23 +59,12 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
     if (currentUserId == null) {
       return _scaffold(
         context,
-        ChatListViewModel(
-          items: [],
-          loading: false,
-          offline: false,
-          failed: false,
-        ),
+        ChatListViewModel(items: [], loading: false, failed: false),
       );
     }
     final summaries = ref.watch(conversationSummariesProvider(currentUserId));
     trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
     final contacts = ref.watch(contactListProvider(currentUserId));
-    // A jammed engine and a slow network used to look identical from here,
-    // because nothing in this application read the phase the engine has been
-    // writing all along.
-    final delivery = _deliveryIndicator(
-      ref.watch(syncProjectionProvider).value?.connectionPhase,
-    );
     final strings = AppLocalizations.of(context);
     final model = summaries.when(
       data: (items) => ChatListViewModel(
@@ -91,24 +75,12 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
           strings: strings,
         ),
         loading: false,
-        offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
         failed: false,
-        delivery: delivery,
       ),
-      loading: () => ChatListViewModel(
-        items: const [],
-        loading: true,
-        offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
-        failed: false,
-        delivery: delivery,
-      ),
-      error: (_, _) => ChatListViewModel(
-        items: const [],
-        loading: false,
-        offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
-        failed: true,
-        delivery: delivery,
-      ),
+      loading: () =>
+          ChatListViewModel(items: const [], loading: true, failed: false),
+      error: (_, _) =>
+          ChatListViewModel(items: const [], loading: false, failed: true),
     );
     return _scaffold(context, model, ref: ref);
   }
@@ -119,28 +91,22 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
     WidgetRef? ref,
   }) {
     final strings = AppLocalizations.of(context);
-    final body = Column(
-      children: [
-        if (model.offline)
-          _InlineNotice(
-            key: const ValueKey('chats-offline-notice'),
-            label: strings.chatsOfflineCachedNotice,
-            kind: AppStatusKind.warning,
-          )
-        else if (_deliveryNotice(model.delivery, strings) case final label?)
-          _InlineNotice(
-            key: const ValueKey('chats-delivery-notice'),
-            label: label,
-            kind: AppStatusKind.neutral,
-          ),
-        Expanded(child: _results(context, model, strings, ref)),
-      ],
-    );
+    // The list, and nothing above it: the engine's status is the title's.
+    final body = _results(context, model, strings, ref);
     if (widget.compact) return body;
     return Scaffold(
       key: const ValueKey('chats-list-screen'),
       appBar: AppBar(
-        title: Text(strings.chatsTitle),
+        // Without a ProviderScope there is no engine to ask, and the title is
+        // its own name.
+        title: ref == null
+            ? Text(
+                strings.chatsTitle,
+                key: const ValueKey('chats-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : const _ChatsTitle(key: ValueKey('chats-title')),
         actions: [
           // Search is a page of its own (ui-specification.md §6.5): the list
           // keeps its whole height for the conversations.
@@ -339,17 +305,124 @@ Future<void> _showConversationMenu(
 
 enum _ConversationAction { pin, mute, markRead, markUnread, delete }
 
-class _InlineNotice extends StatelessWidget {
-  const _InlineNotice({required this.label, required this.kind, super.key});
+/// How long the engine must stay in a state other than settled, without a
+/// break, before the title says so.
+const _statusDelay = Duration(seconds: 1);
 
-  final String label;
-  final AppStatusKind kind;
+final _connectionPhase = syncProjectionProvider.select(
+  (projection) => projection.value?.connectionPhase,
+);
+
+/// The Chats title, which is also where the delivery engine says what it is
+/// doing (ADR-087, moving the line of ADR-060 D11 out of the list).
+///
+/// "Chats" while the session is settled. Once the engine has been in a state
+/// other than settled for [_statusDelay] without a break, the title is that
+/// state instead (connecting, syncing or waiting to reconnect), and it is the
+/// name again the moment the engine settles. An ordinary cycle is over well
+/// within the delay and moves nothing; a stalled engine is still there after
+/// it, and that is the day the title exists for. The delay runs from the moment
+/// the session stops being settled, and a change between two other states does
+/// not restart it. Once the title has left its name, such a change shows at
+/// once.
+///
+/// It reads the live phase and nothing else. How the session was opened
+/// (`offlineFullScope`) does not change when the connection returns, so it
+/// cannot say what the connection is doing.
+class _ChatsTitle extends ConsumerStatefulWidget {
+  const _ChatsTitle({super.key});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(AppSpacing.x2),
-    child: AppStatusBadge(kind: kind, label: label),
-  );
+  ConsumerState<_ChatsTitle> createState() => _ChatsTitleState();
+}
+
+class _ChatsTitleState extends ConsumerState<_ChatsTitle> {
+  late final ProviderSubscription<SyncConnectionPhase?> _phase;
+  Timer? _clock;
+  ChatDeliveryIndicator _state = ChatDeliveryIndicator.settled;
+  bool _showsStatus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _follow(ref.read(_connectionPhase));
+    // Not a watch in `build`: Riverpod pauses a watch while a conversation
+    // covers this page, and the delay would then run from the moment the page
+    // is uncovered rather than from the moment the engine stopped settling.
+    _phase = ref.listenManual(
+      _connectionPhase,
+      (_, phase) => setState(() => _follow(phase)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _phase.close();
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  void _follow(SyncConnectionPhase? phase) {
+    _state = _deliveryIndicator(phase);
+    if (_state == ChatDeliveryIndicator.settled) {
+      _clock?.cancel();
+      _clock = null;
+      _showsStatus = false;
+    } else if (!_showsStatus) {
+      _clock ??= Timer(_statusDelay, () {
+        _clock = null;
+        setState(() => _showsStatus = true);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _showsStatus ? _state : ChatDeliveryIndicator.settled;
+    final text = Text(
+      _statusText(state, AppLocalizations.of(context)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    if (state == ChatDeliveryIndicator.settled) return text;
+    // Only the status is a live region, so a screen reader announces each
+    // change of it once. The name is not one: it would be announced again each
+    // time the engine settled.
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (state != ChatDeliveryIndicator.waiting) ...[
+            const _StatusGlyph(),
+            const SizedBox(width: AppSpacing.x2),
+          ],
+          Flexible(child: text),
+        ],
+      ),
+    );
+  }
+}
+
+/// What stands before "Connecting…" and "Syncing…": a small spinner, or its
+/// still image when animations are off.
+class _StatusGlyph extends StatelessWidget {
+  const _StatusGlyph();
+
+  static const _size = 16.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = context.tokens.colors.accent;
+    return ExcludeSemantics(
+      child: MediaQuery.disableAnimationsOf(context)
+          ? AppIcon(AppIcons.connecting, color: color, size: _size)
+          : SizedBox.square(
+              dimension: _size,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            ),
+    );
+  }
 }
 
 /// Reduces the engine's connection phase to the four states a screen may show.
@@ -371,18 +444,15 @@ ChatDeliveryIndicator _deliveryIndicator(SyncConnectionPhase? phase) =>
       SyncConnectionPhase.originRejected => ChatDeliveryIndicator.waiting,
     };
 
-/// The line for a delivery state, or nothing at all when there is nothing to
-/// say.
+/// The words the title shows for a delivery state.
 ///
-/// A settled session renders no notice. An indicator that is always on screen
-/// is one nobody reads, and this one exists precisely to be noticed on the day
-/// it stops changing.
-String? _deliveryNotice(
-  ChatDeliveryIndicator indicator,
-  AppLocalizations strings,
-) => switch (indicator) {
-  ChatDeliveryIndicator.settled => null,
-  ChatDeliveryIndicator.connecting => strings.chatsDeliveryConnectingNotice,
-  ChatDeliveryIndicator.syncing => strings.chatsDeliverySyncingNotice,
-  ChatDeliveryIndicator.waiting => strings.chatsDeliveryWaitingNotice,
-};
+/// A settled session says nothing about the engine: the title is its own name.
+/// An indicator that is always on screen is one nobody reads, and this one
+/// exists precisely to be noticed on the day it stops changing.
+String _statusText(ChatDeliveryIndicator state, AppLocalizations strings) =>
+    switch (state) {
+      ChatDeliveryIndicator.settled => strings.chatsTitle,
+      ChatDeliveryIndicator.connecting => strings.chatsDeliveryConnectingNotice,
+      ChatDeliveryIndicator.syncing => strings.chatsDeliverySyncingNotice,
+      ChatDeliveryIndicator.waiting => strings.chatsDeliveryWaitingNotice,
+    };

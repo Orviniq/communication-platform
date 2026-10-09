@@ -276,7 +276,6 @@
   "chatsDeliveryConnectingNotice": "Connecting…",
   "chatsDeliverySyncingNotice": "Syncing…",
   "chatsDeliveryWaitingNotice": "Waiting to reconnect…",
-  "chatsOfflineCachedNotice": "Offline — showing cached conversations. New messages will queue locally.",
   "chatsNoMessagesPreview": "No messages yet",
   "chatsConversationActionsLabel": "Conversation actions",
   "chatsMuteAction": "Mute for 8 hours",

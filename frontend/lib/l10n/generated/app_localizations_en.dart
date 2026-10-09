@@ -713,10 +713,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatsDeliveryWaitingNotice => 'Waiting to reconnect…';
 
   @override
-  String get chatsOfflineCachedNotice =>
-      'Offline — showing cached conversations. New messages will queue locally.';
-
-  @override
   String get chatsNoMessagesPreview => 'No messages yet';
 
   @override
