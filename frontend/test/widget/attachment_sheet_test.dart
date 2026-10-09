@@ -25,6 +25,32 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('each choice offers a tap action, and performing it chooses', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    var selections = 0;
+    await _pump(tester, AttachmentSheet(onCancelled: () => selections += 1));
+
+    for (final label in ['Photo or image', 'File', 'Camera']) {
+      expect(
+        tester.getSemantics(find.widgetWithText(ListTile, label)),
+        isSemantics(label: label, isButton: true, hasTapAction: true),
+        reason: label,
+      );
+      // One node announces the choice, and none the tile under it.
+      expect(find.semantics.byLabel(label), findsOneWidget, reason: label);
+    }
+
+    // By the node's action, as a service that does not touch the screen
+    // does it, not by a tap at its centre.
+    tester.semantics.tap(find.semantics.byLabel('File'));
+    expect(selections, 1);
+    tester.semantics.tap(find.semantics.byLabel('Camera'));
+    expect(selections, 2);
+    semantics.dispose();
+  });
+
   testWidgets('verified descriptor shows a safe name and bounded details', (
     tester,
   ) async {
