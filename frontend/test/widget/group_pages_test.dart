@@ -298,14 +298,14 @@ void main() {
     );
   });
 
-  testWidgets(
-    'a group send counts its copies and is not sent before the last',
-    (tester) async {
-      const messageId = '22222222222222222222222222222222';
-      Future<void> show(
-        GroupMessageDelivery delivery, [
-        Map<String, GroupFanoutProgress> progress = const {},
-      ]) => _pump(
+  testWidgets('a group message is not accepted before its last copy, and its '
+      'bubble keeps its width until then', (tester) async {
+    const messageId = '22222222222222222222222222222222';
+    // A word short enough that the row under it, the time and the mark, is
+    // what sizes the bubble. Anything added to that row while the message is
+    // on its way shows as a wider bubble that narrows again once it is sent.
+    Future<double> bubbleWidth(GroupMessageDelivery delivery) async {
+      await _pump(
         tester,
         GroupChatPage(
           groupId: _groupId,
@@ -315,31 +315,33 @@ void main() {
               messageId: messageId,
               groupId: _groupId,
               senderUserId: _owner,
-              text: 'To everyone',
+              text: 'Hi',
               createdMs: 100,
               delivery: delivery,
             ),
           ],
-          injectedProgress: progress,
           currentUserId: _owner,
           onSend: (_) async => const Result.success(null),
         ),
       );
+      return tester
+          .getSize(find.byKey(const ValueKey('message-$messageId')))
+          .width;
+    }
 
-      await show(GroupMessageDelivery.sending, {
-        messageId: GroupFanoutProgress(sent: 45, total: 150),
-      });
+    final queued = await bubbleWidth(GroupMessageDelivery.queued);
+    expect(find.byTooltip('queued offline'), findsOneWidget);
 
-      expect(find.text('Copies sent: 45 of 150'), findsOneWidget);
-      expect(find.byTooltip('sending to server'), findsOneWidget);
-      expect(find.byTooltip('accepted by server relay'), findsNothing);
+    final sending = await bubbleWidth(GroupMessageDelivery.sending);
+    expect(find.byTooltip('sending to server'), findsOneWidget);
+    expect(find.byTooltip('accepted by server relay'), findsNothing);
 
-      await show(GroupMessageDelivery.sent);
+    final sent = await bubbleWidth(GroupMessageDelivery.sent);
+    expect(find.byTooltip('accepted by server relay'), findsOneWidget);
 
-      expect(find.textContaining('Copies sent'), findsNothing);
-      expect(find.byTooltip('accepted by server relay'), findsOneWidget);
-    },
-  );
+    expect(queued, sent);
+    expect(sending, sent);
+  });
 
   testWidgets('a failed group send retries that same message', (tester) async {
     const messageId = '33333333333333333333333333333333';

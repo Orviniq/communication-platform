@@ -1073,11 +1073,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatStateReceived => 'دریافت‌شده';
 
   @override
-  String chatFanoutProgress(int sent, int total) {
-    return 'نسخه‌های ارسال‌شده: $sent از $total';
-  }
-
-  @override
   String get groupCreateTitle => 'ساخت گروه';
 
   @override

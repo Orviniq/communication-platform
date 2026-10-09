@@ -1073,11 +1073,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatStateReceived => 'received';
 
   @override
-  String chatFanoutProgress(int sent, int total) {
-    return 'Copies sent: $sent of $total';
-  }
-
-  @override
   String get groupCreateTitle => 'Create Group';
 
   @override

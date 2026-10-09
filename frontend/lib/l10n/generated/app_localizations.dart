@@ -1982,12 +1982,6 @@ abstract class AppLocalizations {
   /// **'received'**
   String get chatStateReceived;
 
-  /// No description provided for @chatFanoutProgress.
-  ///
-  /// In en, this message translates to:
-  /// **'Copies sent: {sent} of {total}'**
-  String chatFanoutProgress(int sent, int total);
-
   /// No description provided for @groupCreateTitle.
   ///
   /// In en, this message translates to:

@@ -447,8 +447,6 @@
   "chatStateRead": "read receipt received",
   "chatStateFailed": "send failed",
   "chatStateReceived": "received",
-  "chatFanoutProgress": "Copies sent: {sent} of {total}",
-  "@chatFanoutProgress": {"placeholders": {"sent": {"type": "int"}, "total": {"type": "int"}}},
   "groupCreateTitle": "Create Group",
   "groupPickMembersTitle": "Pick members",
   "groupDetailsTitle": "Group details",
