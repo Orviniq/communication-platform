@@ -11,11 +11,9 @@ import android.os.Looper
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val notificationPermissionRequestCode = 9101
@@ -27,7 +25,8 @@ class MainActivity : FlutterActivity() {
     // the headless engine a deferred catch-up runs in, so there is exactly one
     // implementation of each in the artifact. This activity supplies only what
     // genuinely needs a window or a user: the permission dialog, the settings
-    // screen, screen-capture protection and the clipboard.
+    // screen, screen-capture protection, the clipboard, and the attachment
+    // pickers, which answer through this activity's results.
     private val protectedStorage by lazy { ProtectedStorageChannel(applicationContext) }
     private val messageAlerts by lazy {
         MessageAlertChannel(
@@ -36,6 +35,7 @@ class MainActivity : FlutterActivity() {
             requestPermission = ::requestNotificationPermission,
         )
     }
+    private val attachments by lazy { AttachmentChannel(activity = this) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -88,48 +88,9 @@ class MainActivity : FlutterActivity() {
         // a window, and the platform starts a `microphone` service only from a
         // visible activity.
         voiceCallChannel = VoiceCall.attach(applicationContext, messenger, activity = this)
-        MethodChannel(messenger, "communication_platform/attachments")
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "privateCacheDirectory" -> result.success(
-                        cacheDir.resolve("secure_attachment_cache").absolutePath,
-                    )
-                    "shareVerifiedFile" -> {
-                        val path = call.argument<String>("path")
-                        val mime = safeShareMime(call.argument<String>("mime"))
-                        if (path == null) {
-                            result.error("invalid_argument", null, null)
-                        } else {
-                            try {
-                                val file = File(path).canonicalFile
-                                val cache =
-                                    cacheDir.resolve("secure_attachment_cache").canonicalFile
-                                if (!file.path.startsWith(cache.path + File.separator) ||
-                                    !file.isFile
-                                ) {
-                                    result.error("invalid_argument", null, null)
-                                } else {
-                                    val uri = FileProvider.getUriForFile(
-                                        this,
-                                        "${applicationContext.packageName}.attachments",
-                                        file,
-                                    )
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = mime
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    startActivity(Intent.createChooser(intent, null))
-                                    result.success(null)
-                                }
-                            } catch (_: Exception) {
-                                result.error("share_failed", null, null)
-                            }
-                        }
-                    }
-                    else -> result.notImplemented()
-                }
-            }
+        // The pickers, the camera and Save answer through this activity's
+        // results, so the channel lives with the activity (ADR-089).
+        attachments.attach(messenger)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -142,7 +103,17 @@ class MainActivity : FlutterActivity() {
         // once the engine goes, so its service ends here rather than outlive it.
         voiceCallChannel?.let(VoiceCall::detach)
         voiceCallChannel = null
+        // A picker still open answers an isolate that is gone; its result is
+        // dropped when it arrives.
+        attachments.detach()
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        // First, because the Flutter embedding forwards results to plugins
+        // from here.
+        super.onActivityResult(requestCode, resultCode, data)
+        attachments.onActivityResult(requestCode, resultCode, data)
     }
 
     // Whether this activity is visible, which is what the platform asks before
@@ -218,12 +189,4 @@ class MainActivity : FlutterActivity() {
         }, clearAfterSeconds.coerceIn(1, 300) * 1000L)
     }
 
-    private fun safeShareMime(value: String?): String {
-        val normalized = value?.trim()?.lowercase() ?: return "application/octet-stream"
-        val safe = setOf(
-            "image/jpeg", "image/png", "image/webp", "image/gif",
-            "audio/mpeg", "audio/ogg", "audio/wav", "text/plain", "application/pdf",
-        )
-        return if (normalized in safe) normalized else "application/octet-stream"
-    }
 }
