@@ -42,12 +42,29 @@ const _scopeText =
     'conversation and search inside it. Your search stays on this phone.';
 
 void main() {
-  testWidgets('the search page covers the shell, and its field takes the '
-      'focus', (tester) async {
+  testWidgets('the Chats list holds no search field, and lists every '
+      'conversation', (tester) async {
+    await _pumpApp(tester, summaries: _summaries(), contacts: _contacts());
+
+    expect(find.byKey(const ValueKey('chats-list-screen')), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(EditableText), findsNothing);
+    for (final title in ['Maryam', 'Reza', 'Weekend plans', 'Saved Messages']) {
+      expect(find.text(title), findsOneWidget, reason: title);
+    }
+    expect(find.byTooltip('Search chats'), findsOneWidget);
+  });
+
+  testWidgets('the search icon opens the search page over the shell, and its '
+      'field takes the focus', (tester) async {
     await _pumpApp(tester);
     await _openSearch(tester);
 
     expect(find.byType(ChatsSearchPage), findsOneWidget);
+    expect(
+      GoRouterState.of(tester.element(find.byType(ChatsSearchPage))).uri.path,
+      '/chats/search',
+    );
     expect(find.byKey(const ValueKey('shell-narrow')), findsNothing);
     expect(_editor(tester).widget.focusNode.hasFocus, isTrue);
   });
@@ -472,13 +489,9 @@ void main() {
   });
 }
 
-/// Opens the search above the Chats list, as the Chats list does.
+/// Opens the search from the Chats list's app bar.
 Future<void> _openSearch(WidgetTester tester) async {
-  unawaited(
-    GoRouter.of(
-      tester.element(find.byKey(const ValueKey('chats-list-screen'))),
-    ).push('/chats/search'),
-  );
+  await tester.tap(find.byKey(const ValueKey('chats-search-action')));
   await _settle(tester);
 }
 

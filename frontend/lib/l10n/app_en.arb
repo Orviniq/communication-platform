@@ -253,7 +253,6 @@
   "safetyConfirmationRequired": "Out-of-band comparison is required before confirmation.",
   "chatsTitle": "Chats",
   "chatsSearchAction": "Search chats",
-  "chatsSearchHint": "Search names and the latest message",
   "chatsClearSearchAction": "Clear search",
   "chatsLoadingTitle": "Loading chats",
   "chatsErrorTitle": "Chats are unavailable",
@@ -263,10 +262,6 @@
   "chatsStartAction": "Start a chat",
   "chatsNoSearchResultsTitle": "Nothing found on this phone",
   "chatsDeviceSearchScopeNotice": "This searches only the messages stored on this phone. The server never sees them, or what you search for.",
-  "chatsListSearchScopeNotice": "This list matches names and the latest message only. To search a conversation's history, open it and search inside.",
-  "@chatsListSearchScopeNotice": {
-    "description": "The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed."
-  },
   "chatsSearchFieldLabel": "Search chats and contacts",
   "chatsSearchFieldHint": "Search names, usernames and latest messages",
   "@chatsSearchFieldHint": {

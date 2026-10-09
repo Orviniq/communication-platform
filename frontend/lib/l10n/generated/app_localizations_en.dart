@@ -657,9 +657,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatsSearchAction => 'Search chats';
 
   @override
-  String get chatsSearchHint => 'Search names and the latest message';
-
-  @override
   String get chatsClearSearchAction => 'Clear search';
 
   @override
@@ -688,10 +685,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatsDeviceSearchScopeNotice =>
       'This searches only the messages stored on this phone. The server never sees them, or what you search for.';
-
-  @override
-  String get chatsListSearchScopeNotice =>
-      'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.';
 
   @override
   String get chatsSearchFieldLabel => 'Search chats and contacts';

@@ -1226,12 +1226,6 @@ abstract class AppLocalizations {
   /// **'Search chats'**
   String get chatsSearchAction;
 
-  /// No description provided for @chatsSearchHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Search names and the latest message'**
-  String get chatsSearchHint;
-
   /// No description provided for @chatsClearSearchAction.
   ///
   /// In en, this message translates to:
@@ -1285,12 +1279,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This searches only the messages stored on this phone. The server never sees them, or what you search for.'**
   String get chatsDeviceSearchScopeNotice;
-
-  /// The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed.
-  ///
-  /// In en, this message translates to:
-  /// **'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.'**
-  String get chatsListSearchScopeNotice;
 
   /// No description provided for @chatsSearchFieldLabel.
   ///

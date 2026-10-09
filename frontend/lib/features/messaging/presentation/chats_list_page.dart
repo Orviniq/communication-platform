@@ -35,16 +35,6 @@ class ChatsListPage extends StatefulWidget {
 }
 
 class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
-  final TextEditingController _search = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
-
-  @override
-  void dispose() {
-    _search.dispose();
-    _searchFocus.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final injected = widget.model;
@@ -143,26 +133,7 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
             label: label,
             kind: AppStatusKind.neutral,
           ),
-        // The query belongs to the field. Rebuilding the page for it re-mapped
-        // every conversation summary on every keystroke, to filter a list that
-        // had not changed.
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _search,
-          builder: (context, value, _) =>
-              _searchField(context, strings, value.text.trim()),
-        ),
-        Expanded(
-          child: ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _search,
-            builder: (context, value, _) => _results(
-              context,
-              model,
-              strings,
-              value.text.trim().toLowerCase(),
-              ref,
-            ),
-          ),
-        ),
+        Expanded(child: _results(context, model, strings, ref)),
       ],
     );
     if (widget.compact) return body;
@@ -171,10 +142,13 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
       appBar: AppBar(
         title: Text(strings.chatsTitle),
         actions: [
+          // Search is a page of its own (ui-specification.md §6.5): the list
+          // keeps its whole height for the conversations.
           AppIconButton(
+            key: const ValueKey('chats-search-action'),
             icon: AppIcons.search,
             semanticLabel: strings.chatsSearchAction,
-            onPressed: _searchFocus.requestFocus,
+            onPressed: () => unawaited(context.push('/chats/search')),
             kind: AppButtonKind.ghost,
           ),
         ],
@@ -183,66 +157,16 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
     );
   }
 
-  Widget _searchField(
-    BuildContext context,
-    AppLocalizations strings,
-    String query,
-  ) => Padding(
-    padding: const EdgeInsets.fromLTRB(
-      AppSpacing.x4,
-      AppSpacing.x3,
-      AppSpacing.x4,
-      AppSpacing.x2,
-    ),
-    child: TextField(
-      key: const ValueKey('chats-search-field'),
-      controller: _search,
-      focusNode: _searchFocus,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: strings.chatsSearchHint,
-        prefixIcon: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x3),
-          child: AppIcon(AppIcons.search),
-        ),
-        suffixIcon: query.isEmpty
-            ? null
-            : AppIconButton(
-                icon: AppIcons.close,
-                semanticLabel: strings.chatsClearSearchAction,
-                onPressed: _search.clear,
-                kind: AppButtonKind.ghost,
-              ),
-        filled: true,
-        fillColor: context.tokens.colors.surfaceRaised,
-        border: const OutlineInputBorder(
-          borderRadius: AppRadii.control,
-          borderSide: BorderSide.none,
-        ),
-      ),
-    ),
-  );
-
   Widget _results(
     BuildContext context,
     ChatListViewModel model,
     AppLocalizations strings,
-    String query,
     WidgetRef? ref,
   ) {
-    final items = model.items
-        .where(
-          (item) =>
-              query.isEmpty ||
-              item.title.toLowerCase().contains(query) ||
-              item.preview.toLowerCase().contains(query),
-        )
-        .toList(growable: false);
-    return switch ((model.loading, model.failed, items.isEmpty, query)) {
-      (true, _, _, _) => AppStatePanel.loading(
-        title: strings.chatsLoadingTitle,
-      ),
-      (_, true, _, _) => AppStatePanel.error(
+    final items = model.items;
+    return switch ((model.loading, model.failed, items.isEmpty)) {
+      (true, _, _) => AppStatePanel.loading(title: strings.chatsLoadingTitle),
+      (_, true, _) => AppStatePanel.error(
         title: strings.chatsErrorTitle,
         message: strings.chatsErrorMessage,
         actionLabel: strings.retryAction,
@@ -253,36 +177,16 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
           }
         },
       ),
-      (_, _, true, '') => AppStatePanel.empty(
+      (_, _, true) => AppStatePanel.empty(
         title: strings.chatsEmptyTitle,
         message: strings.chatsEmptyMessage,
         actionLabel: strings.chatsStartAction,
         onAction: () => context.go('/chats/new'),
       ),
-      // This list filters on title and last-message preview and nothing
-      // else, so it says so. Borrowing the in-conversation notice here
-      // promised a search of this device's history that the list has
-      // never performed (ADR-052).
-      (_, _, true, _) => AppStatePanel.empty(
-        title: strings.chatsNoSearchResultsTitle,
-        message: strings.chatsListSearchScopeNotice,
-      ),
       _ => ListView.builder(
         key: const PageStorageKey('chats-list'),
-        itemCount: items.length + (query.isEmpty ? 0 : 1),
+        itemCount: items.length,
         itemBuilder: (context, index) {
-          if (index == items.length) {
-            return Padding(
-              padding: const EdgeInsets.all(AppSpacing.x4),
-              child: Text(
-                strings.chatsListSearchScopeNotice,
-                textAlign: TextAlign.center,
-                style: context.tokens.typography.label.copyWith(
-                  color: context.tokens.colors.textMuted,
-                ),
-              ),
-            );
-          }
           final item = items[index];
           return ChatListRow(
             item: item,

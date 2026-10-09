@@ -654,9 +654,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatsSearchAction => 'جست‌وجوی گفت‌وگوها';
 
   @override
-  String get chatsSearchHint => 'جست‌وجو در نام‌ها و آخرین پیام';
-
-  @override
   String get chatsClearSearchAction => 'پاک کردن جست‌وجو';
 
   @override
@@ -684,10 +681,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get chatsDeviceSearchScopeNotice =>
       'فقط پیام‌های ذخیره‌شده روی همین گوشی جست‌وجو می‌شوند. سرور نه آن‌ها را می‌بیند و نه آنچه را جست‌وجو می‌کنید.';
-
-  @override
-  String get chatsListSearchScopeNotice =>
-      'این فهرست فقط نام‌ها و آخرین پیام را می‌گردد. برای جست‌وجو در تاریخچهٔ یک گفت‌وگو، آن را باز کنید و داخل آن جست‌وجو کنید.';
 
   @override
   String get chatsSearchFieldLabel => 'جست‌وجوی گفت‌وگوها و مخاطبان';
