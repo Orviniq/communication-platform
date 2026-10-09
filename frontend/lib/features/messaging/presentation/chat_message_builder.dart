@@ -770,6 +770,9 @@ class _ReactionOption extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
+      // The InkResponse's own tap action goes with `excludeSemantics`, so the
+      // node carries it.
+      onTap: onPressed,
       excludeSemantics: true,
       label: selected
           ? strings.chatReactionRemoveAction(emoji)
@@ -814,6 +817,9 @@ class _ReactionExpandOption extends StatelessWidget {
     final colors = context.tokens.colors;
     return Semantics(
       button: true,
+      // The InkResponse's own tap action goes with `excludeSemantics`, so the
+      // node carries it.
+      onTap: onPressed,
       excludeSemantics: true,
       label: label,
       child: Tooltip(
