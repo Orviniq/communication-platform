@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/create_group_page.dart';
@@ -181,6 +183,119 @@ void main() {
     expect(find.text('Private Team'), findsWidgets);
     expect(find.byType(VerticalDivider), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sending a group message leaves the composer, its focus and the '
+      'keyboard where they were', (tester) async {
+    // The send is held open on purpose. The composer used to be swapped for a
+    // progress bar for as long as `onSend` took, and a text field that leaves
+    // the tree takes the keyboard with it.
+    final finished = Completer<Result<void>>();
+    final sent = <String>[];
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (text) {
+          sent.add(text);
+          return finished.future;
+        },
+      ),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    await tester.tap(field);
+    await tester.pump();
+    await tester.enterText(field, 'Keep typing');
+    await tester.pump();
+    final focus = tester.widget<TextField>(field).focusNode!;
+    expect(focus.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.tap(_sendButton);
+    await tester.pump();
+
+    expect(sent, ['Keep typing']);
+    expect(find.byType(ChatComposerBuilder), findsOneWidget);
+    expect(focus.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    finished.complete(const Result.success(null));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatComposerBuilder), findsOneWidget);
+    expect(focus.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+  });
+
+  testWidgets('a group send that is refused says so and keeps the composer', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (_) async => const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        ),
+      ),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    await tester.enterText(field, 'Not allowed');
+    await tester.pump();
+    await tester.tap(_sendButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('The message was not saved. Nothing was sent.'),
+      findsOneWidget,
+    );
+    expect(find.byType(ChatComposerBuilder), findsOneWidget);
+  });
+
+  testWidgets('a send that succeeds does not hide an earlier one that failed', (
+    tester,
+  ) async {
+    // Two sends can now be in flight at once, because the composer stays. The
+    // one that ends last must not decide whether the failure of the other is
+    // still on screen.
+    final first = Completer<Result<void>>();
+    final second = Completer<Result<void>>();
+    final answers = [first, second];
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (_) => answers.removeAt(0).future,
+      ),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    for (final text in ['First', 'Second']) {
+      await tester.enterText(field, text);
+      await tester.pump();
+      await tester.tap(_sendButton);
+      await tester.pump();
+    }
+
+    first.complete(
+      const Result.failure(SecurityFailure(SecurityFailureKind.policyBlocked)),
+    );
+    await tester.pump();
+    second.complete(const Result.success(null));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('The message was not saved. Nothing was sent.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -494,3 +609,11 @@ Future<void> _pump(
   );
   await tester.pumpAndSettle();
 }
+
+/// Send, once the composer holds a draft to send.
+final Finder _sendButton = find.byWidgetPredicate(
+  (widget) =>
+      widget is AppIconButton &&
+      widget.icon == AppIcons.send &&
+      widget.onPressed != null,
+);

@@ -131,7 +131,6 @@ class GroupChatView extends StatefulWidget {
 
 class _GroupChatViewState extends State<GroupChatView> {
   final _composerKey = GlobalKey<ChatComposerBuilderState>();
-  var _sending = false;
   var _sendFailed = false;
   var _retryFailed = false;
 
@@ -170,16 +169,17 @@ class _GroupChatViewState extends State<GroupChatView> {
         Expanded(
           child: ChatTimelineAdapter(model: timeline, onIntent: _handleIntent),
         ),
-        if (_sending)
-          const LinearProgressIndicator(minHeight: 2)
-        else
-          ChatComposerBuilder(
-            key: _composerKey,
-            securityGate: gate,
-            offline: false,
-            savedMessages: false,
-            onIntent: _handleIntent,
-          ),
+        // Always in the tree, as in a direct conversation. A send only queues
+        // the message, and the timeline shows it the moment it is written, so
+        // the composer has nothing to wait for. A field that left the tree
+        // while a send ran took the keyboard with it.
+        ChatComposerBuilder(
+          key: _composerKey,
+          securityGate: gate,
+          offline: false,
+          savedMessages: false,
+          onIntent: _handleIntent,
+        ),
       ],
     );
     final width = MediaQuery.sizeOf(context).width;
@@ -304,16 +304,12 @@ class _GroupChatViewState extends State<GroupChatView> {
   }
 
   Future<void> _send(String text) async {
-    setState(() {
-      _sending = true;
-      _sendFailed = false;
-    });
+    setState(() => _sendFailed = false);
     final result = await widget.onSend(text);
     if (!mounted) return;
-    setState(() {
-      _sending = false;
-      _sendFailed = result is FailureResult<void>;
-    });
+    // Only a failure is recorded. Sends can overlap now, and one that went
+    // through says nothing about another that was refused.
+    if (result is FailureResult<void>) setState(() => _sendFailed = true);
   }
 
   Future<void> _retry(String messageId) async {
