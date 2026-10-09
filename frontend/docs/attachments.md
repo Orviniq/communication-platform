@@ -10,6 +10,67 @@ Possession of the capability permits any authenticated full-scope account to dow
 the ciphertext, so capability IDs are treated as secrets and never logged, included in
 analytics, copied into diagnostics, or exposed in notification previews.
 
+## Phase 1: direct chats (ADR-089)
+
+*Proposed 2026-10-10; built over five prompts on `frontend-dm-attachments`.* Attachments work
+in a direct chat and in Saved Messages. A group chat gets none in this phase: its paperclip opens
+the attachment sheet with the "not built" notice. The rules below are binding client behaviour;
+ADR-089 holds the reasons, the rejected alternatives and the Android sources.
+
+1. **Pickers.** No picker package. The application's own Android code
+   (`AttachmentChannel.kt`) starts system intents: the photo picker,
+   `MediaStore.ACTION_PICK_IMAGES`, on API 33 and later and on API 30 to 32 with R extension 2
+   or more, else `Intent.ACTION_GET_CONTENT` with `image/*`; `Intent.ACTION_OPEN_DOCUMENT` with
+   `*/*` for a file; `MediaStore.ACTION_IMAGE_CAPTURE` into a `FileProvider` URI in the private
+   cache for the camera. The application asks for no permission and declares no `CAMERA`
+   permission, because a declared and refused one makes the capture intent fail with a
+   `SecurityException`.
+2. **Copy.** The chosen content is copied on a worker thread into
+   `secure_attachment_cache/outgoing/<random id>/<safe name>`, counting the bytes, and the copy
+   stops at the byte limit Dart gives: the largest plaintext that fits the largest bucket both the
+   deployment and the crypto protocol hold (`attachmentPlaintextLimit`). The name and the size
+   come from `OpenableColumns` and the type from the content resolver; the declared size is never
+   what lets a copy through. Dart does not trust the type: `safeMimeType` decides it, and
+   `safeAttachmentName` the name.
+3. **Photo processing.** Photo and Camera re-encode the picture: the EXIF orientation is applied
+   once, the longest side is at most 2048 px and the picture is never enlarged, it is drawn on
+   opaque white, and it is written as a JPEG of quality 82 with no metadata, which removes the
+   location and the camera data. A GIF stays unchanged. File sends the exact bytes. A picture the
+   device cannot decode is refused, with the advice to send it as a file.
+4. **Send.** One attachment per message. A preview step shows the picture or the file name, the
+   size, the upload size, today's remainder and a caption of at most 1,024 characters; the
+   descriptor's authenticated metadata stays at or below 4,096 bytes. Send starts an upload job.
+   The jobs live in memory and one upload runs at a time: a job encrypts, uploads, then calls
+   `sendAttachments`, which commits the message, and the outgoing copy becomes this device's
+   cached copy. A tray above the composer shows each job with Cancel, Retry and Discard. A process
+   death drops the jobs, so in this phase the retention *Send pipeline* asks for below holds for
+   the life of the process only; the durable queue that would carry it across a restart is
+   deferred.
+5. **Allowance.** An upload whose bucket is larger than today's remainder is refused before a
+   byte is sent. The preview step states the remainder, and a `quota_exceeded` refusal states when
+   the UTC day turns, in local time.
+6. **Receive.** A received attachment shows as "not downloaded", with its name and its size. A
+   tap downloads it, one download at a time, then verifies and decrypts it. A ready picture shows
+   inline, decoded at a bounded size; a ready file or picture opens a details sheet with Open, Save
+   and Share. No download starts without a tap.
+7. **Open, Save and Share.** The native side accepts only a regular file whose canonical path is
+   inside `secure_attachment_cache/plain/`, applies its MIME allowlist, and refuses anything else.
+8. **Cache.** Decrypted files go to `secure_attachment_cache/plain/<random id>/<safe name>`. The
+   `attachments` row holds the random id and an expiry. An entry expires 7 days after its last
+   open, the cache holds at most 256 MiB and evicts the least recently opened entry first, and an
+   evicted, expired or missing entry returns to "not downloaded". The native wipe deletes the
+   private cache at logout and at revocation.
+9. **Persisted states.** Of the values 0 to 8 the CHECK of `attachments.transfer_state` allows,
+   the client persists only `queued` (meaning "not downloaded"), `ready` and `expired`. Each other
+   state lives in memory. The schema does not change.
+10. **Projection.** An attachment row keeps its state, its cache id and its expiry when its
+    message is written again. The rows go when the message is deleted for everyone or for me, or
+    when an id leaves the message. A message with an attachment and no caption shows the file name
+    as its Chats list preview.
+
+Not in this phase: group chats, the Shared media screens, thumbnails, automatic download, a
+durable upload queue and video.
+
 ## Send pipeline
 
 1. User selects a file through a platform picker.
@@ -28,7 +89,7 @@ analytics, copied into diagnostics, or exposed in notification previews.
 
 The encrypted descriptor contains capability ID, key, secretstream header, real encrypted
 length, plaintext size, media metadata, safe display name, and optional thumbnail. It is
-authenticated by the surrounding DM/MLS message.
+authenticated by the surrounding pairwise message.
 
 If upload succeeds but message send fails, retain the outbox operation until backend TTL
 or explicit local cancellation. The backend has no delete endpoint, so UI does not claim

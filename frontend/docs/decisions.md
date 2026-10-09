@@ -99,6 +99,299 @@ is not silently edited out of history.
 | ADR-086 | Accepted (2026-10-08); the connection strip its costs name deleted by ADR-087 (2026-10-09) | The navigation bar and the rail show on the three tab roots, `/chats`, `/voice-rooms` and `/settings`, and on no other screen. Each of the 16 routes below them names the root navigator, whose key `createAppRouter` makes per router, so every page above a tab root is a full-screen page at every width: it covers the shell in its own route transition, and the tab root keeps its state under it. The Chats list pushes a group chat and Saved Messages, and a new group goes to the list and pushes its chat, so back returns to the list at the same place. A full-screen page keeps its controls clear of the system insets: an app bar or a bar of the page's own takes the inset at its edge, and a scrolling body adds the rest through `AppInsets.belowAppBar`. During a call every page on the root navigator but the six bootstrap and sign-in pages carries the call banner at its top, below the status bar and above its app bar, through `VoiceRoomBannerFrame`; the banner is the shell's own `VoiceRoomBanner`, read through `LiveShellStatus`, and the call's own page shows none | `ui-specification.md` §0.1 and `responsive-ui.md` asked for a full-screen detail, but the routes put each detail inside its branch, under the shell: the navigation bar stayed on conversations, voice rooms and Settings pages, and back from a group chat or Saved Messages left the application, because a `go` had replaced the stack. On the root navigator the page itself covers the bar, and the tab root waits under it unchanged, where a bar hidden by location would leave out of step with the page and lay the tab root out again at a new size under it. Covering the shell covered its banner, which §0.2 and `voice-room-states.md` §5.8 require on every screen until the call ends, so each page carries one. Costs: a page covers the rail at medium and wide width, and the shell's environment banner, connection strip and keyboard shortcuts stay on the tab roots. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-087 | Accepted (2026-10-09) | The Chats top bar's search icon opens a full-screen search page at `/chats/search`, with a Chats section and a Contacts section and no message section, and the field above the list is deleted. The Chats title carries the delivery engine's status, from its live phase only: Connecting…, Syncing… or Waiting to reconnect… once the engine has been in a state other than settled for one second without a break, with a small spinner before the first two (the still `AppIcons.connecting` when animations are off), and "Chats" again the moment the engine settles. ADR-060 D11's four content-free states and its mapping of the nine phases stay. The status line above the list, the long offline notice, and the shell's connection strip with its state and the `?offline=true` query that fed it are deleted, and `/connection` opens `/chats` after every start | The search icon only moved the focus to a field on the same page, so the icon and the field did one job twice and the field held the list's height for good; a page gives search room for a second section and its scope. ADR-060 D11's line appeared and disappeared with each sync cycle and moved the list by its own height each time, where a title has no neighbour to push, and a stalled engine is still on the title after one second. The offline notice and the strip followed how the session opened, which does not change when the connection returns, so each stayed on screen after the connection was back; the strip also showed on the Chats tab root only and repeated what the title now says. A message section is not built: a chat's summary carries its latest message only, and a search across every conversation's history is a new storage query that needs its own design. Costs: for the second before the title speaks, a start with no server looks like any other, and a screen reader names the Chats route by the status while one shows. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-088 | Accepted (2026-10-09); withdraws the copy count of ADR-075 item 5 | The group chat keeps its composer in the tree while a message is sent, as a direct conversation does, so the focus and the keyboard stay where they were, and the progress bar that replaced it is deleted. A group message in flight shows the mark of its state and no text beside it: "Copies sent: 45 of 150", its two strings, the message view model's field and the group screen's progress map that carried it, and the provider that fed them are deleted. A message is still marked sent only when no copy is owed, and a failed one still offers a retry. The repository's read of what is owed stays, and no screen reads it | Taking the composer out for the length of a send took the keyboard with it after every message, and the send only writes and queues the message, as a direct one does, so there was nothing to wait for. The count was several times wider than the time and the mark beside it: on the code before this change a bubble measured 404 px while its message was sending and 131 px once it was accepted, in a widget test 800 px wide, and the mark already says where the message is. Costs: a person no longer sees how far a large group's fan-out has got, and two sends can now overlap, so the inline error is only ever raised by a send and never cleared by one that succeeds. Changes no table, wire format, protocol, dependency or backend file. |
+| ADR-089 | Proposed (2026-10-10); prompt 5 of the phase sets it Accepted | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
+
+## ADR-089 in full — a direct chat sends a file, through the system's own pickers (2026-10-10)
+
+**Status:** Proposed, 2026-10-10. Phase 1 of the attachment work. Prompt 5 of the phase sets it
+Accepted. Client decision, built over five prompts on the branch `frontend-dm-attachments`.
+**Changes no table, wire format, protocol, dependency, Android permission, cryptographic
+construction, disclosure text, disclosure revision or backend file.** The "Not built yet" label
+ADR-045 gave file attachments stops being true for a direct chat when the phase lands (D13); the
+decision text of ADR-045 is not edited.
+
+**Cites:** `attachments.md`; `platform-android.md`; `backend/attachments/API.md`; ADR-045,
+ADR-075 and ADR-083.
+
+### Context
+
+- **The library exists.** Commit `5cfcd8c` (2026-08-01) built it, and it is tested. The Rust core
+  encrypts with secretstream (`native/crypto_core/src/attachment.rs`), reached through
+  `AttachmentCryptoPort`. `AttachmentCryptoService` encrypts a stream to a padded bucket file and
+  decrypts it again. `DioAttachmentTransport` uploads and downloads, counts the day's allowance and
+  resumes a large download (ADR-083). `AttachmentTransferService` joins the four.
+  `SendConversationEvents.sendAttachments` sends a message that carries descriptors. The projector
+  writes `attachments` rows, and the timeline draws a tile for them.
+- **Nothing composes it.** No provider builds the transfer service, nothing calls
+  `sendAttachments`, and no build has a picker. ADR-045 therefore labelled file attachments **Not
+  built yet**, and the paperclip of a direct chat opens `AttachmentSheet` with the notice "File
+  attachments are not built yet".
+- **The group paperclip does nothing.** It opens no sheet and says nothing.
+
+### The decisions
+
+**D1 Scope.** Attachments work in a direct chat and in Saved Messages. A group chat gets no
+attachment in this phase. The paperclip of a group chat opens the attachment sheet with the "not
+built" notice. The Shared media screens stay not built.
+
+**D2 Pickers.** The app adds no picker package. Its own Android code starts system intents:
+
+- Photo: the Android photo picker, `MediaStore.ACTION_PICK_IMAGES`, where the device has it. Else
+  `Intent.ACTION_GET_CONTENT` with `image/*`.
+- File: `Intent.ACTION_OPEN_DOCUMENT` with `*/*`.
+- Camera: `MediaStore.ACTION_IMAGE_CAPTURE` into a `FileProvider` URI in the private cache.
+
+The app asks for no permission. It declares no `CAMERA` permission: a declared and refused
+`CAMERA` permission makes the capture intent fail with a `SecurityException`.
+
+**D3 Copy.** The Android code copies the chosen content into the private cache on a worker thread.
+It stops at a byte limit that Dart gives: the largest plaintext that fits the largest bucket. It
+reads the name and the size from `OpenableColumns` and the type from the content resolver. Dart
+does not trust the type: `safeMimeType` decides it.
+
+**D4 Photo processing.** Photo and Camera re-encode the picture:
+
+- the EXIF orientation is applied one time;
+- the longest side is at most 2048 px, and the picture is never enlarged;
+- the picture is drawn on opaque white;
+- the encoding is JPEG at quality 82, with no metadata.
+
+This removes the location and the camera data. A GIF stays unchanged. File sends the exact bytes.
+A picture that the device cannot decode is refused, with the advice to send it as a file.
+
+**D5 Send.** One attachment per message. A preview step shows the picture or the file name, the
+size, the upload size, today's remainder and a caption field. The caption has at most 1,024
+characters, and the authenticated metadata of the descriptor stays at or below 4,096 bytes. Send
+starts an upload job. The jobs live in memory, and one upload runs at a time. A job encrypts,
+uploads, then calls `sendAttachments`, which commits the message. The outgoing copy then becomes
+this device's cached copy. A tray above the composer shows each job, with Cancel, Retry and
+Discard. A process death drops the jobs, and the user sends again.
+
+**D6 Allowance.** The client refuses an upload locally when its bucket is larger than today's
+remainder. The preview step states the remainder. A `quota_exceeded` refusal states when the UTC
+day turns, in local time.
+
+**D7 Receive.** A received attachment shows as "not downloaded", with its name and its size. A tap
+downloads it, one download at a time, then verifies and decrypts it. A ready picture shows inline,
+decoded at a bounded size. A ready file and a ready picture open a details sheet with Open, Save
+and Share. No download starts without a tap in this phase.
+
+**D8 Cache.** Decrypted files go to `secure_attachment_cache/plain/<random id>/<safe name>`. The
+`attachments` row holds the random id and an expiry. An entry expires 7 days after its last open.
+The cache holds at most 256 MiB and evicts the least recently opened entry first. An evicted,
+expired or missing entry returns to "not downloaded". The native wipe already deletes the private
+cache at logout and at revocation.
+
+**D9 Persisted states.** The CHECK of `attachments.transfer_state` allows the values 0 to 8. The
+client persists only `queued` (meaning "not downloaded"), `ready` and `expired`. Each other state
+lives in memory. The schema does not change.
+
+**D10 Projection.** An attachment row keeps its state, its cache id and its expiry when its message
+is written again. The rows go when the message is deleted for everyone or for me, or when an id
+leaves the message. A message with an attachment and no caption shows the file name as the Chats
+list preview.
+
+**D11 Retry and forward.** A retry of a failed attachment message re-arms its durable send. Its
+fallback sends the same descriptors again, never the caption alone. Forward sends the descriptors
+and the caption to each target. The server copy is not copied, so it expires on its first date.
+
+**D12 Transport trust.** The attachment transport uses the `Dio` adapter of the provisioned
+`TransportSecurity` and the one token coordinator of `NetworkingFoundation`. No code builds it with
+the platform default trust.
+
+**D13 Disclosure.** This phase changes no disclosure text and no disclosure revision. The point
+`disclosureUnbuiltSurfaces` becomes false for direct-chat attachments, as it is already false for
+voice rooms. The owner revises both. The sheet keeps `attachmentsNotBuiltNotice` for the group
+chat.
+
+**D14 Privacy.** Nothing logs a capability, a key, a file name, a path, a URI, a MIME type, a size
+or content. Each new type has a `toString` that shows none of them.
+
+### The Android boundary, as built (prompt 1)
+
+`AttachmentChannel.kt` holds the channel `communication_platform/attachments`, moved out of
+`MainActivity.kt`, which keeps the registration, forwards `onActivityResult` after
+`super.onActivityResult` (the Flutter embedding hands results to plugins there), and detaches the
+channel with the engine. `FlutterActivity` is an `android.app.Activity`, not a
+`ComponentActivity`, so the results come through `startActivityForResult` and
+`onActivityResult`.
+
+- **`pick`** takes `kind` (`photo`, `file`, `camera`) and `maxBytes`. One pick or save waits at a
+  time; a second answers `busy`. The photo picker is started on API 33 and later, and on API 30 to
+  32 when `SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R)` is 2 or more; elsewhere
+  `ACTION_GET_CONTENT` with `image/*` and `CATEGORY_OPENABLE`. The camera writes
+  `outgoing/<id>/capture.jpg` through a `FileProvider` URI passed as `EXTRA_OUTPUT` and as the
+  intent's `ClipData`, with the read and write grants; a missing camera app answers `noCameraApp`
+  and deletes the directory.
+- **Cancel.** `RESULT_CANCELED`, or a result with no data, answers `null` and deletes what the
+  request made. A camera app that wrote to `EXTRA_OUTPUT` commonly answers with no `Intent` at all,
+  so for the camera "no data" means no captured file, or an empty one, rather than a null `Intent`.
+- **Copy.** On one worker thread for the whole process, answered on the main thread, into
+  `secure_attachment_cache/outgoing/<32 lowercase hex from SecureRandom>/<safe name>`. The safe
+  name is the last path segment of the display name without control characters, at most 128
+  characters and 255 bytes of UTF-8 (the file system's limit for one name), and `attachment` when
+  nothing is left. The bytes are counted while they are copied, and the copy stops above
+  `maxBytes` with `tooLarge`. The declared size only refuses early; it never lets a copy through.
+  The name and the size come from `OpenableColumns`, the type from `ContentResolver.getType`, and
+  nothing else is read from the provider. A stream that cannot be read answers `unreadable`.
+- **Photo and Camera.** `ImageDecoder` on API 28 and later, which applies the EXIF orientation
+  itself and decodes straight to the target size in a software bitmap; `BitmapFactory` below API
+  28, sampled by the largest power of two that keeps the longest side at 2048 px or more, with the
+  orientation read once through `android.media.ExifInterface` and applied when the picture is
+  drawn. The picture is drawn on a new opaque white bitmap, its longest side at most 2048 px, and
+  written with `Bitmap.compress(JPEG, 82)`; the unprocessed copy is then deleted. The name is the
+  original's base name with `.jpg`, and a capture is `photo.jpg`. A photo pick of `image/gif` is
+  sent as it is. A decode failure answers `unsupportedImage`, and so does a GIF above the
+  descriptor's 8192 px. A re-encoded picture above `maxBytes` answers `tooLarge`.
+- **The answer** holds `path`, `name`, `mime`, `size` (the bytes on disk), `kind` (`image` for
+  Photo and Camera, `file` for File whatever its type) and, for an image, `width` and `height`. A
+  File pick of an image type carries the size in pixels from a bounds-only decode, turned by its
+  EXIF orientation, when that succeeds and fits the descriptor.
+- **`openVerifiedFile`** starts `ACTION_VIEW` with `setDataAndType` and the read grant, and
+  answers `noApp` when nothing handles it. **`saveVerifiedFile`** starts `ACTION_CREATE_DOCUMENT`
+  with `CATEGORY_OPENABLE`, the type and `EXTRA_TITLE`, copies the file on the worker, and answers
+  `true`, `false` for a cancel, or `writeFailed`; a failed write does not delete the chosen
+  document, which may be one the user chose to replace. **`shareVerifiedFile`** keeps its
+  behaviour. All three take only a regular file whose canonical path is inside
+  `secure_attachment_cache/plain/`, apply the MIME allowlist, and answer `invalid_argument` to
+  anything else; the old share rule accepted any file in the private cache.
+- **A result with no request waiting** comes from a process that restarted while a picker was
+  open, or from an engine that has gone. It is dropped, and the sweep of prompt 2 deletes the
+  orphan copy.
+- Nothing logs, no permission is added, and no `<queries>` element is added: each intent is
+  started and `ActivityNotFoundException` is caught, which the package-visibility guide states
+  needs no visibility.
+
+In Dart, `AttachmentPlatformPort` (pick, open, save, share) answers a typed `Result`, and
+`MethodChannelAttachmentPlatform` replaces `AndroidAttachmentSharePort`. Each outcome the screen
+must tell apart reuses a failure kind; none was added:
+
+| Outcome | Failure |
+|---|---|
+| a pick that answers `null`, a save that answers `false` | `CancellationFailure(requestedByUser)` |
+| `busy` | `ValidationFailure(conflict)` |
+| `tooLarge` | `ValidationFailure(limitExceeded)` |
+| `unsupportedImage` | `ValidationFailure(invalidInput)` |
+| `unreadable` (pick), `writeFailed` (save) | `StorageFailure(unavailable)` |
+| `noCameraApp`, `noApp` | `UnsupportedProtocolFailure(capability)` |
+| `invalid_argument`, `share_failed` | `SecurityFailure(policyBlocked)` |
+| a malformed answer, or a code the method cannot give | `SecurityFailure(malformedServerResponse)` |
+
+The last row is the kind the crypto worker already gives a reply from its isolate that it cannot
+parse. A pick answer is malformed when a field is missing or of the wrong type, when its kind is
+not the one asked for, when its size is above the limit, when a width or a height is outside 1 to
+8192, and when its path is not `<private cache>/outgoing/<32 hex>/<name>`; its name and its type
+pass through `safeAttachmentName` and `safeMimeType`. `attachmentPlaintextLimit` gives the byte
+limit of a bucket on the formula of `attachmentBucketFor`: 65,429 bytes for 64 KiB up to
+67,091,366 for 64 MiB.
+
+### Rejected alternatives
+
+- **A picker package** (`image_picker`, `file_picker`). It adds a dependency and plugin code to
+  review. The system intents give the same result with no permission.
+- **Re-encode in Dart.** Flutter has no JPEG encoder without a new package, and its PNG encoder
+  makes large files.
+- **A thumbnail in the descriptor.** A descriptor travels in each copy of the message. A thumbnail
+  of up to 64 KiB can move each copy to a larger envelope bucket, up to 256 KiB.
+- **A durable upload queue.** It needs a new table and a recovery path. It is deferred.
+- **Automatic download.** It spends data without a request from the user. It is deferred.
+- **A server delete.** No endpoint exists.
+
+### Consequences
+
+- A person sends a picture from the gallery, a new photo or any file from a direct chat or Saved
+  Messages, and nothing in the artifact asks for a permission to do it. No Google service is on the
+  path: on API 30 to 32 the photo picker comes with a system update, and the Google Play services
+  backport of the picker for older versions is not used.
+- A photo sent as Photo or Camera loses its location, its camera data and every other piece of
+  metadata, and is at most 2048 px on its longest side. A person who wants the original sends it
+  as a file.
+- An upload in progress dies with the process. `attachments.md` asks that an attachment uploaded
+  but not yet sent be retained until the server's TTL or an explicit cancel; in this phase that
+  holds for the life of the process only, and the durable queue that would make it hold across a
+  restart is the deferred alternative above.
+- A decrypted file evicted or expired from the cache costs a second download while the server
+  keeps the ciphertext (30 days by default), and cannot be had again after that.
+- Open, Save and Share refuse every file outside `plain/`. The flat temporary files
+  `PrivateAttachmentStorage` makes today are outside it, which is harmless because nothing shares
+  one yet, and prompt 2 moves decrypted files into `plain/`.
+- A photo taken while the process dies is lost with the result that would have announced it.
+- A group chat sends no file, and its sheet says so instead of doing nothing.
+
+### What this phase does not do
+
+Attachments in group chats, the Shared media screens, thumbnails, automatic download, a durable
+upload queue, video, and the disclosure revision of D13.
+
+### Android sources
+
+Read at primary source on 2026-10-10, against `minSdk` 24 and `targetSdk` 36. The date in
+brackets is the page's own "Last updated". The notes below paraphrase the pages.
+
+- [`MediaStore`](https://developer.android.com/reference/android/provider/MediaStore) (2026-08-03):
+  `ACTION_PICK_IMAGES` was added in API 33 and in R Extensions 2; it gives read access to what the
+  user picks without a storage permission, takes an optional MIME type such as `image/*`, and
+  answers picker URIs that can be queried only for `PickerMediaColumns`. `ACTION_IMAGE_CAPTURE`
+  (API 3) writes the full-size picture to the `EXTRA_OUTPUT` URI; from API 21 the URI may also be
+  set as `ClipData`, and must still be set as `EXTRA_OUTPUT`. An app that targets API 23 or later
+  and declares a `CAMERA` permission it has not been granted gets a `SecurityException` from it.
+- [`MediaStore.PickerMediaColumns`](https://developer.android.com/reference/android/provider/MediaStore.PickerMediaColumns)
+  (2026-08-03): API 33 and R Extensions 2; its `DISPLAY_NAME` and `SIZE` are `_display_name` and
+  `_size`, the names `OpenableColumns` uses.
+- [`SdkExtensions`](https://developer.android.com/reference/android/os/ext/SdkExtensions)
+  (2026-08-03): API 30; `getExtensionVersion(VERSION_CODES.R)` is the documented test for an API
+  that arrived in an extension.
+- [Photo picker](https://developer.android.com/training/data-storage/shared/photopicker)
+  (2026-10-01): available on API 30 and later where Modular System Components update through
+  Google System Updates; the backport for API 19 to 29 is installed through Google Play services,
+  which this deployment does not use.
+- [`Intent`](https://developer.android.com/reference/android/content/Intent) (2026-09-16):
+  `ACTION_GET_CONTENT` (API 1); `ACTION_OPEN_DOCUMENT` (API 19), whose caller sets the acceptable
+  types with `setType`; `ACTION_CREATE_DOCUMENT` (API 19), whose caller sets the concrete type,
+  may offer an initial name through `EXTRA_TITLE`, and adds `CATEGORY_OPENABLE` to get a URI that
+  can be opened; `CATEGORY_OPENABLE` and `ACTION_VIEW` (API 1); `FLAG_GRANT_READ_URI_PERMISSION`
+  (API 1), which also covers the URIs of the intent's `ClipData`.
+- [`FileProvider`](https://developer.android.com/reference/androidx/core/content/FileProvider)
+  (2026-08-06, `androidx.core`): a `cache-path` root is `getCacheDir()`; a grant travels in an
+  intent through its flags, with `ClipData` for API 16 to 22. The page now also warns that using
+  `FileProvider` directly, rather than a subclass, can crash on some devices. The manifest has
+  declared it directly since `5cfcd8c`; this phase does not change that, and it is recorded as
+  follow-up work.
+- [`OpenableColumns`](https://developer.android.com/reference/android/provider/OpenableColumns)
+  (2026-08-03): `DISPLAY_NAME` and `SIZE`, API 1; the size may be null when unknown.
+- [`ContentResolver`](https://developer.android.com/reference/android/content/ContentResolver)
+  (2026-08-03): `getType` (API 1) answers `null` when the type is unknown.
+- [`Activity`](https://developer.android.com/reference/android/app/Activity) (2026-09-16):
+  `startActivityForResult` throws `ActivityNotFoundException`; `onActivityResult` gets
+  `RESULT_CANCELED` when the started activity returned it, returned nothing, or crashed.
+- [Package visibility use cases](https://developer.android.com/training/package-visibility/use-cases)
+  (2026-10-01): `startActivity` needs no package visibility; the app catches
+  `ActivityNotFoundException` and needs no `<queries>` element.
+- [`ImageDecoder`](https://developer.android.com/reference/android/graphics/ImageDecoder)
+  (2026-08-28): API 28, `createSource(File)` API 28; a decoded bitmap is usually a hardware
+  bitmap, and `ALLOCATOR_SOFTWARE` is the allocation for drawing on a software canvas;
+  `setTargetSize` and `setTargetSampleSize` are called in `onHeaderDecoded`. The reference does
+  not say whether the EXIF orientation is applied, so the AOSP sources were read:
+  `frameworks/base` at `android-9.0.0_r1`, `core/jni/android/graphics/ImageDecoder.cpp`, makes its
+  codec with `SkAndroidCodec::ExifOrientationBehavior::kRespect`, while `BitmapFactory.cpp` of the
+  same tag calls `SkAndroidCodec::MakeFromCodec(codec)`, whose default in `external/skia`
+  `include/codec/SkAndroidCodec.h` at that tag is `kIgnore`; on `main`,
+  `libs/hwui/hwui/ImageDecoder.cpp` applies the origin itself and `libs/hwui/jni/BitmapFactory.cpp`
+  still does not.
+- [`BitmapFactory.Options`](https://developer.android.com/reference/android/graphics/BitmapFactory.Options)
+  (2026-08-03): `inJustDecodeBounds` and `inSampleSize` (API 1); the decoder rounds a sample size
+  down to a power of two.
+- [`ExifInterface`](https://developer.android.com/reference/android/media/ExifInterface)
+  (2026-08-03): `ExifInterface(String)`, `TAG_ORIENTATION` and the `ORIENTATION_*` values, API 5.
+- [`Bitmap`](https://developer.android.com/reference/android/graphics/Bitmap) (2026-08-03):
+  `compress` (API 1) writes the bitmap in the given format and belongs on a worker thread. In
+  AOSP `main`, `libs/hwui/hwui/Bitmap.cpp` encodes a JPEG with `SkJpegEncoder::Encode` over the
+  bitmap's pixels and adds a gainmap only for a bitmap that has one; the re-encoded bitmap is new
+  and has none.
+- [`SecureRandom`](https://developer.android.com/reference/java/security/SecureRandom)
+  (2026-08-03): a cryptographically strong generator, API 1.
+
+None was unreachable.
 
 ## ADR-088 in full — a group send keeps the composer, and its bubble shows no copy count (2026-10-09)
 
