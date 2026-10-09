@@ -267,6 +267,17 @@
   "@chatsListSearchScopeNotice": {
     "description": "The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed."
   },
+  "chatsSearchFieldLabel": "Search chats and contacts",
+  "chatsSearchFieldHint": "Search names, usernames and latest messages",
+  "@chatsSearchFieldHint": {
+    "description": "The hint of the Chats search page's field. It names what the page matches and nothing more: 'messages' alone would promise a search of the history, which the page does not perform (ADR-052)."
+  },
+  "chatsSearchScopeNotice": "This searches chat names, the latest message of each chat, and your contacts' names and usernames. To search older messages, open a conversation and search inside it. Your search stays on this phone.",
+  "@chatsSearchScopeNotice": {
+    "description": "The Chats search page matches chat names, the latest message of each chat, and contact names and usernames, and nothing else. Each message body is stored as ciphertext in its own row, so no query reaches an older message across conversations; a conversation's own search reads its history. The page sends the query nowhere and stores none."
+  },
+  "chatsSearchChatsHeader": "Chats",
+  "chatsSearchContactsHeader": "Contacts",
   "chatsDeliveryConnectingNotice": "Connecting…",
   "chatsDeliverySyncingNotice": "Syncing…",
   "chatsDeliveryWaitingNotice": "Waiting to reconnect…",

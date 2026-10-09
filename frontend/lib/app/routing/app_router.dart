@@ -27,6 +27,7 @@ import 'package:communication_platform/features/groups/presentation/edit_group_p
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_info_page.dart';
 import 'package:communication_platform/features/messaging/presentation/chats_list_page.dart';
+import 'package:communication_platform/features/messaging/presentation/chats_search_page.dart';
 import 'package:communication_platform/features/messaging/presentation/direct_chat_page.dart';
 import 'package:communication_platform/features/settings/presentation/about_page.dart';
 import 'package:communication_platform/features/settings/presentation/appearance_page.dart';
@@ -272,6 +273,12 @@ GoRouter createAppRouter({
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) =>
                         fullScreen(context, state, const ContactsNewPage()),
+                  ),
+                  GoRoute(
+                    path: 'search',
+                    parentNavigatorKey: rootNavigatorKey,
+                    pageBuilder: (context, state) =>
+                        fullScreen(context, state, const ChatsSearchPage()),
                   ),
                   GoRoute(
                     path: 'conversation/:conversationId',

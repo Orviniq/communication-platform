@@ -690,6 +690,23 @@ class AppLocalizationsFa extends AppLocalizations {
       'این فهرست فقط نام‌ها و آخرین پیام را می‌گردد. برای جست‌وجو در تاریخچهٔ یک گفت‌وگو، آن را باز کنید و داخل آن جست‌وجو کنید.';
 
   @override
+  String get chatsSearchFieldLabel => 'جست‌وجوی گفت‌وگوها و مخاطبان';
+
+  @override
+  String get chatsSearchFieldHint =>
+      'جست‌وجو در نام‌ها، نام‌های کاربری و آخرین پیام‌ها';
+
+  @override
+  String get chatsSearchScopeNotice =>
+      'نام گفت‌وگوها، آخرین پیام هر گفت‌وگو و نام و نام کاربری مخاطبانتان جست‌وجو می‌شود. برای جست‌وجو در پیام‌های قدیمی‌تر، گفت‌وگو را باز کنید و داخل آن جست‌وجو کنید. جست‌وجوی شما روی همین گوشی می‌ماند.';
+
+  @override
+  String get chatsSearchChatsHeader => 'گفت‌وگوها';
+
+  @override
+  String get chatsSearchContactsHeader => 'مخاطبان';
+
+  @override
   String get chatsDeliveryConnectingNotice => 'در حال اتصال…';
 
   @override

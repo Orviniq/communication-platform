@@ -694,6 +694,23 @@ class AppLocalizationsEn extends AppLocalizations {
       'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.';
 
   @override
+  String get chatsSearchFieldLabel => 'Search chats and contacts';
+
+  @override
+  String get chatsSearchFieldHint =>
+      'Search names, usernames and latest messages';
+
+  @override
+  String get chatsSearchScopeNotice =>
+      'This searches chat names, the latest message of each chat, and your contacts\' names and usernames. To search older messages, open a conversation and search inside it. Your search stays on this phone.';
+
+  @override
+  String get chatsSearchChatsHeader => 'Chats';
+
+  @override
+  String get chatsSearchContactsHeader => 'Contacts';
+
+  @override
   String get chatsDeliveryConnectingNotice => 'Connecting…';
 
   @override

@@ -1292,6 +1292,36 @@ abstract class AppLocalizations {
   /// **'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.'**
   String get chatsListSearchScopeNotice;
 
+  /// No description provided for @chatsSearchFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chats and contacts'**
+  String get chatsSearchFieldLabel;
+
+  /// The hint of the Chats search page's field. It names what the page matches and nothing more: 'messages' alone would promise a search of the history, which the page does not perform (ADR-052).
+  ///
+  /// In en, this message translates to:
+  /// **'Search names, usernames and latest messages'**
+  String get chatsSearchFieldHint;
+
+  /// The Chats search page matches chat names, the latest message of each chat, and contact names and usernames, and nothing else. Each message body is stored as ciphertext in its own row, so no query reaches an older message across conversations; a conversation's own search reads its history. The page sends the query nowhere and stores none.
+  ///
+  /// In en, this message translates to:
+  /// **'This searches chat names, the latest message of each chat, and your contacts\' names and usernames. To search older messages, open a conversation and search inside it. Your search stays on this phone.'**
+  String get chatsSearchScopeNotice;
+
+  /// No description provided for @chatsSearchChatsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get chatsSearchChatsHeader;
+
+  /// No description provided for @chatsSearchContactsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get chatsSearchContactsHeader;
+
   /// No description provided for @chatsDeliveryConnectingNotice.
   ///
   /// In en, this message translates to:
