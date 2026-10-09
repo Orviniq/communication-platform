@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -15,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+
+import '../support/system_insets.dart';
 
 const _groupId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -91,6 +94,40 @@ void main() {
     expect(find.text('Remove from group'), findsOneWidget);
     expect(find.text('Make admin'), findsNothing);
     expect(find.text('Transfer ownership'), findsNothing);
+  });
+
+  // The rule is written once, in `app_modals.dart`, and proved on the two
+  // sheet functions in `sheet_insets_test.dart`. The owner's view of a member
+  // is the longest this sheet gets: four buttons.
+  testWidgets("the owner's member sheet keeps its last button above the "
+      'gesture bar', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    fakeSystemInsets(tester);
+    await _pump(
+      tester,
+      GroupInfoPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        currentUserId: _owner,
+        onMutate: (_) async => Result.success(_state()),
+      ),
+    );
+
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('group-member-$_member')));
+    await tester.pumpAndSettle();
+
+    final surface = find.byKey(const ValueKey('app-sheet-surface'));
+    expect(tester.getRect(surface).bottom, 800);
+    expect(
+      tester
+          .getRect(find.widgetWithText(AppButton, 'Transfer ownership'))
+          .bottom,
+      closeTo(800 - 48 - 24, 0.01),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('removed group stays readable while composer is withheld', (

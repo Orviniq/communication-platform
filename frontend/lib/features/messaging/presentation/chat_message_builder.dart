@@ -428,89 +428,79 @@ class ChatMessageBuilder extends StatelessWidget {
         },
         onExpand: () => unawaited(_expandReactions(context)),
       ),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _MessageAction(
-                label: strings.chatReplyAction,
-                icon: AppIcons.reply,
-                onPressed: () {
-                  popAppModal(context);
-                  onIntent(ReplyToMessageIntent(message));
-                },
-              ),
-              if (message.canEdit)
-                _MessageAction(
-                  label: strings.chatEditAction,
-                  icon: AppIcons.edit,
-                  onPressed: () {
-                    popAppModal(context);
-                    onIntent(BeginEditMessageIntent(message));
-                  },
-                ),
-              if (!message.deleted && message.text?.trim().isNotEmpty == true)
-                _MessageAction(
-                  label: strings.chatForwardAction,
-                  icon: AppIcons.forward,
-                  onPressed: () {
-                    popAppModal(context);
-                    onIntent(ForwardMessageIntent(message));
-                  },
-                ),
-              if (!message.deleted && message.text != null)
-                _MessageAction(
-                  label: strings.chatCopyAction,
-                  icon: AppIcons.copy,
-                  onPressed: () {
-                    popAppModal(context);
-                    onIntent(CopyMessageIntent(message.text!));
-                  },
-                ),
-              _MessageAction(
-                label: message.starred
-                    ? strings.chatUnstarAction
-                    : strings.chatStarAction,
-                icon: AppIcons.star,
-                onPressed: () {
-                  popAppModal(context);
-                  onIntent(
-                    SetStarIntent(
-                      messageId: message.id,
-                      starred: !message.starred,
-                    ),
-                  );
-                },
-              ),
-              _MessageAction(
-                label: message.pinned
-                    ? strings.chatUnpinAction
-                    : strings.chatPinAction,
-                icon: AppIcons.pin,
-                onPressed: () {
-                  popAppModal(context);
-                  onIntent(
-                    SetPinIntent(
-                      messageId: message.id,
-                      pinned: !message.pinned,
-                    ),
-                  );
-                },
-              ),
-              _MessageAction(
-                label: strings.chatDeleteAction,
-                icon: AppIcons.delete,
-                danger: true,
-                onPressed: () {
-                  popAppModal(context);
-                  unawaited(_showDeleteDialog(context));
-                },
-              ),
-            ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _MessageAction(
+            label: strings.chatReplyAction,
+            icon: AppIcons.reply,
+            onPressed: () {
+              popAppModal(context);
+              onIntent(ReplyToMessageIntent(message));
+            },
           ),
-        ),
+          if (message.canEdit)
+            _MessageAction(
+              label: strings.chatEditAction,
+              icon: AppIcons.edit,
+              onPressed: () {
+                popAppModal(context);
+                onIntent(BeginEditMessageIntent(message));
+              },
+            ),
+          if (!message.deleted && message.text?.trim().isNotEmpty == true)
+            _MessageAction(
+              label: strings.chatForwardAction,
+              icon: AppIcons.forward,
+              onPressed: () {
+                popAppModal(context);
+                onIntent(ForwardMessageIntent(message));
+              },
+            ),
+          if (!message.deleted && message.text != null)
+            _MessageAction(
+              label: strings.chatCopyAction,
+              icon: AppIcons.copy,
+              onPressed: () {
+                popAppModal(context);
+                onIntent(CopyMessageIntent(message.text!));
+              },
+            ),
+          _MessageAction(
+            label: message.starred
+                ? strings.chatUnstarAction
+                : strings.chatStarAction,
+            icon: AppIcons.star,
+            onPressed: () {
+              popAppModal(context);
+              onIntent(
+                SetStarIntent(messageId: message.id, starred: !message.starred),
+              );
+            },
+          ),
+          _MessageAction(
+            label: message.pinned
+                ? strings.chatUnpinAction
+                : strings.chatPinAction,
+            icon: AppIcons.pin,
+            onPressed: () {
+              popAppModal(context);
+              onIntent(
+                SetPinIntent(messageId: message.id, pinned: !message.pinned),
+              );
+            },
+          ),
+          _MessageAction(
+            label: strings.chatDeleteAction,
+            icon: AppIcons.delete,
+            danger: true,
+            onPressed: () {
+              popAppModal(context);
+              unawaited(_showDeleteDialog(context));
+            },
+          ),
+        ],
       ),
     );
   }

@@ -109,11 +109,43 @@ Future<T?> showAppContentDialog<T>({
   ),
 );
 
+/// How much of the screen a sheet keeps to, as a share of its height.
+///
+/// This is the share Forui applies on its own, kept so that a sheet looks as it
+/// did. What changes is that content which does not fit scrolls, where Forui
+/// cut it off. The strip under the gesture bar is not counted in it: that is
+/// the system's, and a sheet whose content fitted before must still fit now that
+/// it clears the strip.
+const _sheetHeightShare = 9 / 16;
+
+/// A sheet from the bottom edge of the screen. This and [showAppAnchoredSheet]
+/// are the only ways the application opens one: `sheet_boundary_test.dart` fails
+/// on any other call to a sheet function.
+///
+/// The rule for the system insets is written here and in
+/// [showAppAnchoredSheet], and nowhere else. The sheet's surface runs down to
+/// the bottom edge of the screen, under the gesture bar or the navigation
+/// buttons, and [child] does not: it is laid out above them, and above the
+/// keyboard while one is open. A caller wraps [child] in no `SafeArea`. One that
+/// did would add nothing, because the sheet takes the insets it has applied out
+/// of the `MediaQuery` it hands down.
+///
+/// The sheet is as tall as [child], up to the room it has: the share of the
+/// screen a sheet keeps to, with the strip under the gesture bar on top of it,
+/// or what the keyboard leaves of the screen when that is less. A taller
+/// [child] scrolls, and its last control scrolls fully into view.
+///
+/// [childScrolls] is for a [child] that scrolls by itself - a list between a
+/// title and a button. A scroll view around it would give the list an unbounded
+/// height, so the sheet does not scroll it. It lays [child] out no taller than
+/// the room instead. A height the caller sets is then a wish, not a demand: it
+/// is cut down to what fits, with the keyboard open as well.
 Future<T?> showAppSheet<T>({
   required BuildContext context,
   required String semanticLabel,
   required Widget child,
   bool dismissible = true,
+  bool childScrolls = false,
 }) => showFSheet<T>(
   context: context,
   useRootNavigator: true,
@@ -121,23 +153,22 @@ Future<T?> showAppSheet<T>({
   barrierLabel: semanticLabel,
   barrierDismissible: dismissible,
   useSafeArea: true,
+  // Forui would cap the sheet at 9/16 of the screen whatever the keyboard takes
+  // of it, and cut off what does not fit. `_SheetSurface` caps it instead.
+  mainAxisMaxRatio: null,
   builder: (context) => Semantics(
     container: true,
     scopesRoute: true,
     namesRoute: true,
     explicitChildNodes: true,
     label: semanticLabel,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: context.tokens.colors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.x6),
-          child: child,
-        ),
+    // The constraints carry what the safe area leaves of the screen's height,
+    // which nothing below it can read from the `MediaQuery`.
+    child: LayoutBuilder(
+      builder: (context, constraints) => _SheetSurface(
+        available: constraints.maxHeight,
+        childScrolls: childScrolls,
+        child: child,
       ),
     ),
   ),
@@ -159,6 +190,11 @@ Future<T?> showAppSheet<T>({
 /// directly above the sheet. Dismissal is the barrier, the back gesture, or
 /// [popAppModal] - the same three doors as [showAppSheet]. It has no
 /// drag-to-dismiss, which the Forui sheet does.
+///
+/// The sheet keeps clear of the system insets and the keyboard by the rule
+/// [showAppSheet] states: its surface reaches the bottom edge, [child] sits
+/// above the gesture bar and the keyboard, and a [child] taller than the room
+/// scrolls. [anchored] gives way before the sheet does.
 Future<T?> showAppAnchoredSheet<T>({
   required BuildContext context,
   required String semanticLabel,
@@ -182,34 +218,33 @@ Future<T?> showAppAnchoredSheet<T>({
       namesRoute: true,
       explicitChildNodes: true,
       label: semanticLabel,
-      child: Column(
-        children: [
-          Expanded(
-            child: CustomSingleChildLayout(
-              delegate: _AnchoredAboveLayout(
-                anchor: anchor,
-                gap: AppSpacing.x2,
-                minimumTop: minimumTop,
-              ),
-              child: anchored,
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: context.tokens.colors.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(18),
-              ),
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.x6),
-                child: child,
+      child: Padding(
+        // A dialog route is not resized for the keyboard as Forui's sheet is,
+        // so the layout is lifted above it here.
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: CustomSingleChildLayout(
+                delegate: _AnchoredAboveLayout(
+                  anchor: anchor,
+                  gap: AppSpacing.x2,
+                  minimumTop: minimumTop,
+                ),
+                child: anchored,
               ),
             ),
-          ),
-        ],
+            _SheetSurface(
+              available:
+                  MediaQuery.sizeOf(context).height -
+                  MediaQuery.paddingOf(context).top,
+              childScrolls: false,
+              child: child,
+            ),
+          ],
+        ),
       ),
     ),
     transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -226,6 +261,80 @@ Future<T?> showAppAnchoredSheet<T>({
       );
     },
   );
+}
+
+/// The surface of a sheet and the content on it: where the rule for the system
+/// insets is applied.
+///
+/// The content is padded and the surface is not. A padded surface would stop
+/// short of the screen's edge and leave a strip of the app showing under the
+/// gesture bar. The padding at the bottom is the margin plus the inset, so the
+/// last control rests above the gesture bar, and in a scrolling sheet it
+/// scrolls to rest there.
+///
+/// It reads `padding` and not `viewPadding`. With the keyboard open Android
+/// reports no bottom padding, because the keyboard covers that strip and is the
+/// sheet's floor then: the margin alone is the gap to it. `viewPadding` keeps
+/// the gesture bar's height, and would leave a gap above the keyboard that
+/// nothing fills.
+///
+/// [available] is the height the sheet may stand in, with the status bar already
+/// taken off. Whoever places the sheet lifts it above the keyboard, so what the
+/// sheet has is less than [available] by the keyboard's height. Short of the
+/// keyboard it may be [_sheetHeightShare] of [available] and the inset besides.
+class _SheetSurface extends StatelessWidget {
+  const _SheetSurface({
+    required this.available,
+    required this.childScrolls,
+    required this.child,
+  });
+
+  final double available;
+  final bool childScrolls;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final insets = MediaQuery.paddingOf(context);
+    final room = math.max(
+      0.0,
+      math.min(
+        available * _sheetHeightShare + insets.bottom,
+        available - MediaQuery.viewInsetsOf(context).bottom,
+      ),
+    );
+    final padding = EdgeInsets.fromLTRB(
+      AppSpacing.x6 + insets.left,
+      AppSpacing.x6,
+      AppSpacing.x6 + insets.right,
+      AppSpacing.x6 + insets.bottom,
+    );
+    // What is padded for is taken out of the `MediaQuery` below, so a
+    // `SafeArea` in [child] cannot pad for it a second time.
+    final content = MediaQuery.removePadding(
+      context: context,
+      removeLeft: true,
+      removeRight: true,
+      removeBottom: true,
+      child: child,
+    );
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: room),
+      child: DecoratedBox(
+        key: const ValueKey('app-sheet-surface'),
+        decoration: BoxDecoration(
+          color: context.tokens.colors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: childScrolls
+              ? Padding(padding: padding, child: content)
+              : SingleChildScrollView(padding: padding, child: content),
+        ),
+      ),
+    );
+  }
 }
 
 /// Places a child just above [anchor], clamped into the space it is given.

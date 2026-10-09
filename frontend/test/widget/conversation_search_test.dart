@@ -5,6 +5,8 @@ import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/system_insets.dart';
+
 /// The one in-conversation search surface, which direct, saved and group
 /// conversations all open.
 ///
@@ -108,6 +110,36 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
+  });
+
+  // The rule is written once, in `app_modals.dart`, and proved on the two
+  // sheet functions in `sheet_insets_test.dart`. This sheet asks for the
+  // keyboard the moment it opens, on a screen short enough for it to matter.
+  testWidgets('on a short screen it sits between the status bar and the '
+      'keyboard, with its field in view', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    fakeSystemInsets(tester);
+    fakeOpenKeyboard(tester);
+    await _open(tester, messages: _history(3));
+
+    await tester.enterText(
+      find.byKey(const ValueKey('conversation-search-field')),
+      'message',
+    );
+    await tester.pumpAndSettle();
+
+    final sheet = tester.getRect(
+      find.byKey(const ValueKey('app-sheet-surface')),
+    );
+    expect(sheet.bottom, closeTo(640 - 300, 0.01));
+    expect(sheet.top, greaterThanOrEqualTo(24));
+    final field = tester.getRect(
+      find.byKey(const ValueKey('conversation-search-field')),
+    );
+    expect(field.top, greaterThanOrEqualTo(sheet.top));
+    expect(find.byKey(const ValueKey('conversation-search-hit-m1')), findsOne);
     expect(tester.takeException(), isNull);
   });
 }

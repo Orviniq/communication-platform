@@ -62,6 +62,7 @@ Future<void> showConversationSearch({
   return showAppSheet<void>(
     context: context,
     semanticLabel: strings.chatSearchAction,
+    childScrolls: true,
     child: _ConversationSearchSheet(
       messages: messages,
       onJumpToMessage: onJumpToMessage,

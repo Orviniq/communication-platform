@@ -5,6 +5,7 @@ import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_emoji_picker.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
+import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_message_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
@@ -17,6 +18,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/system_insets.dart';
 
 void main() {
   testWidgets('renders every honest transport state with text semantics', (
@@ -972,6 +975,166 @@ void main() {
       ),
     );
     expect(find.text('Chats are unavailable'), findsOneWidget);
+  });
+
+  // The rule is written once, in `app_modals.dart`, and proved on the two
+  // sheet functions in `sheet_insets_test.dart`; these are the sheets of a
+  // conversation, opened the way a person opens them.
+  group('sheets keep clear of the system insets and the keyboard', () {
+    const phone = Size(430, 900);
+    const gestureBar = 48.0;
+    final surface = find.byKey(const ValueKey('app-sheet-surface'));
+
+    // The last row, bottom edge to the screen's: the margin and the gesture bar.
+    const restingBottom = 900 - gestureBar - AppSpacing.x6;
+
+    /// The tile that carries [label], in a menu or an action sheet.
+    Finder row(String label) =>
+        find.ancestor(of: find.text(label), matching: find.byType(ListTile));
+
+    Future<void> pumpConversation(
+      WidgetTester tester, {
+      Size size = phone,
+      double textScale = 1,
+      ChatTimelineViewModel? model,
+    }) {
+      fakeSystemInsets(tester);
+      return _pump(
+        tester,
+        ChatConversationView(
+          model: model ?? _model(),
+          forwardTargets: () => [
+            ChatListItemViewModel(
+              conversationId: '',
+              title: 'Saved Messages',
+              preview: '',
+              timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+              unreadCount: 0,
+              muted: false,
+              pinned: false,
+              savedMessages: true,
+              peerUserId: null,
+            ),
+          ],
+          onIntent: (_) {},
+        ),
+        size: size,
+        textScale: textScale,
+      );
+    }
+
+    testWidgets('the message actions rest above the gesture bar', (
+      tester,
+    ) async {
+      await pumpConversation(tester);
+
+      await _openMessageSurface(tester, find.text('message-5'));
+
+      expect(tester.getRect(surface).bottom, phone.height);
+      expect(
+        tester.getRect(row('Delete')).bottom,
+        closeTo(restingBottom, 0.01),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the message actions scroll on a short screen at twice the '
+        'text size, and the last row scrolls into view', (tester) async {
+      // Nothing pinned, so no banner stands over the timeline at this size.
+      await pumpConversation(
+        tester,
+        size: const Size(360, 640),
+        textScale: 2,
+        model: _model(messages: [for (var i = 0; i < 6; i++) _message(i)]),
+      );
+
+      await _openMessageSurface(tester, find.text('message-5'));
+
+      final position = tester
+          .state<ScrollableState>(
+            find.descendant(of: surface, matching: find.byType(Scrollable)),
+          )
+          .position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(
+        tester.getRect(row('Delete')).bottom,
+        closeTo(640 - gestureBar - AppSpacing.x6, 0.01),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets("the conversation's menu rests above the gesture bar", (
+      tester,
+    ) async {
+      await pumpConversation(tester);
+
+      await tester.tap(find.byTooltip('More conversation actions'));
+      await tester.pumpAndSettle();
+
+      expect(tester.getRect(surface).bottom, phone.height);
+      expect(
+        tester.getRect(row('Clear history')).bottom,
+        closeTo(restingBottom, 0.01),
+      );
+    });
+
+    testWidgets('the pinned messages stay under the status bar and above the '
+        'gesture bar', (tester) async {
+      await pumpConversation(tester);
+
+      await tester.tap(find.text('View all'));
+      await tester.pumpAndSettle();
+
+      final sheet = tester.getRect(surface);
+      expect(sheet.bottom, phone.height);
+      expect(sheet.top, greaterThanOrEqualTo(24));
+      final list = find.descendant(
+        of: surface,
+        matching: find.byType(ListView),
+      );
+      expect(tester.getRect(list).bottom, lessThanOrEqualTo(restingBottom));
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final size in [phone, const Size(360, 640)]) {
+      testWidgets('the emoji picker keeps its grid above the gesture bar at '
+          '${size.width.round()} by ${size.height.round()}', (tester) async {
+        await pumpConversation(tester, size: size);
+        await _openMessageSurface(tester, find.text('message-5'));
+
+        await tester.tap(find.bySemanticsLabel('More emoji'));
+        await tester.pumpAndSettle();
+
+        // The picker's sheet is the second of two: the actions are under it.
+        final sheet = tester.getRect(surface.last);
+        expect(sheet.bottom, size.height);
+        expect(sheet.top, greaterThanOrEqualTo(24));
+        expect(
+          tester.getRect(find.byType(AppEmojiPicker)).bottom,
+          closeTo(size.height - gestureBar - AppSpacing.x6, 0.01),
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('the forward picker keeps its button above the gesture bar', (
+      tester,
+    ) async {
+      await pumpConversation(tester);
+
+      await _openMessageSurface(tester, find.text('message-5'));
+      await tester.tap(find.text('Forward').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getRect(find.widgetWithText(AppButton, 'Forward')).bottom,
+        closeTo(restingBottom, 0.01),
+      );
+      expect(tester.getRect(surface).top, greaterThanOrEqualTo(24));
+      expect(tester.takeException(), isNull);
+    });
   });
 }
 
