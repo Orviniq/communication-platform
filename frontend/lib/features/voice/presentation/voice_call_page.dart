@@ -997,6 +997,9 @@ class _Tab extends StatelessWidget {
       button: true,
       selected: selected,
       label: label,
+      // The InkWell's own tap action goes with `excludeSemantics`, so the node
+      // carries it.
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
@@ -1538,6 +1541,9 @@ class _Control extends StatelessWidget {
       enabled: enabled,
       label: label,
       value: state,
+      // The InkWell's own tap action goes with `excludeSemantics`, so the node
+      // carries it, and a control that is not enabled has none.
+      onTap: onPressed,
       excludeSemantics: true,
       child: Material(
         color: danger ? colors.danger : colors.surfaceRaised,

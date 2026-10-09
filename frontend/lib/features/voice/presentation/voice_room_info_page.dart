@@ -522,6 +522,9 @@ class _MemberRow extends StatelessWidget {
       key: ValueKey('voice-room-member-$userId'),
       button: onTap != null,
       label: status == null ? name : '$name, $status',
+      // The tile's own tap action goes with `excludeSemantics`, so the node
+      // carries it; a row with nothing to open has none, and is no button.
+      onTap: onTap,
       excludeSemantics: true,
       child: ListTile(
         minTileHeight: AppFocus.minimumTarget,

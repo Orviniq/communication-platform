@@ -147,10 +147,16 @@ class _RoomRow extends StatelessWidget {
       row.state,
       row.devices,
     );
+    void openRoom() => context.go('/voice-rooms/${row.roomId}');
     return Semantics(
       key: ValueKey('voice-room-row-${row.roomId}'),
       button: true,
       label: '${row.name}, $state',
+      // `excludeSemantics` drops the tile's own tap action with the rest of
+      // what is under this node, so the node carries it: a service that acts
+      // through actions, Switch Access for one, has nothing to activate on a
+      // button without it.
+      onTap: openRoom,
       excludeSemantics: true,
       child: ListTile(
         minTileHeight: 64,
@@ -160,7 +166,7 @@ class _RoomRow extends StatelessWidget {
           padding: const EdgeInsets.only(top: AppSpacing.x1),
           child: VoiceRoomStateLine(state: row.state, devices: row.devices),
         ),
-        onTap: () => context.go('/voice-rooms/${row.roomId}'),
+        onTap: openRoom,
       ),
     );
   }
