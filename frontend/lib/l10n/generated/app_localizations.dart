@@ -380,18 +380,6 @@ abstract class AppLocalizations {
   /// **'Create a voice room'**
   String get composeVoiceRoom;
 
-  /// No description provided for @connectingStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'Connecting…'**
-  String get connectingStatus;
-
-  /// No description provided for @offlineStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'No connection to server'**
-  String get offlineStatus;
-
   /// No description provided for @returnToVoiceRoom.
   ///
   /// In en, this message translates to:

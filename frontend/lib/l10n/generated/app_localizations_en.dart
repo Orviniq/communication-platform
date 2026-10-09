@@ -162,12 +162,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get composeVoiceRoom => 'Create a voice room';
 
   @override
-  String get connectingStatus => 'Connecting…';
-
-  @override
-  String get offlineStatus => 'No connection to server';
-
-  @override
   String returnToVoiceRoom(String roomName) {
     return 'Return to voice room: $roomName';
   }

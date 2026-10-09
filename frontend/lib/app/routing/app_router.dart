@@ -110,9 +110,7 @@ GoRouter createAppRouter({
                   case BootstrapDestination.login:
                     context.go('/login', extra: navigation);
                   case BootstrapDestination.application:
-                    context.go(
-                      navigation.offline ? '/chats?offline=true' : '/chats',
-                    );
+                    context.go('/chats');
                 }
               },
             ),
@@ -238,22 +236,16 @@ GoRouter createAppRouter({
         ),
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          final bootstrapOffline =
-              state.uri.queryParameters['offline'] == 'true';
-          return LiveShellStatus(
-            base: bootstrapOffline
-                ? status.copyWith(connection: AppConnectionState.offline)
-                : status,
+        builder: (context, state, navigationShell) => LiveShellStatus(
+          base: status,
+          location: state.uri.path,
+          builder: (status) => AppShell(
+            environment: environment,
+            navigationShell: navigationShell,
             location: state.uri.path,
-            builder: (status) => AppShell(
-              environment: environment,
-              navigationShell: navigationShell,
-              location: state.uri.path,
-              status: status,
-            ),
-          );
-        },
+            status: status,
+          ),
+        ),
         // A branch shows its tab root in the shell, and nothing else: every
         // route below a tab root names the root navigator, so it covers the
         // shell, the navigation bar and the rail. Nested routes name it too.

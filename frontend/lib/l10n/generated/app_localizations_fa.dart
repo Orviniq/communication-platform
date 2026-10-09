@@ -162,12 +162,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get composeVoiceRoom => 'ساخت اتاق صوتی';
 
   @override
-  String get connectingStatus => 'در حال اتصال…';
-
-  @override
-  String get offlineStatus => 'ارتباط با سرور برقرار نیست';
-
-  @override
   String returnToVoiceRoom(String roomName) {
     return 'بازگشت به اتاق صوتی: $roomName';
   }

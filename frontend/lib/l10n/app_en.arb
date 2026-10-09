@@ -77,8 +77,6 @@
   "placeholderBody": "This part of the app is not built yet.",
   "composeChat": "Start a conversation",
   "composeVoiceRoom": "Create a voice room",
-  "connectingStatus": "Connecting…",
-  "offlineStatus": "No connection to server",
   "returnToVoiceRoom": "Return to voice room: {roomName}",
   "@returnToVoiceRoom": {
     "placeholders": {

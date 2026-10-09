@@ -4,6 +4,7 @@ import 'package:communication_platform/features/bootstrap/application/bootstrap_
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import '../features/bootstrap/support/fake_bootstrap_ports.dart';
 
@@ -84,9 +85,7 @@ void main() {
     expect(find.textContaining('bypass'), findsOneWidget);
   });
 
-  testWidgets('Android offline route opens shell with connection strip', (
-    tester,
-  ) async {
+  testWidgets('an offline start opens the shell with no strip', (tester) async {
     await _pumpBootstrap(
       tester,
       platform: BootstrapPlatform.android,
@@ -98,8 +97,18 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('app-shell-golden')), findsOneWidget);
-    expect(find.text('No connection to server'), findsWidgets);
+    final shell = find.byKey(const ValueKey('app-shell-golden'));
+    expect(shell, findsOneWidget);
+    expect(find.byKey(const ValueKey('chats-list-screen')), findsOneWidget);
+    // The route is the Chats tab root, as after any other start.
+    final location = GoRouter.of(
+      tester.element(shell),
+    ).routerDelegate.currentConfiguration.uri;
+    expect(location.path, '/chats');
+    expect(location.hasQuery, isFalse);
+    // Nothing above the tab root says the server cannot be reached.
+    expect(find.text('No connection to server'), findsNothing);
+    expect(find.text('Connecting…'), findsNothing);
   });
 
   testWidgets('production connection gate shows no configuration banner', (
