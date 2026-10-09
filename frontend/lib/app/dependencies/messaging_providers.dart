@@ -245,8 +245,6 @@ final markConversationVisiblyReadProvider =
       final repository = await ref.watch(conversationRepositoryProvider.future);
       return MarkConversationVisiblyRead(
         repository: repository,
-        sender: await ref.watch(
-          sendConversationEventsProvider(scope).future,
-        ),
+        sender: await ref.watch(sendConversationEventsProvider(scope).future),
       );
     });

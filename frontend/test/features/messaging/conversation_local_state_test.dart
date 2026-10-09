@@ -181,11 +181,9 @@ void main() {
 
     expect(
       await repository.markConversationRead('conversation'),
-      isA<Success<List<String>>>().having(
-        (result) => result.value,
-        'cleared',
-        ['message'],
-      ),
+      isA<Success<List<String>>>().having((result) => result.value, 'cleared', [
+        'message',
+      ]),
     );
     await pumpEventQueue();
     expect(writes, isNotEmpty);
