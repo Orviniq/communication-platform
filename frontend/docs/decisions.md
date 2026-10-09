@@ -355,10 +355,30 @@ needs one too.
   1440 wide. Without the container the six new or widened tests fail, and the banner test at 360
   still passes; with a container around `_TwoPaneShell`'s page area instead, the four rail tests
   pass and the two banner-and-strip tests fail.
-- **Found on the way, and not changed.** The destinations, the wide rail's compose button and the
-  connection strip say their text twice: each has a `Semantics` label and a `Text` that both reach
-  its node, so "Chats" reads "Chats Chats", in the navigation bar too. The rail's title joins the
-  keyboard hint, as above.
+- **Found on the way, and fixed the same day: the shell said its controls' text twice.** The
+  destinations at every width, the wide rail's compose button and the connection strip each had a
+  `Semantics` label over a `Text` of the same words, and both reached one node, so "Chats" read
+  "Chats Chats", in the navigation bar too. Each `Text` now sits in an `ExcludeSemantics` of its
+  own, and the `Semantics` above it is unchanged, with the actions its `FocusableActionDetector` and
+  `GestureDetector` or `InkWell` give it: a destination is still a button with tap and focus
+  actions, focusable, with a selected state that the chosen one has. An `excludeSemantics` on that
+  `Semantics` would have dropped the tap action, as the banner's did. The compose button's `Tooltip`
+  leaves the tree too: below Android 9 the engine appends a node's tooltip to its content
+  description (`AccessibilityBridge`, Flutter 3.44.7), which repeated the label at every width; the
+  tooltip still shows on a long press or hover. The wide rail's title, "Communication Platform", is
+  excluded rather than made a header: it is the brand mark in words, which the medium rail shows as
+  a decorative icon and the narrow shell not at all, and each page names itself with a header of its
+  own; the shell's node holds the keyboard hint alone. A dump of the tree at 360, 800 and 1440 wide,
+  offline, differs from the one before only by these labels and the tooltip.
+- **Tests of that fix.** `app_shell_test.dart`, offline at 360, 800 and 1440 wide: each
+  destination's label is exactly its name, and it is a button with tap and focus actions, focusable,
+  with a selected state that only Chats has; the compose button says its label once and has no
+  tooltip; the strip says its label once; and the shell's node holds the keyboard hint alone, with
+  no node naming the app. `full_screen_pages_test.dart`'s `_button` now matches the exact label
+  instead of its first line. Without the fix the three new tests and both rail tests of
+  `full_screen_pages_test.dart` fail; putting back only the title's, the compose text's, the
+  tooltip's or the strip's text's node fails the test at 1440, at 1440, at all three widths and at
+  all three widths.
 - **No ADR of its own.** It restores what the accessibility gates of `responsive-ui.md` already
   require and decides where one widget goes. Changes no route, layout, table, wire format,
   protocol, dependency or backend file.
