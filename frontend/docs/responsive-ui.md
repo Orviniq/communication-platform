@@ -45,7 +45,8 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 
 ## Persistent global surfaces
 
-- Connection strip: connecting/offline state; not dismissible while false.
+- Connection and sync status: the Chats title carries it, after one second and from the
+  engine's live phase (`ui-specification.md` §6). The shell draws no connection strip.
 - Active voice banner: visible across destinations until leave; returns to the room. Above
   the navigation bar or atop the rail on a tab root, at the top of a full-screen page, and
   not on the call's own screen (`ui-specification.md` §0.2).

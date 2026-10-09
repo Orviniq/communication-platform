@@ -132,10 +132,12 @@ edge of the screen.
   microphone icon reads muted or on, in words for a screen reader as well. As built
   (2026-10-08, phase 8 prompt 2), a full-screen page keeps its state when a call starts
   or ends while it is open, a draft in the composer included.
-- **Connection status strip.** When the client can't reach the server, a strip appears at
-  the top of the current screen: "Connecting…" / "No connection to server". It clears only
-  when the connection returns, not by user dismissal. As built (2026-10-08), the shell
-  draws the strip, so it shows on a tab root only: a full-screen page covers it.
+- **No connection strip.** The shell draws none. The connection and sync status is the
+  Chats title's (§6): it shows what the delivery engine is doing once the engine has been
+  unsettled for a second, and it clears when the engine settles. As built (2026-10-09,
+  phase 10 prompt 2), the strip of earlier builds is deleted ([ADR-087](decisions.md)): it
+  showed on the Chats tab root only, after a start without the server, and nothing
+  cleared it when the connection came back.
 
 ### 0.3 Global "new" affordance
 - **Mobile:** a floating compose button (FAB) on the Chats and Voice Rooms lists; its
@@ -393,6 +395,29 @@ rooms pinned at top. The primary hub.
 **Layout.**
 - **Top bar:** left — title "Chats" (or an avatar/menu affordance opening Settings on
   mobile); center/right — the **search** icon and, on desktop, the compose "+".
+- **Title status.** As built (2026-10-09, phase 10 prompt 2, [ADR-087](decisions.md)), the
+  title carries the connection and sync status. It is "Chats" while the delivery engine is
+  **settled**: online, or no state read yet. Once the engine has been in any other state
+  for **one second** without a break, the title is that state in place of the name:
+  **Connecting…** and **Syncing…**, each with a small spinner before the words, and
+  **Waiting to reconnect…** with no indicator. With animations off the spinner is the still
+  `AppIcons.connecting` icon. The words are the same in English and Persian as the line
+  they replace.
+  - **Four states.** The nine phases of the engine collapse to settled, connecting,
+    syncing and waiting, as [ADR-060](decisions.md) D11 decided: every terminal phase
+    — revoked, circuit open, origin rejected — reads as waiting, because the
+    session-level surfaces own those. The status is content-free: no counts, identifiers
+    or timings. The title reads the live phase only; how the session was opened does not
+    change when the connection returns, so it is not read.
+  - **The second.** It runs from the moment the engine stops being settled, and a change
+    between two other states does not start it again. Once the title has left its name,
+    such a change shows at once, and the name is back the moment the engine settles. It
+    keeps a cycle that ends within the second off the title and leaves a stalled engine on
+    it. The title is the only place that says it: the list holds no notice.
+  - **Layout and screen readers.** One line, ending in an ellipsis when the status is
+    longer than the title has room for, at 200 % text as well. The title stays a header
+    in every state. Only the status is a live region, so a screen reader announces each
+    change of it once and does not announce "Chats" again when the engine settles.
 - **Search:** tapping the search icon opens the search page (§6.5), a full-screen page
   (§0.1). The icon is the only search entry: the body holds no search field.
 - **Body:** the scrollable list, and nothing above it. Order: pinned items first (including
@@ -425,8 +450,10 @@ rooms pinned at top. The primary hub.
 **States.**
 - *Loading* — skeleton list while the local store loads and the connection comes up.
 - *Empty* — friendly empty state with "Start a chat" → Contacts (§7).
-- *Offline* — connection strip at top; cached conversations still show and are fully
-  readable (content is stored and decrypted locally). New sends queue (§8 states).
+- *Offline* — the title shows it ("Connecting…" or "Waiting to reconnect…", after one
+  second; see Title status above) and the list carries no notice of its own. Cached
+  conversations still show and are fully readable (content is stored and decrypted
+  locally). New sends queue (§8 states).
 
 ### 6.5 Search (client-side only)
 **Purpose.** Find the user's own conversations, contacts and messages. **[PRIVACY] The
@@ -585,8 +612,8 @@ long-press.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.
 - *Failed send* — retry affordance on the message.
-- *Offline* — connection strip; existing history fully readable; composing allowed, sends
-  queued.
+- *Offline* — the composer says that a send waits in the queue; existing history fully
+  readable; composing allowed, sends queued.
 
 ### 8.2 Attachment sheet
 - Options: **Photo/Image**, **File**, and camera on mobile. Picking shows a **preview +
