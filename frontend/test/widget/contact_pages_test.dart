@@ -70,6 +70,52 @@ void main() {
     expect(find.text('person_00'), findsNothing);
   });
 
+  testWidgets('Contacts/New finds a display name only on a verified contact', (
+    tester,
+  ) async {
+    const profile = AuthenticatedProfile(
+      displayName: 'Maryam',
+      avatarSeed: 3,
+      version: 1,
+      authorDeviceId: 'device',
+    );
+    await _pump(
+      tester,
+      ContactsNewPage(
+        ownUserId: 'self',
+        contacts: Stream.value(const [
+          ContactProjection(
+            userId: 'verified',
+            username: 'first_friend',
+            trustState: ContactTrustState.verified,
+            authenticatedProfile: profile,
+          ),
+          ContactProjection(
+            userId: 'unverified',
+            username: 'second_friend',
+            trustState: ContactTrustState.unverified,
+            authenticatedProfile: profile,
+          ),
+        ]),
+        directoryService: const DirectoryService(
+          remote: _OfflineDirectory(),
+          local: _UnusedLocal(),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '  MARYAM ');
+    await tester.pump();
+    expect(find.text('Maryam'), findsOneWidget);
+    expect(find.text('@first_friend'), findsOneWidget);
+    expect(find.text('second_friend'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'friend');
+    await tester.pump();
+    expect(find.text('Maryam'), findsOneWidget);
+    expect(find.text('second_friend'), findsOneWidget);
+  });
+
   testWidgets(
     'contact profile cannot enable messaging from cached profile data',
     (tester) async {
