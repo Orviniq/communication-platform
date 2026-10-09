@@ -202,53 +202,6 @@ void main() {
     });
   });
 
-  test(
-    'cache evicts by bound, expires entries, and wipes owned files',
-    () async {
-      final root = await Directory.systemTemp.createTemp(
-        'cp_attachment_cache_',
-      );
-      addTearDown(() async {
-        if (await root.exists()) await root.delete(recursive: true);
-      });
-      final storage = PrivateAttachmentStorage(root: root);
-      final cache = BoundedAttachmentCache(
-        storage: storage,
-        maximumEntries: 2,
-        maximumBytes: 20,
-      );
-      final files = <File>[];
-      for (var index = 0; index < 3; index += 1) {
-        final file = File('${root.path}/$index.bin')
-          ..writeAsBytesSync(List.filled(8, index));
-        files.add(file);
-        await cache.put(
-          attachmentId: 'id-$index',
-          file: file,
-          bytes: 8,
-          expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
-        );
-      }
-      expect(await files.first.exists(), isFalse);
-      expect(cache.totalBytes, 16);
-
-      final expired = File('${root.path}/expired.bin')..writeAsBytesSync([1]);
-      await cache.put(
-        attachmentId: 'expired',
-        file: expired,
-        bytes: 1,
-        expiresAt: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
-      );
-      expect(await cache.read('expired'), isNull);
-      expect(await expired.exists(), isFalse);
-
-      await cache.wipe();
-      expect(cache.totalBytes, 0);
-      expect(await files[1].exists(), isFalse);
-      expect(await files[2].exists(), isFalse);
-    },
-  );
-
   group('backend attachment contract', () {
     test(
       'maps upload quota exhaustion without exposing backend detail',
@@ -272,7 +225,7 @@ void main() {
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
           clock: const _FixedClock(),
-          storage: PrivateAttachmentStorage(),
+          storage: const _UnusedStorage(),
           dio: dio,
         );
         final root = await Directory.systemTemp.createTemp('cp_quota_test_');
@@ -340,7 +293,7 @@ void main() {
           config: const FixedServerConfig.fallback(),
           allowance: allowance,
           clock: const _FixedClock(),
-          storage: PrivateAttachmentStorage(),
+          storage: const _UnusedStorage(),
           dio: dio,
         );
 
@@ -376,7 +329,7 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
-        storage: PrivateAttachmentStorage(),
+        storage: const _UnusedStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_allowance_test_');
@@ -412,7 +365,7 @@ void main() {
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
-        storage: PrivateAttachmentStorage(),
+        storage: const _UnusedStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_bucket_test_');
@@ -1176,4 +1129,19 @@ final class _FixedClock implements TimeSource {
 
   @override
   DateTime now() => DateTime.utc(2026, 9, 9, 12);
+}
+
+/// Storage for a test that must make no temporary file: an upload reads the
+/// encrypted file it is handed and writes none.
+final class _UnusedStorage implements AttachmentStoragePort {
+  const _UnusedStorage();
+
+  @override
+  Future<File> createEncryptedTemp() => throw StateError('unused');
+
+  @override
+  Future<File> createDecryptedTemp() => throw StateError('unused');
+
+  @override
+  Future<void> delete(File file) => throw StateError('unused');
 }

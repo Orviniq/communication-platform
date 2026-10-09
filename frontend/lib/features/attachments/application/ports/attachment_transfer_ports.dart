@@ -18,10 +18,15 @@ final class AttachmentUploadResponse {
   String toString() => 'AttachmentUploadResponse(<redacted>)';
 }
 
+/// Where the temporary files of a transfer are made.
+///
+/// A temporary file's name says nothing about its attachment, so neither
+/// method takes one: a decrypted file gets its display name only when the
+/// attachment cache adopts it.
 abstract interface class AttachmentStoragePort {
   Future<File> createEncryptedTemp();
 
-  Future<File> createDecryptedTemp({required String safeName});
+  Future<File> createDecryptedTemp();
 
   Future<void> delete(File file);
 }

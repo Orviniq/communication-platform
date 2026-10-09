@@ -1,46 +1,85 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
-import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_cache_model.dart';
+import 'package:communication_platform/features/attachments/infrastructure/method_channel_attachment_platform.dart';
 import 'package:flutter/services.dart';
 
 export 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart'
     show AttachmentStoragePort;
 
-/// Android's system temp/cache directory is private to the application. The
-/// adapter never returns a path for sharing; callers use a content URI bridge.
+/// The name of the private cache directory, which the native side deletes
+/// recursively at logout and at revocation (`ProtectedStorageChannel.kt`).
+const privateAttachmentCacheName = 'secure_attachment_cache';
+
+/// The private cache, as the platform names it, or null when it names none.
+///
+/// Every attachment file lives under this one directory, because it is the
+/// one the wipe deletes (ADR-089 D8). There is no fallback: a directory the
+/// wipe does not reach would keep decrypted files after a logout. So the
+/// answer is used only when it is an absolute path with no empty, `.` or `..`
+/// segment whose last segment is [privateAttachmentCacheName]; a channel that
+/// fails, answers nothing or answers anything else leaves attachments not
+/// available.
+Future<Directory?> privateAttachmentCacheRoot() async {
+  final Object? answer;
+  try {
+    answer = await const MethodChannel(
+      MethodChannelAttachmentPlatform.channelName,
+    ).invokeMethod<Object?>('privateCacheDirectory');
+  } on PlatformException {
+    return null;
+  } on MissingPluginException {
+    return null;
+  }
+  return answer is String && isPrivateAttachmentCacheRoot(answer)
+      ? Directory(answer)
+      : null;
+}
+
+/// Whether [path] can be the private cache: see [privateAttachmentCacheRoot].
+bool isPrivateAttachmentCacheRoot(String path) {
+  if (!path.startsWith('/')) {
+    return false;
+  }
+  final segments = path.substring(1).split('/');
+  return segments.last == privateAttachmentCacheName &&
+      segments.every(
+        (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+      );
+}
+
+/// The temporary files of encryption and download, at the top level of the
+/// private cache.
+///
+/// Each name is a random cache id and `.tmp`, so a name says nothing about the
+/// attachment it belongs to: not its capability, not its display name, and not
+/// how many came before it. The adapter never hands out a path for sharing;
+/// a decrypted file is shared only after `AttachmentFileCache` moved it into
+/// `plain/`.
 final class PrivateAttachmentStorage implements AttachmentStoragePort {
-  PrivateAttachmentStorage({Directory? root})
-    : _root = root ?? Directory.systemTemp;
+  PrivateAttachmentStorage({required Directory root, Random? random})
+    : _root = root,
+      _random = random ?? Random.secure();
 
   final Directory _root;
-  int _counter = 0;
+  final Random _random;
 
-  static Future<PrivateAttachmentStorage> forPlatform() async {
-    if (!Platform.isAndroid) return PrivateAttachmentStorage();
-    try {
-      final path = await const MethodChannel(
-        'communication_platform/attachments',
-      ).invokeMethod<String>('privateCacheDirectory');
-      if (path != null && path.isNotEmpty) {
-        return PrivateAttachmentStorage(root: Directory(path));
-      }
-    } on PlatformException {
-      // Fall back to the Dart private temp directory; it is never shared by
-      // path and remains application-private on Android.
-    }
-    return PrivateAttachmentStorage();
+  /// The storage on the private cache, or null when the platform names none.
+  static Future<PrivateAttachmentStorage?> forPlatform() async {
+    final root = await privateAttachmentCacheRoot();
+    return root == null ? null : PrivateAttachmentStorage(root: root);
   }
 
   @override
-  Future<File> createEncryptedTemp() => _newFile('cipher');
+  Future<File> createEncryptedTemp() => _newFile();
 
   @override
-  Future<File> createDecryptedTemp({required String safeName}) {
-    final name = safeAttachmentName(safeName);
-    return _newFile('plain_$name');
-  }
+  Future<File> createDecryptedTemp() => _newFile();
 
   @override
   Future<void> delete(File file) async {
@@ -49,110 +88,19 @@ final class PrivateAttachmentStorage implements AttachmentStoragePort {
         await file.delete();
       }
     } on FileSystemException {
-      // Cleanup is best effort; failed files remain private and are retried by
-      // the bounded cache cleanup job.
+      // Best effort. A file left behind stays in the private cache, which the
+      // first sweep of the next process clears and the wipe deletes.
     }
   }
 
-  Future<File> _newFile(String prefix) async {
+  Future<File> _newFile() async {
     await _root.create(recursive: true);
-    _counter += 1;
     return File(
-      '${_root.path}/communication_attachment_${prefix}_$_counter.tmp',
+      '${_root.path}${Platform.pathSeparator}'
+      '${newAttachmentCacheId(_random)}.tmp',
     );
   }
-}
 
-final class AttachmentCacheEntry {
-  const AttachmentCacheEntry({
-    required this.attachmentId,
-    required this.file,
-    required this.bytes,
-    required this.expiresAt,
-    required this.lastAccessAt,
-  });
-
-  final String attachmentId;
-  final File file;
-  final int bytes;
-  final DateTime expiresAt;
-  final DateTime lastAccessAt;
-}
-
-/// Bounded decrypted-file/thumbnail cache. It owns deletion and never exposes
-/// a file after expiry or eviction.
-final class BoundedAttachmentCache {
-  BoundedAttachmentCache({
-    required this.storage,
-    this.maximumEntries = 32,
-    this.maximumBytes = 64 * 1024 * 1024,
-  });
-
-  final AttachmentStoragePort storage;
-  final int maximumEntries;
-  final int maximumBytes;
-  final Map<String, AttachmentCacheEntry> _entries = {};
-
-  int get totalBytes =>
-      _entries.values.fold(0, (sum, item) => sum + item.bytes);
-
-  Future<File?> read(String attachmentId, {DateTime? now}) async {
-    final entry = _entries[attachmentId];
-    if (entry == null) return null;
-    final clock = now ?? DateTime.now().toUtc();
-    if (!entry.expiresAt.isAfter(clock) || !await entry.file.exists()) {
-      await remove(attachmentId);
-      return null;
-    }
-    _entries[attachmentId] = AttachmentCacheEntry(
-      attachmentId: entry.attachmentId,
-      file: entry.file,
-      bytes: entry.bytes,
-      expiresAt: entry.expiresAt,
-      lastAccessAt: clock,
-    );
-    return entry.file;
-  }
-
-  Future<void> put({
-    required String attachmentId,
-    required File file,
-    required int bytes,
-    required DateTime expiresAt,
-  }) async {
-    await remove(attachmentId);
-    _entries[attachmentId] = AttachmentCacheEntry(
-      attachmentId: attachmentId,
-      file: file,
-      bytes: bytes,
-      expiresAt: expiresAt,
-      lastAccessAt: DateTime.now().toUtc(),
-    );
-    await _evict();
-  }
-
-  Future<void> remove(String attachmentId) async {
-    final entry = _entries.remove(attachmentId);
-    if (entry != null) await storage.delete(entry.file);
-  }
-
-  Future<void> wipe() async {
-    final ids = _entries.keys.toList(growable: false);
-    for (final id in ids) {
-      await remove(id);
-    }
-  }
-
-  Future<void> _evict() async {
-    final now = DateTime.now().toUtc();
-    final ordered = _entries.values.toList()
-      ..sort((a, b) => a.lastAccessAt.compareTo(b.lastAccessAt));
-    for (final entry in ordered) {
-      if (!entry.expiresAt.isAfter(now) ||
-          _entries.length > maximumEntries ||
-          totalBytes > maximumBytes) {
-        await remove(entry.attachmentId);
-      }
-    }
-  }
+  @override
+  String toString() => 'PrivateAttachmentStorage(<redacted>)';
 }

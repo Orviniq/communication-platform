@@ -95,9 +95,7 @@ final class AttachmentTransferService {
     }
     final encrypted = (downloaded as Success<File>).value;
     try {
-      final decrypted = await storage.createDecryptedTemp(
-        safeName: descriptor.displayName,
-      );
+      final decrypted = await storage.createDecryptedTemp();
       final encryptedStream = encrypted.openRead();
       final decryptedResult = await crypto.decryptStreamToFile(
         descriptor: descriptor,
@@ -112,8 +110,8 @@ final class AttachmentTransferService {
       return Result.success(decrypted);
     } finally {
       await storage.delete(encrypted);
-      // The caller owns a verified file and must place it in the bounded cache
-      // or delete it. A failure path is cleaned by the crypto service.
+      // The caller owns a verified file and must hand it to the attachment
+      // cache or delete it. A failure path is cleaned by the crypto service.
     }
   }
 }
