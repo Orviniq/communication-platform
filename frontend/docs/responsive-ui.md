@@ -53,6 +53,24 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 - Global error/toast host with accessible announcements and no sensitive detail.
 - Modal routing that becomes a sheet on narrow layouts and dialog/panel on wide layouts.
 
+## Sheets
+
+A sheet keeps each control above the bottom system inset - the gesture bar or the
+navigation buttons - and above the keyboard while one is open, with the sheet's margin and
+no empty gap above the keyboard. Its surface still reaches the edge of the screen: the
+content is padded, not the surface, so the app never shows through under the gesture bar. A
+sheet is as tall as its content, up to 9/16 of the screen below the status bar with the
+strip under the gesture bar on top of that, and never taller than the keyboard leaves room
+for. Content that does not fit scrolls, and its last control scrolls fully into view. A
+list or grid that scrolls on its own is cut to the same room and scrolls inside it.
+
+Only `app_modals.dart` opens a sheet: `showAppSheet`, and `showAppAnchoredSheet` for the
+message actions with the reaction panel above them. The rule is written there and nowhere
+else, so a caller wraps its content in no `SafeArea`; one that did would add nothing, as
+the sheet takes the insets it has applied out of the `MediaQuery` it hands down.
+`test/architecture/sheet_boundary_test.dart` fails on any other call to a sheet function,
+and `test/widget/sheet_insets_test.dart` holds the geometry.
+
 ## Design system
 
 - Tokens cover semantic color, typography, spacing, radius, elevation, motion, focus,
