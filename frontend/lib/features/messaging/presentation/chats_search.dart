@@ -6,10 +6,12 @@ import 'package:flutter/foundation.dart';
 /// Whether [chat] matches [needle], a query already trimmed and in lower case.
 ///
 /// The rule the Chats list's own box applied: the chat's name or its latest
-/// message, without regard to case. No older message is read: each message
-/// body is stored as ciphertext in its own row, so a search across
-/// conversations would need a design of its own, and a conversation's own
-/// search reads its history instead. An empty [needle] matches every chat.
+/// message, without regard to case. No older message is read: a chat's
+/// summary carries its latest message only, and the bodies before it are read
+/// one conversation at a time. A search across every conversation's history
+/// would be a new storage query with its own cost, cap and scope words, so it
+/// needs a design of its own; a conversation's own search reads its history
+/// instead. An empty [needle] matches every chat.
 bool chatMatchesSearch(ChatListItemViewModel chat, String needle) =>
     chat.title.toLowerCase().contains(needle) ||
     chat.preview.toLowerCase().contains(needle);

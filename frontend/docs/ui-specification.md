@@ -56,9 +56,9 @@ These recur across screens. They are stated here so the individual screens can s
   normal chat app. Design for a small delay; don't treat them as instant.
 - **Search is client-side only.** The server never indexes or helps search, and never sees
   the query. Search covers only history stored and decrypted on **this device** — and each
-  search surface states its own narrower scope, because the chat list matches names and one
-  preview line while in-conversation search reads that conversation's whole local history
-  (§6.5).
+  search surface states its own narrower scope, because the Chats search page matches names,
+  usernames and one preview line per chat while in-conversation search reads that
+  conversation's whole local history (§6.5).
 - **Foreground delivery uses the app's own server; Android background delivery is
   best-effort — never Google/Apple push.** By default that is deferred polling; a user may
   additionally turn on keeping the app connected while it is closed (§15), which is faster
@@ -392,10 +392,11 @@ rooms pinned at top. The primary hub.
 
 **Layout.**
 - **Top bar:** left — title "Chats" (or an avatar/menu affordance opening Settings on
-  mobile); center/right — a **search** entry point and, on desktop, the compose "+".
-- **Search:** tapping the search entry opens Search (§6.5).
-- **Body:** scrollable list. Order: pinned items first (including active voice rooms and
-  pinned conversations), then the rest by most recent activity.
+  mobile); center/right — the **search** icon and, on desktop, the compose "+".
+- **Search:** tapping the search icon opens the search page (§6.5), a full-screen page
+  (§0.1). The icon is the only search entry: the body holds no search field.
+- **Body:** the scrollable list, and nothing above it. Order: pinned items first (including
+  active voice rooms and pinned conversations), then the rest by most recent activity.
 - **Bottom (mobile):** the tab bar (Chats / Voice Rooms / Settings) + FAB. Both belong to
   this list: a screen it opens covers them (§0.1).
 - **Active voice-room banner** (§0.2) sits above the tab bar when applicable.
@@ -428,15 +429,40 @@ rooms pinned at top. The primary hub.
   readable (content is stored and decrypted locally). New sends queue (§8 states).
 
 ### 6.5 Search (client-side only)
-**Purpose.** Find the user's own conversations and messages. **[PRIVACY] The server never
-indexes or assists — nothing searchable ever leaves the device, and neither does the query.**
+**Purpose.** Find the user's own conversations, contacts and messages. **[PRIVACY] The
+server never indexes or assists — nothing searchable ever leaves the device, and neither
+does the query.**
 
 Search is built, and it is **two separate surfaces with two different scopes**. Each must
 state its own scope; borrowing the other's is a false promise ([ADR-052](decisions.md)).
 
-- **The chat-list box (this screen).** Filters the conversation list on **name and latest
-  message only**. It does not read history. Its hint and its empty state say so, and point
-  the user at the in-conversation search for anything older.
+- **The search page (`/chats/search`).** As built (2026-10-09, phase 10 prompt 1), the
+  search icon in the Chats top bar (§6) opens it as a full-screen page (§0.1). It replaces
+  the box that sat above the Chats list.
+  - **Top bar:** back, and the query field as the title. The field takes the focus as the
+    page opens, so the keyboard comes up; a clear control shows while the query is not
+    empty. A screen reader names the field "Search chats and contacts".
+  - **Scope:** **chat names, the latest message of each chat, and contact names and
+    usernames**, without regard to case. A contact's display name counts only once the
+    contact is verified, the rule Contacts/New uses (§7). The hint and the scope statement
+    say so, say that older messages are searched inside a conversation, and say that the
+    search stays on the phone.
+  - **Results:** a **Chats** section, then a **Contacts** section, each under a header. A
+    section with no match does not show. A contact whose direct chat is listed under Chats
+    is not listed again. A chat row looks like a row of the Chats list and opens the
+    conversation as the list does; a contact row shows the avatar, the name and the
+    username, and opens the direct chat (`/chats/direct/<userId>`). Back from either
+    returns to the page with its query and its results. There is no long-press menu.
+  - **No Messages section.** A chat's summary carries its latest message only. The bodies
+    before it sit in the `messages` table and are read one conversation at a time, so a
+    search across every conversation's history would be a new storage query with its own
+    cost, cap and scope words: it needs its own design, and is not built here. Older
+    messages are found by the in-conversation search below.
+  - **States:** an empty query shows the scope statement; a query with no match shows the
+    no-results state and the scope statement.
+  - **[PRIVACY]** It reads only the conversation summaries and the contact list already on
+    the phone. It makes no network call and does not refresh the directory. It stores no
+    query and keeps no search history, and it asks the keyboard not to learn the query.
 - **In-conversation search (§8, §9, §14).** One surface, opened from the overflow of
   every conversation kind — direct, saved and group. It reads **that conversation's loaded
   local history** — the message stream carries a window since [ADR-062](decisions.md), and
@@ -449,9 +475,8 @@ state its own scope; borrowing the other's is a false promise ([ADR-052](decisio
 - **States.** Empty query, no results, the match count, the truncation notice, and the
   scope note belonging to that surface.
 
-A single merged results screen grouping **Chats** / **Messages** / **Contacts** is not
-built. Nothing in the app offers it, and the disclosure does not imply it. Contacts are
-filtered where they are listed (§7), which is the third and last search surface.
+Contacts are also filtered where they are listed (§7), with the same contact rule as the
+search page, so the two cannot disagree. That is the third and last search surface.
 
 **[PRIVACY]** There is no separate search index. The encrypted database is the index:
 the decrypted message projection lives inside it, under the Keystore-wrapped key, and a
@@ -477,7 +502,8 @@ second copy of every message body ([ADR-057](decisions.md)).
 
 **Interactions.**
 - **Tap a contact** → open/create a DM (§8).
-- **Search field** filters by name.
+- **Search field** filters by username, and by display name once a contact is verified —
+  the contact rule of the search page (§6.5).
 
 **States.** *Loading*, *empty* (no other users known yet), *offline* (cached contacts).
 

@@ -144,9 +144,11 @@ boundary; the size-notification anchor path is shared by every row builder.
 
 - **Chats List:** pinned/active rooms, conversations ordered by local activity, unread,
   mute/pin/status, offline cached state, context menu.
-- **Search:** three in-place surfaces, never a merged results screen — the chat-list
-  filter, the shared in-conversation sheet (direct, saved and group), and the contact
-  filter. Jump to message, per-surface scope notice, and a stated result cap.
+- **Search:** three surfaces, each stating its own scope — the Chats search page
+  (`/chats/search`, a full-screen page at every width, opened from the Chats top bar) with a
+  Chats and a Contacts section and no message section; the shared in-conversation sheet
+  (direct, saved and group) with jump to message and a stated result cap; and the contact
+  filter of Contacts/New, which uses the search page's contact rule.
 - **Contacts/New:** New Group, New Voice Room, verified indicator, cached offline state.
 - **Profile bootstrap:** use backend username and deterministic local avatar until an
   authenticated profile key/payload arrives; never render unverified cached identity.

@@ -1292,7 +1292,7 @@ abstract class AppLocalizations {
   /// **'Search names, usernames and latest messages'**
   String get chatsSearchFieldHint;
 
-  /// The Chats search page matches chat names, the latest message of each chat, and contact names and usernames, and nothing else. Each message body is stored as ciphertext in its own row, so no query reaches an older message across conversations; a conversation's own search reads its history. The page sends the query nowhere and stores none.
+  /// The Chats search page matches chat names, the latest message of each chat, and contact names and usernames, and nothing else. A chat's summary carries its latest message only; older messages are read one conversation at a time, by that conversation's own search. The page sends the query nowhere and stores none.
   ///
   /// In en, this message translates to:
   /// **'This searches chat names, the latest message of each chat, and your contacts\' names and usernames. To search older messages, open a conversation and search inside it. Your search stays on this phone.'**
