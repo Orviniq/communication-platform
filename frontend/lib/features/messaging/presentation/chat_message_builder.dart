@@ -71,11 +71,6 @@ class ChatMessageBuilder extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.tokens.colors;
     final strings = AppLocalizations.of(context);
-    final progress = message.fanoutProgress;
-    final stateLabel = progress == null
-        ? _deliveryLabel(strings, message.delivery)
-        : '${_deliveryLabel(strings, message.delivery)}, '
-              '${strings.chatFanoutProgress(progress.sent, progress.total)}';
     final semanticLabel = strings.chatMessageSemantics(
       message.authorName,
       message.deleted
@@ -83,7 +78,7 @@ class ChatMessageBuilder extends StatelessWidget {
           : message.kind == ChatTimelineContentKind.unsupported
           ? strings.chatUnsupportedMessage
           : message.text ?? '',
-      stateLabel,
+      _deliveryLabel(strings, message.delivery),
     );
     final bubble = Semantics(
       container: true,
@@ -352,14 +347,6 @@ class ChatMessageBuilder extends StatelessWidget {
                 color: colors.textMuted,
               ),
             ),
-            if (message.fanoutProgress case final progress?)
-              Text(
-                strings.chatFanoutProgress(progress.sent, progress.total),
-                key: ValueKey('chat-fanout-${message.id}'),
-                style: context.tokens.typography.label.copyWith(
-                  color: colors.textMuted,
-                ),
-              ),
             _DeliveryIndicator(state: message.delivery),
           ],
         ),

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/create_group_page.dart';
@@ -183,14 +185,127 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'a group send counts its copies and is not sent before the last',
-    (tester) async {
-      const messageId = '22222222222222222222222222222222';
-      Future<void> show(
-        GroupMessageDelivery delivery, [
-        Map<String, GroupFanoutProgress> progress = const {},
-      ]) => _pump(
+  testWidgets('sending a group message leaves the composer, its focus and the '
+      'keyboard where they were', (tester) async {
+    // The send is held open on purpose. The composer used to be swapped for a
+    // progress bar for as long as `onSend` took, and a text field that leaves
+    // the tree takes the keyboard with it.
+    final finished = Completer<Result<void>>();
+    final sent = <String>[];
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (text) {
+          sent.add(text);
+          return finished.future;
+        },
+      ),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    await tester.tap(field);
+    await tester.pump();
+    await tester.enterText(field, 'Keep typing');
+    await tester.pump();
+    final focus = tester.widget<TextField>(field).focusNode!;
+    expect(focus.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.tap(_sendButton);
+    await tester.pump();
+
+    expect(sent, ['Keep typing']);
+    expect(find.byType(ChatComposerBuilder), findsOneWidget);
+    expect(focus.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    finished.complete(const Result.success(null));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatComposerBuilder), findsOneWidget);
+    expect(focus.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+  });
+
+  testWidgets('a group send that is refused says so and keeps the composer', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (_) async => const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        ),
+      ),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    await tester.enterText(field, 'Not allowed');
+    await tester.pump();
+    await tester.tap(_sendButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('The message was not saved. Nothing was sent.'),
+      findsOneWidget,
+    );
+    expect(find.byType(ChatComposerBuilder), findsOneWidget);
+  });
+
+  testWidgets('a send that succeeds does not hide an earlier one that failed', (
+    tester,
+  ) async {
+    // Two sends can now be in flight at once, because the composer stays. The
+    // one that ends last must not decide whether the failure of the other is
+    // still on screen.
+    final first = Completer<Result<void>>();
+    final second = Completer<Result<void>>();
+    final answers = [first, second];
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (_) => answers.removeAt(0).future,
+      ),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    for (final text in ['First', 'Second']) {
+      await tester.enterText(field, text);
+      await tester.pump();
+      await tester.tap(_sendButton);
+      await tester.pump();
+    }
+
+    first.complete(
+      const Result.failure(SecurityFailure(SecurityFailureKind.policyBlocked)),
+    );
+    await tester.pump();
+    second.complete(const Result.success(null));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('The message was not saved. Nothing was sent.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a group message is not accepted before its last copy, and its '
+      'bubble keeps its width until then', (tester) async {
+    const messageId = '22222222222222222222222222222222';
+    // A word short enough that the row under it, the time and the mark, is
+    // what sizes the bubble. Anything added to that row while the message is
+    // on its way shows as a wider bubble that narrows again once it is sent.
+    Future<double> bubbleWidth(GroupMessageDelivery delivery) async {
+      await _pump(
         tester,
         GroupChatPage(
           groupId: _groupId,
@@ -200,31 +315,33 @@ void main() {
               messageId: messageId,
               groupId: _groupId,
               senderUserId: _owner,
-              text: 'To everyone',
+              text: 'Hi',
               createdMs: 100,
               delivery: delivery,
             ),
           ],
-          injectedProgress: progress,
           currentUserId: _owner,
           onSend: (_) async => const Result.success(null),
         ),
       );
+      return tester
+          .getSize(find.byKey(const ValueKey('message-$messageId')))
+          .width;
+    }
 
-      await show(GroupMessageDelivery.sending, {
-        messageId: GroupFanoutProgress(sent: 45, total: 150),
-      });
+    final queued = await bubbleWidth(GroupMessageDelivery.queued);
+    expect(find.byTooltip('queued offline'), findsOneWidget);
 
-      expect(find.text('Copies sent: 45 of 150'), findsOneWidget);
-      expect(find.byTooltip('sending to server'), findsOneWidget);
-      expect(find.byTooltip('accepted by server relay'), findsNothing);
+    final sending = await bubbleWidth(GroupMessageDelivery.sending);
+    expect(find.byTooltip('sending to server'), findsOneWidget);
+    expect(find.byTooltip('accepted by server relay'), findsNothing);
 
-      await show(GroupMessageDelivery.sent);
+    final sent = await bubbleWidth(GroupMessageDelivery.sent);
+    expect(find.byTooltip('accepted by server relay'), findsOneWidget);
 
-      expect(find.textContaining('Copies sent'), findsNothing);
-      expect(find.byTooltip('accepted by server relay'), findsOneWidget);
-    },
-  );
+    expect(queued, sent);
+    expect(sending, sent);
+  });
 
   testWidgets('a failed group send retries that same message', (tester) async {
     const messageId = '33333333333333333333333333333333';
@@ -494,3 +611,11 @@ Future<void> _pump(
   );
   await tester.pumpAndSettle();
 }
+
+/// Send, once the composer holds a draft to send.
+final Finder _sendButton = find.byWidgetPredicate(
+  (widget) =>
+      widget is AppIconButton &&
+      widget.icon == AppIcons.send &&
+      widget.onPressed != null,
+);

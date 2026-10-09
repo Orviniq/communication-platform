@@ -25,7 +25,6 @@ class GroupChatPage extends ConsumerWidget {
     required this.groupId,
     this.injectedState,
     this.injectedMessages,
-    this.injectedProgress,
     this.currentUserId,
     this.onSend,
     this.onRetry,
@@ -35,7 +34,6 @@ class GroupChatPage extends ConsumerWidget {
   final String groupId;
   final GroupState? injectedState;
   final List<GroupMessage>? injectedMessages;
-  final Map<String, GroupFanoutProgress>? injectedProgress;
   final String? currentUserId;
   final SendGroupMessageCallback? onSend;
   final RetryGroupMessageCallback? onRetry;
@@ -46,7 +44,6 @@ class GroupChatPage extends ConsumerWidget {
       return GroupChatView(
         state: injectedState!,
         messages: injectedMessages!,
-        progress: injectedProgress ?? const {},
         currentUserId: currentUserId ?? injectedState!.members.first.userId,
         onSend: onSend!,
         onRetry: onRetry ?? _retryUnavailable,
@@ -57,11 +54,6 @@ class GroupChatPage extends ConsumerWidget {
     if (userId == null) return groupErrorPage(context);
     final group = ref.watch(groupProvider(groupId));
     final messages = ref.watch(groupMessagesProvider(groupId));
-    // A count that has not loaded is a count not shown, never a timeline held
-    // back: the message's own state already says it is still sending.
-    final progress =
-        ref.watch(groupFanoutProgressProvider(groupId)).value ??
-        const <String, GroupFanoutProgress>{};
     final device = ref.watch(currentMessagingDeviceIdProvider);
     final useCases = ref.watch(groupUseCasesProvider);
     return group.when(
@@ -81,7 +73,6 @@ class GroupChatPage extends ConsumerWidget {
               data: (resolved) => GroupChatView(
                 state: state,
                 messages: items,
-                progress: progress,
                 currentUserId: userId,
                 onSend: (text) => resolved.sendMessage(
                   groupId: groupId,
@@ -112,15 +103,11 @@ class GroupChatView extends StatefulWidget {
     required this.currentUserId,
     required this.onSend,
     required this.onRetry,
-    this.progress = const {},
     super.key,
   });
 
   final GroupState state;
   final List<GroupMessage> messages;
-
-  /// The copies still owed for this device's messages, by message id.
-  final Map<String, GroupFanoutProgress> progress;
   final String currentUserId;
   final SendGroupMessageCallback onSend;
   final RetryGroupMessageCallback onRetry;
@@ -131,7 +118,6 @@ class GroupChatView extends StatefulWidget {
 
 class _GroupChatViewState extends State<GroupChatView> {
   final _composerKey = GlobalKey<ChatComposerBuilderState>();
-  var _sending = false;
   var _sendFailed = false;
   var _retryFailed = false;
 
@@ -170,16 +156,17 @@ class _GroupChatViewState extends State<GroupChatView> {
         Expanded(
           child: ChatTimelineAdapter(model: timeline, onIntent: _handleIntent),
         ),
-        if (_sending)
-          const LinearProgressIndicator(minHeight: 2)
-        else
-          ChatComposerBuilder(
-            key: _composerKey,
-            securityGate: gate,
-            offline: false,
-            savedMessages: false,
-            onIntent: _handleIntent,
-          ),
+        // Always in the tree, as in a direct conversation. A send only queues
+        // the message, and the timeline shows it the moment it is written, so
+        // the composer has nothing to wait for. A field that left the tree
+        // while a send ran took the keyboard with it.
+        ChatComposerBuilder(
+          key: _composerKey,
+          securityGate: gate,
+          offline: false,
+          savedMessages: false,
+          onIntent: _handleIntent,
+        ),
       ],
     );
     final width = MediaQuery.sizeOf(context).width;
@@ -273,12 +260,6 @@ class _GroupChatViewState extends State<GroupChatView> {
         isUtc: true,
       ).toLocal(),
       delivery: _deliveryView(message.delivery),
-      // The count shows for exactly as long as the send has not ended.
-      fanoutProgress: switch (message.delivery) {
-        GroupMessageDelivery.queued || GroupMessageDelivery.sending =>
-          _progressView(widget.progress[message.messageId]),
-        _ => null,
-      },
       firstInAuthorGroup:
           previous == null || previous.senderUserId != message.senderUserId,
       lastInAuthorGroup:
@@ -304,16 +285,12 @@ class _GroupChatViewState extends State<GroupChatView> {
   }
 
   Future<void> _send(String text) async {
-    setState(() {
-      _sending = true;
-      _sendFailed = false;
-    });
+    setState(() => _sendFailed = false);
     final result = await widget.onSend(text);
     if (!mounted) return;
-    setState(() {
-      _sending = false;
-      _sendFailed = result is FailureResult<void>;
-    });
+    // Only a failure is recorded. Sends can overlap now, and one that went
+    // through says nothing about another that was refused.
+    if (result is FailureResult<void>) setState(() => _sendFailed = true);
   }
 
   Future<void> _retry(String messageId) async {
@@ -344,11 +321,6 @@ ChatDeliveryViewState _deliveryView(GroupMessageDelivery delivery) =>
       GroupMessageDelivery.sent => ChatDeliveryViewState.accepted,
       GroupMessageDelivery.failed => ChatDeliveryViewState.failed,
     };
-
-ChatFanoutProgress? _progressView(GroupFanoutProgress? progress) =>
-    progress == null
-    ? null
-    : ChatFanoutProgress(sent: progress.sent, total: progress.total);
 
 /// What a view built without a retry path answers: a refusal, so a retry it
 /// cannot make is never reported as made.

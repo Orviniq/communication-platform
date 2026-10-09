@@ -647,7 +647,9 @@ history; up to ~50 members; roles **owner → admins → members**.
 2. **Message list:** as §8, but incoming bubbles also show the **sender's name/avatar**.
    Inline system lines appear for membership changes ("X was added", "Y left").
 3. **Input bar:** as §8. By default all members can post; if you implement any
-   posting restriction, disabled states must explain why.
+   posting restriction, disabled states must explain why. A send never replaces it: the bar
+   keeps its focus, and the keyboard stays up, while a message is sent and between messages
+   ([ADR-088](decisions.md)).
 
 **Message interactions:** identical to §8 (reply, react, edit own, forward, copy, star,
 pin, delete-for-me / delete-for-everyone). A pin is visible to all members via the pinned
@@ -664,10 +666,11 @@ member confirms the group's current control state, and it never asks members to 
 re-add this device.
 
 **Copies.** A group message is one encrypted copy for each device of each member
-([ADR-075](decisions.md)). While any copy is still owed, the message shows how many the
-server has accepted out of how many are owed ("Copies sent: 45 of 150"), and it takes the
+([ADR-075](decisions.md)). While any copy is still owed, the message shows the sending mark
+and nothing beside it, so its bubble keeps one width from the send to the end
+([ADR-088](decisions.md), which withdrew the count that ADR-075 had put there). It takes the
 accepted mark only when none is still owed. A copy for a device the server reports as gone
-leaves the count; a copy for a device whose mailbox is full stays in it until it is
+is no longer owed; a copy for a device whose mailbox is full stays owed until it is
 accepted. A failed send offers a retry of the same message.
 
 ---

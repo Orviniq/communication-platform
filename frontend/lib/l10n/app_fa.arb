@@ -369,8 +369,6 @@
   "chatStateRead": "رسید خواندن دریافت شد",
   "chatStateFailed": "ارسال ناموفق",
   "chatStateReceived": "دریافت‌شده",
-  "chatFanoutProgress": "نسخه‌های ارسال‌شده: {sent} از {total}",
-  "@chatFanoutProgress": {"placeholders": {"sent": {"type": "int"}, "total": {"type": "int"}}},
   "groupCreateTitle": "ساخت گروه",
   "groupPickMembersTitle": "انتخاب اعضا",
   "groupDetailsTitle": "مشخصات گروه",
