@@ -112,9 +112,6 @@ void main() {
                   .first)
               .messages
               .single;
-      final attachment = await database
-          .select(database.attachments)
-          .getSingle();
       expect(summary.draft, 'draft');
       expect(summary.mutedUntil, mutedUntil);
       expect(summary.pinned, isTrue);
@@ -122,8 +119,9 @@ void main() {
       expect(message.deletedForMe, isTrue);
       expect(message.starred, isTrue);
       expect(message.unread, isFalse);
-      expect(attachment.boundedCacheHandleCiphertext, isNull);
-      expect(attachment.cacheExpiresAt, isNull);
+      // Delete-for-me takes the attachment row and its cache handle with it
+      // (ADR-089 D10).
+      expect(await database.select(database.attachments).get(), isEmpty);
 
       expect(
         await repository.deleteConversationForMe('conversation'),

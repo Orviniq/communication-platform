@@ -8,6 +8,7 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/drift_repository_base.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart'
     hide MessageReaction;
+import 'package:communication_platform/features/local_storage/infrastructure/database/stored_attachment_descriptor.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:drift/drift.dart';
@@ -423,43 +424,22 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
   }
 
   _DecodedAttachment? _decodeAttachment(Attachment attachment) {
-    try {
-      final value = jsonDecode(
-        utf8.decode(attachment.encryptedDescriptor, allowMalformed: false),
-      );
-      if (value is! Map<String, Object?>) return null;
-      return _DecodedAttachment(
-        descriptor: EncryptedAttachmentDescriptor(
-          capabilityId: value['capability']! as String,
-          key: base64Url.decode(value['key']! as String),
-          header: base64Url.decode(value['header']! as String),
-          secretstreamHeader: base64Url.decode(
-            value['stream_header']! as String,
-          ),
-          encryptedSize: value['encrypted_size']! as int,
-          bucketSize: value['bucket_size']! as int,
-          plaintextSize: value['plaintext_size']! as int,
-          displayName: value['name']! as String,
-          mimeType: value['mime']! as String,
-          mediaKind: AttachmentMediaKind.values[value['media_kind']! as int],
-          width: value['width'] as int?,
-          height: value['height'] as int?,
-          caption: value['caption'] as String?,
-          thumbnail: value['thumbnail'] == null
-              ? null
-              : base64Url.decode(value['thumbnail']! as String),
-        ),
-        state:
-            AttachmentTransferState.values[math.min(
-              math.max(attachment.transferState, 0),
-              AttachmentTransferState.values.length - 1,
-            )],
-      );
-    } on Object {
+    final descriptor = decodeStoredAttachmentDescriptor(
+      attachment.encryptedDescriptor,
+    );
+    if (descriptor == null) {
       // Malformed local descriptors remain invisible until the next
       // authenticated event rebuild; they are never presented.
       return null;
     }
+    return _DecodedAttachment(
+      descriptor: descriptor,
+      state:
+          AttachmentTransferState.values[math.min(
+            math.max(attachment.transferState, 0),
+            AttachmentTransferState.values.length - 1,
+          )],
+    );
   }
 
   @override
@@ -645,14 +625,13 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
     if (updated != 1) {
       throw const _MissingMessage();
     }
-    await (database.update(
+    // The rows go, and with them the cache id of a downloaded file, which the
+    // next sweep of the attachment cache then deletes (ADR-089 D10). The
+    // projector writes no row for a message deleted for me, so a later
+    // re-fold does not bring them back.
+    await (database.delete(
       database.attachments,
-    )..where((row) => row.messageId.equals(messageId))).write(
-      const AttachmentsCompanion(
-        boundedCacheHandleCiphertext: Value(null),
-        cacheExpiresAt: Value(null),
-      ),
-    );
+    )..where((row) => row.messageId.equals(messageId))).go();
     await _refreshUnreadCountForMessage(messageId);
   });
 
@@ -671,30 +650,38 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
   });
 
   @override
-  Future<Result<void>> deleteConversationForMe(String conversationId) =>
-      runWrite(() async {
-        final updated =
-            await (database.update(
-              database.conversations,
-            )..where((row) => row.conversationId.equals(conversationId))).write(
-              const ConversationsCompanion(
-                tombstoned: Value(true),
-                unreadCount: Value(0),
-                draftCiphertext: Value(null),
-              ),
-            );
-        if (updated != 1) {
-          throw const _MissingConversation();
-        }
+  Future<Result<void>> deleteConversationForMe(
+    String conversationId,
+  ) => runWrite(() async {
+    final updated =
         await (database.update(
-          database.messages,
+          database.conversations,
         )..where((row) => row.conversationId.equals(conversationId))).write(
-          const MessagesCompanion(
-            deletedForMe: Value(true),
-            unread: Value(false),
+          const ConversationsCompanion(
+            tombstoned: Value(true),
+            unreadCount: Value(0),
+            draftCiphertext: Value(null),
           ),
         );
-      });
+    if (updated != 1) {
+      throw const _MissingConversation();
+    }
+    await (database.update(
+      database.messages,
+    )..where((row) => row.conversationId.equals(conversationId))).write(
+      const MessagesCompanion(deletedForMe: Value(true), unread: Value(false)),
+    );
+    // Every message is now deleted for me, so none keeps an attachment
+    // row, as `deleteForMe` does for one (ADR-089 D10).
+    await (database.delete(database.attachments)..where(
+          (row) => row.messageId.isInQuery(
+            database.selectOnly(database.messages)
+              ..addColumns([database.messages.messageId])
+              ..where(database.messages.conversationId.equals(conversationId)),
+          ),
+        ))
+        .go();
+  });
 
   @override
   Future<Result<List<String>>> markConversationRead(String conversationId) =>

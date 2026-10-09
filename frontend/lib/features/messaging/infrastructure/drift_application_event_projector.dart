@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/database/stored_attachment_descriptor.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
@@ -517,13 +518,43 @@ final class DriftApplicationEventProjector {
     )..where((row) => row.conversationId.equals(conversationId))).write(
       ConversationsCompanion(
         listProjectionCiphertext: Value(
-          latest?.projectionCiphertext ?? Uint8List(0),
+          latest == null ? Uint8List(0) : await _listPreview(latest),
         ),
         sortKey: Value(latest?.orderingMs ?? 0),
         lastActivityEventId: Value(latest?.orderingEventId),
         unreadCount: Value(counted.read(unread) ?? 0),
       ),
     );
+  }
+
+  /// What the Chats list shows for [latest]: its text, or, when it carries an
+  /// attachment and no caption, the display name of its first attachment
+  /// (ADR-089 D10).
+  ///
+  /// The first attachment is the first row written for the message, which is
+  /// the first of the descriptor list: the rows of a message are inserted in
+  /// that order and a re-fold keeps them. One indexed read, and only for a
+  /// message with no text; a message deleted for everyone has neither.
+  Future<Uint8List> _listPreview(Message latest) async {
+    if (latest.projectionCiphertext.isNotEmpty || latest.deletedForEveryone) {
+      return latest.projectionCiphertext;
+    }
+    final first = await database
+        .customSelect(
+          'SELECT encrypted_descriptor FROM attachments '
+          'WHERE message_id = ? ORDER BY rowid LIMIT 1',
+          variables: [Variable<String>(latest.messageId)],
+          readsFrom: {database.attachments},
+        )
+        .getSingleOrNull();
+    final descriptor = first == null
+        ? null
+        : decodeStoredAttachmentDescriptor(
+            first.read<Uint8List>('encrypted_descriptor'),
+          );
+    return descriptor == null
+        ? Uint8List(0)
+        : Uint8List.fromList(utf8.encode(descriptor.displayName));
   }
 
   Future<void> retainUnsupportedInsideTransaction(
@@ -1090,9 +1121,12 @@ final class DriftApplicationEventProjector {
   /// cannot move either and does not delete and re-insert them to prove it. A
   /// rebuild passes neither and rewrites both, because it is rebuilding.
   ///
-  /// Attachments are deliberately not gated: the rebuild resets their transfer
-  /// state and clears their cache handle on every write, and changing when that
-  /// happens would change observable local state rather than only its cost.
+  /// Attachments are not gated either, and they need not be: [_writeAttachments]
+  /// writes a row only when it is new or its descriptor changed, and keeps what
+  /// this device knows about a file it holds (ADR-089 D10). Until ADR-089 every
+  /// write deleted the rows and inserted them again as `queued` with no cache
+  /// handle, so a reaction, a pin, a receipt or an edit made a downloaded file
+  /// look as if it had never been fetched.
   Future<void> _writeMessage(
     _ProjectedMessage message, {
     required _LocalMessageState? localState,
@@ -1141,27 +1175,7 @@ final class DriftApplicationEventProjector {
             unread: Value(message.unread),
           ),
         );
-    if (message.attachments.isNotEmpty) {
-      await (database.delete(
-        database.attachments,
-      )..where((row) => row.messageId.equals(message.messageId))).go();
-      for (final attachment in message.attachments) {
-        final id = attachment['capability'];
-        if (id is! String) continue;
-        await database
-            .into(database.attachments)
-            .insertOnConflictUpdate(
-              AttachmentsCompanion.insert(
-                attachmentId: id,
-                messageId: message.messageId,
-                encryptedDescriptor: Uint8List.fromList(
-                  utf8.encode(jsonEncode(attachment)),
-                ),
-                transferState: AttachmentTransferState.queued.index,
-              ),
-            );
-      }
-    }
+    await _writeAttachments(message);
     if (rewriteReactions) {
       await (database.delete(
         database.messageReactions,
@@ -1199,16 +1213,6 @@ final class DriftApplicationEventProjector {
             );
       }
     }
-    if (message.deletedForEveryone) {
-      await (database.update(
-        database.attachments,
-      )..where((row) => row.messageId.equals(message.messageId))).write(
-        const AttachmentsCompanion(
-          boundedCacheHandleCiphertext: Value(null),
-          cacheExpiresAt: Value(null),
-        ),
-      );
-    }
     if (message.pendingDeliveredReceipt && message.localDeviceId.isNotEmpty) {
       // Only for a message this device has not already acknowledged to its
       // sender. `pendingDeliveredReceipt` says a receipt is *owed in principle*
@@ -1239,6 +1243,73 @@ final class DriftApplicationEventProjector {
               mode: InsertMode.insertOrIgnore,
             );
       }
+    }
+  }
+
+  /// Writes the attachment rows of [message] by capability (ADR-089 D10).
+  ///
+  /// A row that exists for the same capability and the same message keeps its
+  /// transfer state, its cache id and its expiry, which are this device's own
+  /// knowledge of a file it holds and appear in no event: a reaction, a pin, a
+  /// receipt or an edit re-folds the message and must not forget them. It is
+  /// written again only when its descriptor changed. Any other row starts as
+  /// `queued`, which the client reads as "not downloaded", with no cache id
+  /// and no expiry — including a row that named another message, because the
+  /// primary key holds one row per capability.
+  ///
+  /// A message deleted for everyone or for me keeps no row, and a row whose
+  /// capability left the message is deleted. Both take the cache id of a
+  /// downloaded file with them, and the attachment cache's next sweep deletes
+  /// the file. `deleted_for_me` is carried by the message row, so a re-fold
+  /// of such a message inserts nothing again.
+  Future<void> _writeAttachments(_ProjectedMessage message) async {
+    final projected = <String, Map<String, Object?>>{
+      if (!message.deletedForEveryone && !message.deletedForMe)
+        for (final attachment in message.attachments)
+          if (attachment['capability'] case final String id) id: attachment,
+    };
+    final stale = database.delete(database.attachments)
+      ..where((row) => row.messageId.equals(message.messageId));
+    if (projected.isNotEmpty) {
+      stale.where((row) => row.attachmentId.isNotIn(projected.keys));
+    }
+    await stale.go();
+    if (projected.isEmpty) {
+      return;
+    }
+    final existing = {
+      for (final row in await (database.select(
+        database.attachments,
+      )..where((row) => row.attachmentId.isIn(projected.keys))).get())
+        row.attachmentId: row,
+    };
+    for (final MapEntry(key: id, value: attachment) in projected.entries) {
+      final descriptor = Uint8List.fromList(
+        utf8.encode(jsonEncode(attachment)),
+      );
+      final kept = existing[id];
+      if (kept != null && kept.messageId == message.messageId) {
+        if (!_same(kept.encryptedDescriptor, descriptor)) {
+          await (database.update(
+            database.attachments,
+          )..where((row) => row.attachmentId.equals(id))).write(
+            AttachmentsCompanion(encryptedDescriptor: Value(descriptor)),
+          );
+        }
+        continue;
+      }
+      await database
+          .into(database.attachments)
+          .insertOnConflictUpdate(
+            AttachmentsCompanion.insert(
+              attachmentId: id,
+              messageId: message.messageId,
+              encryptedDescriptor: descriptor,
+              transferState: AttachmentTransferState.queued.index,
+              boundedCacheHandleCiphertext: const Value(null),
+              cacheExpiresAt: const Value(null),
+            ),
+          );
     }
   }
 

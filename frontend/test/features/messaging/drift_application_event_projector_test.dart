@@ -195,11 +195,9 @@ void main() {
       row = await database.select(database.messages).getSingle();
       expect(row.deletedForEveryone, isTrue);
       expect(row.projectionCiphertext, isEmpty);
-      final attachment = await database
-          .select(database.attachments)
-          .getSingle();
-      expect(attachment.boundedCacheHandleCiphertext, isNull);
-      expect(attachment.cacheExpiresAt, isNull);
+      // The row goes with the message, and with it the cache handle of a
+      // downloaded file (ADR-089 D10).
+      expect(await database.select(database.attachments).get(), isEmpty);
     },
   );
 
