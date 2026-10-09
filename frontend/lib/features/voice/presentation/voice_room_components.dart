@@ -233,9 +233,10 @@ class VoiceResponsiveBody extends StatelessWidget {
 }
 
 /// A sheet on a narrow window and a dialog on a wider one
-/// (`voice-room-states.md` §7). Both scroll, so a large text scale never
-/// pushes an action off the screen; both restore focus to what opened them
-/// when they close.
+/// (`voice-room-states.md` §7). Both scroll - the sheet by [showAppSheet], the
+/// dialog by [showAppContentDialog] - so a large text scale never pushes an
+/// action off the screen; both restore focus to what opened them when they
+/// close.
 Future<T?> showVoiceModal<T>({
   required BuildContext context,
   required String title,
@@ -254,24 +255,17 @@ Future<T?> showVoiceModal<T>({
   return showAppSheet<T>(
     context: context,
     semanticLabel: title,
-    child: ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.8,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Semantics(
-              header: true,
-              child: Text(title, style: context.tokens.typography.section),
-            ),
-            const SizedBox(height: AppSpacing.x3),
-            child,
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(title, style: context.tokens.typography.section),
         ),
-      ),
+        const SizedBox(height: AppSpacing.x3),
+        child,
+      ],
     ),
   );
 }

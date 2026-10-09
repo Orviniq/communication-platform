@@ -10,10 +10,12 @@ import 'package:communication_platform/app/dependencies/voice_call_providers.dar
 import 'package:communication_platform/app/dependencies/voice_call_service_providers.dart';
 import 'package:communication_platform/app/dependencies/voice_room_providers.dart';
 import 'package:communication_platform/app/dependencies/voice_screen_providers.dart';
+import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
 import 'package:communication_platform/features/app_shell/presentation/voice_room_banner.dart';
 import 'package:communication_platform/features/app_shell/presentation/voice_room_banner_frame.dart';
+import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
@@ -656,6 +658,59 @@ void main() {
           expect(tester.takeException(), isNull);
         });
       }
+    });
+  });
+
+  // The rule is written once, in `app_modals.dart`, and proved on the two
+  // sheet functions in `sheet_insets_test.dart`; these two are opened by the
+  // pages that own them, from a long press and from the paperclip.
+  group('sheets keep clear of the system insets and the keyboard', () {
+    final surface = find.byKey(const ValueKey('app-sheet-surface'));
+
+    testWidgets("the Chats list's conversation menu rests above the gesture "
+        'bar', (tester) async {
+      fakeSystemInsets(tester);
+      await _pumpApp(tester, size: _narrow, summaries: _summaries());
+
+      await tester.longPress(find.text('peer-00'));
+      await _settle(tester);
+
+      expect(surface, findsOneWidget);
+      expect(tester.getRect(surface).bottom, _narrow.height);
+      final lastRow = find.ancestor(
+        of: find.text('Delete chat'),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        tester.getRect(lastRow).bottom,
+        closeTo(_narrow.height - 48 - AppSpacing.x6, 0.01),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the attachment sheet opens through the app sheet, and its '
+        'last control rests above the gesture bar', (tester) async {
+      fakeSystemInsets(tester);
+      await _pumpApp(
+        tester,
+        size: _narrow,
+        initialLocation: '/chats/conversation/c-01?peer=peer-01',
+      );
+
+      await tester.tap(find.byTooltip('Attach'));
+      await _settle(tester);
+
+      // Only the app sheet draws this surface.
+      expect(
+        find.descendant(of: surface, matching: find.byType(AttachmentSheet)),
+        findsOneWidget,
+      );
+      expect(tester.getRect(surface).bottom, _narrow.height);
+      expect(
+        tester.getRect(find.widgetWithText(AppButton, 'Cancel')).bottom,
+        closeTo(_narrow.height - 48 - AppSpacing.x6, 0.01),
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 }

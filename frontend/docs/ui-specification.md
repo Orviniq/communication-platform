@@ -1176,6 +1176,10 @@ The recurring modal surfaces and their contents:
 - **Member/participant sheets** — group member sheet (§12.2), voice participant sheet
   (§10).
 
+Every sheet keeps each control above the bottom system inset and above the keyboard, its
+surface reaches the screen edge, and its content scrolls when it does not fit; only
+`app_modals.dart` opens a sheet (`responsive-ui.md`, Sheets).
+
 Every dialog that performs an irreversible or best-effort action must carry honest wording
 — no dialog may imply a stronger guarantee than the app can keep.
 

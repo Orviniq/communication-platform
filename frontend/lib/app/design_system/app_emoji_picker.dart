@@ -180,6 +180,7 @@ Future<String?> showAppEmojiPicker(BuildContext context) =>
     showAppSheet<String>(
       context: context,
       semanticLabel: AppLocalizations.of(context).emojiPickerLabel,
+      childScrolls: true,
       child: AppEmojiPicker(
         onSelected: (emoji) => popAppModal<String>(context, emoji),
       ),

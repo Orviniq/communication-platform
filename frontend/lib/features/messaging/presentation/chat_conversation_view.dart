@@ -220,6 +220,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     await showAppSheet<void>(
       context: context,
       semanticLabel: strings.chatPinnedMessagesTitle,
+      childScrolls: true,
       child: SizedBox(
         height: mathMin(MediaQuery.sizeOf(context).height * .65, 520),
         child: Column(
@@ -271,6 +272,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     await showAppSheet<void>(
       context: context,
       semanticLabel: strings.chatForwardAction,
+      childScrolls: true,
       child: StatefulBuilder(
         builder: (context, setModalState) => SizedBox(
           height: mathMin(MediaQuery.sizeOf(context).height * .7, 560),
