@@ -383,6 +383,48 @@ needs one too.
   require and decides where one widget goes. Changes no route, layout, table, wire format,
   protocol, dependency or backend file.
 
+### Done 2026-10-09 — the banner's shape elsewhere: seven more nodes carry their tap action
+
+`grep -rn "excludeSemantics: true" lib` found the banner's structure, a `Semantics(button: true,
+excludeSemantics: true)` over a control that holds the `onTap`, at seven more widgets. A widget test
+for each, run before the fix, failed with `missing actions: [tap]`; each node now takes the handler
+of the control under it and keeps `excludeSemantics`, so it is still one node with the same label,
+key and target.
+
+| Widget | File | Handler the node takes |
+| --- | --- | --- |
+| room list row, `voice-room-row-<roomId>` | `voice_rooms_page.dart` | `go('/voice-rooms/<roomId>')` |
+| member row, `voice-room-member-<userId>` | `voice_room_info_page.dart` | the member sheet, or none for this account's own row |
+| People and Room chat tabs | `voice_call_page.dart` | the tab's `onTap` |
+| Mute, Invite and Leave | `voice_call_page.dart` | `onPressed`, none while the call connects and Mute is disabled |
+| Photo or image, File, Camera | `attachment_sheet.dart` | `onPressed` |
+| the reaction selector's options | `chat_message_builder.dart` | `onPressed` |
+| the selector's expand control | `chat_message_builder.dart` | `onPressed` |
+
+**The rule.** A `Semantics` with `excludeSemantics: true` over a tappable control passes the
+control's own handler as its `onTap`, and passes null when the control is disabled, so a disabled
+control is a button with no action and not one that does nothing when activated. The other
+`excludeSemantics: true` sites in `lib/` wrap no control (icons, the notice, a room-text line) and
+are as they were.
+
+- **Tests.** Each matches `isSemantics(label: ..., isButton: true, hasTapAction: true)` (with
+  `isSelected` for the tabs and the reaction options), finds exactly one node by its label, and
+  performs the semantics tap with `tester.semantics.tap`: it opens the room and the member sheet,
+  switches the tab, mutes, opens the invitation and leaves, picks an attachment choice, sets and
+  takes off a reaction, and opens the full picker, as a touch does. They are in
+  `voice_room_pages_test.dart`, `voice_call_page_test.dart`, `attachment_sheet_test.dart` and
+  `chat_interface_test.dart`. Run once each, three mutations fail the test of every widget: no
+  `onTap` on the node, no `excludeSemantics` (a second node), and a handler that does nothing or
+  that is set when the control is disabled (this account's own member row, Mute while the call
+  connects). A label alone does not see a second node under the reaction controls, whose glyph or
+  icon has none, so their tests count the nodes with a tap action in the selector, 25, instead.
+- **Found on the way, not changed: the reaction chip under a message reads its label twice.** It
+  has no `excludeSemantics`, so its tap action is there, but its `Semantics` label and its `Text`
+  reach one node: "👍 reaction, 2 people" and then "👍 2". It is the shell's doubled label again,
+  which an `ExcludeSemantics` around the `Text`, as the shell's, would remove.
+- **No ADR of its own.** It applies the banner's fix to the same structure. Changes no route,
+  layout, label, table, wire format, protocol, dependency or backend file.
+
 ## ADR-085 in full — a session token is renewed from half its life, not in its last minutes (2026-10-07)
 
 **Status:** Accepted, 2026-10-07. Client-side correctness decision, on server ADR-0023, which
