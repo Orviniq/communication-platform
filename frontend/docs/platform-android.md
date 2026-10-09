@@ -509,8 +509,11 @@ Request only at point of use:
 - the microphone (`RECORD_AUDIO`, dangerous) at the join and at no other time
   (`CLIENT_CONTRACT.md` §N rule 11), with the call's foreground service — see *A call's
   microphone* below;
-- camera for capture/optional safety QR;
-- media/files through system pickers without broad storage permission.
+- no camera permission: a photo is taken by the system camera app through
+  `ACTION_IMAGE_CAPTURE`, and `CAMERA` is deliberately not declared (ADR-089; see
+  *Attachments* below). An in-app safety QR scanner would need it and is not built;
+- no media or storage permission: pictures and files come through the system photo
+  picker and the document picker, which grant access to what the user chose (ADR-089).
 
 `ACCESS_NETWORK_STATE` is declared, and is the one permission in this artifact that
 arrives from a package rather than from this application's own manifest —
@@ -675,6 +678,67 @@ the start, the entry, the capture in the background and the stop are source shap
 tests, and phase 6 prompt 10's call is where they are proved.
 `test/architecture/voice_call_service_policy_test.dart` pins the Kotlin and the manifest.
 
+## Attachments: pickers, the camera, Open, Save and Share (ADR-089)
+
+`AttachmentChannel.kt` owns the channel `communication_platform/attachments`, attached with the
+activity because every answer it waits for is an activity result. `FlutterActivity` is an
+`android.app.Activity`, not a `ComponentActivity`, so `registerForActivityResult` does not exist
+here: requests go through `startActivityForResult`, and `MainActivity.onActivityResult` calls
+`super.onActivityResult` first, which is where the Flutter embedding hands results to plugins, and
+then forwards the result to the channel.
+
+**System intents, no permission.** No picker package and no permission:
+
+- Photo: the system photo picker, `MediaStore.ACTION_PICK_IMAGES` with `image/*`, on API 33 and
+  later and on API 30 to 32 when `SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R)` is 2 or
+  more, which is where the action is available as an R extension. Elsewhere
+  `Intent.ACTION_GET_CONTENT` with `image/*` and `CATEGORY_OPENABLE`. The Google Play services
+  backport of the photo picker is not used: it is a Google dependency.
+- File: `Intent.ACTION_OPEN_DOCUMENT` with `*/*` and `CATEGORY_OPENABLE`.
+- Camera: `MediaStore.ACTION_IMAGE_CAPTURE`, writing `secure_attachment_cache/outgoing/<id>/capture.jpg`
+  through the `FileProvider` URI given as `EXTRA_OUTPUT` and as the intent's `ClipData`, with the
+  read and write grants, so the grant reaches the camera app.
+
+Each intent is started and `ActivityNotFoundException` is caught, so the manifest adds no
+`<queries>` element: starting an activity needs no package visibility.
+
+**Why there is no `CAMERA` permission.** The camera app takes the picture, so this application
+never opens the camera itself. Declaring `CAMERA` would make things worse, not better: an app that
+targets API 23 or later and declares `CAMERA` without holding it gets a `SecurityException` from
+`ACTION_IMAGE_CAPTURE`. The capture works with the permission absent and would break with it
+declared and refused. The same reasoning keeps out `READ_MEDIA_*`, `READ_EXTERNAL_STORAGE` and
+`WRITE_EXTERNAL_STORAGE`: the photo picker and the document picker grant read access to what the
+user chose, and nothing more is read.
+
+**The copy.** A pick is copied on one worker thread into
+`secure_attachment_cache/outgoing/<32 hex>/<safe name>` and answered by path on the main thread.
+The bytes are counted against the limit Dart gives and the copy stops above it; only the display
+name and the size (`OpenableColumns`) and the type (`ContentResolver.getType`) are read from the
+provider. A photo is re-encoded there: `ImageDecoder` on API 28 and later, which applies the EXIF
+orientation itself, `BitmapFactory` with the orientation read through `android.media.ExifInterface`
+below it, then a new opaque white bitmap with its longest side at most 2048 px, written as a JPEG
+of quality 82 that carries no metadata. A GIF is sent unchanged. One pick or save waits at a time;
+a second is refused as busy.
+
+**The path rule of Open, Save and Share.** `openVerifiedFile` (`ACTION_VIEW`),
+`saveVerifiedFile` (`ACTION_CREATE_DOCUMENT` with `EXTRA_TITLE`) and `shareVerifiedFile`
+(`ACTION_SEND` through a chooser) take only a regular file whose canonical path is inside
+`secure_attachment_cache/plain/`, where verified decrypted files live, and apply the MIME
+allowlist. A path anywhere else, including the outgoing copies, is refused. The `FileProvider`
+exposes `secure_attachment_cache/` as its one `cache-path`, and only these calls turn a file into a
+content URI.
+
+**A result after a process restart is dropped.** Android can kill the process while a picker or
+the camera is in front and deliver the result to a new one, which has no request waiting. The
+result is dropped, as is one that arrives after the engine went; nobody is waiting for it, and
+the sweep of the outgoing directory deletes what a camera left there. The person picks again.
+
+**What was read, and what was not run.** Read on 2026-10-10 from developer.android.com and AOSP;
+ADR-089 lists each page, the API level and the page date. **Nothing here ran on a device**: the
+pickers, the capture, the re-encode, Open, Save and Share are source shape and host tests until
+the owner's device test after the phase merges. `test/architecture/attachment_platform_policy_test.dart`
+pins the Kotlin and the manifest.
+
 ## Lifecycle and reliability
 
 - Process death at any inbox/outbox stage is recoverable from Drift.
@@ -804,6 +868,12 @@ key, the build, the install rule and the retained beta key.
 - [App standby buckets, including the eight-day restricted-bucket rule](https://developer.android.com/topic/performance/appstandby)
 - [Data Saver and `getRestrictBackgroundStatus`](https://developer.android.com/training/basics/network-ops/data-saver)
 - [Implicit broadcasts exempt from the background execution limits](https://developer.android.com/develop/background-work/background-tasks/broadcasts/broadcast-exceptions)
+- [Photo picker](https://developer.android.com/training/data-storage/shared/photopicker)
+- [`MediaStore`: `ACTION_PICK_IMAGES` and `ACTION_IMAGE_CAPTURE`](https://developer.android.com/reference/android/provider/MediaStore)
+- [`Intent`: the document actions, `ACTION_VIEW` and the URI grants](https://developer.android.com/reference/android/content/Intent)
+- [`FileProvider`](https://developer.android.com/reference/androidx/core/content/FileProvider)
+- [Package visibility: starting an activity needs none](https://developer.android.com/training/package-visibility/use-cases)
+- [`ImageDecoder`](https://developer.android.com/reference/android/graphics/ImageDecoder)
 - `JobInfo.java`, `JobScheduler.java`, `JobService.java` and `AlarmManager.java` from the
   pinned `android-35` SDK sources, which carry the normative javadoc for the periodic
   floor, `setPersisted`, the job execution limits and the while-idle alarm contract
