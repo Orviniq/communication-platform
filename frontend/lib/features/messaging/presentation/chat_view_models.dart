@@ -34,6 +34,21 @@ enum ChatSecurityGate {
 
 enum ChatTimelineLoadState { loading, data, empty, error }
 
+/// What the paperclip of a conversation does (ADR-089 D1).
+enum ChatAttachmentAvailability {
+  /// A group chat: attachments are not built for it, and the paperclip opens
+  /// the sheet that says so.
+  notBuilt,
+
+  /// A direct chat or Saved Messages on a device that keeps attachment files:
+  /// the paperclip opens the choice of a photo, a file or the camera.
+  available,
+
+  /// A direct chat or Saved Messages with no private cache to keep the files
+  /// in: the paperclip is disabled.
+  unavailable,
+}
+
 enum ChatComposerMode { compose, reply, edit }
 
 @immutable

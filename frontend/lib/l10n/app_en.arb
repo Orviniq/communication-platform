@@ -413,7 +413,7 @@
   "chatYouAuthor": "You",
   "chatAttachmentsUnavailable": "Open or save verified file",
   "attachmentChoosePrompt": "Choose encrypted media or a file.",
-  "attachmentsNotBuiltNotice": "File attachments are not built yet. Nothing can be attached to a message in this build.",
+  "attachmentsNotBuiltNotice": "Group chats cannot send files yet. Files can be sent in direct chats and in Saved Messages.",
   "attachmentPhotoOption": "Photo or image",
   "attachmentFileOption": "File",
   "attachmentCameraOption": "Camera",
@@ -436,6 +436,88 @@
       "mimeType": {"type": "String"},
       "size": {"type": "int"}
     }
+  },
+  "attachmentPickBusy": "A picker is already open. Finish with it first.",
+  "attachmentPickTooLarge": "This file is too large to send. The largest file is {size}.",
+  "@attachmentPickTooLarge": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "attachmentPickUnsupportedImage": "This picture cannot be read on this phone. Send it as a file instead.",
+  "attachmentPickUnreadable": "The file could not be read. Nothing was attached.",
+  "attachmentPickNoCamera": "No camera app is available on this phone.",
+  "attachmentPickRefused": "The phone refused the file. Nothing was attached.",
+  "attachmentPickMalformed": "The picker gave an answer this app does not accept. Nothing was attached.",
+  "attachmentEnqueueFailed": "The attachment could not be added. Nothing was sent.",
+  "attachmentPreviewTitle": "Send an attachment",
+  "attachmentPreviewImageLabel": "The picture to send",
+  "attachmentPreviewFileSize": "Size: {size}",
+  "@attachmentPreviewFileSize": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "attachmentPreviewUploadSize": "Upload size: {size}",
+  "@attachmentPreviewUploadSize": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "attachmentPreviewRemaining": "Left today: {size}",
+  "@attachmentPreviewRemaining": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "attachmentPreviewOverRemainder": "This upload needs {upload}, and today has {remaining} left. The allowance resets at {time}.",
+  "@attachmentPreviewOverRemainder": {
+    "placeholders": {"upload": {"type": "String"}, "remaining": {"type": "String"}, "time": {"type": "String"}}
+  },
+  "attachmentPreviewNotTaken": "This server takes no upload of this size.",
+  "attachmentCaptionLabel": "Caption",
+  "attachmentCaptionHint": "Add a caption (optional)",
+  "attachmentCaptionCharacters": "{count}/{limit} characters",
+  "@attachmentCaptionCharacters": {
+    "placeholders": {"count": {"type": "int"}, "limit": {"type": "int"}}
+  },
+  "attachmentCaptionBytes": "{count}/{limit} bytes of details",
+  "@attachmentCaptionBytes": {
+    "placeholders": {"count": {"type": "int"}, "limit": {"type": "int"}}
+  },
+  "attachmentCaptionTooLong": "With this caption the file's details pass {limit} bytes, the most an attachment carries. Shorten the caption.",
+  "@attachmentCaptionTooLong": {
+    "placeholders": {"limit": {"type": "int"}}
+  },
+  "attachmentSendAction": "Send",
+  "attachmentSizeBytes": "{value} B",
+  "@attachmentSizeBytes": {
+    "placeholders": {"value": {"type": "String"}}
+  },
+  "attachmentSizeKilobytes": "{value} KB",
+  "@attachmentSizeKilobytes": {
+    "placeholders": {"value": {"type": "String"}}
+  },
+  "attachmentSizeMegabytes": "{value} MB",
+  "@attachmentSizeMegabytes": {
+    "placeholders": {"value": {"type": "String"}}
+  },
+  "attachmentUploadsLabel": "Uploads",
+  "attachmentUploadWaiting": "Waiting",
+  "attachmentUploadEncrypting": "Encrypting",
+  "attachmentUploadUploading": "Uploading",
+  "attachmentUploadSending": "Sending",
+  "attachmentUploadProgress": "{state}, {percent}%",
+  "@attachmentUploadProgress": {
+    "placeholders": {"state": {"type": "String"}, "percent": {"type": "int"}}
+  },
+  "attachmentUploadAllowanceSpent": "Today's upload allowance is spent. It resets at {time}.",
+  "@attachmentUploadAllowanceSpent": {
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "attachmentUploadTooLarge": "The file is too large for the server.",
+  "attachmentUploadStorageFull": "The server's storage is full. Try again later.",
+  "attachmentUploadThrottled": "Too many transfers. Try again in a minute.",
+  "attachmentUploadOffline": "No connection. Try again when you are online.",
+  "attachmentUploadFailed": "The upload failed.",
+  "attachmentUploadCancelAction": "Cancel upload",
+  "attachmentUploadRetryAction": "Retry upload",
+  "attachmentUploadDiscardAction": "Discard upload",
+  "attachmentUploadAnnouncement": "{name}: {state}",
+  "@attachmentUploadAnnouncement": {
+    "placeholders": {"name": {"type": "String"}, "state": {"type": "String"}}
   },
   "chatActionFailedMessage": "That action could not be completed. No security guarantee was weakened.",
   "chatStateLocalOnly": "saved locally only",

@@ -1,37 +1,26 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_pick_model.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// ADR-089 D1: the sheet chooses in a direct chat and in Saved Messages, says
+/// "not built" in a group chat, and shows a received descriptor's details.
 void main() {
-  testWidgets('attachment choices are localized and semantically reachable', (
+  testWidgets('the choices are localized and semantically reachable', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    var selections = 0;
-    await _pump(tester, AttachmentSheet(onCancelled: () => selections += 1));
+    await _open(tester, const AttachmentSheet.choose());
 
     expect(find.text('Choose encrypted media or a file.'), findsOneWidget);
-    for (final label in ['Photo or image', 'File', 'Camera']) {
-      expect(find.bySemanticsLabel(label), findsOneWidget);
-    }
-    await tester.tap(find.text('File'));
-    expect(selections, 1);
-    semantics.dispose();
-  });
-
-  testWidgets('each choice offers a tap action, and performing it chooses', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    var selections = 0;
-    await _pump(tester, AttachmentSheet(onCancelled: () => selections += 1));
-
     for (final label in ['Photo or image', 'File', 'Camera']) {
       expect(
         tester.getSemantics(find.widgetWithText(ListTile, label)),
@@ -41,17 +30,65 @@ void main() {
       // One node announces the choice, and none the tile under it.
       expect(find.semantics.byLabel(label), findsOneWidget, reason: label);
     }
-
-    // By the node's action, as a service that does not touch the screen
-    // does it, not by a tap at its centre.
-    tester.semantics.tap(find.semantics.byLabel('File'));
-    expect(selections, 1);
-    tester.semantics.tap(find.semantics.byLabel('Camera'));
-    expect(selections, 2);
+    expect(find.text('Not built yet'), findsNothing);
     semantics.dispose();
   });
 
-  testWidgets('verified descriptor shows a safe name and bounded details', (
+  testWidgets('a choice closes the sheet with the kind chosen', (tester) async {
+    for (final (label, kind) in [
+      ('Photo or image', AttachmentPickKind.photo),
+      ('File', AttachmentPickKind.file),
+      ('Camera', AttachmentPickKind.camera),
+    ]) {
+      final result = await _open(tester, const AttachmentSheet.choose());
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+
+      expect(await result, kind, reason: label);
+      expect(find.byType(AttachmentSheet), findsNothing);
+    }
+  });
+
+  testWidgets('a choice made by a service that does not touch the screen '
+      'chooses too', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final result = await _open(tester, const AttachmentSheet.choose());
+
+    tester.semantics.tap(find.semantics.byLabel('Camera'));
+    await tester.pumpAndSettle();
+
+    expect(await result, AttachmentPickKind.camera);
+    semantics.dispose();
+  });
+
+  testWidgets('Cancel closes the sheet with no choice', (tester) async {
+    final result = await _open(tester, const AttachmentSheet.choose());
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(await result, isNull);
+  });
+
+  testWidgets('a group chat is told attachments are not built for it', (
+    tester,
+  ) async {
+    await _open(tester, const AttachmentSheet.notBuilt());
+
+    expect(
+      find.text(
+        'Group chats cannot send files yet. Files can be sent in direct '
+        'chats and in Saved Messages.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Not built yet'), findsOneWidget);
+    for (final label in ['Photo or image', 'File', 'Camera']) {
+      expect(find.text(label), findsNothing);
+    }
+  });
+
+  testWidgets('a verified descriptor shows a safe name and bounded details', (
     tester,
   ) async {
     final descriptor = EncryptedAttachmentDescriptor(
@@ -69,47 +106,50 @@ void main() {
       height: 1,
     );
 
-    await _pump(tester, AttachmentSheet(descriptor: descriptor));
+    await _open(tester, AttachmentSheet.details(descriptor: descriptor));
 
     expect(find.text('photo.jpg'), findsOneWidget);
     expect(find.text('image/jpeg · 1 bytes'), findsOneWidget);
     expect(find.text('Open or save verified file'), findsOneWidget);
     expect(find.textContaining('../'), findsNothing);
   });
-
-  testWidgets('with no picker wired the sheet says attachments are absent', (
-    tester,
-  ) async {
-    // This is the path the running app takes: the composer's paperclip
-    // opens the sheet with nothing behind it, because no build composes an
-    // attachment picker or transfer service. It used to offer three choices
-    // that did nothing at all when tapped (ADR-045).
-    await _pump(tester, const AttachmentSheet());
-
-    expect(
-      find.text(
-        'File attachments are not built yet. Nothing can be attached to a '
-        'message in this build.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('Not built yet'), findsOneWidget);
-    for (final label in ['Photo or image', 'File', 'Camera']) {
-      expect(find.text(label), findsNothing);
-    }
-  });
 }
 
-Future<void> _pump(WidgetTester tester, Widget child) => tester.pumpWidget(
-  MaterialApp(
-    theme: AppTheme.light(),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    builder: (context, child) =>
-        AppDesignSystem(child: child ?? const SizedBox.shrink()),
-    home: Scaffold(body: child),
-  ),
-);
+/// Opens [sheet] through the app sheet and answers what it closes with.
+Future<Future<AttachmentPickKind?>> _open(
+  WidgetTester tester,
+  Widget sheet,
+) async {
+  final result = Completer<AttachmentPickKind?>();
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) =>
+          AppDesignSystem(child: child ?? const SizedBox.shrink()),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              onPressed: () => unawaited(
+                showAppSheet<AttachmentPickKind>(
+                  context: context,
+                  semanticLabel: 'Attach',
+                  child: sheet,
+                ).then(result.complete),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+  return result.future;
+}
 
 Uint8List _header() {
   final bytes = Uint8List(66);

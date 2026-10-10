@@ -20,6 +20,7 @@ class ChatConversationView extends StatefulWidget {
     this.peerUserId,
     this.initialDraft,
     this.forwardTargets,
+    this.attachments = ChatAttachmentAvailability.notBuilt,
     super.key,
   });
 
@@ -27,6 +28,9 @@ class ChatConversationView extends StatefulWidget {
   final ChatIntentCallback onIntent;
   final String? peerUserId;
   final String? initialDraft;
+
+  /// What the composer's paperclip does here.
+  final ChatAttachmentAvailability attachments;
 
   /// Where a forward may go, resolved when the sheet opens.
   ///
@@ -198,6 +202,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                   offline: widget.model.offline,
                   savedMessages: widget.model.savedMessages,
                   initialDraft: widget.initialDraft,
+                  attachments: widget.attachments,
                   onIntent: _handleIntent,
                 ),
               ),

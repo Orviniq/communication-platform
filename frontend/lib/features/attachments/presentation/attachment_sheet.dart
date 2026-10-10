@@ -3,45 +3,67 @@ import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_pick_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 
+/// What the attachment sheet is for (ADR-089 D1).
+enum AttachmentSheetMode {
+  /// Photo, File and Camera: a direct chat and Saved Messages.
+  choose,
+
+  /// The "not built" notice and its badge: a group chat, which sends no
+  /// attachment in this phase.
+  notBuilt,
+
+  /// A received descriptor's name and details.
+  details,
+}
+
+/// The sheet the paperclip opens, and the one a received attachment opens.
+///
+/// It is opened through `showAppSheet`. In [AttachmentSheetMode.choose] a
+/// choice closes the sheet with the [AttachmentPickKind] chosen as its result,
+/// and Cancel closes it with none.
 final class AttachmentSheet extends StatelessWidget {
-  const AttachmentSheet({this.descriptor, this.onCancelled, super.key});
+  const AttachmentSheet.choose({super.key})
+    : mode = AttachmentSheetMode.choose,
+      descriptor = null;
 
+  const AttachmentSheet.notBuilt({super.key})
+    : mode = AttachmentSheetMode.notBuilt,
+      descriptor = null;
+
+  const AttachmentSheet.details({
+    required EncryptedAttachmentDescriptor this.descriptor,
+    super.key,
+  }) : mode = AttachmentSheetMode.details;
+
+  final AttachmentSheetMode mode;
   final EncryptedAttachmentDescriptor? descriptor;
-  final VoidCallback? onCancelled;
-
-  /// Whether a picker is wired behind the compose choices.
-  ///
-  /// No composition root installs an attachment picker or transfer service, so
-  /// in the running app this is false and the sheet says attachments are not
-  /// built instead of offering three options that do nothing when tapped
-  /// (ADR-045).
-  bool get _pickerAvailable => onCancelled != null;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final colors = context.tokens.colors;
-    final composing = descriptor == null;
+    final descriptor = this.descriptor;
     // The margin and the system insets are the sheet's (`showAppSheet`).
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          composing ? strings.chatAttachAction : descriptor!.displayName,
+          descriptor?.displayName ?? strings.chatAttachAction,
           style: context.tokens.typography.title,
         ),
         const SizedBox(height: AppSpacing.x1),
         Text(
-          switch ((composing, _pickerAvailable)) {
-            (true, true) => strings.attachmentChoosePrompt,
-            (true, false) => strings.attachmentsNotBuiltNotice,
-            (false, _) => strings.attachmentDetails(
+          switch (mode) {
+            AttachmentSheetMode.choose => strings.attachmentChoosePrompt,
+            AttachmentSheetMode.notBuilt => strings.attachmentsNotBuiltNotice,
+            AttachmentSheetMode.details => strings.attachmentDetails(
               descriptor!.mimeType,
-              descriptor!.plaintextSize,
+              descriptor.plaintextSize,
             ),
           },
           style: context.tokens.typography.compact.copyWith(
@@ -49,41 +71,54 @@ final class AttachmentSheet extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.x2),
-        if (composing && !_pickerAvailable)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: AppStatusBadge(
-              kind: AppStatusKind.warning,
-              label: SurfaceMaturity.notBuilt.label(strings),
+        ...switch (mode) {
+          AttachmentSheetMode.choose => [
+            for (final (kind, icon, label) in [
+              (
+                AttachmentPickKind.photo,
+                AppIcons.photo,
+                strings.attachmentPhotoOption,
+              ),
+              (
+                AttachmentPickKind.file,
+                AppIcons.file,
+                strings.attachmentFileOption,
+              ),
+              (
+                AttachmentPickKind.camera,
+                AppIcons.camera,
+                strings.attachmentCameraOption,
+              ),
+            ])
+              _AttachmentChoice(
+                icon: icon,
+                label: label,
+                onPressed: () => popAppModal(context, kind),
+              ),
+          ],
+          AttachmentSheetMode.notBuilt => [
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppStatusBadge(
+                kind: AppStatusKind.warning,
+                label: SurfaceMaturity.notBuilt.label(strings),
+              ),
             ),
-          )
-        else if (composing) ...[
-          _AttachmentChoice(
-            icon: AppIcons.attach,
-            label: strings.attachmentPhotoOption,
-            onPressed: onCancelled,
-          ),
-          _AttachmentChoice(
-            icon: AppIcons.attach,
-            label: strings.attachmentFileOption,
-            onPressed: onCancelled,
-          ),
-          _AttachmentChoice(
-            icon: AppIcons.attach,
-            label: strings.attachmentCameraOption,
-            onPressed: onCancelled,
-          ),
-        ] else
-          AppButton(
-            label: strings.chatAttachmentsUnavailable,
-            kind: AppButtonKind.outline,
-            onPressed: onCancelled,
-          ),
+          ],
+          // Prompt 4 of the phase adds Open, Save and Share.
+          AttachmentSheetMode.details => [
+            AppButton(
+              label: strings.chatAttachmentsUnavailable,
+              kind: AppButtonKind.outline,
+              onPressed: null,
+            ),
+          ],
+        },
         const SizedBox(height: AppSpacing.x1),
         AppButton(
           label: strings.chatCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => popAppModal(context),
         ),
       ],
     );
@@ -99,7 +134,7 @@ final class _AttachmentChoice extends StatelessWidget {
 
   final AppIconData icon;
   final String label;
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -110,6 +145,7 @@ final class _AttachmentChoice extends StatelessWidget {
     onTap: onPressed,
     excludeSemantics: true,
     child: ListTile(
+      minTileHeight: AppFocus.minimumTarget,
       leading: AppIcon(icon, decorative: true),
       title: Text(label),
       onTap: onPressed,

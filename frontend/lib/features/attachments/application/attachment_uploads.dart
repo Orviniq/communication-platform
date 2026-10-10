@@ -124,8 +124,8 @@ final class AttachmentUploads {
     if (_closed) {
       return const Result.failure(_ended);
     }
-    final bucket = largestUsableAttachmentBucket(limits().buckets);
-    if (bucket == null) {
+    final limit = pickLimit();
+    if (limit == null) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.limitExceeded),
       );
@@ -142,10 +142,7 @@ final class AttachmentUploads {
     holds.beginPick();
     final Result<PickedAttachment> picked;
     try {
-      picked = await platform.pick(
-        kind: kind,
-        maxBytes: attachmentPlaintextLimit(bucket),
-      );
+      picked = await platform.pick(kind: kind, maxBytes: limit);
     } finally {
       holds.endPick();
     }
@@ -158,6 +155,14 @@ final class AttachmentUploads {
       _previews[value.file.path] = value.file;
     }
     return picked;
+  }
+
+  /// The most bytes a pick takes now: the largest plaintext that fits the
+  /// largest bucket both the deployment and the crypto protocol hold, or null
+  /// when they share none.
+  int? pickLimit() {
+    final bucket = largestUsableAttachmentBucket(limits().buckets);
+    return bucket == null ? null : attachmentPlaintextLimit(bucket);
   }
 
   /// What the upload of [attachment] costs, and what is left of today.

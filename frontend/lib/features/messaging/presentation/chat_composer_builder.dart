@@ -16,6 +16,7 @@ class ChatComposerBuilder extends StatefulWidget {
     required this.savedMessages,
     required this.onIntent,
     this.initialDraft,
+    this.attachments = ChatAttachmentAvailability.notBuilt,
     super.key,
   });
 
@@ -24,6 +25,11 @@ class ChatComposerBuilder extends StatefulWidget {
   final bool savedMessages;
   final String? initialDraft;
   final ChatIntentCallback onIntent;
+
+  /// Whether attachments are available here. The paperclip sends
+  /// [OpenAttachmentIntent] unless they are [ChatAttachmentAvailability.unavailable],
+  /// and the conversation decides what the sheet offers.
+  final ChatAttachmentAvailability attachments;
 
   @override
   State<ChatComposerBuilder> createState() => ChatComposerBuilderState();
@@ -297,7 +303,10 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder>
                       AppIconButton(
                         icon: AppIcons.attach,
                         semanticLabel: strings.chatAttachAction,
-                        onPressed: ready
+                        onPressed:
+                            ready &&
+                                widget.attachments !=
+                                    ChatAttachmentAvailability.unavailable
                             ? () =>
                                   widget.onIntent(const OpenAttachmentIntent())
                             : null,

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:communication_platform/app/app.dart';
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
@@ -714,6 +716,52 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('Saved Messages offers a photo, a file and the camera', (
+      tester,
+    ) async {
+      await _pumpApp(
+        tester,
+        size: _narrow,
+        initialLocation: '/saved-messages?conversationId=c-saved',
+      );
+
+      await tester.tap(find.byTooltip('Attach'));
+      await _settle(tester);
+
+      for (final label in ['Photo or image', 'File', 'Camera']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      expect(find.text('Not built yet'), findsNothing);
+    });
+
+    testWidgets('a direct chat with no private cache disables its paperclip', (
+      tester,
+    ) async {
+      await _pumpApp(
+        tester,
+        size: _narrow,
+        initialLocation: '/chats/conversation/c-01?peer=peer-01',
+        privateCache: false,
+      );
+
+      final paperclip = tester.widget<AppIconButton>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is AppIconButton && widget.semanticLabel == 'Attach',
+        ),
+      );
+      expect(paperclip.onPressed, isNull);
+      // The composer itself is ready: only the paperclip waits.
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('chat-composer-field')),
+            )
+            .enabled,
+        isTrue,
+      );
+    });
   });
 }
 
@@ -806,6 +854,7 @@ Future<ProviderContainer> _pumpApp(
   required Size size,
   String initialLocation = '/chats',
   List<ConversationSummary> summaries = const [],
+  bool privateCache = true,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -844,6 +893,13 @@ Future<ProviderContainer> _pumpApp(
         ),
       ),
       voiceRoomsProvider.overrideWith((ref) => Stream.value(const [])),
+      // A private cache, so a direct chat's paperclip is enabled. Nothing
+      // here writes to it.
+      attachmentCacheRootProvider.overrideWith(
+        (ref) => privateCache
+            ? Future.value(Directory.systemTemp)
+            : Future.error(StateError('no private cache')),
+      ),
       // The test room, as its info page and the banner read it.
       voiceScopeProvider.overrideWith(
         (ref) => (userId: voiceSelf, deviceId: voiceSelfDevice),

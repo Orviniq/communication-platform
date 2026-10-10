@@ -42,6 +42,9 @@ abstract final class AppIcons {
   static const close = AppIconData._(FLucideIcons.x, 'close');
   static const send = AppIconData._(FLucideIcons.send, 'send');
   static const attach = AppIconData._(FLucideIcons.paperclip, 'attach');
+  static const photo = AppIconData._(FLucideIcons.image, 'photo');
+  static const file = AppIconData._(FLucideIcons.file, 'file');
+  static const camera = AppIconData._(FLucideIcons.camera, 'camera');
   static const emoji = AppIconData._(FLucideIcons.smile, 'emoji');
   static const keyboard = AppIconData._(FLucideIcons.keyboard, 'keyboard');
   static const more = AppIconData._(FLucideIcons.ellipsisVertical, 'more');

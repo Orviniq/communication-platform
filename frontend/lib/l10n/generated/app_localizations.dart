@@ -1817,7 +1817,7 @@ abstract class AppLocalizations {
   /// No description provided for @attachmentsNotBuiltNotice.
   ///
   /// In en, this message translates to:
-  /// **'File attachments are not built yet. Nothing can be attached to a message in this build.'**
+  /// **'Group chats cannot send files yet. Files can be sent in direct chats and in Saved Messages.'**
   String get attachmentsNotBuiltNotice;
 
   /// No description provided for @attachmentPhotoOption.
@@ -1921,6 +1921,250 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{mimeType} · {size} bytes'**
   String attachmentDetails(String mimeType, int size);
+
+  /// No description provided for @attachmentPickBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'A picker is already open. Finish with it first.'**
+  String get attachmentPickBusy;
+
+  /// No description provided for @attachmentPickTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is too large to send. The largest file is {size}.'**
+  String attachmentPickTooLarge(String size);
+
+  /// No description provided for @attachmentPickUnsupportedImage.
+  ///
+  /// In en, this message translates to:
+  /// **'This picture cannot be read on this phone. Send it as a file instead.'**
+  String get attachmentPickUnsupportedImage;
+
+  /// No description provided for @attachmentPickUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'The file could not be read. Nothing was attached.'**
+  String get attachmentPickUnreadable;
+
+  /// No description provided for @attachmentPickNoCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'No camera app is available on this phone.'**
+  String get attachmentPickNoCamera;
+
+  /// No description provided for @attachmentPickRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'The phone refused the file. Nothing was attached.'**
+  String get attachmentPickRefused;
+
+  /// No description provided for @attachmentPickMalformed.
+  ///
+  /// In en, this message translates to:
+  /// **'The picker gave an answer this app does not accept. Nothing was attached.'**
+  String get attachmentPickMalformed;
+
+  /// No description provided for @attachmentEnqueueFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The attachment could not be added. Nothing was sent.'**
+  String get attachmentEnqueueFailed;
+
+  /// No description provided for @attachmentPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send an attachment'**
+  String get attachmentPreviewTitle;
+
+  /// No description provided for @attachmentPreviewImageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'The picture to send'**
+  String get attachmentPreviewImageLabel;
+
+  /// No description provided for @attachmentPreviewFileSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size: {size}'**
+  String attachmentPreviewFileSize(String size);
+
+  /// No description provided for @attachmentPreviewUploadSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload size: {size}'**
+  String attachmentPreviewUploadSize(String size);
+
+  /// No description provided for @attachmentPreviewRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Left today: {size}'**
+  String attachmentPreviewRemaining(String size);
+
+  /// No description provided for @attachmentPreviewOverRemainder.
+  ///
+  /// In en, this message translates to:
+  /// **'This upload needs {upload}, and today has {remaining} left. The allowance resets at {time}.'**
+  String attachmentPreviewOverRemainder(
+    String upload,
+    String remaining,
+    String time,
+  );
+
+  /// No description provided for @attachmentPreviewNotTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'This server takes no upload of this size.'**
+  String get attachmentPreviewNotTaken;
+
+  /// No description provided for @attachmentCaptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Caption'**
+  String get attachmentCaptionLabel;
+
+  /// No description provided for @attachmentCaptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a caption (optional)'**
+  String get attachmentCaptionHint;
+
+  /// No description provided for @attachmentCaptionCharacters.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}/{limit} characters'**
+  String attachmentCaptionCharacters(int count, int limit);
+
+  /// No description provided for @attachmentCaptionBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}/{limit} bytes of details'**
+  String attachmentCaptionBytes(int count, int limit);
+
+  /// No description provided for @attachmentCaptionTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'With this caption the file\'s details pass {limit} bytes, the most an attachment carries. Shorten the caption.'**
+  String attachmentCaptionTooLong(int limit);
+
+  /// No description provided for @attachmentSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get attachmentSendAction;
+
+  /// No description provided for @attachmentSizeBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} B'**
+  String attachmentSizeBytes(String value);
+
+  /// No description provided for @attachmentSizeKilobytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} KB'**
+  String attachmentSizeKilobytes(String value);
+
+  /// No description provided for @attachmentSizeMegabytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} MB'**
+  String attachmentSizeMegabytes(String value);
+
+  /// No description provided for @attachmentUploadsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads'**
+  String get attachmentUploadsLabel;
+
+  /// No description provided for @attachmentUploadWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get attachmentUploadWaiting;
+
+  /// No description provided for @attachmentUploadEncrypting.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypting'**
+  String get attachmentUploadEncrypting;
+
+  /// No description provided for @attachmentUploadUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading'**
+  String get attachmentUploadUploading;
+
+  /// No description provided for @attachmentUploadSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending'**
+  String get attachmentUploadSending;
+
+  /// No description provided for @attachmentUploadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{state}, {percent}%'**
+  String attachmentUploadProgress(String state, int percent);
+
+  /// No description provided for @attachmentUploadAllowanceSpent.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s upload allowance is spent. It resets at {time}.'**
+  String attachmentUploadAllowanceSpent(String time);
+
+  /// No description provided for @attachmentUploadTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is too large for the server.'**
+  String get attachmentUploadTooLarge;
+
+  /// No description provided for @attachmentUploadStorageFull.
+  ///
+  /// In en, this message translates to:
+  /// **'The server\'s storage is full. Try again later.'**
+  String get attachmentUploadStorageFull;
+
+  /// No description provided for @attachmentUploadThrottled.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many transfers. Try again in a minute.'**
+  String get attachmentUploadThrottled;
+
+  /// No description provided for @attachmentUploadOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection. Try again when you are online.'**
+  String get attachmentUploadOffline;
+
+  /// No description provided for @attachmentUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The upload failed.'**
+  String get attachmentUploadFailed;
+
+  /// No description provided for @attachmentUploadCancelAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel upload'**
+  String get attachmentUploadCancelAction;
+
+  /// No description provided for @attachmentUploadRetryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry upload'**
+  String get attachmentUploadRetryAction;
+
+  /// No description provided for @attachmentUploadDiscardAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard upload'**
+  String get attachmentUploadDiscardAction;
+
+  /// No description provided for @attachmentUploadAnnouncement.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: {state}'**
+  String attachmentUploadAnnouncement(String name, String state);
 
   /// No description provided for @chatActionFailedMessage.
   ///

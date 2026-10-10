@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
+import 'package:communication_platform/features/attachments/presentation/attachment_send_flow.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
@@ -345,6 +348,11 @@ class _ProjectedConversationPageState
         peerUserId: peerUserId,
         initialDraft: draft,
         forwardTargets: () => _forwardTargets(strings),
+        // Attachments need the private cache to keep their files in, and
+        // there is no other directory to fall back to (ADR-089 D8).
+        attachments: ref.watch(attachmentCacheRootProvider).hasValue
+            ? ChatAttachmentAvailability.available
+            : ChatAttachmentAvailability.unavailable,
         onIntent: (intent) => _dispatch(context, intent),
       ),
     );
@@ -385,6 +393,35 @@ class _ProjectedConversationPageState
     return targets;
   }
 
+  /// The paperclip: a photo, a file or a camera picture, through its preview
+  /// step to an upload job of this session (ADR-089 D5).
+  ///
+  /// An attachment message carries no reply reference in this phase, so a
+  /// reply the composer is holding stays for the next text message.
+  Future<void> _attach(BuildContext context) => runAttachmentSendFlow(
+    context: context,
+    session: () async {
+      try {
+        final deviceId = await ref.read(
+          currentMessagingDeviceIdProvider.future,
+        );
+        return ref.read(
+          attachmentUploadsProvider((
+            userId: widget.currentUserId,
+            deviceId: deviceId,
+          )),
+        );
+      } on Object {
+        // No device identity to send from: the flow says the action failed.
+        return null;
+      }
+    },
+    conversationId: widget.conversationId,
+    target: widget.savedMessages
+        ? const AttachmentUploadTarget.saved()
+        : AttachmentUploadTarget.direct(widget.peerUserId!),
+  );
+
   Future<void> _dispatch(BuildContext context, ChatIntent intent) async {
     final conversationId = widget.conversationId;
     final currentUserId = widget.currentUserId;
@@ -409,17 +446,19 @@ class _ProjectedConversationPageState
       return;
     }
     if (intent case OpenAttachmentIntent(:final attachment)) {
-      if (context.mounted) {
-        await showAppSheet<void>(
-          context: context,
-          // The sheet's own title: the file's name, or "Attach" when the
-          // composer opened it with nothing to open.
-          semanticLabel:
-              attachment?.displayName ??
-              AppLocalizations.of(context).chatAttachAction,
-          child: AttachmentSheet(descriptor: attachment),
-        );
+      if (!context.mounted) {
+        return;
       }
+      if (attachment == null) {
+        await _attach(context);
+        return;
+      }
+      await showAppSheet<void>(
+        context: context,
+        // The sheet's own title: the file's name.
+        semanticLabel: attachment.displayName,
+        child: AttachmentSheet.details(descriptor: attachment),
+      );
       return;
     }
     if (intent is LoadOlderMessagesIntent) {
