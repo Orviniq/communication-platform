@@ -560,8 +560,29 @@ second copy of every message body ([ADR-057](decisions.md)).
      beneath, a star marker if starred.
    - **Pinned banner** atop the list if any message is pinned; tap to jump; expand → all
      pinned messages (§8.3).
-3. **Input bar (bottom):**
-   - **Attachment** button → attachment sheet (§8.2).
+3. **Upload tray** (a DM and Saved Messages), between the list and the input bar, while the
+   conversation has upload jobs ([ADR-089](decisions.md) D5). One row for each job: the
+   kind's icon, the file name, the state — *Waiting*, *Encrypting, n%*, *Uploading, n%*,
+   *Sending* — a progress bar, and **Cancel**. A failed row names its reason instead: today's
+   upload allowance is spent, with the local time it resets; the file is too large for the
+   server; the server's storage is full; too many transfers; no connection; or the upload
+   failed. It offers **Retry** and **Discard**, and Discard only for a size the server never
+   takes.
+   - Uploads run one at a time, the oldest first, and in memory: a process that dies drops
+     them, and the user sends again.
+   - Cancel stops a job at its next check and deletes its copy. Once its message is being
+     committed a job can no longer be cancelled, and its Cancel is disabled.
+   - A failure after the upload keeps the upload: Retry commits the message without
+     uploading the file again.
+   - The message shows in the timeline when it is committed, and its row leaves at the same
+     moment.
+   - Each state is a live region that changes with the state and the reason, not with the
+     percent, so a screen reader hears each change once; the progress bar carries the
+     percent.
+   - The tray takes at most 30% of the screen's height; more rows scroll.
+4. **Input bar (bottom):**
+   - **Attachment** button → attachment sheet (§8.2). Disabled when this device has no
+     private cache to keep attachment files in.
    - Text input (multiline, grows).
    - **Emoji** — always present; opens the full emoji picker and inserts the chosen
      glyph at the caret. Dismissing the picker leaves the draft untouched.
@@ -591,7 +612,9 @@ long-press.
   anywhere sends a fixed emoji ([ADR-059](decisions.md)).
 - **Reply** — sets the reply strip.
 - **Edit** (own messages) — loads the message into the input with an edit strip.
-- **Forward** — Forward target picker (§8.4).
+- **Forward** — Forward target picker (§8.4). An attachment message forwards its
+  attachments with their caption. The server's copy is not copied, so a forwarded
+  attachment expires on the date of the first send ([ADR-089](decisions.md) D11).
 - **Copy** — local clipboard.
 - **Star/Unstar** — client-side flag.
 - **Pin/Unpin**.
@@ -611,14 +634,54 @@ long-press.
 - *Empty* — new-conversation placeholder.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.
-- *Failed send* — retry affordance on the message.
+- *Failed send* — retry affordance on the message. An attachment message is retried with its
+  attachments and its caption, never with its caption alone ([ADR-089](decisions.md) D11).
+- *Uploading* — the upload tray (above) shows each attachment until its message is
+  committed.
 - *Offline* — the composer says that a send waits in the queue; existing history fully
   readable; composing allowed, sends queued.
 
 ### 8.2 Attachment sheet
-- Options: **Photo/Image**, **File**, and camera on mobile. Picking shows a **preview +
-  caption** step with send/cancel. **[PRIVACY]** Files/images are encrypted on the device
-  before upload; the server stores only ciphertext.
+
+*As built 2026-10-10 ([ADR-089](decisions.md) D1, D5, D6).* The sheet has three modes:
+
+- **Choose** — a DM and Saved Messages: **Photo or image**, **File** and **Camera**, then
+  Cancel.
+- **Not built** — a group chat (§9): "Group chats cannot send files yet. Files can be sent in
+  direct chats and in Saved Messages.", the *Not built yet* badge, and Cancel.
+- **Details** — a received attachment: its name, type and size. Open, Save and Share come
+  with the receive work of the same phase.
+
+**Choice.** A choice closes the sheet and opens the system photo picker, the file picker or
+the camera app ([ADR-089](decisions.md) D2) under a byte limit: the largest file that fits
+the largest upload size both the server publishes and the client holds (64 MB with the
+default sizes). Closing the picker says nothing. Every other outcome says why, in a snack
+bar: another picker is already open; the file is too large to send, with the largest size;
+the picture cannot be read on this phone, so send it as a file; the file could not be read;
+no camera app; the phone refused the file; or the picker gave an answer the app does not
+accept.
+
+**Preview step.** A second sheet, opened after a successful pick:
+
+- a picture, decoded no wider than the sheet in device pixels and never wider than 1,024 px,
+  or a file's icon; then the name the message carries;
+- the file's size, the upload size (the padded size the server receives), and what is left
+  of today's upload allowance;
+- when the upload is larger than what is left, a sentence that says so, with the local time
+  the server's UTC day turns, and Send disabled; a size the server does not take is said
+  the same way, with Send disabled;
+- an optional **caption** of at most 1,024 characters (Unicode scalar values; a longer paste
+  is cut). The file's authenticated details — its name, type, size in pixels, kind and the
+  caption — stay within 4,096 bytes: a caption that passes that is refused with the reason,
+  and Send is disabled. A counter shows from 90% of each limit. The caption's direction
+  follows its first strong character;
+- **Send**, which closes the step and adds an upload job (§8, upload tray), and **Cancel**,
+  which deletes the copy the pick made, as the barrier and Back do.
+
+Both sheets keep their controls above the keyboard and the gesture bar, and scroll when they
+are taller than their room. An attachment message carries no reply reference: a reply the
+input bar holds stays for the next text message. **[PRIVACY]** Files and images are encrypted
+on the device before upload; the server stores only ciphertext padded to one of six sizes.
 
 ### 8.3 Pinned messages screen
 - All pinned messages in the conversation. Each row: preview + jump-to + **Unpin**.
@@ -646,7 +709,9 @@ history; up to ~50 members; roles **owner → admins → members**.
      **Edit group**).
 2. **Message list:** as §8, but incoming bubbles also show the **sender's name/avatar**.
    Inline system lines appear for membership changes ("X was added", "Y left").
-3. **Input bar:** as §8. By default all members can post; if you implement any
+3. **Input bar:** as §8, with no upload tray: a group chat sends no attachment in this phase,
+   and its attachment button opens the sheet in its not-built mode (§8.2,
+   [ADR-089](decisions.md) D1). By default all members can post; if you implement any
    posting restriction, disabled states must explain why. A send never replaces it: the bar
    keeps its focus, and the keyboard stays up, while a message is sent and between messages
    ([ADR-088](decisions.md)).

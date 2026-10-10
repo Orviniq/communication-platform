@@ -95,6 +95,68 @@ If upload succeeds but message send fails, retain the outbox operation until bac
 or explicit local cancellation. The backend has no delete endpoint, so UI does not claim
 immediate server deletion of abandoned uploads.
 
+### As built (ADR-089 D5, D6, D11)
+
+*Built 2026-10-10, prompt 3 of the phase.* `AttachmentUploads`
+(`lib/features/attachments/application/attachment_uploads.dart`) is the upload queue of one
+session, one for each `MessagingScope`, composed in `attachment_providers.dart`. The tray and
+the preview step are in [UI specification](ui-specification.md) §8 and §8.2.
+
+1. **Pick.** The cache's first sweep runs before the picker opens, and no sweep runs while
+   it is open (`AttachmentOutgoingHolds.pickOpen`): nothing holds the copy the picker is
+   writing until it answers. The byte limit is `attachmentPlaintextLimit` of the largest
+   bucket both `attachment_buckets` and the protocol hold. The copy is held from the answer
+   until it is adopted or deleted.
+2. **Preview.** The step states the file's length, its bucket, and what is left of today on
+   this device's count, and refuses a bucket the deployment does not take or one larger
+   than what is left. A caption is trimmed; it has at most 1,024 Unicode scalar values, and
+   the authenticated metadata — name, type, width, height, kind and caption, joined by NUL —
+   at most 4,096 bytes.
+3. **Name.** The descriptor carries the safe name cut to 128 bytes of UTF-8 on whole
+   characters (`attachmentDescriptorName`). The protocol reads a name of at most 128 bytes
+   and 128 scalar values, in the Rust core and in this client's own reader, while the
+   picker's safe name allows 128 characters, up to 512 bytes: a longer name would have been
+   refused when the message was encoded, after the upload.
+4. **Job.** Send adds a job. Jobs live in memory and run one at a time, the oldest first. A
+   job:
+   1. waits for the cache's first sweep;
+   2. fails with no network call when its bucket is not one the deployment publishes
+      (*too large*, no retry) or is larger than today's remainder (*allowance spent*, with
+      the next 00:00 UTC);
+   3. encrypts the outgoing copy to a temporary file and uploads it (`createAndUpload`),
+      reporting the share encrypted, then the share of the request body sent;
+   4. commits the message with its one descriptor (`sendAttachments`, an image message for
+      an inline image), which writes the message and its projection before any network
+      call (ADR-061);
+   5. reads the attachment's row, which the commit wrote, and hands the outgoing copy to the
+      cache as this device's copy of the file (`adoptOutgoing`), which marks the row `ready`
+      with an expiry seven days on. Should the row be missing, the copy is not adopted —
+      adopting it would delete it — and the next sweep deletes it. A test through the real
+      send path shows the row is there when `sendAttachments` answers.
+5. **Failures.** `413 quota_exceeded` is *allowance spent*; `413 payload_too_large` and
+   `400 bad_bucket` are *too large*; `503 storage_full` is *storage full*; `429 throttled`
+   is *too many transfers*; a transport failure other than a refused certificate is *no
+   connection*; anything else, a commit that failed after the upload included, is *failed*.
+   A job keeps its descriptor once the upload succeeded, so Retry commits the message
+   without uploading again: an upload is not idempotent, and each stores another copy.
+6. **Cancel and Discard.** Cancel removes a waiting job at once and stops a running one at
+   its next check — between chunks while it encrypts, the request while it uploads, and
+   between the steps — and deletes its copy. A job committing its message runs on. Discard
+   deletes a failed job and its copy. Bytes that already reached the server stay there
+   until they expire.
+7. **End of session.** When the session ends (`attachmentSessionActiveProvider`, the rule
+   of `voiceSessionActiveProvider`), the queue cancels every job, deletes every copy, a
+   preview step's too, and takes no more.
+8. **Retry and forward.** `retrySend` re-arms the durable send of a failed message; with
+   nothing left to re-arm, an attachment message is sent again with the same descriptors
+   and its caption, never the caption alone. Forward sends the descriptors and the caption
+   to each target. Neither uploads again, and the server does not copy an upload, so a
+   forwarded attachment expires on the date of the first send. An attachment message
+   carries no reply reference.
+
+The retention the paragraph above asks for holds for the life of the process: a process that
+dies drops its jobs, and the user sends again (ADR-089, Consequences).
+
 ## Receive pipeline
 
 *Corrected 2026-10-07 (server ADR-0020):* this section said Web downloads used blob URLs,
@@ -177,9 +239,10 @@ the sweeps are in [Local data model](local-data-model.md#attachment-rows-and-dec
   next process deletes what a killed one left.
 - **Thumbnails.** None are made in this phase (ADR-089, rejected alternatives).
 
-The outgoing copies a sweep keeps are the ones the send flow names as live. A copy the picker
-is still writing is not yet one of them, so the send flow must count an open pick as well, or
-keep a sweep from running while one is open.
+The outgoing copies a sweep keeps are the ones `AttachmentOutgoingHolds` names: each copy of a
+preview step and of an upload job. A copy the picker is still writing is not named yet, so the
+first sweep runs before a picker opens and a sweep after a deletion does not run while one is
+open (*Send pipeline*, as built).
 
 ## UI states
 

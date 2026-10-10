@@ -262,6 +262,24 @@ channel with the engine. `FlutterActivity` is an `android.app.Activity`, not a
   started and `ActivityNotFoundException` is caught, which the package-visibility guide states
   needs no visibility.
 
+### The send flow, as built (prompt 3)
+
+`attachments.md`, *Send pipeline*, holds the pipeline; `ui-specification.md` §8 and §8.2 the
+screens. Four details the decisions above do not spell out:
+
+- **The notice's text.** `attachmentsNotBuiltNotice` keeps its key and its place in the group
+  chat's sheet (D13). Its text said nothing could be attached in this build, which stopped
+  being true; it now says group chats cannot send files yet, and direct chats and Saved
+  Messages can. No disclosure text and no disclosure revision changed.
+- **The name.** A descriptor carries the safe name cut to 128 bytes of UTF-8. The protocol
+  reads no longer name, and the picker's safe name allows 128 characters, so a long Persian
+  name would have been refused after its upload.
+- **The sweep and the picker.** The first sweep runs before the first picker opens, and no
+  sweep runs while a picker is open: until it answers, nothing holds the copy it writes.
+- **The session's end** is read from `attachmentSessionActiveProvider`, which prompt 2 added
+  with the rule of `voiceSessionActiveProvider`, so the attachment pipeline does not depend on
+  the voice feature's composition.
+
 In Dart, `AttachmentPlatformPort` (pick, open, save, share) answers a typed `Result`, and
 `MethodChannelAttachmentPlatform` replaces `AndroidAttachmentSharePort`. Each outcome the screen
 must tell apart reuses a failure kind; none was added:
