@@ -21,6 +21,7 @@ class ChatConversationView extends StatefulWidget {
     this.initialDraft,
     this.forwardTargets,
     this.attachments = ChatAttachmentAvailability.notBuilt,
+    this.uploads,
     super.key,
   });
 
@@ -31,6 +32,11 @@ class ChatConversationView extends StatefulWidget {
 
   /// What the composer's paperclip does here.
   final ChatAttachmentAvailability attachments;
+
+  /// The uploads of this conversation, drawn between the timeline and the
+  /// composer. A slot rather than a list, so that a percent that moves
+  /// rebuilds the tray and not the timeline above it.
+  final Widget? uploads;
 
   /// Where a forward may go, resolved when the sheet opens.
   ///
@@ -191,6 +197,15 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 ),
               ),
             ),
+            if (widget.uploads case final uploads?)
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppContentWidths.readable,
+                  ),
+                  child: uploads,
+                ),
+              ),
             Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(

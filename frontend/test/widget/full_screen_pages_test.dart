@@ -15,8 +15,11 @@ import 'package:communication_platform/app/dependencies/voice_screen_providers.d
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/features/app_shell/presentation/voice_room_banner.dart';
 import 'package:communication_platform/features/app_shell/presentation/voice_room_banner_frame.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_pick_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
@@ -39,6 +42,7 @@ import 'package:communication_platform/features/voice/presentation/voice_room_in
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -762,6 +766,58 @@ void main() {
         isTrue,
       );
     });
+
+    for (final locale in const [Locale('en'), Locale('fa')]) {
+      testWidgets('the uploads of a direct chat sit between its timeline and '
+          'its composer, at 200 % text in ${locale.languageCode}', (
+        tester,
+      ) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        fakeSystemInsets(tester);
+        final job = AttachmentUploadJob(
+          id: 'job-1',
+          conversationId: 'c-01',
+          target: const AttachmentUploadTarget.direct('peer-01'),
+          attachment: PickedAttachment(
+            file: File('unused'),
+            displayName: 'minutes.pdf',
+            mimeType: 'application/pdf',
+            length: 1000,
+            mediaKind: AttachmentMediaKind.file,
+          ),
+          caption: null,
+          state: AttachmentUploadState.uploading,
+          progress: 0.5,
+        );
+        await _pumpApp(
+          tester,
+          size: _narrow,
+          locale: locale,
+          initialLocation: '/chats/conversation/c-01?peer=peer-01',
+          extra: [
+            currentMessagingDeviceIdProvider.overrideWith(
+              (ref) => Future.value('device-01'),
+            ),
+            attachmentUploadJobsProvider.overrideWith(
+              (ref, request) => Stream.value(
+                request.conversationId == 'c-01' ? [job] : const [],
+              ),
+            ),
+          ],
+        );
+
+        final tray = tester.getRect(
+          find.byKey(const ValueKey('attachment-upload-tray')),
+        );
+        final composer = tester.getRect(
+          find.byKey(const ValueKey('chat-composer-field')),
+        );
+        expect(tray.bottom, lessThanOrEqualTo(composer.top));
+        expect(find.textContaining('minutes.pdf'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 }
 
@@ -855,6 +911,8 @@ Future<ProviderContainer> _pumpApp(
   String initialLocation = '/chats',
   List<ConversationSummary> summaries = const [],
   bool privateCache = true,
+  Locale locale = const Locale('en'),
+  List<Override> extra = const [],
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -914,6 +972,7 @@ Future<ProviderContainer> _pumpApp(
       voiceCallControllerProvider.overrideWith(
         (ref, scope) => Completer<VoiceCallController>().future,
       ),
+      ...extra,
     ],
   );
   addTearDown(container.dispose);
@@ -926,7 +985,7 @@ Future<ProviderContainer> _pumpApp(
       container: container,
       child: CommunicationPlatformApp(
         environment: AppEnvironment.production,
-        locale: const Locale('en'),
+        locale: locale,
         themeMode: ThemeMode.light,
         initialLocation: initialLocation,
       ),

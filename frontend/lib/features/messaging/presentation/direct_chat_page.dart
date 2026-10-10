@@ -9,6 +9,7 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_send_flow.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
+import 'package:communication_platform/features/attachments/presentation/attachment_upload_tray.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -353,6 +354,10 @@ class _ProjectedConversationPageState
         attachments: ref.watch(attachmentCacheRootProvider).hasValue
             ? ChatAttachmentAvailability.available
             : ChatAttachmentAvailability.unavailable,
+        uploads: _ConversationUploads(
+          currentUserId: widget.currentUserId,
+          conversationId: conversationId,
+        ),
         onIntent: (intent) => _dispatch(context, intent),
       ),
     );
@@ -613,6 +618,55 @@ class _ProjectedConversationPageState
         );
       }
     }
+  }
+}
+
+/// The upload jobs of one conversation, read from the session's queue and
+/// drawn by [AttachmentUploadTray] (ADR-089 D5).
+///
+/// A consumer of its own, so that a percent that moves rebuilds the tray and
+/// not the page and its timeline. A job's message shows in the timeline when
+/// it is committed, and its row leaves at the same moment.
+class _ConversationUploads extends ConsumerWidget {
+  const _ConversationUploads({
+    required this.currentUserId,
+    required this.conversationId,
+  });
+
+  final String currentUserId;
+  final String conversationId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final deviceId = ref.watch(currentMessagingDeviceIdProvider).value;
+    if (deviceId == null) {
+      return const SizedBox.shrink();
+    }
+    final scope = (userId: currentUserId, deviceId: deviceId);
+    final jobs =
+        ref
+            .watch(
+              attachmentUploadJobsProvider((
+                scope: scope,
+                conversationId: conversationId,
+              )),
+            )
+            .value ??
+        const <AttachmentUploadJob>[];
+    return AttachmentUploadTray(
+      rows: attachmentUploadRows(jobs),
+      onIntent: (intent) {
+        final uploads = ref.read(attachmentUploadsProvider(scope));
+        switch (intent) {
+          case CancelAttachmentUploadIntent(:final id):
+            unawaited(uploads.cancel(id));
+          case RetryAttachmentUploadIntent(:final id):
+            uploads.retry(id);
+          case DiscardAttachmentUploadIntent(:final id):
+            unawaited(uploads.discard(id));
+        }
+      },
+    );
   }
 }
 
