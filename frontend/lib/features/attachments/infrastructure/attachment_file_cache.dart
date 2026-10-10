@@ -8,6 +8,7 @@ import 'package:communication_platform/core/protocol/attachment_crypto_model.dar
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_local_state_port.dart';
+import 'package:communication_platform/features/attachments/application/ports/attachment_upload_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_cache_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
 
@@ -42,7 +43,7 @@ import 'package:communication_platform/features/attachments/domain/attachment_mo
 /// Every operation runs one at a time, in the order called, so a sweep never
 /// sees a file between its move and the row that names it. Nothing here logs,
 /// and a failure carries a kind and nothing else.
-final class AttachmentFileCache {
+final class AttachmentFileCache implements AttachmentOutgoingFilesPort {
   AttachmentFileCache({
     required Directory root,
     required this.states,
@@ -80,6 +81,7 @@ final class AttachmentFileCache {
   /// first. Until the move the copy stays where it was, and after it a
   /// failure to record the row deletes it, so plaintext is never left where
   /// no row names it.
+  @override
   Future<Result<String>> adoptOutgoing({
     required String attachmentId,
     required File copy,
@@ -172,6 +174,19 @@ final class AttachmentFileCache {
     return file;
   });
 
+  /// Deletes the outgoing [copy] with its directory, `outgoing/<id>/`.
+  ///
+  /// [copy] has to be `outgoing/<id>/<name>` under the root; anything else is
+  /// left alone. Never fails: what this could not delete, the next sweep
+  /// does.
+  @override
+  Future<void> discardOutgoing(File copy) => _serial(() async {
+    final outgoingId = _outgoingIdOf(copy);
+    if (outgoingId != null) {
+      await _delete(Directory('$_outgoing$_separator$outgoingId'));
+    }
+  });
+
   /// Deletes directory [cacheId] and what it holds.
   Future<void> remove(String cacheId) => _serial(() async {
     if (isAttachmentCacheId(cacheId)) {
@@ -203,6 +218,7 @@ final class AttachmentFileCache {
   /// Completes when the first sweep has run, running it if nothing has yet.
   ///
   /// Each transfer awaits this before it makes a temporary file.
+  @override
   Future<void> beforeTransfer({required Iterable<File> liveOutgoing}) =>
       _firstSweep ?? sweep(liveOutgoing: liveOutgoing);
 

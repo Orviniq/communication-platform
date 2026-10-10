@@ -11,10 +11,14 @@ import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/networking_foundation.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/application/attachment_uploads.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_allowance_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_pick_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/infrastructure/attachment_storage.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
@@ -28,6 +32,7 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/attachment_descriptor_fixture.dart';
+import '../../support/attachment_platform_fake.dart';
 
 /// ADR-089 D12: the attachment transport runs on the provisioned trust and the
 /// one token coordinator, and nothing builds it on any other.
@@ -299,6 +304,120 @@ void main() {
         manageLocalConversationStateProvider.future,
       );
       expect(manage.attachments, same(container.read(attachmentSweepProvider)));
+    });
+
+    group('the uploads of a session', () {
+      late FakeAttachmentPlatform platform;
+
+      setUp(() => platform = FakeAttachmentPlatform());
+
+      /// An outgoing copy where the picker writes one.
+      Future<PickedAttachment> outgoing(String id) async {
+        final file = File(
+          [
+            root.path,
+            'outgoing',
+            id * 32,
+            'minutes.pdf',
+          ].join(Platform.pathSeparator),
+        );
+        await file.parent.create(recursive: true);
+        await file.writeAsString('plaintext');
+        return PickedAttachment(
+          file: file,
+          displayName: 'minutes.pdf',
+          mimeType: 'application/pdf',
+          length: 9,
+          mediaKind: AttachmentMediaKind.file,
+        );
+      }
+
+      /// Opens a pick, writes its copy while it is open, and answers it.
+      Future<PickedAttachment> pick(
+        AttachmentUploads uploads,
+        String id,
+      ) async {
+        final answer = Completer<Result<PickedAttachment>>();
+        platform.enqueuePick(answer.future);
+        final before = platform.picks.length;
+        final picking = uploads.pick(AttachmentPickKind.file);
+        while (platform.picks.length == before) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        final copy = await outgoing(id);
+        answer.complete(Result.success(copy));
+        expect(await picking, isA<Success<PickedAttachment>>());
+        return copy;
+      }
+
+      test(
+        'end with it: each job is cancelled and each copy deleted',
+        () async {
+          final container = ProviderContainer.test(
+            overrides: [
+              ...base(),
+              attachmentPlatformProvider.overrideWithValue(platform),
+              attachmentSessionActiveProvider(
+                scope,
+              ).overrideWith((ref) => ref.watch(_sessionProvider)),
+            ],
+          );
+          final uploads = container.read(attachmentUploadsProvider(scope));
+          final jobs = container.listen(
+            attachmentUploadJobsProvider((scope: scope, conversationId: 'c-1')),
+            (_, _) {},
+          );
+
+          final queued = await pick(uploads, 'a');
+          uploads.enqueue(
+            conversationId: 'c-1',
+            target: const AttachmentUploadTarget.saved(),
+            attachment: queued,
+          );
+          final preview = await pick(uploads, 'b');
+          expect(container.read(attachmentLiveOutgoingProvider)(), [
+            queued.file,
+            preview.file,
+          ]);
+          // No networking foundation here, so the job fails where it would
+          // upload, and keeps its copy for a retry.
+          while (uploads.jobs.single.state != AttachmentUploadState.failed) {
+            await Future<void>.delayed(const Duration(milliseconds: 5));
+          }
+          expect(jobs.read().value, hasLength(1));
+
+          container.read(_sessionProvider.notifier).end();
+          while (await queued.file.parent.exists() ||
+              await preview.file.parent.exists()) {
+            await Future<void>.delayed(const Duration(milliseconds: 5));
+          }
+
+          expect(uploads.jobs, isEmpty);
+          expect(container.read(attachmentLiveOutgoingProvider)(), isEmpty);
+        },
+      );
+
+      test('no sweep runs while a picker is open', () async {
+        final container = ProviderContainer.test(
+          overrides: [
+            ...base(),
+            attachmentPlatformProvider.overrideWithValue(platform),
+          ],
+        );
+        final cache = await container.read(attachmentFileCacheProvider.future);
+        await cache.beforeTransfer(liveOutgoing: const []);
+        final holds = container.read(attachmentOutgoingHoldsProvider);
+        // What a picker is writing: nothing holds it yet.
+        holds.beginPick();
+        final writing = await outgoing('c');
+
+        await container.read(attachmentSweepProvider).sweepAfterDeletion();
+        expect(await writing.file.exists(), isTrue);
+
+        holds.endPick();
+        await container.read(attachmentSweepProvider).sweepAfterDeletion();
+        expect(await writing.file.parent.exists(), isFalse);
+      });
     });
   });
 }

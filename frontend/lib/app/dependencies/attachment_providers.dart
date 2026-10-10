@@ -6,18 +6,26 @@ import 'package:communication_platform/app/dependencies/local_storage_providers.
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
+import 'package:communication_platform/features/attachments/application/attachment_outgoing_holds.dart';
 import 'package:communication_platform/features/attachments/application/attachment_transfer_service.dart';
+import 'package:communication_platform/features/attachments/application/attachment_uploads.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_local_state_port.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_platform_port.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
+import 'package:communication_platform/features/attachments/application/ports/attachment_upload_ports.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/infrastructure/attachment_file_cache.dart';
 import 'package:communication_platform/features/attachments/infrastructure/attachment_storage.dart';
 import 'package:communication_platform/features/attachments/infrastructure/drift_attachment_allowance_store.dart';
 import 'package:communication_platform/features/attachments/infrastructure/drift_attachment_local_state.dart';
 import 'package:communication_platform/features/attachments/infrastructure/method_channel_attachment_platform.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // The attachment pipeline, composed (ADR-089).
@@ -106,15 +114,22 @@ final attachmentFileCacheProvider = FutureProvider<AttachmentFileCache>(
   ),
 );
 
-/// The outgoing copies something in this process still holds, which no sweep
-/// may delete.
+/// The outgoing copies this process holds, and whether a picker is open.
 ///
-/// Nothing holds one before the send flow exists. The send flow answers here
-/// with every copy waiting in its preview step or in an upload job.
-final attachmentLiveOutgoingProvider = Provider<Iterable<File> Function()>(
-  (ref) =>
-      () => const <File>[],
+/// One for the process: every session's upload queue holds its copies here,
+/// so a sweep, which is the process's, keeps all of them.
+final attachmentOutgoingHoldsProvider = Provider<AttachmentOutgoingHolds>(
+  (ref) => AttachmentOutgoingHolds(),
 );
+
+/// The outgoing copies something in this process still holds, which no sweep
+/// may delete: each copy of a preview step and of an upload job.
+final attachmentLiveOutgoingProvider = Provider<Iterable<File> Function()>((
+  ref,
+) {
+  final holds = ref.watch(attachmentOutgoingHoldsProvider);
+  return () => holds.live;
+});
 
 /// The sweep messaging asks for after a deletion.
 final attachmentSweepProvider = Provider<AttachmentSweepPort>(
@@ -162,6 +177,93 @@ final attachmentTransferServiceProvider =
       );
     });
 
+/// The uploads of one session (ADR-089 D5).
+///
+/// One queue for each [MessagingScope], kept for the life of the process so
+/// that a job goes on when its conversation is closed. The end of the session
+/// closes it: every job is cancelled and every copy deleted.
+final attachmentUploadsProvider =
+    Provider.family<AttachmentUploads, MessagingScope>((ref, scope) {
+      final uploads = AttachmentUploads(
+        platform: ref.watch(attachmentPlatformProvider),
+        holds: ref.watch(attachmentOutgoingHoldsProvider),
+        limits: () {
+          final current = ref.read(serverConfigSnapshotProvider).current;
+          return (
+            buckets: current.attachmentBuckets,
+            dailyBytes: current.attachmentDailyBytes,
+          );
+        },
+        clock: ref.watch(timeSourceProvider),
+        files: () => ref.read(attachmentFileCacheProvider.future),
+        allowance: () => ref.read(attachmentAllowanceProvider.future),
+        states: () => ref.read(attachmentLocalStateProvider.future),
+        transfer: () =>
+            ref.read(attachmentTransferServiceProvider(scope).future),
+        messages: () async => _ConversationAttachmentMessages(
+          sender: await ref.read(sendConversationEventsProvider(scope).future),
+          scope: scope,
+        ),
+      );
+      ref
+        ..listen(attachmentSessionActiveProvider(scope), (_, active) {
+          if (!active) {
+            unawaited(uploads.close());
+          }
+        })
+        ..onDispose(() => unawaited(uploads.close()));
+      return uploads;
+    });
+
+/// The upload jobs of one conversation, for its tray.
+final attachmentUploadJobsProvider =
+    StreamProvider.family<
+      List<AttachmentUploadJob>,
+      ({MessagingScope scope, String conversationId})
+    >(
+      (ref, request) => ref
+          .watch(attachmentUploadsProvider(request.scope))
+          .watch(request.conversationId),
+    );
+
+/// [AttachmentMessagePort] over the messaging send path of one session.
+final class _ConversationAttachmentMessages implements AttachmentMessagePort {
+  const _ConversationAttachmentMessages({
+    required this.sender,
+    required this.scope,
+  });
+
+  final SendConversationEvents sender;
+  final MessagingScope scope;
+
+  @override
+  Future<Result<void>> send({
+    required AttachmentUploadTarget target,
+    required AttachmentDescriptor descriptor,
+    required String? caption,
+    required bool imageMessage,
+  }) async {
+    final sent = await sender.sendAttachments(
+      currentUserId: scope.userId,
+      currentDeviceId: scope.deviceId,
+      target: switch (target.peerUserId) {
+        final peer? => DirectConversationTarget(peer),
+        null => const SavedConversationTarget(),
+      },
+      attachments: [descriptor],
+      caption: caption,
+      imageMessage: imageMessage,
+    );
+    return sent.fold(
+      onSuccess: (_) => const Result.success(null),
+      onFailure: Result.failure,
+    );
+  }
+
+  @override
+  String toString() => '_ConversationAttachmentMessages(<redacted>)';
+}
+
 /// [AttachmentSweepPort] over the file cache, resolved when a sweep is asked
 /// for rather than when messaging is composed: messaging works whether or not
 /// this device can keep attachment files, and a device that cannot has none
@@ -173,6 +275,12 @@ final class _FileCacheSweep implements AttachmentSweepPort {
 
   @override
   Future<void> sweepAfterDeletion() async {
+    // A picker that is open is writing a copy nothing holds yet, and a sweep
+    // now would delete it. What this sweep would have deleted waits for the
+    // next one.
+    if (_ref.read(attachmentOutgoingHoldsProvider).pickOpen) {
+      return;
+    }
     try {
       final cache = await _ref.read(attachmentFileCacheProvider.future);
       await cache.sweep(

@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/cancellation_signal.dart';
-import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
@@ -23,10 +22,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/attachment_crypto_fake.dart';
+
 void main() {
   group('attachment header and sizing contract', () {
     test('matches the version-1 deterministic header vector', () {
-      final header = _header(plaintextSize: 15, metadataHashByte: 0xea);
+      final header = fakeAttachmentHeader(
+        plaintextSize: 15,
+        metadataHashByte: 0xea,
+      );
       final parsed = AttachmentHeaderV1.parse(header);
 
       expect(ascii.decode(header.sublist(0, 8)), 'CPAFV001');
@@ -79,7 +83,7 @@ void main() {
     test(
       'large input stays chunk bounded and round trips only after final tag',
       () async {
-        final crypto = _RecordingCryptoPort();
+        final crypto = FakeAttachmentCryptoPort();
         final service = AttachmentCryptoService(crypto);
         final plaintext = Uint8List(2 * 1024 * 1024 + 7);
         for (var index = 0; index < plaintext.length; index += 1) {
@@ -123,7 +127,7 @@ void main() {
     test(
       'truncation, reorder, corruption, and missing final tag wipe output',
       () async {
-        final crypto = _RecordingCryptoPort();
+        final crypto = FakeAttachmentCryptoPort();
         final service = AttachmentCryptoService(crypto);
         final plaintext = Uint8List(2 * 65536 + 31);
         final encrypted = File('${temporary.path}/encrypted.bin');
@@ -185,7 +189,7 @@ void main() {
     test('cancellation leaves no partial encrypted artifact', () async {
       final signal = CancellationSignal()..cancel();
       final destination = File('${temporary.path}/cancelled.bin');
-      final result = await AttachmentCryptoService(_RecordingCryptoPort())
+      final result = await AttachmentCryptoService(FakeAttachmentCryptoPort())
           .encryptToFile(
             source: AttachmentSource(
               length: 32,
@@ -817,7 +821,7 @@ void main() {
     });
 
     test('decrypts the file it is handed, then deletes it', () async {
-      final crypto = AttachmentCryptoService(_RecordingCryptoPort());
+      final crypto = AttachmentCryptoService(FakeAttachmentCryptoPort());
       final plaintext = Uint8List(70000);
       for (var index = 0; index < plaintext.length; index += 1) {
         plaintext[index] = index & 0xff;
@@ -849,7 +853,7 @@ void main() {
 
     test('leaves what a failed download fetched to the transport', () async {
       final service = AttachmentTransferService(
-        crypto: AttachmentCryptoService(_RecordingCryptoPort()),
+        crypto: AttachmentCryptoService(FakeAttachmentCryptoPort()),
         transport: _HandingTransport(
           const Result.failure(TransportFailure(TransportFailureKind.offline)),
         ),
@@ -893,7 +897,10 @@ EncryptedAttachmentDescriptor _descriptor({
   return EncryptedAttachmentDescriptor(
     capabilityId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     key: Uint8List(32),
-    header: _header(plaintextSize: plaintextSize, bucketSize: bucket),
+    header: fakeAttachmentHeader(
+      plaintextSize: plaintextSize,
+      bucketSize: bucket,
+    ),
     secretstreamHeader: Uint8List(24),
     encryptedSize: streamSize,
     bucketSize: bucket,
@@ -903,155 +910,6 @@ EncryptedAttachmentDescriptor _descriptor({
     mediaKind: AttachmentMediaKind.file,
     width: width,
   );
-}
-
-Uint8List _header({
-  required int plaintextSize,
-  int? bucketSize,
-  int metadataHashByte = 0,
-}) {
-  final streamSize = encryptedStreamSize(plaintextSize, 65536);
-  final bucket = bucketSize ?? attachmentBucketFor(plaintextSize);
-  final bytes = Uint8List(66);
-  bytes.setAll(0, ascii.encode('CPAFV001'));
-  bytes[8] = 1;
-  final data = ByteData.sublistView(bytes);
-  data.setUint32(10, 65536, Endian.big);
-  data.setUint64(14, plaintextSize, Endian.big);
-  data.setUint64(22, streamSize, Endian.big);
-  data.setUint32(30, bucket, Endian.big);
-  bytes.fillRange(34, 66, metadataHashByte);
-  return bytes;
-}
-
-final class _RecordingCryptoPort implements AttachmentCryptoPort {
-  Uint8List _metadata = Uint8List(0);
-  int _pushSequence = 0;
-  int _pullSequence = 0;
-  int maximumPushBytes = 0;
-  int maximumPullBytes = 0;
-  int pushCalls = 0;
-  bool lastPullWasFinal = false;
-
-  @override
-  Future<Result<AttachmentCryptoPushSession>> createPush({
-    required int plaintextSize,
-    required int bucketSize,
-    required Uint8List metadata,
-  }) async {
-    _metadata = Uint8List.fromList(metadata);
-    _pushSequence = 0;
-    final streamSize = encryptedStreamSize(plaintextSize, 65536);
-    return Result.success(
-      AttachmentCryptoPushSession(
-        handle: 1,
-        key: Uint8List(32),
-        header: _header(plaintextSize: plaintextSize, bucketSize: bucketSize),
-        secretstreamHeader: Uint8List(24),
-        plaintextSize: plaintextSize,
-        streamSize: streamSize,
-        bucketSize: bucketSize,
-      ),
-    );
-  }
-
-  @override
-  Future<Result<Uint8List>> pushChunk({
-    required AttachmentCryptoPushSession session,
-    required Uint8List plaintext,
-    required bool finalChunk,
-  }) async {
-    maximumPushBytes = maximumPushBytes < plaintext.length
-        ? plaintext.length
-        : maximumPushBytes;
-    pushCalls += 1;
-    final output = Uint8List(plaintext.length + 17)
-      ..setRange(0, plaintext.length, plaintext)
-      ..[plaintext.length] = _pushSequence & 0xff
-      ..fillRange(
-        plaintext.length + 1,
-        plaintext.length + 16,
-        _checksum(plaintext),
-      )
-      ..[plaintext.length + 16] = finalChunk ? 1 : 0;
-    _pushSequence += 1;
-    return Result.success(output);
-  }
-
-  @override
-  Future<Result<AttachmentCryptoPullSession>> createPull({
-    required Uint8List key,
-    required Uint8List header,
-    required Uint8List secretstreamHeader,
-    required Uint8List metadata,
-  }) async {
-    if (!listEquals(metadata, _metadata)) {
-      return const Result.failure(
-        CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-      );
-    }
-    _pullSequence = 0;
-    lastPullWasFinal = false;
-    return const Result.success(AttachmentCryptoPullSession(2));
-  }
-
-  @override
-  Future<Result<AttachmentDecryptedChunk>> pullChunk({
-    required AttachmentCryptoPullSession session,
-    required Uint8List ciphertext,
-  }) async {
-    maximumPullBytes = maximumPullBytes < ciphertext.length
-        ? ciphertext.length
-        : maximumPullBytes;
-    if (ciphertext.length < 17) {
-      return const Result.failure(
-        CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-      );
-    }
-    final plaintextLength = ciphertext.length - 17;
-    final plaintext = ciphertext.sublist(0, plaintextLength);
-    if (ciphertext[plaintextLength] != (_pullSequence & 0xff)) {
-      return const Result.failure(
-        CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-      );
-    }
-    final checksum = _checksum(plaintext);
-    for (
-      var index = plaintextLength + 1;
-      index < plaintextLength + 16;
-      index += 1
-    ) {
-      if (ciphertext[index] != checksum) {
-        return const Result.failure(
-          CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-        );
-      }
-    }
-    final finalChunk = ciphertext.last == 1;
-    lastPullWasFinal = finalChunk;
-    _pullSequence += 1;
-    return Result.success(
-      AttachmentDecryptedChunk(plaintext: plaintext, finalChunk: finalChunk),
-    );
-  }
-
-  @override
-  Future<Result<void>> closeSession({
-    required int handle,
-    bool abort = false,
-  }) async => const Result.success(null);
-
-  @override
-  Future<Result<Uint8List>> randomBytes(int length) async =>
-      Result.success(Uint8List(length));
-}
-
-int _checksum(List<int> bytes) {
-  var value = 0;
-  for (final byte in bytes) {
-    value = (value + byte) & 0xff;
-  }
-  return value;
 }
 
 typedef _AdapterHandler =

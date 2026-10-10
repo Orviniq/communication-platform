@@ -58,3 +58,8 @@ DateTime utcDayOf(DateTime moment) {
   final utc = moment.toUtc();
   return DateTime.utc(utc.year, utc.month, utc.day);
 }
+
+/// When the UTC day containing [moment] ends and the server's counter resets:
+/// the next midnight UTC.
+DateTime allowanceResetsAt(DateTime moment) =>
+    utcDayOf(moment).add(const Duration(days: 1));
