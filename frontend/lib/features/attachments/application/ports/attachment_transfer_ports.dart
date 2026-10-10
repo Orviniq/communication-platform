@@ -32,10 +32,16 @@ abstract interface class AttachmentStoragePort {
 }
 
 abstract interface class AttachmentTransportPort {
+  /// Uploads [encryptedFile], exactly [bucketSize] bytes.
+  ///
+  /// [onProgress] is told the bytes of the request body sent so far and the
+  /// body's whole length, which is a little more than [bucketSize]: the body is
+  /// multipart.
   Future<Result<AttachmentUploadResponse>> upload({
     required File encryptedFile,
     required int bucketSize,
     CancellationSignal? cancellation,
+    void Function(int sent, int total)? onProgress,
   });
 
   /// Fetches the ciphertext of [capabilityId] and answers the file that holds

@@ -93,6 +93,7 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
     required File encryptedFile,
     required int bucketSize,
     CancellationSignal? cancellation,
+    void Function(int sent, int total)? onProgress,
   }) async {
     if (_closed) {
       return const Result.failure(_ended);
@@ -142,6 +143,7 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
           ),
         }),
         cancelToken: cancelToken,
+        onSendProgress: onProgress,
         options: Options(
           responseType: ResponseType.json,
           followRedirects: false,

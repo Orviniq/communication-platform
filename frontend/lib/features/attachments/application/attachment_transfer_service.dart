@@ -53,6 +53,19 @@ final class AttachmentTransferService {
         encryptedFile: encrypted,
         bucketSize: descriptor.bucketSize,
         cancellation: cancellation,
+        // The request body is the bucket in a multipart wrapping, so its
+        // share sent is the bucket's share sent.
+        onProgress: onProgress == null
+            ? null
+            : (sent, total) => onProgress(
+                AttachmentProgress(
+                  state: AttachmentTransferState.uploading,
+                  completedBytes: total <= 0
+                      ? 0
+                      : (descriptor.bucketSize * (sent / total)).floor(),
+                  totalBytes: descriptor.bucketSize,
+                ),
+              ),
       );
       if (uploaded case FailureResult(failure: final failure)) {
         return Result.failure(failure);

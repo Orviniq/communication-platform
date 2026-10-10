@@ -382,6 +382,53 @@ void main() {
       expect(allowance.recorded, isEmpty);
     });
 
+    test('an upload reports the body it has sent, up to all of it', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _QueueAdapter([
+        (options, requestStream, cancelFuture) async {
+          await requestStream?.drain<void>();
+          return ResponseBody.fromString(
+            '{"attachment_id":"${'A' * 43}","size":65536}',
+            201,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        },
+      ]);
+      final transport = DioAttachmentTransport(
+        tokens: _FullTokenCoordinator(),
+        config: const FixedServerConfig.fallback(),
+        allowance: _RecordingAllowance(),
+        clock: const _FixedClock(),
+        storage: const _UnusedStorage(),
+        dio: dio,
+      );
+      final root = await Directory.systemTemp.createTemp('cp_progress_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final file = File('${root.path}/blob')
+        ..writeAsBytesSync(Uint8List(65536));
+      final reports = <(int, int)>[];
+
+      final result = await transport.upload(
+        encryptedFile: file,
+        bucketSize: 65536,
+        onProgress: (sent, total) => reports.add((sent, total)),
+      );
+
+      expect(result, isA<Success<AttachmentUploadResponse>>());
+      expect(reports, isNotEmpty);
+      final (lastSent, total) = reports.last;
+      // The multipart body wraps the bucket, so it is a little longer.
+      expect(total, greaterThan(65536));
+      expect(lastSent, total);
+      for (var index = 1; index < reports.length; index += 1) {
+        expect(reports[index].$1, greaterThanOrEqualTo(reports[index - 1].$1));
+      }
+    });
+
     test('maps expired capability to not-found and keeps no bytes', () async {
       final root = await Directory.systemTemp.createTemp('cp_expired_test_');
       addTearDown(() async {
@@ -1097,6 +1144,7 @@ final class _HandingTransport implements AttachmentTransportPort {
     required File encryptedFile,
     required int bucketSize,
     CancellationSignal? cancellation,
+    void Function(int sent, int total)? onProgress,
   }) => throw UnimplementedError('this test only downloads');
 }
 
