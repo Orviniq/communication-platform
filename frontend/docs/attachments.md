@@ -142,7 +142,8 @@ keep.
 The record of a partial download names a capability, so it lives in the transport's memory
 and nowhere else: one at a time, replaced by the next download that stops, and lost with the
 process. A restart therefore downloads from zero, and the file it leaves stays in the private
-cache directory as any temporary file of a killed process does.
+cache directory until the first sweep of the next process deletes it, as it deletes every
+temporary file of a killed process (see *Caching*).
 
 A development client that talks to the application directly cannot test this. The range
 is nginx's work, from the internal location the download redirects to; the application
@@ -150,12 +151,35 @@ answers `200` with an empty body and does nothing with `Range`.
 
 ## Caching
 
-- Ciphertext may use a bounded cache keyed by a local hash of the capability.
-- Decrypted previews/files use the shortest practical lifetime and never Android shared
-  external storage.
-- Logout, revocation, delete-for-me, or cache eviction removes decrypted artifacts.
-- Image thumbnails are generated locally, encrypted in persistent storage, and stripped
-  of unnecessary metadata such as EXIF location by default.
+*Built 2026-10-10 (ADR-089 D8, D9, D10, prompt 2 of the phase). The table, the projection and
+the sweeps are in [Local data model](local-data-model.md#attachment-rows-and-decrypted-files).*
+
+- **Where.** Every attachment file lives under `secure_attachment_cache` in the application's
+  cache directory, never in shared external storage. The native wipe deletes that directory at
+  logout and at revocation. When the platform names no such directory, attachments are not
+  available; there is no fallback directory.
+- **Layout.** `plain/<cache id>/<safe name>` holds one decrypted, verified file;
+  `outgoing/<id>/<safe name>` holds a copy the picker made; `<cache id>.tmp` at the top level
+  is a temporary file of encryption or download. A cache id is 32 random lowercase
+  hexadecimal characters, so no path holds a capability, and no temporary name holds a display
+  name. The safe name is `safeAttachmentName` cut to 255 bytes of UTF-8.
+- **Ownership.** `AttachmentFileCache` adopts an outgoing copy after its message is sent, or a
+  decrypted temporary file after its download is verified, by moving it under a new cache id,
+  and records the cache id and an expiry in the attachment's row in the same step.
+- **Bounds.** An entry expires 7 days after its last open; `plain/` holds at most 256 MiB and
+  evicts the least recently opened entry first. An evicted, expired or missing entry returns
+  to "not downloaded", and a second download fetches it again while the server keeps it.
+- **Deletion.** Deleting a message for me or for everyone, or clearing a conversation, deletes
+  its attachment rows, and the sweep that follows deletes the files. A message a peer deletes
+  for everyone loses its rows at once and its file at the next sweep.
+- **Ciphertext.** No ciphertext is cached. A partial download of the two largest buckets is
+  kept for a resume within the process (see *Resuming a download*), and the first sweep of the
+  next process deletes what a killed one left.
+- **Thumbnails.** None are made in this phase (ADR-089, rejected alternatives).
+
+The outgoing copies a sweep keeps are the ones the send flow names as live. A copy the picker
+is still writing is not yet one of them, so the send flow must count an open pick as well, or
+keep a sweep from running while one is open.
 
 ## UI states
 

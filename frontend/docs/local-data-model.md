@@ -13,7 +13,11 @@ transactions. Riverpod observes database queries and exposes immutable projectio
 Use SQLite encryption with a random database key. Wrap that key with an Android Keystore
 AES key, preferring hardware-backed storage when available. Exclude the database,
 wrapping material, attachments, and key files from Android backup. Plaintext may exist
-inside the unlocked encrypted database and process memory, never in ordinary files.
+inside the unlocked encrypted database and process memory, never in ordinary files — with
+one exception, a decrypted attachment, which another application can open only as a file. It
+lives in the private cache directory the logout and revocation wipe deletes, inside the
+bounds of [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files)
+([ADR-089](decisions.md) D8).
 
 ### Web (post-v1)
 
@@ -47,7 +51,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `messages` | Current logical message projection, plus the columns the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048), `delivered_receipt_sent` ([ADR-060](decisions.md)), and `status` ([ADR-061](decisions.md)) |
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
 | `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](decisions.md)) |
-| `attachments` | Encrypted descriptor, transfer state, bounded cache handle |
+| `attachments` | One row per capability: the message, the encrypted descriptor, and what this device holds of the file — "not downloaded", "ready" with the cache id of its decrypted file and an expiry, or "expired". See [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files) ([ADR-089](decisions.md)) |
 | `inbox_envelopes` | Backend envelope ID/seq, processing and ack state |
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
 | `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
@@ -110,6 +114,86 @@ the current protocol version, so it is deliberately left unindexed.
   surface that lists them also counts them.
 - A jump to a message outside the window (`messageCursor`, then `reveal`) opens the window far
   enough back to contain it, with a page of context below it.
+
+## Attachment rows and decrypted files
+
+*Since [ADR-089](decisions.md) (prompt 2 of its phase, 2026-10-10). Schema 23 is unchanged.*
+
+**The row.** An `attachments` row is keyed by the capability and names its message. Of the
+values 0 to 8 the CHECK of `transfer_state` allows, the client writes three (D9):
+
+| State | Means | `bounded_cache_handle_ciphertext` | `cache_expires_at` |
+|---|---|---|---|
+| `queued` (0) | not downloaded | null | null |
+| `ready` (6) | a decrypted file is on this device | the cache id, as UTF-8 | its last open plus 7 days |
+| `expired` (7) | the server no longer holds the attachment | null | null |
+
+Every other state of a transfer — encrypting, uploading, downloading, a failure — lives in
+memory with the transfer and dies with the process. `AttachmentLocalStatePort`
+(`DriftAttachmentLocalState`) is the one writer, and it throws an `ArgumentError` for any other
+state, and for a cache id or an expiry that does not go with the state, before it writes. A row
+that claims more than it holds — `ready` with no expiry or a cache id of the wrong form, or a
+state another build wrote — reads as `queued`. The cache id is a random 32-character
+lowercase hexadecimal string; it says nothing about the capability or the file.
+
+**The projection (D10).** The projector writes a message's rows by capability. A row that
+exists for the same capability and the same message keeps its state, its cache id and its
+expiry, and is rewritten only when its descriptor changed, so a reaction, a pin, a receipt or
+an edit re-folds the message without forgetting a downloaded file. Any other row starts as
+`queued`. A message deleted for everyone or for me keeps no row, and a row whose capability
+left the message is deleted; `deleted_for_me` lives on the message row, so a later re-fold
+inserts nothing again. `deleteForMe` and clearing a conversation (`deleteConversationForMe`)
+delete the rows themselves. A message with an attachment and no caption gives the display
+name of its first attachment (the first row written for it) as the Chats list preview.
+
+The primary key holds **one row per capability**. A capability that two messages carry — the
+same attachment forwarded on this device, or a descriptor a peer sends again — has one row,
+and the message written last takes it, starting again as `queued`.
+
+**A rebuild.** A conversation rebuild folds every message again through the same rules and
+keeps the rows of the messages it keeps. Any path that deletes a `messages` row — the
+projector removing a message whose create no longer stands, or a rebuild dropping a stale
+row — deletes its attachment rows through `ON DELETE CASCADE`, and with them the cache ids.
+The decrypted files are then named by nothing, and the next sweep deletes them.
+
+**The files (D8).** Every file lives under one root, `secure_attachment_cache` in the
+application's cache directory, which `ProtectedStorageChannel.erasePersistentArtifacts`
+deletes recursively at logout and at revocation. The platform names it through the channel's
+`privateCacheDirectory`; when it names none, or a path that is not an absolute path ending in
+`secure_attachment_cache`, there is no root and attachments are not available. Nothing falls
+back to another directory.
+
+| Path | Holds |
+|---|---|
+| `plain/<cache id>/<safe name>` | one decrypted, verified file, named by one `ready` row |
+| `outgoing/<id>/<safe name>` | one copy the picker made, until it is sent |
+| `<cache id>.tmp` | a temporary file of encryption or download |
+
+`AttachmentFileCache` owns `plain/`. It adopts an outgoing copy, or a decrypted temporary
+file, by moving it under a new cache id and marking the row `ready` in the same serial step,
+so no sweep meets a file before its row names it; a failure to mark the row deletes the file.
+Opening a file moves its expiry to the open plus 7 days.
+
+**The bounds.** An entry expires 7 days after its last open. `plain/` holds at most 256 MiB,
+and above that the entry with the earliest expiry — the least recently opened — is evicted
+first. An evicted, expired or missing entry returns its row to `queued`.
+
+**The sweeps.** A sweep deletes every `plain/` entry no row names, returns to `queued` each
+row whose file is missing or expired and deletes its directory, deletes every `outgoing/`
+entry no live upload job holds, and holds the bound. When the rows cannot be read it deletes
+nothing. A sweep runs:
+
+- before the first transfer of the process, and every later transfer waits for that sweep;
+- after the user deletes a message for me or for everyone, and after the user clears a
+  conversation, from the messaging use cases through `AttachmentSweepPort`.
+
+The first sweep of the process, whichever of these runs it, alone also deletes the files at
+the top level: the transport keeps the record of a partial download in memory only, so when a
+process starts no temporary file is anybody's. The application composes one
+`AttachmentFileCache` for the process, and every sweep, adoption and eviction runs in its one
+queue.
+
+A message a peer deletes for everyone loses its rows at once; its file goes at the next sweep.
 
 ## Identity and uniqueness
 
@@ -314,8 +398,11 @@ under reason codes 48 to 51.
   payload of a send whose preparation is still owed. Discarding those bytes would leave a
   message on screen that nothing can ever seal.
 - Ratchet skipped keys obey the bounds in [Pairwise transport version 1](pairwise-transport-v1.md).
-- Decrypted attachment files and thumbnails use bounded LRU caches with explicit expiry.
-- Delete-for-me creates a tombstone before cache cleanup.
+- Decrypted attachment files live in one bounded cache: 7 days after the last open, 256 MiB,
+  least recently opened first ([Attachment rows and decrypted files](#attachment-rows-and-decrypted-files)).
+  No thumbnail is made.
+- Delete-for-me creates a tombstone and deletes the message's attachment rows in one
+  transaction, and the sweep that follows deletes the decrypted file.
 - Logout/revocation closes handles, deletes the database key, then removes database and
   cache files. Key destruction is the primary cryptographic erasure boundary.
 
