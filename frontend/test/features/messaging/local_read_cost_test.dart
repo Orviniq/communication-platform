@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -6,6 +9,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/attachment_descriptor_fixture.dart';
 import '../../support/conversation_history_harness.dart';
 import '../../support/counting_interceptor.dart';
 
@@ -192,6 +196,105 @@ void main() {
     // One insert plus one emission, and the emission is the same six
     // statements it would be in an empty conversation.
     expect(arrival, 7);
+  });
+
+  group('an attachment row written without its message', () {
+    const conversationId = 'conversation';
+    late List<ConversationMessagePage> emissions;
+    late String newest;
+
+    setUp(() async {
+      await seedConversationHistory(
+        database,
+        conversationId: conversationId,
+        messages: 400,
+      );
+      newest = conversationMessageId(conversationId, 399);
+      // The seeded descriptors are there to be counted, not read: this one
+      // decodes, so the page shows its state.
+      final descriptor = testAttachmentDescriptor();
+      await (database.update(
+        database.attachments,
+      )..where((row) => row.attachmentId.equals('attachment-$newest'))).write(
+        AttachmentsCompanion(
+          encryptedDescriptor: Value(
+            Uint8List.fromList(
+              utf8.encode(
+                jsonEncode({
+                  'capability': descriptor.capabilityId,
+                  'key': base64Url.encode(descriptor.key),
+                  'header': base64Url.encode(descriptor.header),
+                  'stream_header': base64Url.encode(
+                    descriptor.secretstreamHeader,
+                  ),
+                  'encrypted_size': descriptor.encryptedSize,
+                  'bucket_size': descriptor.bucketSize,
+                  'plaintext_size': descriptor.plaintextSize,
+                  'name': descriptor.displayName,
+                  'mime': descriptor.mimeType,
+                  'media_kind': descriptor.mediaKind.index,
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+      emissions = <ConversationMessagePage>[];
+      final subscription = repository
+          .watchMessages(
+            currentUserId: 'self',
+            conversationId: conversationId,
+            window: const NewestConversationMessages(120),
+          )
+          .listen(emissions.add);
+      addTearDown(subscription.cancel);
+      await pumpEventQueue();
+      expect(emissions, hasLength(1));
+    });
+
+    Future<void> markExpired() =>
+        (database.update(
+          database.attachments,
+        )..where((row) => row.attachmentId.equals('attachment-$newest'))).write(
+          AttachmentsCompanion(
+            transferState: Value(AttachmentTransferState.expired.index),
+          ),
+        );
+
+    test('is one more emission, which reads no message again', () async {
+      expect(emissions.single.messages.last.attachmentStates, [
+        AttachmentTransferState.queued,
+      ]);
+      counter.reset();
+      await markExpired();
+      await pumpEventQueue();
+
+      // A download, an open and an eviction write the row alone (ADR-089
+      // D9), and the tile has to follow it.
+      expect(emissions, hasLength(2));
+      expect(emissions.last.messages.last.attachmentStates, [
+        AttachmentTransferState.expired,
+      ]);
+      // The update, then the page's five statements over the rows the last
+      // emission read.
+      expect(counter.statements, 6);
+    });
+
+    test('in one transaction with its message is still one emission', () async {
+      await database.transaction(() async {
+        await (database.update(database.messages)
+              ..where((row) => row.messageId.equals(newest)))
+            .write(const MessagesCompanion(starred: Value(true)));
+        await markExpired();
+      });
+      await pumpEventQueue();
+
+      expect(emissions, hasLength(2));
+      expect(emissions.last.messages.last.starred, isTrue);
+      expect(emissions.last.messages.last.attachmentStates, [
+        AttachmentTransferState.expired,
+      ]);
+    });
   });
 }
 

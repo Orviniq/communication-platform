@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -63,9 +64,64 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
       case ConversationMessagesFrom(:final oldest):
         query.where((row) => _atOrAfter(row, oldest));
     }
-    return query.watch().asyncMap(
+    return _againOnAttachmentWrites(query.watch()).asyncMap(
       (rows) => _projectPage(conversationId: conversationId, newestFirst: rows),
     );
+  }
+
+  /// [rows], and the latest of them again after each write that changed the
+  /// attachment rows and left the messages alone.
+  ///
+  /// A page carries each attachment's state, and a download, an open, an
+  /// eviction and an expiry write that state without touching the message
+  /// (ADR-089 D9). The query watches the messages only, so a file that had
+  /// finished downloading stayed "not downloaded" on screen until something
+  /// wrote its message. A write that touched both tables is an emission of
+  /// [rows] already, and adds nothing here.
+  Stream<List<Message>> _againOnAttachmentWrites(Stream<List<Message>> rows) {
+    final messages = database.messages.actualTableName;
+    return Stream.multi((controller) {
+      List<Message>? latest;
+      final attachmentWrites = database
+          .tableUpdates(
+            TableUpdateQuery.onAllTables([
+              database.messages,
+              database.attachments,
+            ]),
+          )
+          .where(
+            (updates) => updates.every((update) => update.table != messages),
+          )
+          .listen((_) {
+            if (latest case final current?) {
+              controller.add(current);
+            }
+          });
+      final source = rows.listen(
+        (value) {
+          latest = value;
+          controller.add(value);
+        },
+        onError: controller.addError,
+        onDone: () async {
+          await attachmentWrites.cancel();
+          await controller.close();
+        },
+      );
+      // A pause is not passed on. The `asyncMap` this feeds pauses for every
+      // page it projects, and drift answers each resume by sending its last
+      // rows again, which would be projected again, without end. Rows that
+      // arrive during a pause wait in this controller instead.
+      //
+      // The cancel answers when the query's own does, as it did before this
+      // stream was here. The cancel of drift's table updates is not awaited:
+      // it completes through drift's own pipe, on the zone the database was
+      // opened in, and nothing waits on it.
+      controller.onCancel = () {
+        unawaited(attachmentWrites.cancel());
+        return source.cancel();
+      };
+    });
   }
 
   @override
