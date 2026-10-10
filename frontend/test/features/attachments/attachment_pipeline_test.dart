@@ -891,9 +891,45 @@ void main() {
 
       final result = await service.downloadAndDecrypt(descriptor: descriptor);
 
-      final decrypted = (result as Success<File>).value;
+      final decrypted = (result as AttachmentDownloaded).file;
       expect(await decrypted.readAsBytes(), plaintext);
       expect(await fetched.exists(), isFalse);
+    });
+
+    test('bytes that arrived whole and do not verify fail the verification, '
+        'and leave nothing', () async {
+      final crypto = AttachmentCryptoService(FakeAttachmentCryptoPort());
+      final plaintext = Uint8List(70000);
+      final fetched = File('${root.path}/fetched.bin');
+      final encrypted = await crypto.encryptToFile(
+        source: AttachmentSource(
+          length: plaintext.length,
+          displayName: 'notes.txt',
+          mimeType: 'text/plain',
+          openRead: () => Stream.value(plaintext),
+        ),
+        destination: fetched,
+      );
+      final descriptor = (encrypted as Success<AttachmentDescriptor>).value
+          .withCapability('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+      // One byte of the first chunk changed: the bucket is whole, and it is
+      // not the file the descriptor describes.
+      final bytes = await fetched.readAsBytes();
+      bytes[66 + 24 + 5] ^= 0x01;
+      await fetched.writeAsBytes(bytes);
+      final service = AttachmentTransferService(
+        crypto: crypto,
+        transport: _HandingTransport(Result.success(fetched)),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(descriptor: descriptor);
+
+      final failed = result as AttachmentDownloadFailed;
+      expect(failed.stage, AttachmentDownloadStage.verification);
+      expect(failed.failure, isA<CryptoCoreFailure>());
+      expect(root.listSync(), isEmpty);
+      expect('$failed', 'AttachmentDownloadFailed(verification)');
     });
 
     test('leaves what a failed download fetched to the transport', () async {
@@ -909,7 +945,30 @@ void main() {
         descriptor: _descriptor(plaintextSize: 10),
       );
 
-      expect((result as FailureResult<File>).failure, isA<TransportFailure>());
+      final failed = result as AttachmentDownloadFailed;
+      expect(failed.failure, isA<TransportFailure>());
+      expect(failed.stage, AttachmentDownloadStage.download);
+      expect(root.listSync(), isEmpty);
+    });
+
+    test("a broken answer from the transport is the download's failure, "
+        'though its kind is one the verification gives too', () async {
+      const malformed = SecurityFailure(
+        SecurityFailureKind.malformedServerResponse,
+      );
+      final service = AttachmentTransferService(
+        crypto: AttachmentCryptoService(FakeAttachmentCryptoPort()),
+        transport: _HandingTransport(const Result.failure(malformed)),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(
+        descriptor: _descriptor(plaintextSize: 10),
+      );
+
+      final failed = result as AttachmentDownloadFailed;
+      expect(failed.failure, malformed);
+      expect(failed.stage, AttachmentDownloadStage.download);
       expect(root.listSync(), isEmpty);
     });
   });

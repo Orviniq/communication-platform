@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:communication_platform/core/application/cancellation_signal.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
@@ -84,7 +85,19 @@ final class AttachmentTransferService {
     }
   }
 
-  Future<Result<File>> downloadAndDecrypt({
+  /// Downloads the ciphertext of [descriptor], then verifies and decrypts it
+  /// to a temporary file, reporting `downloading` and then `verifying`.
+  ///
+  /// A failure says which step it came from, because the two mean different
+  /// things: a download that failed fetched nothing anyone checked, and may
+  /// work the next time, while bytes that arrived whole and did not verify
+  /// are not the file the descriptor describes. The transport and the crypto
+  /// service can both answer `malformedServerResponse`, so the failure alone
+  /// cannot say which.
+  ///
+  /// The caller owns the verified file, and hands it to the attachment cache
+  /// or deletes it. A failure leaves no decrypted file.
+  Future<AttachmentDownloadResult> downloadAndDecrypt({
     required AttachmentDescriptor descriptor,
     CancellationSignal? cancellation,
     void Function(AttachmentProgress progress)? onProgress,
@@ -104,27 +117,80 @@ final class AttachmentTransferService {
     if (downloaded case FailureResult(failure: final failure)) {
       // Whatever the attempt fetched stays with the transport, which takes it
       // up again on the next call when it can (ADR-083).
-      return Result.failure(failure);
+      return AttachmentDownloadFailed(
+        failure,
+        stage: AttachmentDownloadStage.download,
+      );
     }
     final encrypted = (downloaded as Success<File>).value;
+    File? decrypted;
     try {
-      final decrypted = await storage.createDecryptedTemp();
-      final encryptedStream = encrypted.openRead();
+      decrypted = await storage.createDecryptedTemp();
       final decryptedResult = await crypto.decryptStreamToFile(
         descriptor: descriptor,
-        ciphertext: encryptedStream,
+        ciphertext: encrypted.openRead(),
         destination: decrypted,
         cancellation: cancellation,
         onProgress: onProgress,
       );
       if (decryptedResult case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
+        // The crypto service deleted what it wrote.
+        return AttachmentDownloadFailed(
+          failure,
+          stage: AttachmentDownloadStage.verification,
+        );
       }
-      return Result.success(decrypted);
+      return AttachmentDownloaded(decrypted);
+    } on FileSystemException {
+      // The disk, not the bytes: no verdict on the file was reached.
+      if (decrypted != null) {
+        await storage.delete(decrypted);
+      }
+      return const AttachmentDownloadFailed(
+        StorageFailure(StorageFailureKind.unavailable),
+        stage: AttachmentDownloadStage.verification,
+      );
     } finally {
       await storage.delete(encrypted);
-      // The caller owns a verified file and must hand it to the attachment
-      // cache or delete it. A failure path is cleaned by the crypto service.
     }
   }
+}
+
+/// The step of [AttachmentTransferService.downloadAndDecrypt] a failure came
+/// from.
+enum AttachmentDownloadStage {
+  /// Fetching the ciphertext: the server refused it, the connection dropped,
+  /// or the answer broke the length or the range rules. No byte was verified.
+  download,
+
+  /// Verifying and decrypting what arrived: the header, a chunk, the length
+  /// or the padding is not what the descriptor describes, or the decrypted
+  /// file could not be written.
+  verification,
+}
+
+/// What [AttachmentTransferService.downloadAndDecrypt] gives.
+sealed class AttachmentDownloadResult {
+  const AttachmentDownloadResult();
+}
+
+/// A verified, decrypted temporary file, which the caller now owns.
+final class AttachmentDownloaded extends AttachmentDownloadResult {
+  const AttachmentDownloaded(this.file);
+
+  final File file;
+
+  @override
+  String toString() => 'AttachmentDownloaded(<redacted>)';
+}
+
+/// A download that gave no file: [failure], in [stage].
+final class AttachmentDownloadFailed extends AttachmentDownloadResult {
+  const AttachmentDownloadFailed(this.failure, {required this.stage});
+
+  final Failure failure;
+  final AttachmentDownloadStage stage;
+
+  @override
+  String toString() => 'AttachmentDownloadFailed(${stage.name})';
 }
