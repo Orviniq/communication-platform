@@ -7,6 +7,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 
@@ -16,12 +17,16 @@ final class SendConversationEvents {
     required this.protocol,
     required this.fanout,
     required this.clock,
+    required this.attachments,
   });
 
   final ConversationRepositoryPort repository;
   final ApplicationProtocolPort protocol;
   final ApplicationFanoutPort fanout;
   final TimeSource clock;
+
+  /// Deletes the decrypted files a deletion for everyone leaves unnamed.
+  final AttachmentSweepPort attachments;
 
   Future<Result<SendMessageOutcome>> sendText({
     required String currentUserId,
@@ -199,7 +204,7 @@ final class SendConversationEvents {
     if (authorized case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    return _sendMutation(
+    final deleted = await _sendMutation(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
       conversationId: conversationId,
@@ -207,6 +212,12 @@ final class SendConversationEvents {
       targetMessageId: messageId,
       body: (target) => MessageDeleteBody(targetMessageId: target),
     );
+    // The local commit projected the message with no attachment row, so a
+    // file this device downloaded for it is now unnamed (ADR-089 D10).
+    if (deleted is Success<void>) {
+      await attachments.sweepAfterDeletion();
+    }
+    return deleted;
   }
 
   /// Sets or, with a null [emoji], removes this user's reaction.
@@ -568,9 +579,15 @@ final class SendConversationEvents {
 }
 
 final class ManageLocalConversationState {
-  const ManageLocalConversationState(this.repository);
+  const ManageLocalConversationState(
+    this.repository, {
+    required this.attachments,
+  });
 
   final ConversationRepositoryPort repository;
+
+  /// Deletes the decrypted files a local deletion leaves unnamed.
+  final AttachmentSweepPort attachments;
 
   Future<Result<void>> saveDraft({
     required String conversationId,
@@ -594,15 +611,16 @@ final class ManageLocalConversationState {
   );
 
   Future<Result<void>> deleteForMe(String messageId) =>
-      repository.deleteForMe(messageId);
+      _thenSweep(repository.deleteForMe(messageId));
 
   Future<Result<void>> setStar({
     required String messageId,
     required bool starred,
   }) => repository.setStar(messageId: messageId, starred: starred);
 
+  /// Clears the conversation's history on this device.
   Future<Result<void>> deleteConversationForMe(String conversationId) =>
-      repository.deleteConversationForMe(conversationId);
+      _thenSweep(repository.deleteConversationForMe(conversationId));
 
   Future<Result<List<String>>> markRead(String conversationId) =>
       repository.markConversationRead(conversationId);
@@ -614,6 +632,16 @@ final class ManageLocalConversationState {
     conversationId: conversationId,
     currentUserId: currentUserId,
   );
+
+  /// A deletion deletes the attachment rows of the messages it took, so the
+  /// files they named are swept once it is committed (ADR-089 D10).
+  Future<Result<void>> _thenSweep(Future<Result<void>> deletion) async {
+    final deleted = await deletion;
+    if (deleted is Success<void>) {
+      await attachments.sweepAfterDeletion();
+    }
+    return deleted;
+  }
 }
 
 final class FlushPendingDeliveredReceipts {

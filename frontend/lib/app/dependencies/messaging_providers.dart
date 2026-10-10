@@ -1,3 +1,4 @@
+import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
@@ -221,13 +222,17 @@ final sendConversationEventsProvider =
           await ref.watch(pairwiseFanoutCoordinatorProvider(scope).future),
         ),
         clock: ref.watch(timeSourceProvider),
+        attachments: ref.watch(attachmentSweepProvider),
       );
     });
 
 final manageLocalConversationStateProvider =
     FutureProvider<ManageLocalConversationState>((ref) async {
       final repository = await ref.watch(conversationRepositoryProvider.future);
-      return ManageLocalConversationState(repository);
+      return ManageLocalConversationState(
+        repository,
+        attachments: ref.watch(attachmentSweepProvider),
+      );
     });
 
 /// Clearing a conversation's unread state *and* telling the sender it was read.

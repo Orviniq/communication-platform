@@ -6,6 +6,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
+import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,17 +18,20 @@ void main() {
   late _Repository repository;
   late _Protocol protocol;
   late _Fanout fanout;
+  late _Sweep sweep;
   late SendConversationEvents sender;
 
   setUp(() {
     repository = _Repository();
     protocol = _Protocol();
     fanout = _Fanout();
+    sweep = _Sweep();
     sender = SendConversationEvents(
       repository: repository,
       protocol: protocol,
       fanout: fanout,
       clock: const _Clock(),
+      attachments: sweep,
     );
   });
 
@@ -310,6 +314,52 @@ void main() {
     expect(fanout.events, isEmpty);
   });
 
+  test('a committed deletion sweeps the attachment cache, and a refused '
+      'one does not (ADR-089 D10)', () async {
+    repository.conversation = const ConversationSummary(
+      conversationId: _directConversationHex,
+      kind: ConversationKind.direct,
+      peerUserId: peerUser,
+      lastMessage: null,
+      lastActivityMs: 0,
+      unreadCount: 0,
+      mutedUntil: null,
+      draft: null,
+      pinnedMessageIds: {},
+    );
+    final local = ManageLocalConversationState(repository, attachments: sweep);
+
+    expect(
+      await sender.deleteForEveryone(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        conversationId: _directConversationHex,
+        messageId: _messageOne,
+      ),
+      isA<Success<void>>(),
+    );
+    expect(sweep.sweeps, 1);
+    expect(await local.deleteForMe(_messageTwo), isA<Success<void>>());
+    expect(sweep.sweeps, 2);
+    expect(
+      await local.deleteConversationForMe(_directConversationHex),
+      isA<Success<void>>(),
+    );
+    expect(sweep.sweeps, 3);
+
+    repository.originalSender = false;
+    expect(
+      await sender.deleteForEveryone(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        conversationId: _directConversationHex,
+        messageId: _messageOne,
+      ),
+      isA<FailureResult<void>>(),
+    );
+    expect(sweep.sweeps, 3);
+  });
+
   test(
     'Saved Messages supports local deletion but no remote-delete event',
     () async {
@@ -500,6 +550,15 @@ final class _Protocol implements ApplicationProtocolPort {
   @override
   Future<Result<Uint8List>> generateEventId() async =>
       Result.success(Uint8List.fromList(List<int>.filled(16, next++)));
+}
+
+final class _Sweep implements AttachmentSweepPort {
+  int sweeps = 0;
+
+  @override
+  Future<void> sweepAfterDeletion() async {
+    sweeps += 1;
+  }
 }
 
 final class _Fanout implements ApplicationFanoutPort {
