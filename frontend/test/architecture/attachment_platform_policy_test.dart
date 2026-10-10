@@ -21,7 +21,8 @@ void main() {
     File('$kotlinRoot/MainActivity.kt').readAsStringSync(),
   );
 
-  test('only the adapter and the private storage name the channel', () {
+  test('only the adapter names the channel, and the private storage '
+      'reaches it by the adapter\'s name', () {
     expect(MethodChannelAttachmentPlatform.channelName, channelName);
     final naming = <String>[
       for (final entry in Directory('lib').listSync(recursive: true))
@@ -31,9 +32,15 @@ void main() {
           entry.path.replaceAll(r'\', '/'),
     ]..sort();
     expect(naming, [
-      'lib/features/attachments/infrastructure/attachment_storage.dart',
       'lib/features/attachments/infrastructure/method_channel_attachment_platform.dart',
     ]);
+    expect(
+      File(
+        'lib/features/attachments/infrastructure/attachment_storage.dart',
+      ).readAsStringSync(),
+      contains('MethodChannelAttachmentPlatform.channelName'),
+      reason: 'privateCacheDirectory is asked on the same channel',
+    );
     expect(attachmentChannel, contains('NAME = "$channelName"'));
     expect(
       activity,

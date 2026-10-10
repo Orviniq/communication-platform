@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'dart:async';
 import 'dart:io';
 
@@ -17,25 +19,21 @@ export 'package:communication_platform/features/attachments/application/ports/at
     show AttachmentTransportPort, AttachmentUploadResponse;
 
 /// Direct streaming adapter for the documented attachment endpoints.
+///
+/// [dio] is required, and it is this transport's own: the application builds
+/// it in `NetworkingFoundation.attachmentTransport`, on the adapter of the
+/// provisioned trust and the server's origin (ADR-089 D12, ADR-043). There is
+/// no default, because a default would be the platform's trust, which the
+/// client's own transport never uses.
 final class DioAttachmentTransport implements AttachmentTransportPort {
   DioAttachmentTransport({
-    required Uri serverOrigin,
     required this.tokens,
     required this.config,
     required this.allowance,
     required this.clock,
     required this.storage,
-    Dio? dio,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               baseUrl: serverOrigin.toString(),
-               followRedirects: false,
-               maxRedirects: 0,
-               validateStatus: (_) => true,
-             ),
-           );
+    required Dio dio,
+  }) : _dio = dio;
 
   final Dio _dio;
   final AccessTokenCoordinator tokens;
@@ -70,12 +68,35 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
   /// file of a killed process is.
   _PartialDownload? _partial;
 
+  /// Whether [close] has run.
+  var _closed = false;
+
+  static const _ended = CancellationFailure(
+    CancellationFailureKind.lifecycleInterrupted,
+  );
+
+  /// Ends this transport with the session it was built for: every request in
+  /// flight is aborted, and the partial download it kept is deleted. A
+  /// request made after this fails.
+  Future<void> close() async {
+    _closed = true;
+    _dio.close(force: true);
+    final partial = _partial;
+    _partial = null;
+    if (partial != null) {
+      await storage.delete(partial.file);
+    }
+  }
+
   @override
   Future<Result<AttachmentUploadResponse>> upload({
     required File encryptedFile,
     required int bucketSize,
     CancellationSignal? cancellation,
   }) async {
+    if (_closed) {
+      return const Result.failure(_ended);
+    }
     final limits = config.current;
     if (!await encryptedFile.exists() ||
         await encryptedFile.length() != bucketSize ||
@@ -176,6 +197,9 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
     CancellationSignal? cancellation,
     void Function(int bytes)? onProgress,
   }) async {
+    if (_closed) {
+      return const Result.failure(_ended);
+    }
     if (!RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(capabilityId) ||
         expectedBucketSize <= 0) {
       return const Result.failure(
@@ -340,7 +364,8 @@ final class DioAttachmentTransport implements AttachmentTransportPort {
       }
       if (fetched == null) {
         final resumeTag = tag;
-        if (resumeLater && resumeTag != null) {
+        // A closed transport has no next attempt to keep anything for.
+        if (resumeLater && resumeTag != null && !_closed) {
           await _keepPartial(
             _PartialDownload(
               capabilityId: capabilityId,

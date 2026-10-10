@@ -220,7 +220,6 @@ void main() {
           },
         ]);
         final transport = DioAttachmentTransport(
-          serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
@@ -288,7 +287,6 @@ void main() {
         ]);
         final allowance = _RecordingAllowance();
         final transport = DioAttachmentTransport(
-          serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
           config: const FixedServerConfig.fallback(),
           allowance: allowance,
@@ -324,7 +322,6 @@ void main() {
       // spending the upload to discover it.
       final allowance = _RecordingAllowance(spentBytes: 268435456 - 32768);
       final transport = DioAttachmentTransport(
-        serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
@@ -360,7 +357,6 @@ void main() {
       dio.httpClientAdapter = _QueueAdapter([]);
       final allowance = _RecordingAllowance();
       final transport = DioAttachmentTransport(
-        serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
@@ -397,7 +393,6 @@ void main() {
             ResponseBody.fromString('', 404),
       ]);
       final transport = DioAttachmentTransport(
-        serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
         config: const FixedServerConfig.fallback(),
         allowance: _RecordingAllowance(),
@@ -452,7 +447,6 @@ void main() {
       final server = _QueueAdapter(answers);
       return (
         transport: DioAttachmentTransport(
-          serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
