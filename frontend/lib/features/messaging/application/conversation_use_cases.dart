@@ -84,6 +84,11 @@ final class SendConversationEvents {
   /// Falling back to a fresh send covers the one case with nothing to re-arm: a
   /// message whose operation record has already been pruned. It is the older
   /// behaviour, kept for the case that is genuinely a new send.
+  ///
+  /// A message that carries [attachments] falls back to the same descriptors
+  /// with [text] as their caption, never to the caption alone (ADR-089 D11).
+  /// The descriptors name uploads the server still holds, so nothing is
+  /// uploaded again. An attachment message carries no reply reference.
   Future<Result<void>> retrySend({
     required String currentUserId,
     required String currentDeviceId,
@@ -92,6 +97,8 @@ final class SendConversationEvents {
     required String text,
     String? replyToMessageId,
     String? quoteFallback,
+    List<EncryptedAttachmentDescriptor> attachments = const [],
+    bool imageMessage = false,
   }) async {
     final rearmed = await fanout.retryFailedSend('application:$messageId');
     if (rearmed case FailureResult(failure: final failure)) {
@@ -100,17 +107,55 @@ final class SendConversationEvents {
     if ((rearmed as Success<bool>).value) {
       return const Result.success(null);
     }
-    final sent = await sendText(
+    final sent = await forward(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
       target: target,
       text: text,
       replyToMessageId: replyToMessageId,
       quoteFallback: quoteFallback,
+      attachments: attachments,
+      imageMessage: imageMessage,
     );
     return sent.fold(
       onSuccess: (_) => const Result.success(null),
       onFailure: Result.failure,
+    );
+  }
+
+  /// Sends the content of a message as a new message to [target]: [text]
+  /// alone, or [attachments] with [text] as their caption (ADR-089 D11).
+  ///
+  /// A forwarded attachment names the same upload, which the server does not
+  /// copy, so it expires on the date of the first send. [replyToMessageId]
+  /// and [quoteFallback] go with a text message only.
+  Future<Result<SendMessageOutcome>> forward({
+    required String currentUserId,
+    required String currentDeviceId,
+    required ConversationTarget target,
+    required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
+    List<EncryptedAttachmentDescriptor> attachments = const [],
+    bool imageMessage = false,
+  }) {
+    if (attachments.isEmpty) {
+      return sendText(
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        target: target,
+        text: text,
+        replyToMessageId: replyToMessageId,
+        quoteFallback: quoteFallback,
+      );
+    }
+    return sendAttachments(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      target: target,
+      attachments: attachments,
+      caption: text.trim().isEmpty ? null : text,
+      imageMessage: imageMessage,
     );
   }
 

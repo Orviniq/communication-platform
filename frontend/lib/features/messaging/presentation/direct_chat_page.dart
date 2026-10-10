@@ -531,23 +531,30 @@ class _ProjectedConversationPageState
           text: message.text ?? '',
           replyToMessageId: message.replyToMessageId,
           quoteFallback: message.replyQuote,
+          // An attachment message falls back to its own descriptors, never
+          // to its caption alone (ADR-089 D11).
+          attachments: message.attachments,
+          imageMessage: message.kind == ChatTimelineContentKind.image,
         );
       case ForwardToConversationsIntent(:final message, :final targets):
-        if (message.text == null || message.text!.trim().isEmpty) {
+        if (message.attachments.isEmpty &&
+            (message.text == null || message.text!.trim().isEmpty)) {
           result = const Result.failure(
             ValidationFailure(ValidationFailureKind.invalidInput),
           );
           break;
         }
         for (final target in targets) {
-          final sent = await sender.sendText(
+          final sent = await sender.forward(
             currentUserId: currentUserId,
             currentDeviceId: deviceId,
             target: target.savedMessages
                 ? const SavedConversationTarget()
                 : DirectConversationTarget(target.peerUserId!),
-            text: message.text!,
+            text: message.text ?? '',
             quoteFallback: message.replyQuote,
+            attachments: message.attachments,
+            imageMessage: message.kind == ChatTimelineContentKind.image,
           );
           if (sent case FailureResult(failure: final failure)) {
             result = Result.failure(failure);

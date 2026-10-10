@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
@@ -10,6 +11,8 @@ import 'package:communication_platform/features/messaging/application/ports/atta
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/attachment_descriptor_fixture.dart';
 
 void main() {
   const currentUser = '00000000-0000-0000-0000-000000000001';
@@ -105,6 +108,121 @@ void main() {
     expect(retried, isA<Success<void>>());
     expect(fanout.rearmed, ['application:aabb']);
     expect(fanout.events, hasLength(1));
+  });
+
+  group('an attachment message (ADR-089 D11)', () {
+    final photo = testAttachmentDescriptor(
+      capability: testCapability(4),
+      displayName: 'photo.jpg',
+      mimeType: 'image/jpeg',
+      mediaKind: AttachmentMediaKind.image,
+    );
+    final minutes = testAttachmentDescriptor(capability: testCapability(5));
+
+    test('retried with nothing to re-arm sends its descriptors and its '
+        'caption, never the caption alone', () async {
+      fanout.hasFailedSend = false;
+
+      final retried = await sender.retrySend(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        messageId: 'aabb',
+        text: 'the view',
+        replyToMessageId: _messageOne,
+        attachments: [photo],
+        imageMessage: true,
+      );
+
+      expect(retried, isA<Success<void>>());
+      expect(fanout.rearmed, ['application:aabb']);
+      final body = fanout.events.single.event.body as MessageCreateBody;
+      expect(body.attachments.single.capabilityId, photo.capabilityId);
+      expect(body.contentType, MessageContentType.image);
+      expect(body.text, 'the view');
+      expect(body.replyToMessageId, isNull);
+    });
+
+    test(
+      'retried with no caption sends the descriptors with no text',
+      () async {
+        fanout.hasFailedSend = false;
+
+        await sender.retrySend(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          target: const SavedConversationTarget(),
+          messageId: 'aabb',
+          text: '',
+          attachments: [minutes],
+        );
+
+        final body = fanout.events.single.event.body as MessageCreateBody;
+        expect(body.attachments.single.capabilityId, minutes.capabilityId);
+        expect(body.contentType, MessageContentType.attachment);
+        expect(body.text, isEmpty);
+      },
+    );
+
+    test('retried with a send to re-arm sends nothing new', () async {
+      fanout.hasFailedSend = true;
+
+      await sender.retrySend(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        messageId: 'aabb',
+        text: 'the view',
+        attachments: [photo],
+      );
+
+      expect(fanout.events, isEmpty);
+    });
+
+    test(
+      'forwarded sends its descriptors and its caption to each target',
+      () async {
+        for (final target in const <ConversationTarget>[
+          DirectConversationTarget(peerUser),
+          SavedConversationTarget(),
+        ]) {
+          final sent = await sender.forward(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            target: target,
+            text: 'minutes for Monday',
+            attachments: [minutes],
+          );
+          expect(sent, isA<Success<SendMessageOutcome>>());
+        }
+
+        expect(fanout.events, hasLength(2));
+        for (final event in fanout.events) {
+          final body = event.event.body as MessageCreateBody;
+          expect(body.attachments.single.capabilityId, minutes.capabilityId);
+          expect(body.text, 'minutes for Monday');
+          expect(body.contentType, MessageContentType.attachment);
+        }
+        expect(fanout.events.first.peerUserId, peerUser);
+        expect(fanout.events.last.peerUserId, isNull);
+      },
+    );
+
+    test('a forwarded text message keeps its own path', () async {
+      await sender.forward(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        text: 'just words',
+        quoteFallback: 'a quote',
+      );
+
+      final body = fanout.events.single.event.body as MessageCreateBody;
+      expect(body.attachments, isEmpty);
+      expect(body.contentType, MessageContentType.text);
+      expect(body.text, 'just words');
+      expect(body.quoteFallback, 'a quote');
+    });
   });
 
   test('a malformed peer id is refused rather than thrown', () async {
