@@ -444,12 +444,18 @@ Failure _responseFailure(int? status, Object? body) {
 /// The body is a byte stream here rather than JSON, so there is no envelope to
 /// read and the status is all there is. It is enough: this route answers
 /// neither of the two shared statuses, because nothing is uploaded to it — no
-/// allowance is spent and no disk fills.
+/// allowance is spent and no disk fills. So its `503` is `unavailable` and
+/// never `storage_full`, and its `500` is `server_error`, as
+/// `backend/openapi.json` lists them for this route. Both are the server's
+/// state rather than this object's, and a later attempt can find it changed;
+/// the bytes already on disk are kept for it.
 Failure _statusFailure(int? status) => switch (status) {
   401 => const BackendFailure(BackendFailureCode.invalidToken),
   403 => const BackendFailure(BackendFailureCode.scopeForbidden),
   404 => const BackendFailure(BackendFailureCode.notFound),
   429 => const BackendFailure(BackendFailureCode.throttled),
+  500 => const BackendFailure(BackendFailureCode.serverError),
+  503 => const BackendFailure(BackendFailureCode.unavailable),
   _ => const SecurityFailure(SecurityFailureKind.malformedServerResponse),
 };
 

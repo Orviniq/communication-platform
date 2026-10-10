@@ -694,6 +694,51 @@ void main() {
       expect(listEquals(await file.readAsBytes(), object), isTrue);
     });
 
+    test(
+      'a 500 or a 503 is the server\'s state, which a retry clears',
+      () async {
+        const stoppedAt = 1048576;
+        final (:transport, :server) = serve([
+          dropsAfter(stoppedAt),
+          refuses(500),
+          refuses(503),
+          continuesFrom(stoppedAt),
+        ]);
+        await fetch(transport);
+
+        final failed = await fetch(transport);
+        final unavailable = await fetch(transport);
+        final retried = await fetch(transport);
+
+        // `backend/openapi.json` lists both for this route, as `server_error`
+        // and `unavailable`: neither is an answer this client cannot read.
+        expect(
+          (failed as FailureResult<File>).failure,
+          isA<BackendFailure>().having(
+            (failure) => failure.code,
+            'code',
+            BackendFailureCode.serverError,
+          ),
+        );
+        expect(
+          (unavailable as FailureResult<File>).failure,
+          isA<BackendFailure>().having(
+            (failure) => failure.code,
+            'code',
+            BackendFailureCode.unavailable,
+          ),
+        );
+        for (final failure in [failed.failure, unavailable.failure]) {
+          expect(failure.category, FailureCategory.transport);
+        }
+        for (final request in server.requests.skip(1)) {
+          expect(request.headers['Range'], 'bytes=$stoppedAt-');
+        }
+        final file = (retried as Success<File>).value;
+        expect(listEquals(await file.readAsBytes(), object), isTrue);
+      },
+    );
+
     test('a 404 or a 416 to a resume keeps nothing', () async {
       for (final status in [404, 416]) {
         final (:transport, :server) = serve([
