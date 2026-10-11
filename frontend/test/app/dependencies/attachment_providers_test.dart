@@ -401,6 +401,36 @@ void main() {
         },
       );
 
+      test('end with it when no screen listens to them', () async {
+        final container = ProviderContainer.test(
+          overrides: [
+            ...base(),
+            attachmentPlatformProvider.overrideWithValue(platform),
+            attachmentSessionActiveProvider(
+              scope,
+            ).overrideWith((ref) => ref.watch(_sessionProvider)),
+          ],
+        );
+        // Read, and never listened to: the tray of a chat that was closed.
+        final uploads = container.read(attachmentUploadsProvider(scope));
+        final queued = await pick(uploads, 'd');
+        uploads.enqueue(
+          conversationId: 'c-1',
+          target: const AttachmentUploadTarget.saved(),
+          attachment: queued,
+        );
+        while (uploads.jobs.single.state != AttachmentUploadState.failed) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+
+        container.read(_sessionProvider.notifier).end();
+        while (await queued.file.parent.exists()) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+
+        expect(uploads.jobs, isEmpty);
+      });
+
       test('no sweep runs while a picker is open', () async {
         final container = ProviderContainer.test(
           overrides: [

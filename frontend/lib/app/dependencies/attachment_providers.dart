@@ -206,13 +206,21 @@ final attachmentUploadsProvider =
           scope: scope,
         ),
       );
-      ref
-        ..listen(attachmentSessionActiveProvider(scope), (_, active) {
+      // Heard through the container, as the downloads hear it: an upload goes
+      // on after its chat is closed, when nothing listens to this provider
+      // and Riverpod 3 pauses its own subscriptions.
+      final session = ref.container.listen(
+        attachmentSessionActiveProvider(scope),
+        (_, active) {
           if (!active) {
             unawaited(uploads.close());
           }
-        })
-        ..onDispose(() => unawaited(uploads.close()));
+        },
+      );
+      ref.onDispose(() {
+        session.close();
+        unawaited(uploads.close());
+      });
       return uploads;
     });
 
