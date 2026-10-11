@@ -7,6 +7,7 @@ import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/application/ports/attachment_download_ports.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_local_state_port.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_upload_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_cache_model.dart';
@@ -43,7 +44,8 @@ import 'package:communication_platform/features/attachments/domain/attachment_mo
 /// Every operation runs one at a time, in the order called, so a sweep never
 /// sees a file between its move and the row that names it. Nothing here logs,
 /// and a failure carries a kind and nothing else.
-final class AttachmentFileCache implements AttachmentOutgoingFilesPort {
+final class AttachmentFileCache
+    implements AttachmentOutgoingFilesPort, AttachmentDecryptedFilesPort {
   AttachmentFileCache({
     required Directory root,
     required this.states,
@@ -115,6 +117,7 @@ final class AttachmentFileCache implements AttachmentOutgoingFilesPort {
   ///
   /// [file] has to be a temporary file at the top level of the root. After
   /// the move a failure to record the row deletes it.
+  @override
   Future<Result<String>> adoptDecrypted({
     required String attachmentId,
     required File file,
@@ -148,6 +151,7 @@ final class AttachmentFileCache implements AttachmentOutgoingFilesPort {
   ///
   /// A file that expired or went missing is forgotten here, and its row
   /// returns to `queued`.
+  @override
   Future<File?> open(String attachmentId) => _serial(() async {
     final read = await states.read(attachmentId);
     final state = read is Success<AttachmentLocalState?> ? read.value : null;
@@ -172,6 +176,26 @@ final class AttachmentFileCache implements AttachmentOutgoingFilesPort {
       expiresAt: now.add(lifetime),
     );
     return file;
+  });
+
+  /// The decrypted file of [attachmentId] when its row is `ready`, unexpired
+  /// and names a file that is there, and null otherwise.
+  ///
+  /// Writes nothing: neither the expiry, which only an open moves, nor a row
+  /// whose file is gone, which the next open or sweep returns to `queued`.
+  @override
+  Future<File?> peek(String attachmentId) => _serial(() async {
+    final read = await states.read(attachmentId);
+    final state = read is Success<AttachmentLocalState?> ? read.value : null;
+    final cacheId = state?.cacheId;
+    final expiresAt = state?.expiresAt;
+    if (state?.state != AttachmentTransferState.ready ||
+        cacheId == null ||
+        expiresAt == null ||
+        !expiresAt.isAfter(clock.now().toUtc())) {
+      return null;
+    }
+    return _resolve(cacheId);
   });
 
   /// Deletes the outgoing [copy] with its directory, `outgoing/<id>/`.

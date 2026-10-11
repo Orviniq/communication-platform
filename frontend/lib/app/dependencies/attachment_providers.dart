@@ -8,6 +8,7 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
+import 'package:communication_platform/features/attachments/application/attachment_downloads.dart';
 import 'package:communication_platform/features/attachments/application/attachment_outgoing_holds.dart';
 import 'package:communication_platform/features/attachments/application/attachment_transfer_service.dart';
 import 'package:communication_platform/features/attachments/application/attachment_uploads.dart';
@@ -213,6 +214,42 @@ final attachmentUploadsProvider =
         })
         ..onDispose(() => unawaited(uploads.close()));
       return uploads;
+    });
+
+/// The downloads of one session (ADR-089 D7).
+///
+/// One queue for each [MessagingScope], kept for the life of the process so
+/// that a download goes on when its conversation is closed. The end of the
+/// session closes it: every job is cancelled, and a file one was decrypting
+/// is deleted.
+///
+/// The end is heard through the container rather than through this
+/// provider's own `ref.listen`. Riverpod 3 pauses the subscriptions of a
+/// provider nothing listens to, and a download goes on after its chat is
+/// closed, when nothing does: a paused subscription would not hear the
+/// logout that has to stop it.
+final attachmentDownloadsProvider =
+    Provider.family<AttachmentDownloads, MessagingScope>((ref, scope) {
+      final downloads = AttachmentDownloads(
+        holds: ref.watch(attachmentOutgoingHoldsProvider),
+        files: () => ref.read(attachmentFileCacheProvider.future),
+        states: () => ref.read(attachmentLocalStateProvider.future),
+        transfer: () =>
+            ref.read(attachmentTransferServiceProvider(scope).future),
+      );
+      final session = ref.container.listen(
+        attachmentSessionActiveProvider(scope),
+        (_, active) {
+          if (!active) {
+            unawaited(downloads.close());
+          }
+        },
+      );
+      ref.onDispose(() {
+        session.close();
+        unawaited(downloads.close());
+      });
+      return downloads;
     });
 
 /// The upload jobs of one conversation, for its tray.

@@ -11,12 +11,14 @@ import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/networking_foundation.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_uploads.dart';
 import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_allowance_model.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_download_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_pick_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/infrastructure/attachment_storage.dart';
@@ -31,8 +33,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/application_event_harness.dart';
 import '../../support/attachment_descriptor_fixture.dart';
 import '../../support/attachment_platform_fake.dart';
+import '../../support/local_send_harness.dart';
 
 /// ADR-089 D12: the attachment transport runs on the provisioned trust and the
 /// one token coordinator, and nothing builds it on any other.
@@ -418,6 +422,58 @@ void main() {
         await container.read(attachmentSweepProvider).sweepAfterDeletion();
         expect(await writing.file.parent.exists(), isFalse);
       });
+    });
+
+    test('the downloads of a session end with it', () async {
+      final container = ProviderContainer.test(
+        overrides: [
+          ...base(),
+          attachmentSessionActiveProvider(
+            scope,
+          ).overrideWith((ref) => ref.watch(_sessionProvider)),
+        ],
+      );
+      final downloads = container.read(attachmentDownloadsProvider(scope));
+      final descriptor = testAttachmentDescriptor(capability: capability);
+      // A received message, so the attachment has its row to download into.
+      await applyCommit(
+        database,
+        applicationCommit(
+          eventId: sequentialId(1),
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: peerUserId,
+          senderDevice: peerDeviceId,
+          counter: 1,
+          body: MessageCreateBody(
+            messageId: sequentialId(501),
+            text: '',
+            contentType: MessageContentType.attachment,
+            attachments: [descriptor],
+          ),
+        ),
+      );
+
+      downloads.download(messageId: 'm-1', descriptor: descriptor);
+      // No networking foundation here, so the job fails where it would
+      // download, and waits for a retry.
+      while (downloads.jobs.single.state != AttachmentDownloadState.failed) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      container.read(_sessionProvider.notifier).end();
+      while (downloads.jobs.isNotEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      downloads.download(messageId: 'm-1', descriptor: descriptor);
+
+      expect(downloads.jobs, isEmpty);
+      expect(
+        identical(
+          container.read(attachmentDownloadsProvider(scope)),
+          downloads,
+        ),
+        isTrue,
+      );
     });
   });
 }
