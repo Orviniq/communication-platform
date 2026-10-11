@@ -327,6 +327,10 @@ final class AttachmentCryptoService {
         SecurityFailure(SecurityFailureKind.malformedServerResponse),
       );
     } finally {
+      // A failure stops reading part-way, and the source stays open until its
+      // subscription is cancelled: a file that cannot be deleted on some
+      // platforms, and a handle that outlives the call on every one.
+      await reader.cancel();
       await sink?.close();
       if (session != null) {
         await crypto.closeSession(handle: session.handle, abort: true);
@@ -407,6 +411,13 @@ final class _AttachmentStreamReader {
   }
 
   Future<bool> get hasMore => _ensureCurrent();
+
+  /// Stops reading the source, wherever the reader is in it.
+  Future<void> cancel() async {
+    _done = true;
+    _current = null;
+    await _iterator.cancel();
+  }
 
   Future<bool> _ensureCurrent() async {
     while ((_current == null || _offset == _current!.length) && !_done) {

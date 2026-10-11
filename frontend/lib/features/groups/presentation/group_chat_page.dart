@@ -7,6 +7,7 @@ import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
@@ -165,6 +166,7 @@ class _GroupChatViewState extends State<GroupChatView> {
           securityGate: gate,
           offline: false,
           savedMessages: false,
+          attachments: ChatAttachmentAvailability.notBuilt,
           onIntent: _handleIntent,
         ),
       ],
@@ -281,6 +283,16 @@ class _GroupChatViewState extends State<GroupChatView> {
       unawaited(_send(text));
     } else if (intent case RetryMessageIntent(:final message)) {
       unawaited(_retry(message.id));
+    } else if (intent is OpenAttachmentIntent) {
+      // A group chat sends no attachment in this phase, and its paperclip
+      // says so rather than doing nothing (ADR-089 D1).
+      unawaited(
+        showAppSheet<void>(
+          context: context,
+          semanticLabel: AppLocalizations.of(context).chatAttachAction,
+          child: const AttachmentSheet.notBuilt(),
+        ),
+      );
     }
   }
 

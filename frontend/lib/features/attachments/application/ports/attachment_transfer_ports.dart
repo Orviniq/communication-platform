@@ -18,19 +18,30 @@ final class AttachmentUploadResponse {
   String toString() => 'AttachmentUploadResponse(<redacted>)';
 }
 
+/// Where the temporary files of a transfer are made.
+///
+/// A temporary file's name says nothing about its attachment, so neither
+/// method takes one: a decrypted file gets its display name only when the
+/// attachment cache adopts it.
 abstract interface class AttachmentStoragePort {
   Future<File> createEncryptedTemp();
 
-  Future<File> createDecryptedTemp({required String safeName});
+  Future<File> createDecryptedTemp();
 
   Future<void> delete(File file);
 }
 
 abstract interface class AttachmentTransportPort {
+  /// Uploads [encryptedFile], exactly [bucketSize] bytes.
+  ///
+  /// [onProgress] is told the bytes of the request body sent so far and the
+  /// body's whole length, which is a little more than [bucketSize]: the body is
+  /// multipart.
   Future<Result<AttachmentUploadResponse>> upload({
     required File encryptedFile,
     required int bucketSize,
     CancellationSignal? cancellation,
+    void Function(int sent, int total)? onProgress,
   });
 
   /// Fetches the ciphertext of [capabilityId] and answers the file that holds

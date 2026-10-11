@@ -9,6 +9,7 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
+import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pairwise_application_fanout_adapter.dart';
@@ -55,6 +56,7 @@ void main() {
       protocol: _FixedProtocol(),
       fanout: PairwiseApplicationFanoutAdapter(coordinator),
       clock: const _Clock(),
+      attachments: const _NoSweep(),
     );
     await seedDeviceState(database);
   });
@@ -311,4 +313,11 @@ final class _Clock implements TimeSource {
   @override
   DateTime now() =>
       DateTime.fromMillisecondsSinceEpoch(1700000100000, isUtc: true);
+}
+
+final class _NoSweep implements AttachmentSweepPort {
+  const _NoSweep();
+
+  @override
+  Future<void> sweepAfterDeletion() async {}
 }

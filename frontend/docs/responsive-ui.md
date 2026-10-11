@@ -118,8 +118,10 @@ values.
 The replacement adapter is verified for upward pagination, jump-to-message, dynamic
 edit/reaction/viewport sizing, mixed directionality, keyboard and screen-reader
 semantics, reduced motion, and a 50,000-message fixture with a bounded mounted-widget
-count. Attachment/media builders may be added in piece 16 without changing this
-boundary; the size-notification anchor path is shared by every row builder.
+count. The attachment tiles ([ADR-089](decisions.md), `chat_attachment_tiles.dart`) were
+added inside the message builder without changing this boundary: an inline picture holds
+its place with a placeholder of its ratio until it is decoded, and the size-notification
+anchor path is shared by every row builder.
 
 ## Screen checklist
 
@@ -156,7 +158,11 @@ boundary; the size-notification anchor path is shared by every row builder.
 - **DM Chat:** profile header, local/volatile presence, paged timeline, pinned banner,
   verification-withheld composer, PQ-key-unavailable state, all message actions, and
   honest deletion dialog.
-- **Attachment Sheet/Preview:** photo, file, mobile camera, caption, encrypt/upload states.
+- **Attachment Sheet/Preview** (a DM and Saved Messages, [ADR-089](decisions.md)): photo,
+  file and camera through the system's pickers, a preview with the sizes, today's remainder
+  and a caption, and a details sheet with Open, Save and Share; the encrypt and upload states
+  are rows of the upload tray above the composer. A group chat's sheet says attachments are
+  not built there.
 - **Pinned Messages:** list, jump, authorized unpin.
 - **Forward Picker:** multi-select DMs/groups/Saved Messages; forwarding creates new
   encrypted sends.
@@ -169,7 +175,9 @@ boundary; the size-notification anchor path is shared by every row builder.
   client-side Block/Unblock.
 - **Safety Number:** master-key SAS and QR, cross-sign confirmation, messaging-withheld
   unverified state, master-key change, invalid device, and device-log-fork blocking states.
-- **Shared Media:** local decrypted index, open and jump, safe file handling.
+- **Shared Media:** local decrypted index, open and jump, safe file handling. Not built
+  ([ADR-089](decisions.md) D1): its rows on Contact Profile and Group Info are drawn
+  disabled.
 - **Create Group:** pick members, encrypted details, owner creation, progress/failure.
 - **Group Info:** encrypted header, policy/role/member list, add/remove/leave actions.
 - **Edit Group:** encrypted identity, invite policy, history-sharing policy with honest

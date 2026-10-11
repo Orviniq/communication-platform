@@ -7,6 +7,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 
@@ -16,12 +17,16 @@ final class SendConversationEvents {
     required this.protocol,
     required this.fanout,
     required this.clock,
+    required this.attachments,
   });
 
   final ConversationRepositoryPort repository;
   final ApplicationProtocolPort protocol;
   final ApplicationFanoutPort fanout;
   final TimeSource clock;
+
+  /// Deletes the decrypted files a deletion for everyone leaves unnamed.
+  final AttachmentSweepPort attachments;
 
   Future<Result<SendMessageOutcome>> sendText({
     required String currentUserId,
@@ -79,6 +84,11 @@ final class SendConversationEvents {
   /// Falling back to a fresh send covers the one case with nothing to re-arm: a
   /// message whose operation record has already been pruned. It is the older
   /// behaviour, kept for the case that is genuinely a new send.
+  ///
+  /// A message that carries [attachments] falls back to the same descriptors
+  /// with [text] as their caption, never to the caption alone (ADR-089 D11).
+  /// The descriptors name uploads the server still holds, so nothing is
+  /// uploaded again. An attachment message carries no reply reference.
   Future<Result<void>> retrySend({
     required String currentUserId,
     required String currentDeviceId,
@@ -87,6 +97,8 @@ final class SendConversationEvents {
     required String text,
     String? replyToMessageId,
     String? quoteFallback,
+    List<EncryptedAttachmentDescriptor> attachments = const [],
+    bool imageMessage = false,
   }) async {
     final rearmed = await fanout.retryFailedSend('application:$messageId');
     if (rearmed case FailureResult(failure: final failure)) {
@@ -95,17 +107,55 @@ final class SendConversationEvents {
     if ((rearmed as Success<bool>).value) {
       return const Result.success(null);
     }
-    final sent = await sendText(
+    final sent = await forward(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
       target: target,
       text: text,
       replyToMessageId: replyToMessageId,
       quoteFallback: quoteFallback,
+      attachments: attachments,
+      imageMessage: imageMessage,
     );
     return sent.fold(
       onSuccess: (_) => const Result.success(null),
       onFailure: Result.failure,
+    );
+  }
+
+  /// Sends the content of a message as a new message to [target]: [text]
+  /// alone, or [attachments] with [text] as their caption (ADR-089 D11).
+  ///
+  /// A forwarded attachment names the same upload, which the server does not
+  /// copy, so it expires on the date of the first send. [replyToMessageId]
+  /// and [quoteFallback] go with a text message only.
+  Future<Result<SendMessageOutcome>> forward({
+    required String currentUserId,
+    required String currentDeviceId,
+    required ConversationTarget target,
+    required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
+    List<EncryptedAttachmentDescriptor> attachments = const [],
+    bool imageMessage = false,
+  }) {
+    if (attachments.isEmpty) {
+      return sendText(
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        target: target,
+        text: text,
+        replyToMessageId: replyToMessageId,
+        quoteFallback: quoteFallback,
+      );
+    }
+    return sendAttachments(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      target: target,
+      attachments: attachments,
+      caption: text.trim().isEmpty ? null : text,
+      imageMessage: imageMessage,
     );
   }
 
@@ -199,7 +249,7 @@ final class SendConversationEvents {
     if (authorized case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    return _sendMutation(
+    final deleted = await _sendMutation(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
       conversationId: conversationId,
@@ -207,6 +257,12 @@ final class SendConversationEvents {
       targetMessageId: messageId,
       body: (target) => MessageDeleteBody(targetMessageId: target),
     );
+    // The local commit projected the message with no attachment row, so a
+    // file this device downloaded for it is now unnamed (ADR-089 D10).
+    if (deleted is Success<void>) {
+      await attachments.sweepAfterDeletion();
+    }
+    return deleted;
   }
 
   /// Sets or, with a null [emoji], removes this user's reaction.
@@ -568,9 +624,15 @@ final class SendConversationEvents {
 }
 
 final class ManageLocalConversationState {
-  const ManageLocalConversationState(this.repository);
+  const ManageLocalConversationState(
+    this.repository, {
+    required this.attachments,
+  });
 
   final ConversationRepositoryPort repository;
+
+  /// Deletes the decrypted files a local deletion leaves unnamed.
+  final AttachmentSweepPort attachments;
 
   Future<Result<void>> saveDraft({
     required String conversationId,
@@ -594,15 +656,16 @@ final class ManageLocalConversationState {
   );
 
   Future<Result<void>> deleteForMe(String messageId) =>
-      repository.deleteForMe(messageId);
+      _thenSweep(repository.deleteForMe(messageId));
 
   Future<Result<void>> setStar({
     required String messageId,
     required bool starred,
   }) => repository.setStar(messageId: messageId, starred: starred);
 
+  /// Clears the conversation's history on this device.
   Future<Result<void>> deleteConversationForMe(String conversationId) =>
-      repository.deleteConversationForMe(conversationId);
+      _thenSweep(repository.deleteConversationForMe(conversationId));
 
   Future<Result<List<String>>> markRead(String conversationId) =>
       repository.markConversationRead(conversationId);
@@ -614,6 +677,16 @@ final class ManageLocalConversationState {
     conversationId: conversationId,
     currentUserId: currentUserId,
   );
+
+  /// A deletion deletes the attachment rows of the messages it took, so the
+  /// files they named are swept once it is committed (ADR-089 D10).
+  Future<Result<void>> _thenSweep(Future<Result<void>> deletion) async {
+    final deleted = await deletion;
+    if (deleted is Success<void>) {
+      await attachments.sweepAfterDeletion();
+    }
+    return deleted;
+  }
 }
 
 final class FlushPendingDeliveredReceipts {

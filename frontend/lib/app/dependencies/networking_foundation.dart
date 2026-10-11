@@ -1,6 +1,8 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
+import 'package:communication_platform/features/attachments/infrastructure/attachment_transport.dart';
 import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
@@ -30,9 +32,11 @@ final class NetworkingFoundation {
     required Uri serverOrigin,
     required SocketConnector socketConnector,
     required NetworkDiagnostics diagnostics,
+    required TransportSecurity transportSecurity,
   }) : _serverOrigin = serverOrigin,
        _socketConnector = socketConnector,
-       _diagnostics = diagnostics;
+       _diagnostics = diagnostics,
+       _transportSecurity = transportSecurity;
 
   factory NetworkingFoundation.create({
     required Uri serverOrigin,
@@ -70,6 +74,7 @@ final class NetworkingFoundation {
       // client would refuse.
       socketConnector: socketConnector ?? transportSecurity.socketConnector,
       diagnostics: diagnostics,
+      transportSecurity: transportSecurity,
     );
   }
 
@@ -78,6 +83,10 @@ final class NetworkingFoundation {
   final Uri _serverOrigin;
   final SocketConnector _socketConnector;
   final NetworkDiagnostics _diagnostics;
+
+  /// The trust the REST client was built with, kept for the transports that
+  /// cannot share the REST client's `Dio`.
+  final TransportSecurity _transportSecurity;
 
   /// Builds the authenticated gateway for one delivery session.
   ///
@@ -105,4 +114,44 @@ final class NetworkingFoundation {
     diagnostics: _diagnostics,
     keepAlive: keepAlive,
   );
+
+  /// Builds the attachment transport for one session (ADR-089 D12).
+  ///
+  /// An attachment streams a multipart body up and a byte stream down, which
+  /// the REST client's JSON-envelope path cannot carry, so it gets a `Dio` of
+  /// its own: on the adapter of the same provisioned trust, on the same
+  /// origin, following no redirect. It is not given its own tokens: it asks
+  /// the one coordinator the whole application shares, so a renewal, a logout
+  /// and a revocation decide its session with everything else's.
+  ///
+  /// Throws a [StateError] when this foundation holds the platform's default
+  /// trust, which the client's own transport never uses (ADR-043): there is no
+  /// attachment transport then rather than one that trusts the public root
+  /// store. The transport owns its `Dio`, and closing it closes that.
+  DioAttachmentTransport attachmentTransport({
+    required ServerConfigSnapshot config,
+    required AttachmentAllowancePort allowance,
+    required TimeSource clock,
+    required AttachmentStoragePort storage,
+  }) {
+    final adapter = _transportSecurity.httpClientAdapter;
+    if (adapter == null) {
+      throw StateError('Attachments need the provisioned trust.');
+    }
+    return DioAttachmentTransport(
+      tokens: tokenCoordinator,
+      config: config,
+      allowance: allowance,
+      clock: clock,
+      storage: storage,
+      dio: Dio(
+        BaseOptions(
+          baseUrl: _serverOrigin.toString(),
+          followRedirects: false,
+          maxRedirects: 0,
+          validateStatus: (_) => true,
+        ),
+      )..httpClientAdapter = adapter,
+    );
+  }
 }

@@ -4,10 +4,11 @@ Flutter client for Android. There is no browser target: the server serves no bro
 surface, so a web build cannot connect. The product name and all brand assets remain
 provisional. Registration, login, device enrollment and cross-signing, contacts, direct
 messaging, Saved Messages, local search, linked devices, history transfer,
-notifications, background delivery, the settings surfaces and the user-initiated
-diagnostics export are implemented; voice rooms, file attachments, shared media and
-profile publishing are not, and every surface that is routed without an implementation
-behind it says so ([ADR-045](docs/decisions.md)).
+notifications, background delivery, the settings surfaces, the user-initiated
+diagnostics export, voice rooms, and file attachments in direct chats and Saved Messages
+are implemented ([ADR-089](docs/decisions.md)); attachments in group chats, shared media
+and profile publishing are not, and every surface that is routed without an
+implementation behind it says so ([ADR-045](docs/decisions.md)).
 `docs/implementation-checklist.md` is the live status.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under

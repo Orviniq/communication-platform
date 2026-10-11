@@ -3,12 +3,16 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
+import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/attachment_descriptor_fixture.dart';
 
 void main() {
   const currentUser = '00000000-0000-0000-0000-000000000001';
@@ -17,17 +21,20 @@ void main() {
   late _Repository repository;
   late _Protocol protocol;
   late _Fanout fanout;
+  late _Sweep sweep;
   late SendConversationEvents sender;
 
   setUp(() {
     repository = _Repository();
     protocol = _Protocol();
     fanout = _Fanout();
+    sweep = _Sweep();
     sender = SendConversationEvents(
       repository: repository,
       protocol: protocol,
       fanout: fanout,
       clock: const _Clock(),
+      attachments: sweep,
     );
   });
 
@@ -101,6 +108,121 @@ void main() {
     expect(retried, isA<Success<void>>());
     expect(fanout.rearmed, ['application:aabb']);
     expect(fanout.events, hasLength(1));
+  });
+
+  group('an attachment message (ADR-089 D11)', () {
+    final photo = testAttachmentDescriptor(
+      capability: testCapability(4),
+      displayName: 'photo.jpg',
+      mimeType: 'image/jpeg',
+      mediaKind: AttachmentMediaKind.image,
+    );
+    final minutes = testAttachmentDescriptor(capability: testCapability(5));
+
+    test('retried with nothing to re-arm sends its descriptors and its '
+        'caption, never the caption alone', () async {
+      fanout.hasFailedSend = false;
+
+      final retried = await sender.retrySend(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        messageId: 'aabb',
+        text: 'the view',
+        replyToMessageId: _messageOne,
+        attachments: [photo],
+        imageMessage: true,
+      );
+
+      expect(retried, isA<Success<void>>());
+      expect(fanout.rearmed, ['application:aabb']);
+      final body = fanout.events.single.event.body as MessageCreateBody;
+      expect(body.attachments.single.capabilityId, photo.capabilityId);
+      expect(body.contentType, MessageContentType.image);
+      expect(body.text, 'the view');
+      expect(body.replyToMessageId, isNull);
+    });
+
+    test(
+      'retried with no caption sends the descriptors with no text',
+      () async {
+        fanout.hasFailedSend = false;
+
+        await sender.retrySend(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          target: const SavedConversationTarget(),
+          messageId: 'aabb',
+          text: '',
+          attachments: [minutes],
+        );
+
+        final body = fanout.events.single.event.body as MessageCreateBody;
+        expect(body.attachments.single.capabilityId, minutes.capabilityId);
+        expect(body.contentType, MessageContentType.attachment);
+        expect(body.text, isEmpty);
+      },
+    );
+
+    test('retried with a send to re-arm sends nothing new', () async {
+      fanout.hasFailedSend = true;
+
+      await sender.retrySend(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        messageId: 'aabb',
+        text: 'the view',
+        attachments: [photo],
+      );
+
+      expect(fanout.events, isEmpty);
+    });
+
+    test(
+      'forwarded sends its descriptors and its caption to each target',
+      () async {
+        for (final target in const <ConversationTarget>[
+          DirectConversationTarget(peerUser),
+          SavedConversationTarget(),
+        ]) {
+          final sent = await sender.forward(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            target: target,
+            text: 'minutes for Monday',
+            attachments: [minutes],
+          );
+          expect(sent, isA<Success<SendMessageOutcome>>());
+        }
+
+        expect(fanout.events, hasLength(2));
+        for (final event in fanout.events) {
+          final body = event.event.body as MessageCreateBody;
+          expect(body.attachments.single.capabilityId, minutes.capabilityId);
+          expect(body.text, 'minutes for Monday');
+          expect(body.contentType, MessageContentType.attachment);
+        }
+        expect(fanout.events.first.peerUserId, peerUser);
+        expect(fanout.events.last.peerUserId, isNull);
+      },
+    );
+
+    test('a forwarded text message keeps its own path', () async {
+      await sender.forward(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        text: 'just words',
+        quoteFallback: 'a quote',
+      );
+
+      final body = fanout.events.single.event.body as MessageCreateBody;
+      expect(body.attachments, isEmpty);
+      expect(body.contentType, MessageContentType.text);
+      expect(body.text, 'just words');
+      expect(body.quoteFallback, 'a quote');
+    });
   });
 
   test('a malformed peer id is refused rather than thrown', () async {
@@ -310,6 +432,52 @@ void main() {
     expect(fanout.events, isEmpty);
   });
 
+  test('a committed deletion sweeps the attachment cache, and a refused '
+      'one does not (ADR-089 D10)', () async {
+    repository.conversation = const ConversationSummary(
+      conversationId: _directConversationHex,
+      kind: ConversationKind.direct,
+      peerUserId: peerUser,
+      lastMessage: null,
+      lastActivityMs: 0,
+      unreadCount: 0,
+      mutedUntil: null,
+      draft: null,
+      pinnedMessageIds: {},
+    );
+    final local = ManageLocalConversationState(repository, attachments: sweep);
+
+    expect(
+      await sender.deleteForEveryone(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        conversationId: _directConversationHex,
+        messageId: _messageOne,
+      ),
+      isA<Success<void>>(),
+    );
+    expect(sweep.sweeps, 1);
+    expect(await local.deleteForMe(_messageTwo), isA<Success<void>>());
+    expect(sweep.sweeps, 2);
+    expect(
+      await local.deleteConversationForMe(_directConversationHex),
+      isA<Success<void>>(),
+    );
+    expect(sweep.sweeps, 3);
+
+    repository.originalSender = false;
+    expect(
+      await sender.deleteForEveryone(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        conversationId: _directConversationHex,
+        messageId: _messageOne,
+      ),
+      isA<FailureResult<void>>(),
+    );
+    expect(sweep.sweeps, 3);
+  });
+
   test(
     'Saved Messages supports local deletion but no remote-delete event',
     () async {
@@ -500,6 +668,15 @@ final class _Protocol implements ApplicationProtocolPort {
   @override
   Future<Result<Uint8List>> generateEventId() async =>
       Result.success(Uint8List.fromList(List<int>.filled(16, next++)));
+}
+
+final class _Sweep implements AttachmentSweepPort {
+  int sweeps = 0;
+
+  @override
+  Future<void> sweepAfterDeletion() async {
+    sweeps += 1;
+  }
 }
 
 final class _Fanout implements ApplicationFanoutPort {

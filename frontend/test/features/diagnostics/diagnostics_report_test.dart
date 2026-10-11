@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/features/attachments/infrastructure/drift_attachment_allowance_store.dart';
 import 'package:communication_platform/features/diagnostics/application/collect_diagnostics.dart';
 import 'package:communication_platform/features/diagnostics/application/ports/diagnostics_ports.dart';
 import 'package:communication_platform/features/diagnostics/domain/diagnostics_report.dart';
@@ -188,6 +190,10 @@ void main() {
         expect(rendered, contains('pending_inbound=1-9'));
         expect(rendered, contains('quarantined_input=1-9'));
         expect(rendered, contains('queue_gap_detected=no'));
+        // Attachments add no entry (ADR-089 D14): their rows, their cache
+        // ids and the day's upload count stay out of the report whole.
+        expect(rendered.toLowerCase(), isNot(contains('attachment')));
+        expect(rendered.toLowerCase(), isNot(contains('upload')));
       },
     );
 
@@ -385,6 +391,40 @@ Future<void> _fillWithCanaries(LocalDatabase database) async {
       .insert(
         LocalPreferencesCompanion.insert(
           preferenceKey: _canary,
+          valueCiphertext: canaryBytes,
+          valueVersion: 1,
+        ),
+      );
+  // ADR-089: an attachment row as the projector writes it, its descriptor
+  // stuffed too, with the cache id of a downloaded file; and the day's upload
+  // count, under the key the allowance store uses.
+  await database
+      .into(database.attachments)
+      .insert(
+        AttachmentsCompanion.insert(
+          attachmentId: _canary,
+          messageId: '$_canary-message',
+          encryptedDescriptor: Uint8List.fromList(
+            utf8.encode(
+              jsonEncode({
+                'capability': _canary,
+                'key': base64Url.encode(canaryBytes),
+                'name': '$_canary.pdf',
+                'mime': 'application/pdf',
+                'caption': _canary,
+              }),
+            ),
+          ),
+          transferState: AttachmentTransferState.ready.index,
+          boundedCacheHandleCiphertext: Value(canaryBytes),
+          cacheExpiresAt: Value(DateTime.utc(2026, 10, 18)),
+        ),
+      );
+  await database
+      .into(database.localPreferences)
+      .insert(
+        LocalPreferencesCompanion.insert(
+          preferenceKey: DriftAttachmentAllowanceStore.allowanceKey,
           valueCiphertext: canaryBytes,
           valueVersion: 1,
         ),

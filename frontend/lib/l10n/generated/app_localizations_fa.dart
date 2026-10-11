@@ -978,15 +978,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatYouAuthor => 'شما';
 
   @override
-  String get chatAttachmentsUnavailable => 'باز کردن یا ذخیرهٔ فایل تأییدشده';
-
-  @override
   String get attachmentChoosePrompt =>
       'رسانه یا فایل رمزنگاری‌شده را انتخاب کنید.';
 
   @override
   String get attachmentsNotBuiltNotice =>
-      'پیوست فایل هنوز ساخته نشده است. در این نسخه نمی‌توان چیزی به پیام پیوست کرد.';
+      'گفت‌وگوهای گروهی هنوز نمی‌توانند فایل بفرستند. فایل را می‌توان در گفت‌وگوهای دونفره و در پیام‌های ذخیره‌شده فرستاد.';
 
   @override
   String get attachmentPhotoOption => 'عکس یا تصویر';
@@ -1004,41 +1001,266 @@ class AppLocalizationsFa extends AppLocalizations {
   String get attachmentFileLabel => 'پیوست رمزنگاری‌شده';
 
   @override
-  String get attachmentOpenHint => 'پس از تأیید محلی باز کنید';
+  String get attachmentPickBusy =>
+      'یک انتخابگر دیگر باز است. اول کار آن را تمام کنید.';
 
   @override
-  String get attachmentQueuedState => 'پیوست در صف است';
+  String attachmentPickTooLarge(String size) {
+    return 'این فایل برای ارسال خیلی بزرگ است. بزرگ‌ترین فایل $size است.';
+  }
 
   @override
-  String get attachmentDownloadingState => 'در حال دریافت پیوست';
+  String get attachmentPickUnsupportedImage =>
+      'این تصویر روی این گوشی خوانده نمی‌شود. آن را به‌صورت فایل بفرستید.';
 
   @override
-  String get attachmentVerifyingState => 'در حال تأیید پیوست';
+  String get attachmentPickUnreadable => 'فایل خوانده نشد. چیزی پیوست نشد.';
 
   @override
-  String get attachmentReadyState => 'پیوست تأییدشده';
+  String get attachmentPickNoCamera => 'هیچ برنامهٔ دوربینی روی این گوشی نیست.';
 
   @override
-  String get attachmentExpiredState => 'پیوست منقضی شده است';
+  String get attachmentPickRefused => 'گوشی فایل را نپذیرفت. چیزی پیوست نشد.';
 
   @override
-  String get attachmentCancelledState => 'پیوست لغو شده است';
+  String get attachmentPickMalformed =>
+      'انتخابگر پاسخی داد که این برنامه نمی‌پذیرد. چیزی پیوست نشد.';
 
   @override
-  String get attachmentQuotaState => 'سهمیهٔ پیوست تمام شده است';
+  String get attachmentEnqueueFailed => 'پیوست اضافه نشد. چیزی ارسال نشد.';
 
   @override
-  String get attachmentUnsupportedState => 'پیوست پشتیبانی نمی‌شود';
+  String get attachmentPreviewTitle => 'ارسال پیوست';
 
   @override
-  String get attachmentCorruptState => 'پیوست خراب است';
+  String get attachmentPreviewImageLabel => 'تصویری که فرستاده می‌شود';
 
   @override
-  String get attachmentFailedState => 'پیوست ناموفق بود';
+  String attachmentPreviewFileSize(String size) {
+    return 'اندازه: $size';
+  }
 
   @override
-  String attachmentDetails(String mimeType, int size) {
-    return '$mimeType · $size بایت';
+  String attachmentPreviewUploadSize(String size) {
+    return 'اندازهٔ بارگذاری: $size';
+  }
+
+  @override
+  String attachmentPreviewRemaining(String size) {
+    return 'باقی‌ماندهٔ امروز: $size';
+  }
+
+  @override
+  String attachmentPreviewOverRemainder(
+    String upload,
+    String remaining,
+    String time,
+  ) {
+    return 'این بارگذاری $upload لازم دارد و از سهمیهٔ امروز $remaining مانده است. سهمیه ساعت $time از نو شروع می‌شود.';
+  }
+
+  @override
+  String get attachmentPreviewNotTaken =>
+      'این سرور بارگذاری با این اندازه را نمی‌پذیرد.';
+
+  @override
+  String get attachmentCaptionLabel => 'توضیح';
+
+  @override
+  String get attachmentCaptionHint => 'توضیحی بنویسید (اختیاری)';
+
+  @override
+  String attachmentCaptionCharacters(int count, int limit) {
+    return '$count/$limit نویسه';
+  }
+
+  @override
+  String attachmentCaptionBytes(int count, int limit) {
+    return '$count/$limit بایت از مشخصات';
+  }
+
+  @override
+  String attachmentCaptionTooLong(int limit) {
+    return 'با این توضیح، مشخصات فایل از $limit بایت، بیشترین اندازه‌ای که یک پیوست دارد، بیشتر می‌شود. توضیح را کوتاه‌تر کنید.';
+  }
+
+  @override
+  String get attachmentSendAction => 'ارسال';
+
+  @override
+  String attachmentSizeBytes(String value) {
+    return '$value بایت';
+  }
+
+  @override
+  String attachmentSizeKilobytes(String value) {
+    return '$value کیلوبایت';
+  }
+
+  @override
+  String attachmentSizeMegabytes(String value) {
+    return '$value مگابایت';
+  }
+
+  @override
+  String get attachmentUploadsLabel => 'بارگذاری‌ها';
+
+  @override
+  String get attachmentUploadWaiting => 'در انتظار';
+
+  @override
+  String get attachmentUploadEncrypting => 'در حال رمزنگاری';
+
+  @override
+  String get attachmentUploadUploading => 'در حال بارگذاری';
+
+  @override
+  String get attachmentUploadSending => 'در حال ارسال';
+
+  @override
+  String attachmentUploadProgress(String state, int percent) {
+    return '$state، $percent٪';
+  }
+
+  @override
+  String attachmentUploadAllowanceSpent(String time) {
+    return 'سهمیهٔ بارگذاری امروز تمام شده است. ساعت $time از نو شروع می‌شود.';
+  }
+
+  @override
+  String get attachmentUploadTooLarge => 'فایل برای سرور خیلی بزرگ است.';
+
+  @override
+  String get attachmentUploadStorageFull =>
+      'فضای ذخیره‌سازی سرور پر است. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get attachmentUploadThrottled =>
+      'تعداد انتقال‌ها بیش از حد است. یک دقیقهٔ دیگر دوباره تلاش کنید.';
+
+  @override
+  String get attachmentUploadOffline =>
+      'اتصالی برقرار نیست. وقتی آنلاین شدید دوباره تلاش کنید.';
+
+  @override
+  String get attachmentUploadFailed => 'بارگذاری انجام نشد.';
+
+  @override
+  String get attachmentUploadCancelAction => 'لغو بارگذاری';
+
+  @override
+  String get attachmentUploadRetryAction => 'تلاش مجدد برای بارگذاری';
+
+  @override
+  String get attachmentUploadDiscardAction => 'دور انداختن بارگذاری';
+
+  @override
+  String attachmentUploadAnnouncement(String name, String state) {
+    return '$name: $state';
+  }
+
+  @override
+  String attachmentTileSemantics(
+    String kind,
+    String name,
+    String size,
+    String state,
+  ) {
+    return '$kind: $name، $size، $state';
+  }
+
+  @override
+  String get attachmentNotDownloaded => 'بارگیری نشده';
+
+  @override
+  String get attachmentDownloadWaiting => 'در انتظار بارگیری';
+
+  @override
+  String attachmentDownloading(int percent) {
+    return 'در حال بارگیری، $percent٪';
+  }
+
+  @override
+  String attachmentVerifying(int percent) {
+    return 'در حال بررسی، $percent٪';
+  }
+
+  @override
+  String get attachmentReady => 'بارگیری و بررسی شد';
+
+  @override
+  String get attachmentExpired =>
+      'منقضی شده: سرور دیگر این فایل را نگه نمی‌دارد';
+
+  @override
+  String get attachmentDamaged =>
+      'آسیب‌دیده: این فایل از بررسی سربلند بیرون نیامد و چیزی نگه داشته نشد';
+
+  @override
+  String get attachmentDownloadFailed => 'بارگیری انجام نشد';
+
+  @override
+  String get attachmentDownloadHint => 'بارگیری';
+
+  @override
+  String get attachmentCancelDownloadHint => 'لغو بارگیری';
+
+  @override
+  String get attachmentRetryDownloadHint => 'تلاش دوباره برای بارگیری';
+
+  @override
+  String get attachmentDetailsHint => 'نمایش باز کردن، ذخیره و اشتراک‌گذاری';
+
+  @override
+  String get attachmentPictureUnavailable => 'این تصویر قابل نمایش نیست';
+
+  @override
+  String attachmentDetailsLine(String type, String size) {
+    return '$type · $size';
+  }
+
+  @override
+  String attachmentServerRetention(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'سرور نسخهٔ رمزنگاری‌شده را تا $days روز پس از ارسال نگه می‌دارد.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get attachmentOpenAction => 'باز کردن';
+
+  @override
+  String get attachmentSaveAction => 'ذخیره';
+
+  @override
+  String get attachmentShareAction => 'اشتراک‌گذاری';
+
+  @override
+  String get attachmentOpenNoApp =>
+      'هیچ برنامه‌ای در این گوشی نمی‌تواند این فایل را باز کند. به‌جای آن، ذخیره‌اش کنید.';
+
+  @override
+  String get attachmentSaveFailed => 'فایل ذخیره نشد.';
+
+  @override
+  String get attachmentFileMissing =>
+      'این فایل دیگر روی این گوشی نیست. آن را دوباره از پیامش بارگیری کنید.';
+
+  @override
+  String get attachmentActionFailed => 'گوشی فایل را نپذیرفت.';
+
+  @override
+  String chatDeleteAttachmentNote(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other:
+          'نسخهٔ رمزنگاری‌شده روی سرور تا انقضایش، حداکثر $days روز، می‌ماند و هیچ‌کس بی کلیدِ درون پیام نمی‌تواند آن را بخواند.',
+    );
+    return '$_temp0';
   }
 
   @override

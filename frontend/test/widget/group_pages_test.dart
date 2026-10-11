@@ -7,6 +7,7 @@ import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/create_group_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
@@ -159,6 +160,42 @@ void main() {
     expect(find.text('Past message remains readable'), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-composer-field')), findsNothing);
     expect(find.textContaining('read-only'), findsWidgets);
+  });
+
+  testWidgets('the group paperclip opens the sheet that says attachments '
+      'are not built for a group', (tester) async {
+    // It used to do nothing at all: the page handled send and retry, and
+    // dropped every other intent (ADR-089 D1).
+    await _pump(
+      tester,
+      GroupChatPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        injectedMessages: const [],
+        currentUserId: _owner,
+        onSend: (_) async => const Result.success(null),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Attach'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('app-sheet-surface')),
+        matching: find.byType(AttachmentSheet),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Group chats cannot send files yet. Files can be sent in direct '
+        'chats and in Saved Messages.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Not built yet'), findsOneWidget);
+    expect(find.text('Photo or image'), findsNothing);
   });
 
   testWidgets('wide group chat exposes a bounded information panel', (

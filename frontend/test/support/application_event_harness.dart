@@ -181,10 +181,37 @@ Future<void> expectAggregatesRecomputed(LocalDatabase database) async {
     );
     expect(
       conversation.listProjectionCiphertext,
-      latest?.projectionCiphertext ?? Uint8List(0),
+      latest == null ? Uint8List(0) : await _expectedPreview(database, latest),
       reason: where,
     );
   }
+}
+
+/// The text of [latest], or, for a message with an attachment and no caption,
+/// the name of its first attachment (ADR-089 D10).
+Future<Uint8List> _expectedPreview(
+  LocalDatabase database,
+  Message latest,
+) async {
+  if (latest.projectionCiphertext.isNotEmpty || latest.deletedForEveryone) {
+    return latest.projectionCiphertext;
+  }
+  final rows = await database
+      .customSelect(
+        'SELECT encrypted_descriptor FROM attachments WHERE message_id = ? '
+        'ORDER BY rowid',
+        variables: [Variable<String>(latest.messageId)],
+      )
+      .get();
+  if (rows.isEmpty) {
+    return Uint8List(0);
+  }
+  final stored = jsonDecode(
+    utf8.decode(rows.first.read<Uint8List>('encrypted_descriptor')),
+  );
+  return stored is Map<String, Object?> && stored['name'] is String
+      ? Uint8List.fromList(utf8.encode(stored['name']! as String))
+      : Uint8List(0);
 }
 
 /// Discards the projection, keeping the log and the local-only columns with it.

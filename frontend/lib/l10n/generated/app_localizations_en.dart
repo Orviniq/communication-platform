@@ -979,14 +979,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatYouAuthor => 'You';
 
   @override
-  String get chatAttachmentsUnavailable => 'Open or save verified file';
-
-  @override
   String get attachmentChoosePrompt => 'Choose encrypted media or a file.';
 
   @override
   String get attachmentsNotBuiltNotice =>
-      'File attachments are not built yet. Nothing can be attached to a message in this build.';
+      'Group chats cannot send files yet. Files can be sent in direct chats and in Saved Messages.';
 
   @override
   String get attachmentPhotoOption => 'Photo or image';
@@ -1004,41 +1001,276 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachmentFileLabel => 'Encrypted attachment';
 
   @override
-  String get attachmentOpenHint => 'Open after local verification';
+  String get attachmentPickBusy =>
+      'A picker is already open. Finish with it first.';
 
   @override
-  String get attachmentQueuedState => 'attachment queued';
+  String attachmentPickTooLarge(String size) {
+    return 'This file is too large to send. The largest file is $size.';
+  }
 
   @override
-  String get attachmentDownloadingState => 'downloading attachment';
+  String get attachmentPickUnsupportedImage =>
+      'This picture cannot be read on this phone. Send it as a file instead.';
 
   @override
-  String get attachmentVerifyingState => 'verifying attachment';
+  String get attachmentPickUnreadable =>
+      'The file could not be read. Nothing was attached.';
 
   @override
-  String get attachmentReadyState => 'verified attachment';
+  String get attachmentPickNoCamera =>
+      'No camera app is available on this phone.';
 
   @override
-  String get attachmentExpiredState => 'attachment expired';
+  String get attachmentPickRefused =>
+      'The phone refused the file. Nothing was attached.';
 
   @override
-  String get attachmentCancelledState => 'attachment cancelled';
+  String get attachmentPickMalformed =>
+      'The picker gave an answer this app does not accept. Nothing was attached.';
 
   @override
-  String get attachmentQuotaState => 'attachment quota exceeded';
+  String get attachmentEnqueueFailed =>
+      'The attachment could not be added. Nothing was sent.';
 
   @override
-  String get attachmentUnsupportedState => 'attachment unsupported';
+  String get attachmentPreviewTitle => 'Send an attachment';
 
   @override
-  String get attachmentCorruptState => 'attachment corrupt';
+  String get attachmentPreviewImageLabel => 'The picture to send';
 
   @override
-  String get attachmentFailedState => 'attachment failed';
+  String attachmentPreviewFileSize(String size) {
+    return 'Size: $size';
+  }
 
   @override
-  String attachmentDetails(String mimeType, int size) {
-    return '$mimeType · $size bytes';
+  String attachmentPreviewUploadSize(String size) {
+    return 'Upload size: $size';
+  }
+
+  @override
+  String attachmentPreviewRemaining(String size) {
+    return 'Left today: $size';
+  }
+
+  @override
+  String attachmentPreviewOverRemainder(
+    String upload,
+    String remaining,
+    String time,
+  ) {
+    return 'This upload needs $upload, and today has $remaining left. The allowance resets at $time.';
+  }
+
+  @override
+  String get attachmentPreviewNotTaken =>
+      'This server takes no upload of this size.';
+
+  @override
+  String get attachmentCaptionLabel => 'Caption';
+
+  @override
+  String get attachmentCaptionHint => 'Add a caption (optional)';
+
+  @override
+  String attachmentCaptionCharacters(int count, int limit) {
+    return '$count/$limit characters';
+  }
+
+  @override
+  String attachmentCaptionBytes(int count, int limit) {
+    return '$count/$limit bytes of details';
+  }
+
+  @override
+  String attachmentCaptionTooLong(int limit) {
+    return 'With this caption the file\'s details pass $limit bytes, the most an attachment carries. Shorten the caption.';
+  }
+
+  @override
+  String get attachmentSendAction => 'Send';
+
+  @override
+  String attachmentSizeBytes(String value) {
+    return '$value B';
+  }
+
+  @override
+  String attachmentSizeKilobytes(String value) {
+    return '$value KB';
+  }
+
+  @override
+  String attachmentSizeMegabytes(String value) {
+    return '$value MB';
+  }
+
+  @override
+  String get attachmentUploadsLabel => 'Uploads';
+
+  @override
+  String get attachmentUploadWaiting => 'Waiting';
+
+  @override
+  String get attachmentUploadEncrypting => 'Encrypting';
+
+  @override
+  String get attachmentUploadUploading => 'Uploading';
+
+  @override
+  String get attachmentUploadSending => 'Sending';
+
+  @override
+  String attachmentUploadProgress(String state, int percent) {
+    return '$state, $percent%';
+  }
+
+  @override
+  String attachmentUploadAllowanceSpent(String time) {
+    return 'Today\'s upload allowance is spent. It resets at $time.';
+  }
+
+  @override
+  String get attachmentUploadTooLarge =>
+      'The file is too large for the server.';
+
+  @override
+  String get attachmentUploadStorageFull =>
+      'The server\'s storage is full. Try again later.';
+
+  @override
+  String get attachmentUploadThrottled =>
+      'Too many transfers. Try again in a minute.';
+
+  @override
+  String get attachmentUploadOffline =>
+      'No connection. Try again when you are online.';
+
+  @override
+  String get attachmentUploadFailed => 'The upload failed.';
+
+  @override
+  String get attachmentUploadCancelAction => 'Cancel upload';
+
+  @override
+  String get attachmentUploadRetryAction => 'Retry upload';
+
+  @override
+  String get attachmentUploadDiscardAction => 'Discard upload';
+
+  @override
+  String attachmentUploadAnnouncement(String name, String state) {
+    return '$name: $state';
+  }
+
+  @override
+  String attachmentTileSemantics(
+    String kind,
+    String name,
+    String size,
+    String state,
+  ) {
+    return '$kind: $name, $size, $state';
+  }
+
+  @override
+  String get attachmentNotDownloaded => 'Not downloaded';
+
+  @override
+  String get attachmentDownloadWaiting => 'Waiting to download';
+
+  @override
+  String attachmentDownloading(int percent) {
+    return 'Downloading, $percent%';
+  }
+
+  @override
+  String attachmentVerifying(int percent) {
+    return 'Verifying, $percent%';
+  }
+
+  @override
+  String get attachmentReady => 'Downloaded and verified';
+
+  @override
+  String get attachmentExpired =>
+      'Expired: the server no longer keeps this file';
+
+  @override
+  String get attachmentDamaged =>
+      'Damaged: this file did not pass the check, and nothing was kept';
+
+  @override
+  String get attachmentDownloadFailed => 'The download failed';
+
+  @override
+  String get attachmentDownloadHint => 'Download';
+
+  @override
+  String get attachmentCancelDownloadHint => 'Cancel the download';
+
+  @override
+  String get attachmentRetryDownloadHint => 'Try the download again';
+
+  @override
+  String get attachmentDetailsHint => 'Show Open, Save and Share';
+
+  @override
+  String get attachmentPictureUnavailable => 'This picture cannot be shown';
+
+  @override
+  String attachmentDetailsLine(String type, String size) {
+    return '$type · $size';
+  }
+
+  @override
+  String attachmentServerRetention(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other:
+          'The server keeps the encrypted copy for up to $days days after it was sent.',
+      one:
+          'The server keeps the encrypted copy for up to 1 day after it was sent.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get attachmentOpenAction => 'Open';
+
+  @override
+  String get attachmentSaveAction => 'Save';
+
+  @override
+  String get attachmentShareAction => 'Share';
+
+  @override
+  String get attachmentOpenNoApp =>
+      'No app on this phone can open this file. Save it instead.';
+
+  @override
+  String get attachmentSaveFailed => 'The file could not be saved.';
+
+  @override
+  String get attachmentFileMissing =>
+      'The file is no longer on this phone. Download it again from its message.';
+
+  @override
+  String get attachmentActionFailed => 'The phone did not take the file.';
+
+  @override
+  String chatDeleteAttachmentNote(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other:
+          'The encrypted copy on the server stays until it expires, up to $days days, and nobody can read it without the key in the message.',
+      one:
+          'The encrypted copy on the server stays until it expires, up to 1 day, and nobody can read it without the key in the message.',
+    );
+    return '$_temp0';
   }
 
   @override

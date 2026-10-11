@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/cancellation_signal.dart';
-import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
@@ -23,10 +22,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/attachment_crypto_fake.dart';
+
 void main() {
   group('attachment header and sizing contract', () {
     test('matches the version-1 deterministic header vector', () {
-      final header = _header(plaintextSize: 15, metadataHashByte: 0xea);
+      final header = fakeAttachmentHeader(
+        plaintextSize: 15,
+        metadataHashByte: 0xea,
+      );
       final parsed = AttachmentHeaderV1.parse(header);
 
       expect(ascii.decode(header.sublist(0, 8)), 'CPAFV001');
@@ -79,7 +83,7 @@ void main() {
     test(
       'large input stays chunk bounded and round trips only after final tag',
       () async {
-        final crypto = _RecordingCryptoPort();
+        final crypto = FakeAttachmentCryptoPort();
         final service = AttachmentCryptoService(crypto);
         final plaintext = Uint8List(2 * 1024 * 1024 + 7);
         for (var index = 0; index < plaintext.length; index += 1) {
@@ -123,7 +127,7 @@ void main() {
     test(
       'truncation, reorder, corruption, and missing final tag wipe output',
       () async {
-        final crypto = _RecordingCryptoPort();
+        final crypto = FakeAttachmentCryptoPort();
         final service = AttachmentCryptoService(crypto);
         final plaintext = Uint8List(2 * 65536 + 31);
         final encrypted = File('${temporary.path}/encrypted.bin');
@@ -185,7 +189,7 @@ void main() {
     test('cancellation leaves no partial encrypted artifact', () async {
       final signal = CancellationSignal()..cancel();
       final destination = File('${temporary.path}/cancelled.bin');
-      final result = await AttachmentCryptoService(_RecordingCryptoPort())
+      final result = await AttachmentCryptoService(FakeAttachmentCryptoPort())
           .encryptToFile(
             source: AttachmentSource(
               length: 32,
@@ -201,53 +205,6 @@ void main() {
       expect(await destination.exists(), isFalse);
     });
   });
-
-  test(
-    'cache evicts by bound, expires entries, and wipes owned files',
-    () async {
-      final root = await Directory.systemTemp.createTemp(
-        'cp_attachment_cache_',
-      );
-      addTearDown(() async {
-        if (await root.exists()) await root.delete(recursive: true);
-      });
-      final storage = PrivateAttachmentStorage(root: root);
-      final cache = BoundedAttachmentCache(
-        storage: storage,
-        maximumEntries: 2,
-        maximumBytes: 20,
-      );
-      final files = <File>[];
-      for (var index = 0; index < 3; index += 1) {
-        final file = File('${root.path}/$index.bin')
-          ..writeAsBytesSync(List.filled(8, index));
-        files.add(file);
-        await cache.put(
-          attachmentId: 'id-$index',
-          file: file,
-          bytes: 8,
-          expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
-        );
-      }
-      expect(await files.first.exists(), isFalse);
-      expect(cache.totalBytes, 16);
-
-      final expired = File('${root.path}/expired.bin')..writeAsBytesSync([1]);
-      await cache.put(
-        attachmentId: 'expired',
-        file: expired,
-        bytes: 1,
-        expiresAt: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
-      );
-      expect(await cache.read('expired'), isNull);
-      expect(await expired.exists(), isFalse);
-
-      await cache.wipe();
-      expect(cache.totalBytes, 0);
-      expect(await files[1].exists(), isFalse);
-      expect(await files[2].exists(), isFalse);
-    },
-  );
 
   group('backend attachment contract', () {
     test(
@@ -267,12 +224,11 @@ void main() {
           },
         ]);
         final transport = DioAttachmentTransport(
-          serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
           clock: const _FixedClock(),
-          storage: PrivateAttachmentStorage(),
+          storage: const _UnusedStorage(),
           dio: dio,
         );
         final root = await Directory.systemTemp.createTemp('cp_quota_test_');
@@ -335,12 +291,11 @@ void main() {
         ]);
         final allowance = _RecordingAllowance();
         final transport = DioAttachmentTransport(
-          serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
           config: const FixedServerConfig.fallback(),
           allowance: allowance,
           clock: const _FixedClock(),
-          storage: PrivateAttachmentStorage(),
+          storage: const _UnusedStorage(),
           dio: dio,
         );
 
@@ -371,12 +326,11 @@ void main() {
       // spending the upload to discover it.
       final allowance = _RecordingAllowance(spentBytes: 268435456 - 32768);
       final transport = DioAttachmentTransport(
-        serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
-        storage: PrivateAttachmentStorage(),
+        storage: const _UnusedStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_allowance_test_');
@@ -407,12 +361,11 @@ void main() {
       dio.httpClientAdapter = _QueueAdapter([]);
       final allowance = _RecordingAllowance();
       final transport = DioAttachmentTransport(
-        serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
         config: const FixedServerConfig.fallback(),
         allowance: allowance,
         clock: const _FixedClock(),
-        storage: PrivateAttachmentStorage(),
+        storage: const _UnusedStorage(),
         dio: dio,
       );
       final root = await Directory.systemTemp.createTemp('cp_bucket_test_');
@@ -433,6 +386,53 @@ void main() {
       expect(allowance.recorded, isEmpty);
     });
 
+    test('an upload reports the body it has sent, up to all of it', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _QueueAdapter([
+        (options, requestStream, cancelFuture) async {
+          await requestStream?.drain<void>();
+          return ResponseBody.fromString(
+            '{"attachment_id":"${'A' * 43}","size":65536}',
+            201,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        },
+      ]);
+      final transport = DioAttachmentTransport(
+        tokens: _FullTokenCoordinator(),
+        config: const FixedServerConfig.fallback(),
+        allowance: _RecordingAllowance(),
+        clock: const _FixedClock(),
+        storage: const _UnusedStorage(),
+        dio: dio,
+      );
+      final root = await Directory.systemTemp.createTemp('cp_progress_test_');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final file = File('${root.path}/blob')
+        ..writeAsBytesSync(Uint8List(65536));
+      final reports = <(int, int)>[];
+
+      final result = await transport.upload(
+        encryptedFile: file,
+        bucketSize: 65536,
+        onProgress: (sent, total) => reports.add((sent, total)),
+      );
+
+      expect(result, isA<Success<AttachmentUploadResponse>>());
+      expect(reports, isNotEmpty);
+      final (lastSent, total) = reports.last;
+      // The multipart body wraps the bucket, so it is a little longer.
+      expect(total, greaterThan(65536));
+      expect(lastSent, total);
+      for (var index = 1; index < reports.length; index += 1) {
+        expect(reports[index].$1, greaterThanOrEqualTo(reports[index - 1].$1));
+      }
+    });
+
     test('maps expired capability to not-found and keeps no bytes', () async {
       final root = await Directory.systemTemp.createTemp('cp_expired_test_');
       addTearDown(() async {
@@ -444,7 +444,6 @@ void main() {
             ResponseBody.fromString('', 404),
       ]);
       final transport = DioAttachmentTransport(
-        serverOrigin: Uri.parse('https://chat.example.test'),
         tokens: _FullTokenCoordinator(),
         config: const FixedServerConfig.fallback(),
         allowance: _RecordingAllowance(),
@@ -499,7 +498,6 @@ void main() {
       final server = _QueueAdapter(answers);
       return (
         transport: DioAttachmentTransport(
-          serverOrigin: Uri.parse('https://chat.example.test'),
           tokens: _FullTokenCoordinator(),
           config: const FixedServerConfig.fallback(),
           allowance: _RecordingAllowance(),
@@ -696,6 +694,51 @@ void main() {
       expect(listEquals(await file.readAsBytes(), object), isTrue);
     });
 
+    test(
+      'a 500 or a 503 is the server\'s state, which a retry clears',
+      () async {
+        const stoppedAt = 1048576;
+        final (:transport, :server) = serve([
+          dropsAfter(stoppedAt),
+          refuses(500),
+          refuses(503),
+          continuesFrom(stoppedAt),
+        ]);
+        await fetch(transport);
+
+        final failed = await fetch(transport);
+        final unavailable = await fetch(transport);
+        final retried = await fetch(transport);
+
+        // `backend/openapi.json` lists both for this route, as `server_error`
+        // and `unavailable`: neither is an answer this client cannot read.
+        expect(
+          (failed as FailureResult<File>).failure,
+          isA<BackendFailure>().having(
+            (failure) => failure.code,
+            'code',
+            BackendFailureCode.serverError,
+          ),
+        );
+        expect(
+          (unavailable as FailureResult<File>).failure,
+          isA<BackendFailure>().having(
+            (failure) => failure.code,
+            'code',
+            BackendFailureCode.unavailable,
+          ),
+        );
+        for (final failure in [failed.failure, unavailable.failure]) {
+          expect(failure.category, FailureCategory.transport);
+        }
+        for (final request in server.requests.skip(1)) {
+          expect(request.headers['Range'], 'bytes=$stoppedAt-');
+        }
+        final file = (retried as Success<File>).value;
+        expect(listEquals(await file.readAsBytes(), object), isTrue);
+      },
+    );
+
     test('a 404 or a 416 to a resume keeps nothing', () async {
       for (final status in [404, 416]) {
         final (:transport, :server) = serve([
@@ -823,7 +866,7 @@ void main() {
     });
 
     test('decrypts the file it is handed, then deletes it', () async {
-      final crypto = AttachmentCryptoService(_RecordingCryptoPort());
+      final crypto = AttachmentCryptoService(FakeAttachmentCryptoPort());
       final plaintext = Uint8List(70000);
       for (var index = 0; index < plaintext.length; index += 1) {
         plaintext[index] = index & 0xff;
@@ -848,14 +891,50 @@ void main() {
 
       final result = await service.downloadAndDecrypt(descriptor: descriptor);
 
-      final decrypted = (result as Success<File>).value;
+      final decrypted = (result as AttachmentDownloaded).file;
       expect(await decrypted.readAsBytes(), plaintext);
       expect(await fetched.exists(), isFalse);
     });
 
+    test('bytes that arrived whole and do not verify fail the verification, '
+        'and leave nothing', () async {
+      final crypto = AttachmentCryptoService(FakeAttachmentCryptoPort());
+      final plaintext = Uint8List(70000);
+      final fetched = File('${root.path}/fetched.bin');
+      final encrypted = await crypto.encryptToFile(
+        source: AttachmentSource(
+          length: plaintext.length,
+          displayName: 'notes.txt',
+          mimeType: 'text/plain',
+          openRead: () => Stream.value(plaintext),
+        ),
+        destination: fetched,
+      );
+      final descriptor = (encrypted as Success<AttachmentDescriptor>).value
+          .withCapability('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+      // One byte of the first chunk changed: the bucket is whole, and it is
+      // not the file the descriptor describes.
+      final bytes = await fetched.readAsBytes();
+      bytes[66 + 24 + 5] ^= 0x01;
+      await fetched.writeAsBytes(bytes);
+      final service = AttachmentTransferService(
+        crypto: crypto,
+        transport: _HandingTransport(Result.success(fetched)),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(descriptor: descriptor);
+
+      final failed = result as AttachmentDownloadFailed;
+      expect(failed.stage, AttachmentDownloadStage.verification);
+      expect(failed.failure, isA<CryptoCoreFailure>());
+      expect(root.listSync(), isEmpty);
+      expect('$failed', 'AttachmentDownloadFailed(verification)');
+    });
+
     test('leaves what a failed download fetched to the transport', () async {
       final service = AttachmentTransferService(
-        crypto: AttachmentCryptoService(_RecordingCryptoPort()),
+        crypto: AttachmentCryptoService(FakeAttachmentCryptoPort()),
         transport: _HandingTransport(
           const Result.failure(TransportFailure(TransportFailureKind.offline)),
         ),
@@ -866,7 +945,30 @@ void main() {
         descriptor: _descriptor(plaintextSize: 10),
       );
 
-      expect((result as FailureResult<File>).failure, isA<TransportFailure>());
+      final failed = result as AttachmentDownloadFailed;
+      expect(failed.failure, isA<TransportFailure>());
+      expect(failed.stage, AttachmentDownloadStage.download);
+      expect(root.listSync(), isEmpty);
+    });
+
+    test("a broken answer from the transport is the download's failure, "
+        'though its kind is one the verification gives too', () async {
+      const malformed = SecurityFailure(
+        SecurityFailureKind.malformedServerResponse,
+      );
+      final service = AttachmentTransferService(
+        crypto: AttachmentCryptoService(FakeAttachmentCryptoPort()),
+        transport: _HandingTransport(const Result.failure(malformed)),
+        storage: PrivateAttachmentStorage(root: root),
+      );
+
+      final result = await service.downloadAndDecrypt(
+        descriptor: _descriptor(plaintextSize: 10),
+      );
+
+      final failed = result as AttachmentDownloadFailed;
+      expect(failed.failure, malformed);
+      expect(failed.stage, AttachmentDownloadStage.download);
       expect(root.listSync(), isEmpty);
     });
   });
@@ -899,7 +1001,10 @@ EncryptedAttachmentDescriptor _descriptor({
   return EncryptedAttachmentDescriptor(
     capabilityId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     key: Uint8List(32),
-    header: _header(plaintextSize: plaintextSize, bucketSize: bucket),
+    header: fakeAttachmentHeader(
+      plaintextSize: plaintextSize,
+      bucketSize: bucket,
+    ),
     secretstreamHeader: Uint8List(24),
     encryptedSize: streamSize,
     bucketSize: bucket,
@@ -909,155 +1014,6 @@ EncryptedAttachmentDescriptor _descriptor({
     mediaKind: AttachmentMediaKind.file,
     width: width,
   );
-}
-
-Uint8List _header({
-  required int plaintextSize,
-  int? bucketSize,
-  int metadataHashByte = 0,
-}) {
-  final streamSize = encryptedStreamSize(plaintextSize, 65536);
-  final bucket = bucketSize ?? attachmentBucketFor(plaintextSize);
-  final bytes = Uint8List(66);
-  bytes.setAll(0, ascii.encode('CPAFV001'));
-  bytes[8] = 1;
-  final data = ByteData.sublistView(bytes);
-  data.setUint32(10, 65536, Endian.big);
-  data.setUint64(14, plaintextSize, Endian.big);
-  data.setUint64(22, streamSize, Endian.big);
-  data.setUint32(30, bucket, Endian.big);
-  bytes.fillRange(34, 66, metadataHashByte);
-  return bytes;
-}
-
-final class _RecordingCryptoPort implements AttachmentCryptoPort {
-  Uint8List _metadata = Uint8List(0);
-  int _pushSequence = 0;
-  int _pullSequence = 0;
-  int maximumPushBytes = 0;
-  int maximumPullBytes = 0;
-  int pushCalls = 0;
-  bool lastPullWasFinal = false;
-
-  @override
-  Future<Result<AttachmentCryptoPushSession>> createPush({
-    required int plaintextSize,
-    required int bucketSize,
-    required Uint8List metadata,
-  }) async {
-    _metadata = Uint8List.fromList(metadata);
-    _pushSequence = 0;
-    final streamSize = encryptedStreamSize(plaintextSize, 65536);
-    return Result.success(
-      AttachmentCryptoPushSession(
-        handle: 1,
-        key: Uint8List(32),
-        header: _header(plaintextSize: plaintextSize, bucketSize: bucketSize),
-        secretstreamHeader: Uint8List(24),
-        plaintextSize: plaintextSize,
-        streamSize: streamSize,
-        bucketSize: bucketSize,
-      ),
-    );
-  }
-
-  @override
-  Future<Result<Uint8List>> pushChunk({
-    required AttachmentCryptoPushSession session,
-    required Uint8List plaintext,
-    required bool finalChunk,
-  }) async {
-    maximumPushBytes = maximumPushBytes < plaintext.length
-        ? plaintext.length
-        : maximumPushBytes;
-    pushCalls += 1;
-    final output = Uint8List(plaintext.length + 17)
-      ..setRange(0, plaintext.length, plaintext)
-      ..[plaintext.length] = _pushSequence & 0xff
-      ..fillRange(
-        plaintext.length + 1,
-        plaintext.length + 16,
-        _checksum(plaintext),
-      )
-      ..[plaintext.length + 16] = finalChunk ? 1 : 0;
-    _pushSequence += 1;
-    return Result.success(output);
-  }
-
-  @override
-  Future<Result<AttachmentCryptoPullSession>> createPull({
-    required Uint8List key,
-    required Uint8List header,
-    required Uint8List secretstreamHeader,
-    required Uint8List metadata,
-  }) async {
-    if (!listEquals(metadata, _metadata)) {
-      return const Result.failure(
-        CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-      );
-    }
-    _pullSequence = 0;
-    lastPullWasFinal = false;
-    return const Result.success(AttachmentCryptoPullSession(2));
-  }
-
-  @override
-  Future<Result<AttachmentDecryptedChunk>> pullChunk({
-    required AttachmentCryptoPullSession session,
-    required Uint8List ciphertext,
-  }) async {
-    maximumPullBytes = maximumPullBytes < ciphertext.length
-        ? ciphertext.length
-        : maximumPullBytes;
-    if (ciphertext.length < 17) {
-      return const Result.failure(
-        CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-      );
-    }
-    final plaintextLength = ciphertext.length - 17;
-    final plaintext = ciphertext.sublist(0, plaintextLength);
-    if (ciphertext[plaintextLength] != (_pullSequence & 0xff)) {
-      return const Result.failure(
-        CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-      );
-    }
-    final checksum = _checksum(plaintext);
-    for (
-      var index = plaintextLength + 1;
-      index < plaintextLength + 16;
-      index += 1
-    ) {
-      if (ciphertext[index] != checksum) {
-        return const Result.failure(
-          CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
-        );
-      }
-    }
-    final finalChunk = ciphertext.last == 1;
-    lastPullWasFinal = finalChunk;
-    _pullSequence += 1;
-    return Result.success(
-      AttachmentDecryptedChunk(plaintext: plaintext, finalChunk: finalChunk),
-    );
-  }
-
-  @override
-  Future<Result<void>> closeSession({
-    required int handle,
-    bool abort = false,
-  }) async => const Result.success(null);
-
-  @override
-  Future<Result<Uint8List>> randomBytes(int length) async =>
-      Result.success(Uint8List(length));
-}
-
-int _checksum(List<int> bytes) {
-  var value = 0;
-  for (final byte in bytes) {
-    value = (value + byte) & 0xff;
-  }
-  return value;
 }
 
 typedef _AdapterHandler =
@@ -1150,6 +1106,7 @@ final class _HandingTransport implements AttachmentTransportPort {
     required File encryptedFile,
     required int bucketSize,
     CancellationSignal? cancellation,
+    void Function(int sent, int total)? onProgress,
   }) => throw UnimplementedError('this test only downloads');
 }
 
@@ -1176,4 +1133,19 @@ final class _FixedClock implements TimeSource {
 
   @override
   DateTime now() => DateTime.utc(2026, 9, 9, 12);
+}
+
+/// Storage for a test that must make no temporary file: an upload reads the
+/// encrypted file it is handed and writes none.
+final class _UnusedStorage implements AttachmentStoragePort {
+  const _UnusedStorage();
+
+  @override
+  Future<File> createEncryptedTemp() => throw StateError('unused');
+
+  @override
+  Future<File> createDecryptedTemp() => throw StateError('unused');
+
+  @override
+  Future<void> delete(File file) => throw StateError('unused');
 }

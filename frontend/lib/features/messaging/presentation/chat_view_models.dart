@@ -34,6 +34,21 @@ enum ChatSecurityGate {
 
 enum ChatTimelineLoadState { loading, data, empty, error }
 
+/// What the paperclip of a conversation does (ADR-089 D1).
+enum ChatAttachmentAvailability {
+  /// A group chat: attachments are not built for it, and the paperclip opens
+  /// the sheet that says so.
+  notBuilt,
+
+  /// A direct chat or Saved Messages on a device that keeps attachment files:
+  /// the paperclip opens the choice of a photo, a file or the camera.
+  available,
+
+  /// A direct chat or Saved Messages with no private cache to keep the files
+  /// in: the paperclip is disabled.
+  unavailable,
+}
+
 enum ChatComposerMode { compose, reply, edit }
 
 @immutable
@@ -102,6 +117,18 @@ final class ChatMessageViewModel {
   final String? replyAuthor;
   final String? replyQuote;
   final List<ChatReactionViewModel> reactions;
+
+  /// The caption of an attachment message, or the text of any other: null
+  /// when there is none to show or copy.
+  String? get caption {
+    final value = text;
+    return value == null || value.trim().isEmpty ? null : value;
+  }
+
+  /// What a reply to this message quotes: its text, or, for an attachment
+  /// message with no caption, the name of its first attachment.
+  String? get quoteText =>
+      caption ?? (attachments.isEmpty ? text : attachments.first.displayName);
 }
 
 @immutable
@@ -328,10 +355,37 @@ final class SaveDraftIntent extends ChatIntent {
   final String? text;
 }
 
+/// The paperclip when [attachment] is null; otherwise the details sheet of a
+/// ready attachment, with Open, Save and Share.
 final class OpenAttachmentIntent extends ChatIntent {
   const OpenAttachmentIntent({this.attachment});
 
   final EncryptedAttachmentDescriptor? attachment;
+}
+
+/// A tap on a received attachment that is not downloaded (ADR-089 D7).
+final class DownloadAttachmentIntent extends ChatIntent {
+  const DownloadAttachmentIntent({
+    required this.messageId,
+    required this.attachment,
+  });
+
+  final String messageId;
+  final EncryptedAttachmentDescriptor attachment;
+}
+
+/// A tap on an attachment whose download failed.
+final class RetryAttachmentDownloadIntent extends ChatIntent {
+  const RetryAttachmentDownloadIntent(this.attachment);
+
+  final EncryptedAttachmentDescriptor attachment;
+}
+
+/// A tap on an attachment that waits, downloads or is being verified.
+final class CancelAttachmentDownloadIntent extends ChatIntent {
+  const CancelAttachmentDownloadIntent(this.attachment);
+
+  final EncryptedAttachmentDescriptor attachment;
 }
 
 /// Remove this device's copy of the whole conversation.

@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
@@ -67,6 +68,27 @@ int attachmentBucketFor(int plaintextSize) {
     if (required <= bucket) return bucket;
   }
   throw const FormatException('attachment exceeds largest bucket');
+}
+
+/// The largest plaintext length that [attachmentBucketFor] fits into
+/// [bucketSize], on the same formula: the byte limit of a pick (ADR-089 D3).
+///
+/// The caller passes the largest bucket that both the deployment publishes
+/// (`ServerConfig.largestAttachmentBucket`) and
+/// [AttachmentCryptoProtocolV1.buckets] hold.
+int attachmentPlaintextLimit(int bucketSize) {
+  if (!AttachmentCryptoProtocolV1.buckets.contains(bucketSize)) {
+    throw ArgumentError.value(bucketSize, 'bucketSize', 'not a bucket');
+  }
+  const chunkBytes = AttachmentCryptoProtocolV1.chunkBytes;
+  // The secretstream overhead of each chunk, as [encryptedStreamSize] adds.
+  const chunkOverhead = 17;
+  final streamBudget = bucketSize - AttachmentCryptoProtocolV1.headerBytes - 24;
+  // The most chunks a plaintext can fill and still fit, then the most bytes
+  // that many chunks carry within the budget.
+  final chunks =
+      (streamBudget + chunkBytes - 1) ~/ (chunkBytes + chunkOverhead);
+  return min(chunks * chunkBytes, streamBudget - chunks * chunkOverhead);
 }
 
 String safeAttachmentName(String value) {
