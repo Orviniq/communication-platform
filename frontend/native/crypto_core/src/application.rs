@@ -47,6 +47,7 @@ const MAX_TEXT_SCALARS: usize = 16_384;
 const MAX_QUOTE_BYTES: usize = 2_048;
 const MAX_QUOTE_SCALARS: usize = 512;
 const MAX_EMOJI_BYTES: usize = 64;
+const CAPABILITY_ID_LENGTH: usize = 43;
 const MAX_APPLICATION_CBOR_DEPTH: usize = 16;
 const MAX_APPLICATION_MAP_ENTRIES: usize = 64;
 const MAX_DEVICE_GOSSIP_HEADS: usize = 32;
@@ -745,14 +746,8 @@ fn encode_cbor_attachment(
 fn read_cbor_attachment(decoder: &mut Decoder<'_>) -> CryptoResult<AttachmentDescriptor> {
     read_exact_map(decoder, 14)?;
     read_key(decoder, 0)?;
-    let capability_id = read_text(decoder, 43, 43, true)?;
-    if !capability_id
-        .as_bytes()
-        .iter()
-        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
-    {
-        return Err(CryptoError::MalformedInput);
-    }
+    let capability_id = read_text(decoder, CAPABILITY_ID_LENGTH, CAPABILITY_ID_LENGTH, true)?;
+    check_capability_id(&capability_id)?;
     read_key(decoder, 1)?;
     let key = read_exact_bytes(decoder)?;
     read_key(decoder, 2)?;
@@ -805,6 +800,19 @@ fn read_cbor_attachment(decoder: &mut Decoder<'_>) -> CryptoResult<AttachmentDes
             Some(thumbnail.to_vec())
         },
     })
+}
+
+/// The server issues a capability as 32 random bytes in unpadded URL-safe Base64, so both
+/// readers refuse an ID shorter than 43 characters as well as a longer one.
+fn check_capability_id(capability_id: &str) -> CryptoResult<()> {
+    if capability_id.len() != CAPABILITY_ID_LENGTH
+        || !capability_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    Ok(())
 }
 
 fn decode_event(input: &[u8]) -> CryptoResult<(Option<ApplicationEvent>, Option<u8>)> {
@@ -993,6 +1001,11 @@ fn decode_cbor_body(kind: u16, decoder: &mut Decoder<'_>) -> CryptoResult<EventB
             let attachments = if map_len == 6 {
                 read_key(decoder, 5)?;
                 let count = read_array_len(decoder)?;
+                // The encoder omits key 5 rather than write an empty list, so `5: []` would
+                // be a second encoding of the same event.
+                if count == 0 {
+                    return Err(CryptoError::MalformedInput);
+                }
                 if count > 32 {
                     return Err(CryptoError::InputTooLarge);
                 }
@@ -1254,14 +1267,8 @@ fn framed_text(
 }
 
 fn decode_projection_attachment(reader: &mut Reader<'_>) -> CryptoResult<AttachmentDescriptor> {
-    let capability_id = framed_text(reader, 43, 43, true)?;
-    if !capability_id
-        .as_bytes()
-        .iter()
-        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
-    {
-        return Err(CryptoError::MalformedInput);
-    }
+    let capability_id = framed_text(reader, CAPABILITY_ID_LENGTH, CAPABILITY_ID_LENGTH, true)?;
+    check_capability_id(&capability_id)?;
     let key = reader.array()?;
     let header = reader.array()?;
     let stream_header = reader.array()?;
@@ -1963,6 +1970,17 @@ mod tests {
         input
     }
 
+    /// Offset of the message.create body's content-type value in canonical CBOR: key 9,
+    /// the body map header, key 0, the 16-byte message id header and id, then key 1.
+    fn content_type_offset(cbor: &[u8], body_map: u8) -> usize {
+        cbor.windows(4)
+            .position(|window| window == [0x09, body_map, 0x00, 0x50])
+            .unwrap()
+            + 4
+            + 16
+            + 1
+    }
+
     #[test]
     fn attachment_message_create_round_trips_as_canonical_bytes() {
         let longest_name = "\u{e9}".repeat(64);
@@ -2065,6 +2083,26 @@ mod tests {
     }
 
     #[test]
+    fn attachment_descriptor_capability_of_wrong_length_or_alphabet_is_refused() {
+        let valid = capability(1);
+        for (capability_id, refusal) in [
+            (valid[..42].to_owned(), CryptoError::MalformedInput),
+            (valid[..1].to_owned(), CryptoError::MalformedInput),
+            (String::new(), CryptoError::MalformedInput),
+            (format!("{valid}A"), CryptoError::InputTooLarge),
+            (format!("{}+", &valid[..42]), CryptoError::MalformedInput),
+        ] {
+            let mut descriptor = attachment(1, 1, None, None, None);
+            descriptor.capability_id = capability_id;
+            let event = attachment_event(1, "", None, None, vec![descriptor]);
+            assert_eq!(operation(1, &attachment_projection(&event)), Err(refusal));
+            let hostile = encode_event(&event).unwrap();
+            assert_eq!(decode_event(&hostile), Err(refusal));
+            assert_eq!(operation(2, &hostile), Err(refusal));
+        }
+    }
+
+    #[test]
     fn attachment_descriptor_key_of_wrong_length_is_refused() {
         let descriptor = attachment(9, 1, None, None, None);
         let event = attachment_event(1, "", None, None, vec![descriptor.clone()]);
@@ -2085,6 +2123,86 @@ mod tests {
         for hostile in [short_key, long_key] {
             assert_eq!(decode_event(&hostile), Err(CryptoError::MalformedInput));
             assert_eq!(operation(2, &hostile), Err(CryptoError::MalformedInput));
+        }
+    }
+
+    #[test]
+    fn content_type_that_disagrees_with_the_attachment_list_is_refused() {
+        let descriptor = attachment(1, 1, None, None, None);
+        for (content_type, attachments) in [
+            (0, vec![descriptor.clone()]),
+            (1, Vec::new()),
+            (2, Vec::new()),
+        ] {
+            let event = attachment_event(content_type, "text", None, None, attachments);
+            assert_eq!(encode_event(&event), Err(CryptoError::MalformedInput));
+        }
+
+        // Projection: an attachment type with an empty list, and a text type followed by a
+        // descriptor the text layout does not read.
+        let empty_file = attachment_event(1, "", None, None, Vec::new());
+        assert_eq!(
+            operation(1, &attachment_projection(&empty_file)),
+            Err(CryptoError::MalformedInput)
+        );
+        let mut text_with_descriptor =
+            attachment_projection(&attachment_event(0, "text", None, None, Vec::new()));
+        let file_projection = attachment_projection(&attachment_event(
+            1,
+            "text",
+            None,
+            None,
+            vec![descriptor.clone()],
+        ));
+        text_with_descriptor.extend_from_slice(&file_projection[text_with_descriptor.len() + 1..]);
+        assert_eq!(
+            operation(1, &text_with_descriptor),
+            Err(CryptoError::MalformedInput)
+        );
+
+        // CBOR: relabel an attachment message as text, and a text message as an attachment.
+        let file = encode_event(&attachment_event(1, "", None, None, vec![descriptor])).unwrap();
+        let offset = content_type_offset(&file, 0xa6);
+        assert_eq!(file[offset], 1);
+        let mut file_as_text = file.clone();
+        file_as_text[offset] = 0;
+        assert_eq!(
+            decode_event(&file_as_text),
+            Err(CryptoError::MalformedInput)
+        );
+        let mut file_as_unknown = file;
+        file_as_unknown[offset] = 3;
+        assert_eq!(
+            decode_event(&file_as_unknown),
+            Err(CryptoError::UnsupportedOperation)
+        );
+
+        let text = encode_event(&attachment_event(0, "text", None, None, Vec::new())).unwrap();
+        let offset = content_type_offset(&text, 0xa5);
+        assert_eq!(text[offset], 0);
+        for content_type in [1, 2] {
+            let mut text_as_attachment = text.clone();
+            text_as_attachment[offset] = content_type;
+            assert_eq!(
+                decode_event(&text_as_attachment),
+                Err(CryptoError::MalformedInput)
+            );
+        }
+
+        // An explicit empty attachment list (`5: []`) is never written: with the text type it
+        // would be a second encoding of the same event, and with an attachment type the
+        // message would carry no attachment.
+        let body_map = text
+            .windows(4)
+            .position(|window| window == [0x09, 0xa5, 0x00, 0x50])
+            .unwrap()
+            + 1;
+        for content_type in [0, 1, 2] {
+            let mut empty_list = text.clone();
+            empty_list[body_map] = 0xa6;
+            empty_list[offset] = content_type;
+            empty_list.extend_from_slice(&[0x05, 0x80]);
+            assert_eq!(decode_event(&empty_list), Err(CryptoError::MalformedInput));
         }
     }
 
