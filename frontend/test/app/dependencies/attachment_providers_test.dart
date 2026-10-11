@@ -288,6 +288,18 @@ void main() {
       expect(requests, hasLength(1));
     });
 
+    test(
+      'the file cache holds 256 MiB for 7 days after an open (D8)',
+      () async {
+        final container = ProviderContainer.test(overrides: base());
+
+        final cache = await container.read(attachmentFileCacheProvider.future);
+
+        expect(cache.maximumBytes, 256 * 1024 * 1024);
+        expect(cache.lifetime, const Duration(days: 7));
+      },
+    );
+
     test('the sweep messaging asks for deletes a file no row names', () async {
       final unnamed = File(
         [
