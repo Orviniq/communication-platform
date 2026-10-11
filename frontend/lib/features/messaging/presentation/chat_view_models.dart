@@ -117,6 +117,13 @@ final class ChatMessageViewModel {
   final String? replyAuthor;
   final String? replyQuote;
   final List<ChatReactionViewModel> reactions;
+
+  /// The caption of an attachment message, or the text of any other: null
+  /// when there is none to show or copy.
+  String? get caption {
+    final value = text;
+    return value == null || value.trim().isEmpty ? null : value;
+  }
 }
 
 @immutable
@@ -343,10 +350,37 @@ final class SaveDraftIntent extends ChatIntent {
   final String? text;
 }
 
+/// The paperclip when [attachment] is null; otherwise the details sheet of a
+/// ready attachment, with Open, Save and Share.
 final class OpenAttachmentIntent extends ChatIntent {
   const OpenAttachmentIntent({this.attachment});
 
   final EncryptedAttachmentDescriptor? attachment;
+}
+
+/// A tap on a received attachment that is not downloaded (ADR-089 D7).
+final class DownloadAttachmentIntent extends ChatIntent {
+  const DownloadAttachmentIntent({
+    required this.messageId,
+    required this.attachment,
+  });
+
+  final String messageId;
+  final EncryptedAttachmentDescriptor attachment;
+}
+
+/// A tap on an attachment whose download failed.
+final class RetryAttachmentDownloadIntent extends ChatIntent {
+  const RetryAttachmentDownloadIntent(this.attachment);
+
+  final EncryptedAttachmentDescriptor attachment;
+}
+
+/// A tap on an attachment that waits, downloads or is being verified.
+final class CancelAttachmentDownloadIntent extends ChatIntent {
+  const CancelAttachmentDownloadIntent(this.attachment);
+
+  final EncryptedAttachmentDescriptor attachment;
 }
 
 /// Remove this device's copy of the whole conversation.

@@ -418,17 +418,6 @@
   "attachmentCameraOption": "Camera",
   "attachmentImageLabel": "Encrypted image",
   "attachmentFileLabel": "Encrypted attachment",
-  "attachmentOpenHint": "Open after local verification",
-  "attachmentQueuedState": "attachment queued",
-  "attachmentDownloadingState": "downloading attachment",
-  "attachmentVerifyingState": "verifying attachment",
-  "attachmentReadyState": "verified attachment",
-  "attachmentExpiredState": "attachment expired",
-  "attachmentCancelledState": "attachment cancelled",
-  "attachmentQuotaState": "attachment quota exceeded",
-  "attachmentUnsupportedState": "attachment unsupported",
-  "attachmentCorruptState": "attachment corrupt",
-  "attachmentFailedState": "attachment failed",
   "attachmentPickBusy": "A picker is already open. Finish with it first.",
   "attachmentPickTooLarge": "This file is too large to send. The largest file is {size}.",
   "@attachmentPickTooLarge": {
@@ -511,6 +500,29 @@
   "@attachmentUploadAnnouncement": {
     "placeholders": {"name": {"type": "String"}, "state": {"type": "String"}}
   },
+  "attachmentTileSemantics": "{kind}: {name}, {size}, {state}",
+  "@attachmentTileSemantics": {
+    "placeholders": {"kind": {"type": "String"}, "name": {"type": "String"}, "size": {"type": "String"}, "state": {"type": "String"}}
+  },
+  "attachmentNotDownloaded": "Not downloaded",
+  "attachmentDownloadWaiting": "Waiting to download",
+  "attachmentDownloading": "Downloading, {percent}%",
+  "@attachmentDownloading": {
+    "placeholders": {"percent": {"type": "int"}}
+  },
+  "attachmentVerifying": "Verifying, {percent}%",
+  "@attachmentVerifying": {
+    "placeholders": {"percent": {"type": "int"}}
+  },
+  "attachmentReady": "Downloaded and verified",
+  "attachmentExpired": "Expired: the server no longer keeps this file",
+  "attachmentDamaged": "Damaged: this file did not pass the check, and nothing was kept",
+  "attachmentDownloadFailed": "The download failed",
+  "attachmentDownloadHint": "Download",
+  "attachmentCancelDownloadHint": "Cancel the download",
+  "attachmentRetryDownloadHint": "Try the download again",
+  "attachmentDetailsHint": "Show Open, Save and Share",
+  "attachmentPictureUnavailable": "This picture cannot be shown",
   "attachmentDetailsLine": "{type} · {size}",
   "@attachmentDetailsLine": {
     "placeholders": {"type": {"type": "String"}, "size": {"type": "String"}}

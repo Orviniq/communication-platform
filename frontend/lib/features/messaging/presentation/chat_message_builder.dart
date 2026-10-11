@@ -6,6 +6,7 @@ import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_text_direction.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -262,17 +263,8 @@ class ChatMessageBuilder extends StatelessWidget {
               fontStyle: message.deleted ? FontStyle.italic : FontStyle.normal,
             ),
           ),
-          ChatTimelineContentKind.image ||
-          ChatTimelineContentKind.attachment => _AttachmentMessageContent(
-            message: message,
-            onOpen: () => onIntent(
-              OpenAttachmentIntent(
-                attachment: message.attachments.isEmpty
-                    ? null
-                    : message.attachments.first,
-              ),
-            ),
-          ),
+          ChatTimelineContentKind.image || ChatTimelineContentKind.attachment =>
+            _AttachmentMessageContent(message: message, onIntent: onIntent),
           ChatTimelineContentKind.system => _SystemMessageContent(
             text: message.text ?? strings.chatSystemMessage,
           ),
@@ -541,64 +533,64 @@ class ChatMessageBuilder extends StatelessWidget {
   }
 }
 
+/// The tiles of an attachment message, one for each descriptor, and its
+/// caption below them (ADR-089 D7).
+///
+/// The caption is the message's text, which an edit changes; the caption a
+/// descriptor carries is not shown. A deleted message shows no tile.
 final class _AttachmentMessageContent extends StatelessWidget {
   const _AttachmentMessageContent({
     required this.message,
-    required this.onOpen,
+    required this.onIntent,
   });
 
   final ChatMessageViewModel message;
-  final VoidCallback onOpen;
+  final ChatIntentCallback onIntent;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final colors = context.tokens.colors;
-    final state = message.attachmentStates.isEmpty
-        ? AttachmentTransferState.ready
-        : message.attachmentStates.first;
-    final ready = state == AttachmentTransferState.ready;
-    final typeLabel = message.kind == ChatTimelineContentKind.image
-        ? strings.attachmentImageLabel
-        : strings.attachmentFileLabel;
-    return Semantics(
-      button: true,
-      label: '$typeLabel: ${_attachmentStateLabel(strings, state)}',
-      hint: ready ? strings.attachmentOpenHint : null,
-      child: InkWell(
-        onTap: message.attachments.isEmpty || !ready ? null : onOpen,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.surfaceRaised,
-            borderRadius: AppRadii.control,
-            border: Border.all(color: colors.border),
+    if (message.deleted) {
+      return Text(
+        strings.chatDeletedMessage,
+        style: context.tokens.typography.body.copyWith(
+          color: colors.textMuted,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+    final caption = message.caption;
+    return Column(
+      crossAxisAlignment: message.outgoing
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < message.attachments.length; index += 1)
+          ChatAttachmentTile(
+            // By position: a capability is a secret, and a key is printed in
+            // every debug dump of the tree.
+            key: ValueKey('attachment-tile-${message.id}-$index'),
+            messageId: message.id,
+            attachment: message.attachments[index],
+            persisted: index < message.attachmentStates.length
+                ? message.attachmentStates[index]
+                : AttachmentTransferState.queued,
+            onIntent: onIntent,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.x2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppIcon(
-                  message.kind == ChatTimelineContentKind.image
-                      ? AppIcons.attach
-                      : AppIcons.attach,
-                  color: colors.accent,
-                ),
-                const SizedBox(width: AppSpacing.x1),
-                Flexible(
-                  child: Text(
-                    message.attachments.isEmpty || !ready
-                        ? _attachmentStateLabel(strings, state)
-                        : message.attachments.first.displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+        if (caption != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.x1),
+            child: Text(
+              caption,
+              textDirection: resolveFirstStrongDirection(caption),
+              style: context.tokens.typography.body.copyWith(
+                color: colors.textPrimary,
+              ),
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
 }
@@ -991,25 +983,6 @@ BorderRadius _bubbleRadius(ChatMessageViewModel message) {
           bottomRight: regular,
         );
 }
-
-String _attachmentStateLabel(
-  AppLocalizations strings,
-  AttachmentTransferState state,
-) => switch (state) {
-  AttachmentTransferState.queued => strings.attachmentQueuedState,
-  AttachmentTransferState.encrypting => strings.chatStateEncrypting,
-  AttachmentTransferState.uploading => strings.chatStateSending,
-  AttachmentTransferState.sending => strings.chatStateSending,
-  AttachmentTransferState.downloading => strings.attachmentDownloadingState,
-  AttachmentTransferState.verifying => strings.attachmentVerifyingState,
-  AttachmentTransferState.ready => strings.attachmentReadyState,
-  AttachmentTransferState.expired => strings.attachmentExpiredState,
-  AttachmentTransferState.cancelled => strings.attachmentCancelledState,
-  AttachmentTransferState.quotaExceeded => strings.attachmentQuotaState,
-  AttachmentTransferState.unsupported => strings.attachmentUnsupportedState,
-  AttachmentTransferState.corrupt => strings.attachmentCorruptState,
-  AttachmentTransferState.failed => strings.attachmentFailedState,
-};
 
 String _deliveryLabel(AppLocalizations strings, ChatDeliveryViewState state) =>
     switch (state) {

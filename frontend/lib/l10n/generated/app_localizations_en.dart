@@ -1001,39 +1001,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachmentFileLabel => 'Encrypted attachment';
 
   @override
-  String get attachmentOpenHint => 'Open after local verification';
-
-  @override
-  String get attachmentQueuedState => 'attachment queued';
-
-  @override
-  String get attachmentDownloadingState => 'downloading attachment';
-
-  @override
-  String get attachmentVerifyingState => 'verifying attachment';
-
-  @override
-  String get attachmentReadyState => 'verified attachment';
-
-  @override
-  String get attachmentExpiredState => 'attachment expired';
-
-  @override
-  String get attachmentCancelledState => 'attachment cancelled';
-
-  @override
-  String get attachmentQuotaState => 'attachment quota exceeded';
-
-  @override
-  String get attachmentUnsupportedState => 'attachment unsupported';
-
-  @override
-  String get attachmentCorruptState => 'attachment corrupt';
-
-  @override
-  String get attachmentFailedState => 'attachment failed';
-
-  @override
   String get attachmentPickBusy =>
       'A picker is already open. Finish with it first.';
 
@@ -1196,6 +1163,61 @@ class AppLocalizationsEn extends AppLocalizations {
   String attachmentUploadAnnouncement(String name, String state) {
     return '$name: $state';
   }
+
+  @override
+  String attachmentTileSemantics(
+    String kind,
+    String name,
+    String size,
+    String state,
+  ) {
+    return '$kind: $name, $size, $state';
+  }
+
+  @override
+  String get attachmentNotDownloaded => 'Not downloaded';
+
+  @override
+  String get attachmentDownloadWaiting => 'Waiting to download';
+
+  @override
+  String attachmentDownloading(int percent) {
+    return 'Downloading, $percent%';
+  }
+
+  @override
+  String attachmentVerifying(int percent) {
+    return 'Verifying, $percent%';
+  }
+
+  @override
+  String get attachmentReady => 'Downloaded and verified';
+
+  @override
+  String get attachmentExpired =>
+      'Expired: the server no longer keeps this file';
+
+  @override
+  String get attachmentDamaged =>
+      'Damaged: this file did not pass the check, and nothing was kept';
+
+  @override
+  String get attachmentDownloadFailed => 'The download failed';
+
+  @override
+  String get attachmentDownloadHint => 'Download';
+
+  @override
+  String get attachmentCancelDownloadHint => 'Cancel the download';
+
+  @override
+  String get attachmentRetryDownloadHint => 'Try the download again';
+
+  @override
+  String get attachmentDetailsHint => 'Show Open, Save and Share';
+
+  @override
+  String get attachmentPictureUnavailable => 'This picture cannot be shown';
 
   @override
   String attachmentDetailsLine(String type, String size) {

@@ -1001,39 +1001,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get attachmentFileLabel => 'پیوست رمزنگاری‌شده';
 
   @override
-  String get attachmentOpenHint => 'پس از تأیید محلی باز کنید';
-
-  @override
-  String get attachmentQueuedState => 'پیوست در صف است';
-
-  @override
-  String get attachmentDownloadingState => 'در حال دریافت پیوست';
-
-  @override
-  String get attachmentVerifyingState => 'در حال تأیید پیوست';
-
-  @override
-  String get attachmentReadyState => 'پیوست تأییدشده';
-
-  @override
-  String get attachmentExpiredState => 'پیوست منقضی شده است';
-
-  @override
-  String get attachmentCancelledState => 'پیوست لغو شده است';
-
-  @override
-  String get attachmentQuotaState => 'سهمیهٔ پیوست تمام شده است';
-
-  @override
-  String get attachmentUnsupportedState => 'پیوست پشتیبانی نمی‌شود';
-
-  @override
-  String get attachmentCorruptState => 'پیوست خراب است';
-
-  @override
-  String get attachmentFailedState => 'پیوست ناموفق بود';
-
-  @override
   String get attachmentPickBusy =>
       'یک انتخابگر دیگر باز است. اول کار آن را تمام کنید.';
 
@@ -1191,6 +1158,61 @@ class AppLocalizationsFa extends AppLocalizations {
   String attachmentUploadAnnouncement(String name, String state) {
     return '$name: $state';
   }
+
+  @override
+  String attachmentTileSemantics(
+    String kind,
+    String name,
+    String size,
+    String state,
+  ) {
+    return '$kind: $name، $size، $state';
+  }
+
+  @override
+  String get attachmentNotDownloaded => 'بارگیری نشده';
+
+  @override
+  String get attachmentDownloadWaiting => 'در انتظار بارگیری';
+
+  @override
+  String attachmentDownloading(int percent) {
+    return 'در حال بارگیری، $percent٪';
+  }
+
+  @override
+  String attachmentVerifying(int percent) {
+    return 'در حال بررسی، $percent٪';
+  }
+
+  @override
+  String get attachmentReady => 'بارگیری و بررسی شد';
+
+  @override
+  String get attachmentExpired =>
+      'منقضی شده: سرور دیگر این فایل را نگه نمی‌دارد';
+
+  @override
+  String get attachmentDamaged =>
+      'آسیب‌دیده: این فایل از بررسی سربلند بیرون نیامد و چیزی نگه داشته نشد';
+
+  @override
+  String get attachmentDownloadFailed => 'بارگیری انجام نشد';
+
+  @override
+  String get attachmentDownloadHint => 'بارگیری';
+
+  @override
+  String get attachmentCancelDownloadHint => 'لغو بارگیری';
+
+  @override
+  String get attachmentRetryDownloadHint => 'تلاش دوباره برای بارگیری';
+
+  @override
+  String get attachmentDetailsHint => 'نمایش باز کردن، ذخیره و اشتراک‌گذاری';
+
+  @override
+  String get attachmentPictureUnavailable => 'این تصویر قابل نمایش نیست';
 
   @override
   String attachmentDetailsLine(String type, String size) {

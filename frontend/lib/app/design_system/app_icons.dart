@@ -46,6 +46,15 @@ abstract final class AppIcons {
   static const file = AppIconData._(FLucideIcons.file, 'file');
   static const camera = AppIconData._(FLucideIcons.camera, 'camera');
 
+  /// Fetch a received attachment.
+  static const download = AppIconData._(FLucideIcons.download, 'download');
+
+  /// The server copy of an attachment is gone.
+  static const expired = AppIconData._(FLucideIcons.timerOff, 'expired');
+
+  /// An attachment that did not pass verification.
+  static const damaged = AppIconData._(FLucideIcons.fileWarning, 'damaged');
+
   /// Hand a verified file to another app to view.
   static const openFile = AppIconData._(FLucideIcons.externalLink, 'openFile');
 

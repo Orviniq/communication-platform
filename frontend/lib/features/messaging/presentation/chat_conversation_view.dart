@@ -4,6 +4,7 @@ import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
@@ -22,6 +23,8 @@ class ChatConversationView extends StatefulWidget {
     this.forwardTargets,
     this.attachments = ChatAttachmentAvailability.notBuilt,
     this.uploads,
+    this.attachmentTransfers,
+    this.attachmentRetentionDays = 30,
     super.key,
   });
 
@@ -37,6 +40,15 @@ class ChatConversationView extends StatefulWidget {
   /// composer. A slot rather than a list, so that a percent that moves
   /// rebuilds the tray and not the timeline above it.
   final Widget? uploads;
+
+  /// The downloads and the ready pictures the timeline's attachment tiles
+  /// read, or null where attachments are not built: a tile then shows its row
+  /// alone.
+  final ChatAttachmentTransfers? attachmentTransfers;
+
+  /// How many days the server keeps an attachment after it was sent, which
+  /// the delete dialog of an attachment message states.
+  final int attachmentRetentionDays;
 
   /// Where a forward may go, resolved when the sheet opens.
   ///
@@ -190,10 +202,20 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                   constraints: const BoxConstraints(
                     maxWidth: AppContentWidths.readable,
                   ),
-                  child: ChatTimelineAdapter(
-                    model: model,
-                    onIntent: _handleIntent,
-                  ),
+                  child: switch (widget.attachmentTransfers) {
+                    final transfers? => ChatAttachmentScope(
+                      transfers: transfers,
+                      retentionDays: widget.attachmentRetentionDays,
+                      child: ChatTimelineAdapter(
+                        model: model,
+                        onIntent: _handleIntent,
+                      ),
+                    ),
+                    null => ChatTimelineAdapter(
+                      model: model,
+                      onIntent: _handleIntent,
+                    ),
+                  },
                 ),
               ),
             ),

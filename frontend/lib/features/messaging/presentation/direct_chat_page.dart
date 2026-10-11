@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
@@ -9,6 +10,7 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_downloads.dart';
 import 'package:communication_platform/features/attachments/application/attachment_file_actions.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_download_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_send_flow.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
@@ -16,6 +18,7 @@ import 'package:communication_platform/features/attachments/presentation/attachm
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
@@ -159,6 +162,11 @@ class _ProjectedConversationPageState
   /// because this is the layer that resolved a conversation identity, and the
   /// same layer that registers the identity as on screen.
   VisibleConversationReadMarker? _readMarker;
+
+  /// What the timeline's attachment tiles read: one object for the life of
+  /// the page, so that a rebuild of the page redraws no tile.
+  late final _SessionAttachmentTransfers _attachmentTransfers =
+      _SessionAttachmentTransfers(_downloads);
 
   /// The download queue of this device's session, or null when the session
   /// has no device to download for.
@@ -377,6 +385,10 @@ class _ProjectedConversationPageState
           currentUserId: widget.currentUserId,
           conversationId: conversationId,
         ),
+        attachmentTransfers: _attachmentTransfers,
+        attachmentRetentionDays: ref.watch(
+          publishedLimitsProvider.select((limits) => limits.attachmentTtlDays),
+        ),
         onIntent: (intent) => _dispatch(context, intent),
       ),
     );
@@ -491,6 +503,26 @@ class _ProjectedConversationPageState
           ),
         ),
       );
+      return;
+    }
+    // A tap on a tile (ADR-089 D7). The queue is the session's, so a download
+    // goes on when this page is closed.
+    if (intent case DownloadAttachmentIntent(
+      :final messageId,
+      :final attachment,
+    )) {
+      (await _downloads())?.download(
+        messageId: messageId,
+        descriptor: attachment,
+      );
+      return;
+    }
+    if (intent case RetryAttachmentDownloadIntent(:final attachment)) {
+      (await _downloads())?.retry(attachment.capabilityId);
+      return;
+    }
+    if (intent case CancelAttachmentDownloadIntent(:final attachment)) {
+      (await _downloads())?.cancel(attachment.capabilityId);
       return;
     }
     if (intent is LoadOlderMessagesIntent) {
@@ -646,6 +678,45 @@ class _ProjectedConversationPageState
       }
     }
   }
+}
+
+/// [ChatAttachmentTransfers] over the session's download queue, which is
+/// resolved when a tile first asks: the device id it is keyed by is read
+/// asynchronously.
+final class _SessionAttachmentTransfers implements ChatAttachmentTransfers {
+  _SessionAttachmentTransfers(this._resolve);
+
+  final Future<AttachmentDownloads?> Function() _resolve;
+  Future<AttachmentDownloads?>? _pending;
+  AttachmentDownloads? _downloads;
+
+  /// Resolved once; a session with no device yet is asked again next time.
+  Future<AttachmentDownloads?> _queue() =>
+      _pending ??= _resolve().then((downloads) {
+        if (downloads == null) {
+          _pending = null;
+        }
+        return _downloads = downloads;
+      });
+
+  @override
+  AttachmentDownloadJob? jobOf(String attachmentId) =>
+      _downloads?.jobOf(attachmentId);
+
+  @override
+  Stream<AttachmentDownloadJob?> watch(String attachmentId) async* {
+    final downloads = await _queue();
+    if (downloads != null) {
+      yield* downloads.watch(attachmentId);
+    }
+  }
+
+  @override
+  Future<File?> picture(String attachmentId) async =>
+      (await _queue())?.peek(attachmentId);
+
+  @override
+  String toString() => '_SessionAttachmentTransfers(<redacted>)';
 }
 
 /// The upload jobs of one conversation, read from the session's queue and

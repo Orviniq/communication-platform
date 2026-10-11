@@ -1844,72 +1844,6 @@ abstract class AppLocalizations {
   /// **'Encrypted attachment'**
   String get attachmentFileLabel;
 
-  /// No description provided for @attachmentOpenHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Open after local verification'**
-  String get attachmentOpenHint;
-
-  /// No description provided for @attachmentQueuedState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment queued'**
-  String get attachmentQueuedState;
-
-  /// No description provided for @attachmentDownloadingState.
-  ///
-  /// In en, this message translates to:
-  /// **'downloading attachment'**
-  String get attachmentDownloadingState;
-
-  /// No description provided for @attachmentVerifyingState.
-  ///
-  /// In en, this message translates to:
-  /// **'verifying attachment'**
-  String get attachmentVerifyingState;
-
-  /// No description provided for @attachmentReadyState.
-  ///
-  /// In en, this message translates to:
-  /// **'verified attachment'**
-  String get attachmentReadyState;
-
-  /// No description provided for @attachmentExpiredState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment expired'**
-  String get attachmentExpiredState;
-
-  /// No description provided for @attachmentCancelledState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment cancelled'**
-  String get attachmentCancelledState;
-
-  /// No description provided for @attachmentQuotaState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment quota exceeded'**
-  String get attachmentQuotaState;
-
-  /// No description provided for @attachmentUnsupportedState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment unsupported'**
-  String get attachmentUnsupportedState;
-
-  /// No description provided for @attachmentCorruptState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment corrupt'**
-  String get attachmentCorruptState;
-
-  /// No description provided for @attachmentFailedState.
-  ///
-  /// In en, this message translates to:
-  /// **'attachment failed'**
-  String get attachmentFailedState;
-
   /// No description provided for @attachmentPickBusy.
   ///
   /// In en, this message translates to:
@@ -2153,6 +2087,95 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name}: {state}'**
   String attachmentUploadAnnouncement(String name, String state);
+
+  /// No description provided for @attachmentTileSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind}: {name}, {size}, {state}'**
+  String attachmentTileSemantics(
+    String kind,
+    String name,
+    String size,
+    String state,
+  );
+
+  /// No description provided for @attachmentNotDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded'**
+  String get attachmentNotDownloaded;
+
+  /// No description provided for @attachmentDownloadWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to download'**
+  String get attachmentDownloadWaiting;
+
+  /// No description provided for @attachmentDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading, {percent}%'**
+  String attachmentDownloading(int percent);
+
+  /// No description provided for @attachmentVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying, {percent}%'**
+  String attachmentVerifying(int percent);
+
+  /// No description provided for @attachmentReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded and verified'**
+  String get attachmentReady;
+
+  /// No description provided for @attachmentExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired: the server no longer keeps this file'**
+  String get attachmentExpired;
+
+  /// No description provided for @attachmentDamaged.
+  ///
+  /// In en, this message translates to:
+  /// **'Damaged: this file did not pass the check, and nothing was kept'**
+  String get attachmentDamaged;
+
+  /// No description provided for @attachmentDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The download failed'**
+  String get attachmentDownloadFailed;
+
+  /// No description provided for @attachmentDownloadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get attachmentDownloadHint;
+
+  /// No description provided for @attachmentCancelDownloadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel the download'**
+  String get attachmentCancelDownloadHint;
+
+  /// No description provided for @attachmentRetryDownloadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Try the download again'**
+  String get attachmentRetryDownloadHint;
+
+  /// No description provided for @attachmentDetailsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Open, Save and Share'**
+  String get attachmentDetailsHint;
+
+  /// No description provided for @attachmentPictureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This picture cannot be shown'**
+  String get attachmentPictureUnavailable;
 
   /// No description provided for @attachmentDetailsLine.
   ///
