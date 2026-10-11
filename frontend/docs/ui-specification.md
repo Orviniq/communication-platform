@@ -543,7 +543,8 @@ second copy of every message body ([ADR-057](decisions.md)).
 
 ## 8. DM Chat Screen
 
-**Purpose.** 1-on-1 encrypted text conversation with the full chat experience.
+**Purpose.** 1-on-1 encrypted conversation, text and attachments, with the full chat
+experience.
 
 **Layout (top → bottom).**
 1. **Top bar:**
@@ -600,7 +601,7 @@ second copy of every message body ([ADR-057](decisions.md)).
    *Sending* — a progress bar, and **Cancel**. A failed row names its reason instead: today's
    upload allowance is spent, with the local time it resets; the file is too large for the
    server; the server's storage is full; too many transfers; no connection; or the upload
-   failed. It offers **Retry** and **Discard**, and Discard only for a size the server never
+   failed. It offers **Retry** and **Discard**, and Discard alone for a size the server never
    takes.
    - Uploads run one at a time, the oldest first, and in memory: a process that dies drops
      them, and the user sends again.
@@ -937,7 +938,8 @@ Every state above is drawn in [`design-handoff/voice-room-states.md`](design-han
    - **Message** → DM (§8).
    - **Mute** → mute options (§17).
    - **Verify safety number** → Safety Number screen (§11.1).
-   - **Shared media/files** → a media grid from this DM, decrypted locally (§11.2).
+   - **Shared media/files** → a media grid from this DM, decrypted locally (§11.2). Not
+     built: the row is drawn disabled.
    - **Clear history** → confirm, honest wording.
    - **Block/Unblock** → confirm. Blocking is private client state synchronized only to
      the user's own devices. It suppresses display, receipts, presence, typing, and
@@ -956,6 +958,9 @@ Every state above is drawn in [`design-handoff/voice-room-states.md`](design-han
   they are not dismissible warnings or automatic TOFU resets.
 
 ### 11.2 Shared media screen
+*Not built ([ADR-089](decisions.md) D1).* No route opens it: the *Shared media and files* row
+of Contact Profile (§11) and the *Shared media* button of Group Info (§12.2) are drawn
+disabled. A received attachment is reached from its message (§8).
 - A grid of images/files from the conversation, decrypted locally, with tap-to-open and
   jump-to-message.
 
@@ -979,7 +984,8 @@ Reached from Contacts (§7). Multi-step:
 **Layout (top → bottom).**
 1. **Top bar:** back; an **Edit** affordance for owner/admins → §12.3.
 2. **Header:** group photo, name, description, member count.
-3. **Quick actions:** **Mute**, **Search in chat**, **Shared media** (grid like §11.2).
+3. **Quick actions:** **Mute**, **Search in chat**, **Shared media** (grid like §11.2; not
+   built, so the button is drawn disabled).
 4. **Members section:** each row — avatar, name, a **role tag** (owner/admin/member), a
    verified-key indicator if verified.
    - **Tap a member** → sheet with **Message** (DM), **Verify safety number** (§11.1), and
@@ -1384,7 +1390,7 @@ Every dialog that performs an irreversible or best-effort action must carry hone
 17. Live Voice Room (§10)
 18. Contact Profile (§11)
 19. Safety Number (§11.1)
-20. Shared media (§11.2)
+20. Shared media (§11.2) — not built
 21. Create Group (§12.1)
 22. Group Info (§12.2)
 23. Edit Group (§12.3)

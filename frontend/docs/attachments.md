@@ -12,7 +12,7 @@ analytics, copied into diagnostics, or exposed in notification previews.
 
 ## Phase 1: direct chats (ADR-089)
 
-*Proposed 2026-10-10; built over five prompts on `frontend-dm-attachments`.* Attachments work
+*Accepted 2026-10-11; built over five prompts on `frontend-dm-attachments`.* Attachments work
 in a direct chat and in Saved Messages. A group chat gets none in this phase: its paperclip opens
 the attachment sheet with the "not built" notice. The rules below are binding client behaviour;
 ADR-089 holds the reasons, the rejected alternatives and the Android sources.
@@ -335,6 +335,16 @@ progress shows only inside the application: no notification carries it. The deta
   oversized dimensions, decompression bombs, and malicious filenames.
 - Test cancellation/process death at every pipeline stage.
 - Test constant bucket sizing and ensure temporary plaintext never survives failure.
+
+*As tested 2026-10-11 (ADR-089, Verified by).* Host tests cover the header vector, malicious
+names, types and dimensions, a bucket that is not the smallest, truncated, reordered and
+corrupted chunks and a missing final tag, each of which deletes the output, a cancel at each
+stage of an upload and a download, the bucket sizes, the resumed download, and a file sent
+from one simulated device and opened on another through one in-memory server. Not tested:
+a process that dies part-way, beyond the first sweep that deletes what one left; fuzzing;
+decompression bombs, because pictures are decoded by Android code that no host test runs;
+and the encoding of a descriptor in the Rust core, whose round-trip test carries text
+messages only.
 
 ## API reference
 
