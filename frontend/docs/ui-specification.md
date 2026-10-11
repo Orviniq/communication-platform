@@ -558,6 +558,40 @@ second copy of every message body ([ADR-057](decisions.md)).
    - **Message bubble:** text (decrypted locally), timestamp, outgoing delivery/read state,
      an **edited** marker if edited, a reply-quote block if it's a reply, reaction chips
      beneath, a star marker if starred.
+   - **Attachment message** (a DM and Saved Messages, [ADR-089](decisions.md) D7): one
+     **tile** for each attachment the message carries, then the **caption** below them. The
+     caption is the message's text, so an edit changes it; its direction follows its first
+     strong character. A message deleted for everyone or for me shows no tile.
+   - **Tile:** the kind's icon, the name (at most two lines), the size in the locale's unit,
+     and the state, at most 260 logical px wide and never lower than the minimum touch
+     target. The states and what a tap on the tile does:
+
+     | State | Shown as | Tap |
+     |---|---|---|
+     | not downloaded | *Not downloaded*, with a download mark | downloads |
+     | waiting | *Waiting to download*, with a bar | cancels |
+     | downloading | *Downloading, n%*, with a bar | cancels |
+     | verifying | *Verifying, n%*, with a bar | cancels |
+     | ready | *Downloaded and verified* | opens the details sheet (§8.2) |
+     | expired | *Expired: the server no longer keeps this file* | nothing |
+     | damaged | *Damaged: this file did not pass the check, and nothing was kept* | nothing |
+     | failed | *The download failed*, with a retry mark | downloads again |
+
+     A tile with nothing to do takes the tap and does nothing; a tap on the bubble outside
+     every tile opens the context menu as on any message. Downloads run one at a time, the
+     oldest first, and none starts without a tap. A tile listens to its own download, so a
+     percent that moves redraws that tile alone.
+   - **Inline picture:** a ready JPEG, PNG, WebP or GIF sent as a picture shows in its tile,
+     decoded no wider than the tile in device pixels and never wider than 1,024 px. Until it
+     is ready, a placeholder of the same size keeps its place: the descriptor's aspect ratio,
+     kept between 1:2 and 2:1, at most 260 × 320 logical px, so the timeline does not jump.
+     A picture that cannot be decoded says *This picture cannot be shown*, and its tile still
+     opens the details sheet. A ready picture whose file the cache no longer holds is *not
+     downloaded* again.
+   - **Accessibility:** each tile is one semantic node. Its label holds the kind, the name,
+     the size and the state; its hint names what a tap does (*Download*, *Cancel the
+     download*, *Try the download again*, *Show Open, Save and Share*), and an expired or
+     damaged tile has none.
    - **Pinned banner** atop the list if any message is pinned; tap to jump; expand → all
      pinned messages (§8.3).
 3. **Upload tray** (a DM and Saved Messages), between the list and the input bar, while the
@@ -610,18 +644,23 @@ long-press.
   set operation per `(message, user)`, so choosing a second one replaces the first.
   **[PRIVACY]** the reaction is encrypted, and the server never sees the emoji. No control
   anywhere sends a fixed emoji ([ADR-059](decisions.md)).
-- **Reply** — sets the reply strip.
+- **Reply** — sets the reply strip. A reply to an attachment message with no caption quotes
+  the name of its first attachment.
 - **Edit** (own messages) — loads the message into the input with an edit strip.
 - **Forward** — Forward target picker (§8.4). An attachment message forwards its
   attachments with their caption. The server's copy is not copied, so a forwarded
   attachment expires on the date of the first send ([ADR-089](decisions.md) D11).
-- **Copy** — local clipboard.
+- **Copy** — local clipboard. An attachment message copies its caption, and one with no
+  caption does not offer Copy.
 - **Star/Unstar** — client-side flag.
 - **Pin/Unpin**.
 - **Delete** → **Delete dialog** with two clearly labeled options: **Delete for me** (local
   only) and **Delete for everyone** (**best-effort**). **[PRIVACY]** The dialog must state
   honestly that *Delete for everyone* cannot force other devices to forget content they've
-  already received and decrypted.
+  already received and decrypted. The dialog of an attachment message adds one sentence: the
+  encrypted copy on the server stays until it expires, up to N days, and nobody can read it
+  without the key in the message. N is the server's `attachment_ttl_days`; there is no
+  server delete.
 
 **States.**
 - *Loading* — history loads locally; older messages page in on scroll-up. The timeline holds
@@ -638,19 +677,21 @@ long-press.
   attachments and its caption, never with its caption alone ([ADR-089](decisions.md) D11).
 - *Uploading* — the upload tray (above) shows each attachment until its message is
   committed.
+- *Downloading* — a received attachment's tile shows its download (above); the download goes
+  on when the chat is closed, and ends with the session.
 - *Offline* — the composer says that a send waits in the queue; existing history fully
   readable; composing allowed, sends queued.
 
 ### 8.2 Attachment sheet
 
-*As built 2026-10-10 ([ADR-089](decisions.md) D1, D5, D6).* The sheet has three modes:
+*As built 2026-10-10 and 2026-10-11 ([ADR-089](decisions.md) D1, D5, D6, D7).* The sheet has
+three modes:
 
 - **Choose** — a DM and Saved Messages: **Photo or image**, **File** and **Camera**, then
   Cancel.
 - **Not built** — a group chat (§9): "Group chats cannot send files yet. Files can be sent in
   direct chats and in Saved Messages.", the *Not built yet* badge, and Cancel.
-- **Details** — a received attachment: its name, type and size. Open, Save and Share come
-  with the receive work of the same phase.
+- **Details** — a ready attachment, from a tap on its tile (§8): see *Details* below.
 
 **Choice.** A choice closes the sheet and opens the system photo picker, the file picker or
 the camera app ([ADR-089](decisions.md) D2) under a byte limit: the largest file that fits
@@ -677,6 +718,22 @@ accept.
   follows its first strong character;
 - **Send**, which closes the step and adds an upload job (§8, upload tray), and **Cancel**,
   which deletes the copy the pick made, as the barrier and Back do.
+
+**Details.** *As built 2026-10-11 ([ADR-089](decisions.md) D7, D8).* The name, the type
+and the size; one sentence, "The server keeps the encrypted copy for up to N days after it
+was sent.", N being the server's `attachment_ttl_days`; then **Open**, **Save** and
+**Share**, and Cancel. Each action first opens the cached file, which moves its expiry to
+seven days from now, then hands it to the system: Open to the app that views the type, Save
+to the document the user creates, Share to the app the user picks. While one action is with
+the system the others wait. A failure is said on the sheet, in a live region:
+
+- no app on this phone can open the file — save it instead;
+- the file could not be saved;
+- the file is no longer on this phone — download it again from its message (the cache
+  evicted or expired it, and its tile is *not downloaded* again);
+- the phone did not take the file (any other refusal).
+
+A save the user closed says nothing.
 
 Both sheets keep their controls above the keyboard and the gesture bar, and scroll when they
 are taller than their room. An attachment message carries no reply reference: a reply the

@@ -177,6 +177,64 @@ target).
 Never open active content directly in the application origin. Android shares files
 through a scoped content URI, not a raw path.
 
+### As built (ADR-089 D7, D8, D9)
+
+*Built 2026-10-11, prompt 4 of the phase.* `AttachmentDownloads`
+(`lib/features/attachments/application/attachment_downloads.dart`) is the download queue of
+one session, one for each `MessagingScope`, composed in `attachment_providers.dart`. The
+tiles and the details sheet are in [UI specification](ui-specification.md) §8 and §8.2.
+
+1. **Tap.** No download starts without a tap on a tile. A tap adds a job for that
+   attachment id, and a second request for an id that has a job does nothing. Jobs live in
+   memory and run one at a time, the oldest first.
+2. **Job.** A job:
+   1. waits for the cache's first sweep;
+   2. reads its row, and stops with no network call when the row is gone (its message was
+      deleted) or says `expired`;
+   3. downloads, verifies and decrypts the bucket (`downloadAndDecrypt`), reporting the
+      share of the bucket fetched, then the share of the plaintext checked, in whole
+      percents;
+   4. reads its row again, and deletes the decrypted file when the row is gone: the message
+      was deleted while the job ran;
+   5. hands the file to the cache (`adoptDecrypted`), which moves it to
+      `plain/<random id>/<safe name>`, marks the row `ready` with an expiry seven days on,
+      then holds the 256 MiB bound.
+3. **Which step failed.** `downloadAndDecrypt` answers the step a failure came from: the
+   download, or the verification. The transport and the crypto service both answer
+   `malformedServerResponse`, so the failure alone could not say whether the bytes never
+   arrived whole or arrived and were not the file.
+4. **Outcomes.**
+
+   | What happened | The row | The job |
+   |---|---|---|
+   | finished | `ready`, seven days | leaves |
+   | `404`, or an `ETag` that moved: the server copy is gone | `expired` | leaves |
+   | the bytes arrived and did not verify | not downloaded | *damaged*, until a retry or a restart |
+   | no connection, `429`, `500`, `503`, a token the server refused, a broken length or range | not downloaded | *failed*; a tap retries |
+   | the disk, while the file was decrypted | not downloaded | *failed* |
+   | cancelled, or the session ended | not downloaded | leaves |
+
+   No decrypted file outlives a job that did not finish. The download's `500` is
+   `server_error` and its `503` is `unavailable`, as `backend/openapi.json` lists them for the
+   route; both keep the bytes already fetched for the next attempt (ADR-083).
+5. **Cancel.** A cancel removes a waiting job at once and stops a running one at its next
+   check: the request while it downloads, between two chunks while it verifies. A large
+   download's partial bytes stay with the transport, and the next download of the same
+   attachment in the session goes on from them.
+6. **Open.** Open, Save and Share first ask the queue to open the file: the cache gives it
+   and moves its expiry to seven days from now. A file that went missing or expired returns
+   its row to "not downloaded", and the sheet says the file is no longer on the phone. An
+   inline picture is looked at, not opened: the look moves no expiry and writes nothing.
+7. **End of session.** When the session ends (`attachmentSessionActiveProvider`), the queue
+   cancels every job and takes no more. Both queues hear the end through the provider
+   container rather than through their provider's own `ref.listen`: Riverpod 3 pauses the
+   subscriptions of a provider nothing listens to, and a transfer goes on after its chat is
+   closed, when nothing does.
+8. **The timeline.** A download, an open, an eviction and an expiry write the attachment row
+   and not the message. The timeline's query watches the messages, so the page is projected
+   again after a write that changed the attachment rows alone; a write that touched both
+   tables is one emission, as before.
+
 ## Resuming a download
 
 Implemented 2026-10-07 (ADR-083), on the behaviour the
@@ -246,10 +304,29 @@ open (*Send pipeline*, as built).
 
 ## UI states
 
-Queued, encrypting, uploading, sending, downloading, verifying, ready, expired, cancelled,
-quota exceeded, unsupported, corrupt, and failed/retry are distinct. Progress avoids
-revealing filenames/content outside the unlocked app. Users are told that server
-attachments normally expire after 30 days and should be downloaded promptly.
+*As built 2026-10-11 (ADR-089 D7, D9).* The database keeps three states (`queued`, `ready`,
+`expired`); the rest live in memory, with the job that has them. An upload's states are the
+tray's (*Send pipeline*, as built): waiting, encrypting, uploading, sending, and failed with
+its reason. A received attachment's tile reads its row, what the cache holds and its
+download job as one presentation state, `ChatAttachmentTileState`, which is not an
+`AttachmentTransferState`: that one's index is what the database stores, and its CHECK
+allows nothing past 8.
+
+| Tile state | From | What a tap does |
+|---|---|---|
+| not downloaded | `queued` and no job; a `ready` row whose picture the cache no longer holds; every value the client never writes | downloads |
+| waiting | a waiting job | cancels |
+| downloading, n% | a downloading job | cancels |
+| verifying, n% | a verifying job | cancels |
+| ready | `ready` and no job | opens the details sheet |
+| expired | `expired` and no job | nothing; the state says the server no longer keeps the file |
+| damaged | a damaged job | nothing; the state says the file did not pass the check |
+| failed | a failed job | retries |
+
+A job decides while it exists, because it is the newest thing known. The tile listens to its
+own job, so a percent that moves redraws one tile and not its bubble (ADR-064). A transfer's
+progress shows only inside the application: no notification carries it. The details sheet states how many days the server keeps the encrypted copy
+(`attachment_ttl_days`), and so does the delete dialog of an attachment message.
 
 ## Limits and testing
 

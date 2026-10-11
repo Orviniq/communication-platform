@@ -303,6 +303,33 @@ pass through `safeAttachmentName` and `safeMimeType`. `attachmentPlaintextLimit`
 limit of a bucket on the formula of `attachmentBucketFor`: 65,429 bytes for 64 KiB up to
 67,091,366 for 64 MiB.
 
+### The receive flow, as built (prompt 4)
+
+`attachments.md`, *Receive pipeline* and *UI states*, holds the pipeline and the tile states;
+`ui-specification.md` §8 and §8.2 the screens. Details the decisions above do not spell out:
+
+- **Which step failed.** `AttachmentTransferService.downloadAndDecrypt` answers the step a
+  failure came from, the download or the verification, because the transport and the crypto
+  service both answer `malformedServerResponse`. A failure of the verification is *damaged*
+  and is not retried by a tap; one of the download is *failed* and is. The download's `500`
+  and `503` map to `server_error` and `unavailable`, which ADR-083 recorded as missing.
+- **A cancel while verifying.** The tile cancels in the verifying state as well as in the
+  waiting and downloading ones. The prompt named only the last two; a decryption of a large
+  file takes long enough to want a cancel, and the crypto service stops between two chunks.
+- **The session's end** is read from `attachmentSessionActiveProvider`, which has the rule of
+  `voiceSessionActiveProvider` that the prompt named, as the send flow reads it. Both queues
+  listen to it through the provider container: Riverpod 3 pauses the subscriptions of a
+  provider nothing listens to, and a transfer goes on after its chat is closed. The upload
+  queue's own `ref.listen` had that defect, and a running upload outlived a logout.
+- **The timeline follows the row.** The page's query watched the `messages` table only, so a
+  finished download stayed "not downloaded" until its message was written again. The page
+  is projected again after a write that changed the attachment rows alone.
+- **The delete dialog** is in `chat_message_builder.dart`, not in `chat_conversation_view.dart`
+  as the prompt said; its sentence reads the retention days from the timeline's attachment
+  scope.
+- **Forward** was offered only for a message with a caption, so an attachment message with
+  none could not be forwarded although D11 forwards its descriptors. It is offered now.
+
 ### Rejected alternatives
 
 - **A picker package** (`image_picker`, `file_picker`). It adds a dependency and plugin code to
