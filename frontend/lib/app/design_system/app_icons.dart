@@ -45,6 +45,15 @@ abstract final class AppIcons {
   static const photo = AppIconData._(FLucideIcons.image, 'photo');
   static const file = AppIconData._(FLucideIcons.file, 'file');
   static const camera = AppIconData._(FLucideIcons.camera, 'camera');
+
+  /// Hand a verified file to another app to view.
+  static const openFile = AppIconData._(FLucideIcons.externalLink, 'openFile');
+
+  /// Write a copy of a verified file where the user chooses.
+  static const saveFile = AppIconData._(FLucideIcons.save, 'saveFile');
+
+  /// Offer a verified file to another app to send on.
+  static const share = AppIconData._(FLucideIcons.share2, 'share');
   static const emoji = AppIconData._(FLucideIcons.smile, 'emoji');
   static const keyboard = AppIconData._(FLucideIcons.keyboard, 'keyboard');
   static const more = AppIconData._(FLucideIcons.ellipsisVertical, 'more');

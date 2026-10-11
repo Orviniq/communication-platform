@@ -333,7 +333,6 @@
   "chatSearchEmptyQueryTitle": "جست‌وجوی تاریخچهٔ این دستگاه",
   "chatMoreAction": "عملیات بیشتر گفت‌وگو",
   "chatYouAuthor": "شما",
-  "chatAttachmentsUnavailable": "باز کردن یا ذخیرهٔ فایل تأییدشده",
   "attachmentChoosePrompt": "رسانه یا فایل رمزنگاری‌شده را انتخاب کنید.",
   "attachmentsNotBuiltNotice": "گفت‌وگوهای گروهی هنوز نمی‌توانند فایل بفرستند. فایل را می‌توان در گفت‌وگوهای دونفره و در پیام‌های ذخیره‌شده فرستاد.",
   "attachmentPhotoOption": "عکس یا تصویر",
@@ -352,13 +351,6 @@
   "attachmentUnsupportedState": "پیوست پشتیبانی نمی‌شود",
   "attachmentCorruptState": "پیوست خراب است",
   "attachmentFailedState": "پیوست ناموفق بود",
-  "attachmentDetails": "{mimeType} · {size} بایت",
-  "@attachmentDetails": {
-    "placeholders": {
-      "mimeType": {"type": "String"},
-      "size": {"type": "int"}
-    }
-  },
   "attachmentPickBusy": "یک انتخابگر دیگر باز است. اول کار آن را تمام کنید.",
   "attachmentPickTooLarge": "این فایل برای ارسال خیلی بزرگ است. بزرگ‌ترین فایل {size} است.",
   "attachmentPickUnsupportedImage": "این تصویر روی این گوشی خوانده نمی‌شود. آن را به‌صورت فایل بفرستید.",
@@ -399,6 +391,15 @@
   "attachmentUploadRetryAction": "تلاش مجدد برای بارگذاری",
   "attachmentUploadDiscardAction": "دور انداختن بارگذاری",
   "attachmentUploadAnnouncement": "{name}: {state}",
+  "attachmentDetailsLine": "{type} · {size}",
+  "attachmentServerRetention": "{days, plural, other{سرور نسخهٔ رمزنگاری‌شده را تا {days} روز پس از ارسال نگه می‌دارد.}}",
+  "attachmentOpenAction": "باز کردن",
+  "attachmentSaveAction": "ذخیره",
+  "attachmentShareAction": "اشتراک‌گذاری",
+  "attachmentOpenNoApp": "هیچ برنامه‌ای در این گوشی نمی‌تواند این فایل را باز کند. به‌جای آن، ذخیره‌اش کنید.",
+  "attachmentSaveFailed": "فایل ذخیره نشد.",
+  "attachmentFileMissing": "این فایل دیگر روی این گوشی نیست. آن را دوباره از پیامش بارگیری کنید.",
+  "attachmentActionFailed": "گوشی فایل را نپذیرفت.",
   "chatActionFailedMessage": "عملیات انجام نشد؛ هیچ تضمین امنیتی تضعیف نشده است.",
   "chatStateLocalOnly": "فقط محلی ذخیره شد",
   "chatStateQueued": "در صف آفلاین",

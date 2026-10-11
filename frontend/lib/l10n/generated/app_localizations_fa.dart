@@ -978,9 +978,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatYouAuthor => 'شما';
 
   @override
-  String get chatAttachmentsUnavailable => 'باز کردن یا ذخیرهٔ فایل تأییدشده';
-
-  @override
   String get attachmentChoosePrompt =>
       'رسانه یا فایل رمزنگاری‌شده را انتخاب کنید.';
 
@@ -1035,11 +1032,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get attachmentFailedState => 'پیوست ناموفق بود';
-
-  @override
-  String attachmentDetails(String mimeType, int size) {
-    return '$mimeType · $size بایت';
-  }
 
   @override
   String get attachmentPickBusy =>
@@ -1199,6 +1191,44 @@ class AppLocalizationsFa extends AppLocalizations {
   String attachmentUploadAnnouncement(String name, String state) {
     return '$name: $state';
   }
+
+  @override
+  String attachmentDetailsLine(String type, String size) {
+    return '$type · $size';
+  }
+
+  @override
+  String attachmentServerRetention(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'سرور نسخهٔ رمزنگاری‌شده را تا $days روز پس از ارسال نگه می‌دارد.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get attachmentOpenAction => 'باز کردن';
+
+  @override
+  String get attachmentSaveAction => 'ذخیره';
+
+  @override
+  String get attachmentShareAction => 'اشتراک‌گذاری';
+
+  @override
+  String get attachmentOpenNoApp =>
+      'هیچ برنامه‌ای در این گوشی نمی‌تواند این فایل را باز کند. به‌جای آن، ذخیره‌اش کنید.';
+
+  @override
+  String get attachmentSaveFailed => 'فایل ذخیره نشد.';
+
+  @override
+  String get attachmentFileMissing =>
+      'این فایل دیگر روی این گوشی نیست. آن را دوباره از پیامش بارگیری کنید.';
+
+  @override
+  String get attachmentActionFailed => 'گوشی فایل را نپذیرفت.';
 
   @override
   String get chatActionFailedMessage =>

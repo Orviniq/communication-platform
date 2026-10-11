@@ -1802,12 +1802,6 @@ abstract class AppLocalizations {
   /// **'You'**
   String get chatYouAuthor;
 
-  /// No description provided for @chatAttachmentsUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Open or save verified file'**
-  String get chatAttachmentsUnavailable;
-
   /// No description provided for @attachmentChoosePrompt.
   ///
   /// In en, this message translates to:
@@ -1915,12 +1909,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'attachment failed'**
   String get attachmentFailedState;
-
-  /// No description provided for @attachmentDetails.
-  ///
-  /// In en, this message translates to:
-  /// **'{mimeType} · {size} bytes'**
-  String attachmentDetails(String mimeType, int size);
 
   /// No description provided for @attachmentPickBusy.
   ///
@@ -2165,6 +2153,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name}: {state}'**
   String attachmentUploadAnnouncement(String name, String state);
+
+  /// No description provided for @attachmentDetailsLine.
+  ///
+  /// In en, this message translates to:
+  /// **'{type} · {size}'**
+  String attachmentDetailsLine(String type, String size);
+
+  /// No description provided for @attachmentServerRetention.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{The server keeps the encrypted copy for up to 1 day after it was sent.} other{The server keeps the encrypted copy for up to {days} days after it was sent.}}'**
+  String attachmentServerRetention(int days);
+
+  /// No description provided for @attachmentOpenAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get attachmentOpenAction;
+
+  /// No description provided for @attachmentSaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get attachmentSaveAction;
+
+  /// No description provided for @attachmentShareAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get attachmentShareAction;
+
+  /// No description provided for @attachmentOpenNoApp.
+  ///
+  /// In en, this message translates to:
+  /// **'No app on this phone can open this file. Save it instead.'**
+  String get attachmentOpenNoApp;
+
+  /// No description provided for @attachmentSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The file could not be saved.'**
+  String get attachmentSaveFailed;
+
+  /// No description provided for @attachmentFileMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is no longer on this phone. Download it again from its message.'**
+  String get attachmentFileMissing;
+
+  /// No description provided for @attachmentActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The phone did not take the file.'**
+  String get attachmentActionFailed;
 
   /// No description provided for @chatActionFailedMessage.
   ///

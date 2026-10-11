@@ -979,9 +979,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatYouAuthor => 'You';
 
   @override
-  String get chatAttachmentsUnavailable => 'Open or save verified file';
-
-  @override
   String get attachmentChoosePrompt => 'Choose encrypted media or a file.';
 
   @override
@@ -1035,11 +1032,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get attachmentFailedState => 'attachment failed';
-
-  @override
-  String attachmentDetails(String mimeType, int size) {
-    return '$mimeType · $size bytes';
-  }
 
   @override
   String get attachmentPickBusy =>
@@ -1204,6 +1196,47 @@ class AppLocalizationsEn extends AppLocalizations {
   String attachmentUploadAnnouncement(String name, String state) {
     return '$name: $state';
   }
+
+  @override
+  String attachmentDetailsLine(String type, String size) {
+    return '$type · $size';
+  }
+
+  @override
+  String attachmentServerRetention(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other:
+          'The server keeps the encrypted copy for up to $days days after it was sent.',
+      one:
+          'The server keeps the encrypted copy for up to 1 day after it was sent.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get attachmentOpenAction => 'Open';
+
+  @override
+  String get attachmentSaveAction => 'Save';
+
+  @override
+  String get attachmentShareAction => 'Share';
+
+  @override
+  String get attachmentOpenNoApp =>
+      'No app on this phone can open this file. Save it instead.';
+
+  @override
+  String get attachmentSaveFailed => 'The file could not be saved.';
+
+  @override
+  String get attachmentFileMissing =>
+      'The file is no longer on this phone. Download it again from its message.';
+
+  @override
+  String get attachmentActionFailed => 'The phone did not take the file.';
 
   @override
   String get chatActionFailedMessage =>

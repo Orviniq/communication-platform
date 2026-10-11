@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/application/attachment_downloads.dart';
+import 'package:communication_platform/features/attachments/application/attachment_file_actions.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_upload_model.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_send_flow.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
@@ -156,6 +159,22 @@ class _ProjectedConversationPageState
   /// because this is the layer that resolved a conversation identity, and the
   /// same layer that registers the identity as on screen.
   VisibleConversationReadMarker? _readMarker;
+
+  /// The download queue of this device's session, or null when the session
+  /// has no device to download for.
+  Future<AttachmentDownloads?> _downloads() async {
+    try {
+      final deviceId = await ref.read(currentMessagingDeviceIdProvider.future);
+      return ref.read(
+        attachmentDownloadsProvider((
+          userId: widget.currentUserId,
+          deviceId: deviceId,
+        )),
+      );
+    } on Object {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -462,7 +481,15 @@ class _ProjectedConversationPageState
         context: context,
         // The sheet's own title: the file's name.
         semanticLabel: attachment.displayName,
-        child: AttachmentSheet.details(descriptor: attachment),
+        child: AttachmentSheet.details(
+          descriptor: attachment,
+          retentionDays: ref.read(publishedLimitsProvider).attachmentTtlDays,
+          actions: AttachmentFileActions(
+            platform: ref.read(attachmentPlatformProvider),
+            files: (attachmentId) async =>
+                (await _downloads())?.open(attachmentId),
+          ),
+        ),
       );
       return;
     }
