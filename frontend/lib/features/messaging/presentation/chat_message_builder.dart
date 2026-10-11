@@ -428,7 +428,10 @@ class ChatMessageBuilder extends StatelessWidget {
                 onIntent(BeginEditMessageIntent(message));
               },
             ),
-          if (!message.deleted && message.text?.trim().isNotEmpty == true)
+          // An attachment message forwards its attachments, with or without
+          // a caption (ADR-089 D11).
+          if (!message.deleted &&
+              (message.caption != null || message.attachments.isNotEmpty))
             _MessageAction(
               label: strings.chatForwardAction,
               icon: AppIcons.forward,
@@ -437,13 +440,15 @@ class ChatMessageBuilder extends StatelessWidget {
                 onIntent(ForwardMessageIntent(message));
               },
             ),
-          if (!message.deleted && message.text != null)
+          // The caption is what an attachment message has to copy, and one
+          // with none offers nothing.
+          if (!message.deleted && message.caption != null)
             _MessageAction(
               label: strings.chatCopyAction,
               icon: AppIcons.copy,
               onPressed: () {
                 popAppModal(context);
-                onIntent(CopyMessageIntent(message.text!));
+                onIntent(CopyMessageIntent(message.caption!));
               },
             ),
           _MessageAction(
@@ -501,10 +506,16 @@ class ChatMessageBuilder extends StatelessWidget {
 
   Future<void> _showDeleteDialog(BuildContext context) async {
     final strings = AppLocalizations.of(context);
+    // Deleting an attachment message deletes nothing on the server, which
+    // has no delete: the dialog says how long the encrypted copy stays.
+    final retentionDays = ChatAttachmentScope.maybeOf(context)?.retentionDays;
     await showAppDialog<void>(
       context: context,
       title: strings.chatDeleteTitle,
-      body: strings.chatDeleteHonestMessage,
+      body: message.attachments.isEmpty || retentionDays == null
+          ? strings.chatDeleteHonestMessage
+          : '${strings.chatDeleteHonestMessage} '
+                '${strings.chatDeleteAttachmentNote(retentionDays)}',
       actions: [
         AppButton(
           label: strings.chatCancelAction,

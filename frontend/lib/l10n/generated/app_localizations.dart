@@ -2231,6 +2231,12 @@ abstract class AppLocalizations {
   /// **'The phone did not take the file.'**
   String get attachmentActionFailed;
 
+  /// No description provided for @chatDeleteAttachmentNote.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{The encrypted copy on the server stays until it expires, up to 1 day, and nobody can read it without the key in the message.} other{The encrypted copy on the server stays until it expires, up to {days} days, and nobody can read it without the key in the message.}}'**
+  String chatDeleteAttachmentNote(int days);
+
   /// No description provided for @chatActionFailedMessage.
   ///
   /// In en, this message translates to:

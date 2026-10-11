@@ -150,7 +150,7 @@ abstract final class ChatViewModelMapper {
           : reply.senderUserId.toLowerCase() == currentUserId.toLowerCase()
           ? currentUserName
           : peerName,
-      replyQuote: reply?.text ?? message.quoteFallback,
+      replyQuote: _quoteOf(reply) ?? message.quoteFallback,
       reactions: [
         for (final entry in reactionCounts.entries)
           ChatReactionViewModel(
@@ -160,6 +160,18 @@ abstract final class ChatViewModelMapper {
           ),
       ],
     );
+  }
+
+  /// What a reply quotes of [reply]: its text, or, for an attachment message
+  /// with no caption, the name of its first attachment, which would otherwise
+  /// quote nothing at all.
+  static String? _quoteOf(ConversationMessage? reply) {
+    if (reply == null) return null;
+    final text = reply.text;
+    if ((text == null || text.trim().isEmpty) && reply.attachments.isNotEmpty) {
+      return reply.attachments.first.displayName;
+    }
+    return text;
   }
 
   static bool _grouped(

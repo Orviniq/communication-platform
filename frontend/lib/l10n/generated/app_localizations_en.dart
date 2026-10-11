@@ -1261,6 +1261,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachmentActionFailed => 'The phone did not take the file.';
 
   @override
+  String chatDeleteAttachmentNote(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other:
+          'The encrypted copy on the server stays until it expires, up to $days days, and nobody can read it without the key in the message.',
+      one:
+          'The encrypted copy on the server stays until it expires, up to 1 day, and nobody can read it without the key in the message.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get chatActionFailedMessage =>
       'That action could not be completed. No security guarantee was weakened.';
 

@@ -403,6 +403,7 @@
   "attachmentSaveFailed": "فایل ذخیره نشد.",
   "attachmentFileMissing": "این فایل دیگر روی این گوشی نیست. آن را دوباره از پیامش بارگیری کنید.",
   "attachmentActionFailed": "گوشی فایل را نپذیرفت.",
+  "chatDeleteAttachmentNote": "{days, plural, other{نسخهٔ رمزنگاری‌شده روی سرور تا انقضایش، حداکثر {days} روز، می‌ماند و هیچ‌کس بی کلیدِ درون پیام نمی‌تواند آن را بخواند.}}",
   "chatActionFailedMessage": "عملیات انجام نشد؛ هیچ تضمین امنیتی تضعیف نشده است.",
   "chatStateLocalOnly": "فقط محلی ذخیره شد",
   "chatStateQueued": "در صف آفلاین",

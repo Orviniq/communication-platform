@@ -220,7 +220,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder>
               ? contextMessage?.id
               : null,
           quoteFallback: _mode == ChatComposerMode.reply
-              ? contextMessage?.text
+              ? contextMessage?.quoteText
               : null,
         ),
       );
@@ -473,7 +473,10 @@ class _ComposerContextStrip extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    message.text ?? strings.chatDeletedMessage,
+                    (mode == ChatComposerMode.reply
+                            ? message.quoteText
+                            : message.text) ??
+                        strings.chatDeletedMessage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: context.tokens.typography.compact,

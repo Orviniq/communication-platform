@@ -124,6 +124,11 @@ final class ChatMessageViewModel {
     final value = text;
     return value == null || value.trim().isEmpty ? null : value;
   }
+
+  /// What a reply to this message quotes: its text, or, for an attachment
+  /// message with no caption, the name of its first attachment.
+  String? get quoteText =>
+      caption ?? (attachments.isEmpty ? text : attachments.first.displayName);
 }
 
 @immutable

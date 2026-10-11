@@ -1253,6 +1253,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String get attachmentActionFailed => 'گوشی فایل را نپذیرفت.';
 
   @override
+  String chatDeleteAttachmentNote(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other:
+          'نسخهٔ رمزنگاری‌شده روی سرور تا انقضایش، حداکثر $days روز، می‌ماند و هیچ‌کس بی کلیدِ درون پیام نمی‌تواند آن را بخواند.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get chatActionFailedMessage =>
       'عملیات انجام نشد؛ هیچ تضمین امنیتی تضعیف نشده است.';
 

@@ -538,6 +538,10 @@
   "attachmentSaveFailed": "The file could not be saved.",
   "attachmentFileMissing": "The file is no longer on this phone. Download it again from its message.",
   "attachmentActionFailed": "The phone did not take the file.",
+  "chatDeleteAttachmentNote": "{days, plural, =1{The encrypted copy on the server stays until it expires, up to 1 day, and nobody can read it without the key in the message.} other{The encrypted copy on the server stays until it expires, up to {days} days, and nobody can read it without the key in the message.}}",
+  "@chatDeleteAttachmentNote": {
+    "placeholders": {"days": {"type": "int"}}
+  },
   "chatActionFailedMessage": "That action could not be completed. No security guarantee was weakened.",
   "chatStateLocalOnly": "saved locally only",
   "chatStateQueued": "queued offline",

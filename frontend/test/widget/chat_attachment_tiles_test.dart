@@ -2,13 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/features/attachments/domain/attachment_download_model.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_message_builder.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/gestures.dart';
@@ -623,6 +627,134 @@ void main() {
       });
     }
   });
+
+  group('small corrections', () {
+    testWidgets('a reply to an attachment with no caption quotes its name', (
+      tester,
+    ) async {
+      final attachment = testAttachmentDescriptor(displayName: 'scan.pdf');
+      final views = ChatViewModelMapper.messages(
+        [
+          _conversationMessage(1, text: '', attachments: [attachment]),
+          _conversationMessage(2, text: 'about that', replyTo: _id(1)),
+        ],
+        currentUserId: 'self',
+        currentUserName: 'You',
+        peerName: 'Peer',
+      );
+      expect(views.last.replyQuote, 'scan.pdf');
+      expect(views.first.quoteText, 'scan.pdf');
+
+      final intents = <ChatIntent>[];
+      await _pump(
+        tester,
+        ChatConversationView(
+          model: _model([
+            _attachmentMessage(1, attachments: [attachment]),
+          ]),
+          onIntent: intents.add,
+          attachmentTransfers: _Transfers(),
+        ),
+      );
+      await _openMenu(tester, _id(1));
+      await tester.tap(find.text('Reply'));
+      await tester.pumpAndSettle();
+      expect(find.text('scan.pdf'), findsWidgets);
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-composer-field')),
+        'about that',
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is AppIconButton &&
+              widget.icon == AppIcons.send &&
+              widget.onPressed != null,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final sent = intents.whereType<SendTextIntent>().single;
+      expect(sent.replyToMessageId, _id(1));
+      expect(sent.quoteFallback, 'scan.pdf');
+    });
+
+    testWidgets('Copy copies the caption, and a message with none offers no '
+        'Copy', (tester) async {
+      final intents = <ChatIntent>[];
+      await _pump(
+        tester,
+        ChatConversationView(
+          model: _model([
+            _attachmentMessage(
+              1,
+              attachments: [testAttachmentDescriptor()],
+              text: 'the caption',
+            ),
+            _attachmentMessage(2, attachments: [testAttachmentDescriptor()]),
+          ]),
+          onIntent: intents.add,
+        ),
+      );
+
+      await _openMenu(tester, _id(1));
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+      expect(intents.whereType<CopyMessageIntent>().single.text, 'the caption');
+
+      await _openMenu(tester, _id(2));
+      expect(find.text('Reply'), findsOneWidget);
+      expect(find.text('Copy'), findsNothing);
+      // It forwards, caption or none (ADR-089 D11).
+      expect(find.text('Forward'), findsOneWidget);
+    });
+
+    testWidgets('the delete dialog of an attachment message says the server '
+        'copy stays until it expires', (tester) async {
+      await _pump(
+        tester,
+        ChatConversationView(
+          model: _model([
+            _attachmentMessage(
+              1,
+              attachments: [testAttachmentDescriptor()],
+              outgoing: true,
+              text: 'a caption',
+            ),
+            _textMessage(2, text: 'plain text', outgoing: true),
+          ]),
+          onIntent: (_) {},
+          attachmentTransfers: _Transfers(),
+          attachmentRetentionDays: 14,
+        ),
+      );
+      const sentence =
+          'The encrypted copy on the server stays until it expires, up to 14 '
+          'days, and nobody can read it without the key in the message.';
+
+      await _openMenu(tester, _id(1));
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(sentence), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      await _openMenu(tester, _id(2));
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('encrypted copy on the server'), findsNothing);
+    });
+  });
+}
+
+/// The menu of message [id], opened from a corner of its bubble that no
+/// tile covers.
+Future<void> _openMenu(WidgetTester tester, String id) async {
+  final bubble = find.byKey(ValueKey('message-$id'));
+  await tester.tapAt(tester.getBottomRight(bubble) - const Offset(6, 6));
+  await tester.pump(kDoubleTapTimeout);
+  await tester.pumpAndSettle();
 }
 
 /// Lets the picture's file be read and decoded, which happens outside the
@@ -728,6 +860,64 @@ ChatMessageViewModel _attachmentMessage(
   timestampSkewed: false,
   canEdit: outgoing,
   canDeleteForEveryone: outgoing,
+);
+
+ChatMessageViewModel _textMessage(
+  int index, {
+  required String text,
+  bool outgoing = false,
+}) => ChatMessageViewModel(
+  id: _id(index),
+  authorId: outgoing ? 'self' : 'peer',
+  authorName: outgoing ? 'You' : 'Peer',
+  outgoing: outgoing,
+  kind: ChatTimelineContentKind.text,
+  text: text,
+  timestamp: DateTime(2026, 10, 10, 9, index),
+  delivery: outgoing
+      ? ChatDeliveryViewState.accepted
+      : ChatDeliveryViewState.received,
+  firstInAuthorGroup: true,
+  lastInAuthorGroup: true,
+  edited: false,
+  deleted: false,
+  pinned: false,
+  starred: false,
+  unread: false,
+  timestampSkewed: false,
+  canEdit: outgoing,
+  canDeleteForEveryone: outgoing,
+);
+
+ConversationMessage _conversationMessage(
+  int index, {
+  required String text,
+  List<EncryptedAttachmentDescriptor> attachments = const [],
+  String? replyTo,
+}) => ConversationMessage(
+  messageId: _id(index),
+  conversationId: 'conversation',
+  senderUserId: 'peer',
+  senderDeviceId: 'peer-device',
+  text: text,
+  attachments: attachments,
+  attachmentStates: [
+    for (final _ in attachments) AttachmentTransferState.queued,
+  ],
+  replyToMessageId: replyTo,
+  quoteFallback: null,
+  createdMs: 1700000000000 + index,
+  orderingMs: 1700000000000 + index,
+  timestampState: MessageTimestampState.plausible,
+  revision: 0,
+  edited: false,
+  deletedForEveryone: false,
+  deletedForMe: false,
+  pinned: false,
+  unread: false,
+  transportState: MessageTransportState.received,
+  receiptState: MessageReceiptState.none,
+  reactions: const [],
 );
 
 ChatTimelineViewModel _model(List<ChatMessageViewModel> messages) =>
