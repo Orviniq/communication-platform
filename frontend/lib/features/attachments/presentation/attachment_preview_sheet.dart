@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show File;
 import 'dart:math' as math;
 
 import 'package:communication_platform/app/design_system/app_components.dart';
@@ -12,7 +12,6 @@ import 'package:communication_platform/features/attachments/domain/attachment_up
 import 'package:communication_platform/features/attachments/presentation/attachment_formatting.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 /// What the preview step shows of one picked file (ADR-089 D5, D6).
 @immutable
@@ -214,7 +213,7 @@ class _AttachmentPreviewSheetState extends State<AttachmentPreviewSheet> {
           textDirection:
               resolveFirstStrongDirection(_caption.text) ??
               Directionality.of(context),
-          inputFormatters: const [_ScalarLimit(characterLimit)],
+          inputFormatters: const [AppScalarLimitFormatter(characterLimit)],
           decoration: InputDecoration(
             labelText: strings.attachmentCaptionLabel,
             hintText: strings.attachmentCaptionHint,
@@ -318,28 +317,4 @@ class _Counter extends StatelessWidget {
       style: context.tokens.typography.label,
     ),
   );
-}
-
-/// Keeps a caption to [limit] Unicode scalar values, the unit the protocol
-/// counts text in. A paste past the limit is cut to it.
-final class _ScalarLimit extends TextInputFormatter {
-  const _ScalarLimit(this.limit);
-
-  final int limit;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final runes = newValue.text.runes;
-    if (runes.length <= limit) {
-      return newValue;
-    }
-    final kept = String.fromCharCodes(runes.take(limit));
-    return TextEditingValue(
-      text: kept,
-      selection: TextSelection.collapsed(offset: kept.length),
-    );
-  }
 }
