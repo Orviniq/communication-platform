@@ -99,12 +99,12 @@ is not silently edited out of history.
 | ADR-086 | Accepted (2026-10-08); the connection strip its costs name deleted by ADR-087 (2026-10-09) | The navigation bar and the rail show on the three tab roots, `/chats`, `/voice-rooms` and `/settings`, and on no other screen. Each of the 16 routes below them names the root navigator, whose key `createAppRouter` makes per router, so every page above a tab root is a full-screen page at every width: it covers the shell in its own route transition, and the tab root keeps its state under it. The Chats list pushes a group chat and Saved Messages, and a new group goes to the list and pushes its chat, so back returns to the list at the same place. A full-screen page keeps its controls clear of the system insets: an app bar or a bar of the page's own takes the inset at its edge, and a scrolling body adds the rest through `AppInsets.belowAppBar`. During a call every page on the root navigator but the six bootstrap and sign-in pages carries the call banner at its top, below the status bar and above its app bar, through `VoiceRoomBannerFrame`; the banner is the shell's own `VoiceRoomBanner`, read through `LiveShellStatus`, and the call's own page shows none | `ui-specification.md` §0.1 and `responsive-ui.md` asked for a full-screen detail, but the routes put each detail inside its branch, under the shell: the navigation bar stayed on conversations, voice rooms and Settings pages, and back from a group chat or Saved Messages left the application, because a `go` had replaced the stack. On the root navigator the page itself covers the bar, and the tab root waits under it unchanged, where a bar hidden by location would leave out of step with the page and lay the tab root out again at a new size under it. Covering the shell covered its banner, which §0.2 and `voice-room-states.md` §5.8 require on every screen until the call ends, so each page carries one. Costs: a page covers the rail at medium and wide width, and the shell's environment banner, connection strip and keyboard shortcuts stay on the tab roots. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-087 | Accepted (2026-10-09) | The Chats top bar's search icon opens a full-screen search page at `/chats/search`, with a Chats section and a Contacts section and no message section, and the field above the list is deleted. The Chats title carries the delivery engine's status, from its live phase only: Connecting…, Syncing… or Waiting to reconnect… once the engine has been in a state other than settled for one second without a break, with a small spinner before the first two (the still `AppIcons.connecting` when animations are off), and "Chats" again the moment the engine settles. ADR-060 D11's four content-free states and its mapping of the nine phases stay. The status line above the list, the long offline notice, and the shell's connection strip with its state and the `?offline=true` query that fed it are deleted, and `/connection` opens `/chats` after every start | The search icon only moved the focus to a field on the same page, so the icon and the field did one job twice and the field held the list's height for good; a page gives search room for a second section and its scope. ADR-060 D11's line appeared and disappeared with each sync cycle and moved the list by its own height each time, where a title has no neighbour to push, and a stalled engine is still on the title after one second. The offline notice and the strip followed how the session opened, which does not change when the connection returns, so each stayed on screen after the connection was back; the strip also showed on the Chats tab root only and repeated what the title now says. A message section is not built: a chat's summary carries its latest message only, and a search across every conversation's history is a new storage query that needs its own design. Costs: for the second before the title speaks, a start with no server looks like any other, and a screen reader names the Chats route by the status while one shows. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-088 | Accepted (2026-10-09); withdraws the copy count of ADR-075 item 5 | The group chat keeps its composer in the tree while a message is sent, as a direct conversation does, so the focus and the keyboard stay where they were, and the progress bar that replaced it is deleted. A group message in flight shows the mark of its state and no text beside it: "Copies sent: 45 of 150", its two strings, the message view model's field and the group screen's progress map that carried it, and the provider that fed them are deleted. A message is still marked sent only when no copy is owed, and a failed one still offers a retry. The repository's read of what is owed stays, and no screen reads it | Taking the composer out for the length of a send took the keyboard with it after every message, and the send only writes and queues the message, as a direct one does, so there was nothing to wait for. The count was several times wider than the time and the mark beside it: on the code before this change a bubble measured 404 px while its message was sending and 131 px once it was accepted, in a widget test 800 px wide, and the mark already says where the message is. Costs: a person no longer sees how far a large group's fan-out has got, and two sends can now overlap, so the inline error is only ever raised by a send and never cleared by one that succeeds. Changes no table, wire format, protocol, dependency or backend file. |
-| ADR-089 | Proposed (2026-10-10); prompt 5 of the phase sets it Accepted | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
+| ADR-089 | Accepted (2026-10-11); proposed 2026-10-10 | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
 
 ## ADR-089 in full — a direct chat sends a file, through the system's own pickers (2026-10-10)
 
-**Status:** Proposed, 2026-10-10. Phase 1 of the attachment work. Prompt 5 of the phase sets it
-Accepted. Client decision, built over five prompts on the branch `frontend-dm-attachments`.
+**Status:** Accepted, 2026-10-11; proposed 2026-10-10. Phase 1 of the attachment work. Client
+decision, built over five prompts on the branch `frontend-dm-attachments`.
 **Changes no table, wire format, protocol, dependency, Android permission, cryptographic
 construction, disclosure text, disclosure revision or backend file.** The "Not built yet" label
 ADR-045 gave file attachments stops being true for a direct chat when the phase lands (D13); the
@@ -330,6 +330,118 @@ limit of a bucket on the formula of `attachmentBucketFor`: 65,429 bytes for 64 K
 - **Forward** was offered only for a message with a caption, so an attachment message with
   none could not be forwarded although D11 forwards its descriptors. It is offered now.
 
+### As built
+
+*Prompts 1 to 4, 2026-10-10 and 2026-10-11; prompt 5 added no feature.* The sections above
+hold the details of prompts 1, 3 and 4. What each prompt built, with its important files:
+
+- **Prompt 1, the Android boundary.** `AttachmentChannel.kt` (the intents, the copy, the photo
+  processing, Open, Save and Share) and the `onActivityResult` forward in `MainActivity.kt`;
+  in Dart `AttachmentPlatformPort`, `MethodChannelAttachmentPlatform`, and the test double
+  `FakeAttachmentPlatform`.
+- **Prompt 2, the rows, the files and the composition.** The projector writes the attachment
+  rows by capability and keeps a row's state, cache id and expiry when its message is written
+  again (`_writeAttachments` in `drift_application_event_projector.dart`); until then every
+  re-fold reset them to `queued` (D10). `AttachmentLocalStatePort` and
+  `DriftAttachmentLocalState` persist `queued`, `ready` and `expired` only (D9).
+  `AttachmentFileCache` owns `plain/` and `outgoing/`, moves a file in and marks its row in
+  one step, and sweeps: first before any transfer, then after each deletion, through
+  `AttachmentSweepPort` (D8). `NetworkingFoundation.attachmentTransport` builds
+  `DioAttachmentTransport` on the provisioned adapter (D12), and `attachment_providers.dart`
+  composes the pipeline for each `MessagingScope`. `PrivateAttachmentStorage` lost its
+  fallback to the system's temporary directory, which the native wipe does not reach.
+- **Prompt 3, send.** `AttachmentUploads` and `AttachmentOutgoingHolds`;
+  `attachment_send_flow.dart`, `attachment_preview_sheet.dart`, `attachment_upload_tray.dart`
+  and the three modes of `attachment_sheet.dart`; `retrySend` and `forward` carry the
+  descriptors (D11).
+- **Prompt 4, receive.** `AttachmentDownloads`, `AttachmentFileActions`,
+  `chat_attachment_tiles.dart`, the details sheet, the transport's `500` and `503`, and the
+  timeline that follows the attachment row.
+- **Prompt 5.** The boundary test it added found the preview sheet importing
+  `package:flutter/services.dart` for one `TextInputFormatter`, and all of `dart:io` for the
+  `File` that `Image.file` draws. The formatter moved unchanged to the design system as
+  `AppScalarLimitFormatter`, and the sheet takes `File` alone from `dart:io`.
+
+Where the build differs from a decision, and why:
+
+- **D5, the unit of a caption.** "1,024 characters" is built as 1,024 Unicode scalar values,
+  the unit the protocol's reader counts text in, and a longer paste is cut. An emoji made of
+  several scalar values counts as several, so the field can stop before 1,024 visible
+  characters. The core's own limit on the text is far higher, 16,384 scalar values.
+- **D8, the entry evicted first.** The cache evicts the entry whose expiry comes first. An
+  expiry is set when a file is moved in and moved at each open, so that entry is the least
+  recently opened. A look at an inline picture is not an open: it moves no expiry.
+- **D10 and D11, one row per capability.** The key of `attachments` is the capability, so a
+  capability two messages carry — an attachment forwarded on the same device — has one row,
+  which the message written last takes, starting again as "not downloaded"
+  (`local-data-model.md`). A table keyed by message and capability would be a schema change,
+  which D9 rules out.
+- **D14, the text of a type.** Not every new type has a `toString` of its own. One that has
+  says `<redacted>` or its state; one that has not, such as `AttachmentSource` and the
+  download intents, keeps Dart's default text, which names the type and nothing it holds.
+  The redaction test reads both kinds.
+
+### Verified by
+
+Host tests, run 2026-10-11 at the head of the branch: 2,152 of the 2,153 tests of the suite
+pass, and the one that fails, `background_delivery_policy_test.dart`, fails because of the
+CRLF checkout of the machine that ran them. 235 of them are in the twenty test
+files of the attachment code, among them:
+
+- **End to end.** `direct_chat_attachment_end_to_end_test.dart` (4 tests) joins two devices,
+  each with its own database, private cache, file cache and transport, through one in-memory
+  server: an `HttpClientAdapter` that reads the multipart body, refuses a part that is not
+  one bucket long, stores each under a new 43-character id and serves it under a strong
+  `ETag`. A's picked file goes through the upload queue and `sendAttachments`, and the event
+  A's send path encoded is applied to B from A's user and device. B's row is "not
+  downloaded" until the download queue fetches, verifies and decrypts the same bytes. A's
+  own row is ready with no download; a reaction re-folds the message and B keeps its file;
+  delete for me removes B's row and the next sweep the file; a body the server forgot gives
+  `expired`, which a re-fold keeps. The two devices share the fake crypto port, which stands
+  for the one Rust core both run, and the event crosses as the record A encoded, not as
+  bytes (see *Not verified*).
+- **Privacy.** `attachment_redaction_test.dart` (6 tests) builds each value of the phase from
+  a canary capability, key, name, path, MIME type, caption and message id, and reads its
+  text. The diagnostics canary database holds an attachment row and the day's upload count,
+  and the report holds no canary and no attachment entry. No file under
+  `lib/features/attachments/` and no new file of the phase calls `print`, `debugPrint`,
+  `log` or `developer.log`.
+- **Boundaries.** `attachment_boundary_test.dart` (6 tests): the presentation imports no Dio,
+  no Drift, no `package:flutter/services.dart` and no infrastructure, and takes from
+  `dart:io` only `File`, with no file access; the adapter and the private storage alone
+  reach the channel; the networking foundation alone builds the transport; the group chat
+  keeps its "not built" sheet. `deployment_disclosure_test.dart` is unchanged.
+
+Each mutation below was applied alone, the named tests run, and the file restored byte for
+byte; `git status` showed no change from it after each.
+
+| Mutation | Caught by | Result |
+|---|---|---|
+| M1: the projector resets an attachment row to `queued` at each re-fold | `attachment_projection_test.dart`, `direct_chat_attachment_end_to_end_test.dart` | 4 tests fail: a re-fold after a reaction, a pin, a receipt and an edit; an id that leaves the message; the reaction and the expiry end to end |
+| M2: the file cache never evicts past its bound | `attachment_file_cache_test.dart`, `attachment_downloads_test.dart` | 2 tests fail: the earliest expiry evicted first; a download that then holds the bound |
+| M2, raised: the bound is 1 GiB instead of 256 MiB | none at first: 212 tests passed | survived; prompt 5 added "the file cache holds 256 MiB for 7 days after an open" to `attachment_providers_test.dart`, which fails |
+| M3: `retrySend` falls back to `sendText` for an attachment message | `conversation_use_cases_test.dart` | 2 tests fail: a retry with no caption, and a retry with nothing to re-arm |
+| M4: the transport's `Dio` keeps the default adapter | `attachment_providers_test.dart` | 3 tests fail: the provisioned trust, no redirect, the session's end |
+| M5: the upload queue skips the local allowance check | `attachment_uploads_test.dart` | 3 tests fail, among them the local refusal of a bucket larger than today's remainder and the retry that runs the checks again |
+| a picked file prints its name | `attachment_redaction_test.dart` | 1 test fails |
+| the preview sheet imports `package:flutter/services.dart` | `attachment_boundary_test.dart` | 1 test fails |
+| an attachment file calls `debugPrint` | `attachment_boundary_test.dart` | 1 test fails |
+
+### Not verified
+
+- **No run on a device.** The pickers, the camera, the photo processing, Open, Save and Share
+  are Android behaviour, and no host test runs Kotlin: the policy test reads its sources.
+  Nothing on a phone has picked, captured, re-encoded, opened, saved or shared a file.
+- **No run against the live server and its nginx.** The upload, the download and the
+  resumed download were run against fake servers only; the range a resume needs is
+  nginx's work.
+- **No test encodes a descriptor.** The Rust core writes and reads a message's descriptors
+  (`encode_cbor_attachment` and `decode_projection_attachment` in
+  `native/crypto_core/src/application.rs`), but its round-trip test generates text messages
+  only, and its fixture is one. The Rust core does not run in a host test, so the
+  end-to-end test above carries the decoded event. Adding the Rust test is follow-up work;
+  this phase changed no Rust code.
+
 ### Rejected alternatives
 
 - **A picker package** (`image_picker`, `file_picker`). It adds a dependency and plugin code to
@@ -358,15 +470,25 @@ limit of a bucket on the formula of `attachmentBucketFor`: 65,429 bytes for 64 K
 - A decrypted file evicted or expired from the cache costs a second download while the server
   keeps the ciphertext (30 days by default), and cannot be had again after that.
 - Open, Save and Share refuse every file outside `plain/`. The flat temporary files
-  `PrivateAttachmentStorage` makes today are outside it, which is harmless because nothing shares
-  one yet, and prompt 2 moves decrypted files into `plain/`.
+  `PrivateAttachmentStorage` makes are outside it, and a decrypted file reaches the platform
+  only after the cache moved it into `plain/`.
 - A photo taken while the process dies is lost with the result that would have announced it.
 - A group chat sends no file, and its sheet says so instead of doing nothing.
 
-### What this phase does not do
+### Not done
 
 Attachments in group chats, the Shared media screens, thumbnails, automatic download, a durable
 upload queue, video, and the disclosure revision of D13.
+
+### The owner's action
+
+The point `disclosureUnbuiltSurfaces` of disclosure revision 9 tells the reader that voice
+rooms and file attachments "do nothing". It is false for both now: for voice rooms since phase
+6, and for attachments in direct chats and Saved Messages since this phase. This phase changed
+no disclosure text and no revision (D13), so the point stands until the owner revises it. A
+revision of the disclosure is release-blocking: its written statement goes again to every
+existing recipient (`deployment-and-release.md`, step 9), and no artifact that carries
+attachments should reach anyone before then.
 
 ### Android sources
 
