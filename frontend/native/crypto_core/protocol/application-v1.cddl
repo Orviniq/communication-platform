@@ -33,12 +33,51 @@ application-body-v1 =
   / receipt-v1
   / typing-set-v1
 
-message-create-v1 = {
+; message.create. The content type (key 1) selects the shape. Type 0 is UTF-8 text
+; and has no key 5, so its body map has 5 entries. Types 1 (attachment) and 2 (image)
+; carry key 5, so their body map has 6 entries. Any other pairing is refused: type 0
+; with key 5, type 1 or 2 without it, and an empty key 5 (the encoder omits the key
+; rather than write an empty list). A content type above 2 is unsupported and refused.
+message-create-v1 = message-create-text-v1 / message-create-attachment-v1
+
+message-create-text-v1 = {
   0: bstr .size 16,             ; message_id
   1: 0,                         ; content type: UTF-8 text
-  2: tstr,                      ; <= 65,536 bytes and 16,384 scalars
+  2: tstr .size (1..65536),     ; text: non-empty, <= 65,536 bytes and 16,384 scalars
   3: bstr .size 16 / null,      ; reply_to_message_id
-  4: tstr / null                ; bounded quote fallback
+  4: tstr .size (1..2048) / null ; quote fallback: <= 2,048 bytes and 512 scalars
+}
+
+message-create-attachment-v1 = {
+  0: bstr .size 16,             ; message_id
+  1: 1 / 2,                     ; content type: 1 attachment, 2 image
+  2: tstr .size (0..65536),     ; text or caption: may be empty, <= 65,536 bytes and
+                                ; 16,384 scalars
+  3: bstr .size 16 / null,      ; reply_to_message_id
+  4: tstr .size (1..2048) / null, ; quote fallback: <= 2,048 bytes and 512 scalars
+  5: [1*32 attachment-descriptor-v1] ; 1 to 32 descriptors
+}
+
+; One encrypted attachment: a map of exactly these 14 entries, in this key order. Where a
+; text bound names both bytes and scalars, the decoder enforces both.
+attachment-descriptor-v1 = {
+  0: tstr .regexp "[A-Za-z0-9_-]{43}", ; capability_id: exactly 43 characters from
+                                ; this alphabet (a secret; never logged)
+  1: bstr .size 32,             ; key (secretstream key)
+  2: bstr .size 66,             ; attachment header; bytes 34..66 are the SHA-256 of
+                                ; the authenticated metadata
+  3: bstr .size 24,             ; secretstream header
+  4: uint,                      ; encrypted size
+  5: uint,                      ; bucket size
+  6: uint,                      ; plaintext size
+  7: tstr .size (1..128),       ; display name: <= 128 bytes and 128 scalars
+  8: tstr .size (1..128),       ; MIME type: <= 128 bytes and 128 scalars
+  9: 0 / 1,                     ; media kind: 0 image, 1 file
+  10: uint .le 4294967295,      ; width: 0 means absent
+  11: uint .le 4294967295,      ; height: 0 means absent
+  12: tstr .size (1..65536) / null, ; caption: null means absent, otherwise
+                                ; non-empty, <= 65,536 bytes and 16,384 scalars
+  13: bstr .size (0..65536)     ; thumbnail: an empty string means absent
 }
 
 message-edit-v1 = {
