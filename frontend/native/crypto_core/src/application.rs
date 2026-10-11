@@ -47,6 +47,7 @@ const MAX_TEXT_SCALARS: usize = 16_384;
 const MAX_QUOTE_BYTES: usize = 2_048;
 const MAX_QUOTE_SCALARS: usize = 512;
 const MAX_EMOJI_BYTES: usize = 64;
+const CAPABILITY_ID_LENGTH: usize = 43;
 const MAX_APPLICATION_CBOR_DEPTH: usize = 16;
 const MAX_APPLICATION_MAP_ENTRIES: usize = 64;
 const MAX_DEVICE_GOSSIP_HEADS: usize = 32;
@@ -745,14 +746,8 @@ fn encode_cbor_attachment(
 fn read_cbor_attachment(decoder: &mut Decoder<'_>) -> CryptoResult<AttachmentDescriptor> {
     read_exact_map(decoder, 14)?;
     read_key(decoder, 0)?;
-    let capability_id = read_text(decoder, 43, 43, true)?;
-    if !capability_id
-        .as_bytes()
-        .iter()
-        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
-    {
-        return Err(CryptoError::MalformedInput);
-    }
+    let capability_id = read_text(decoder, CAPABILITY_ID_LENGTH, CAPABILITY_ID_LENGTH, true)?;
+    check_capability_id(&capability_id)?;
     read_key(decoder, 1)?;
     let key = read_exact_bytes(decoder)?;
     read_key(decoder, 2)?;
@@ -805,6 +800,19 @@ fn read_cbor_attachment(decoder: &mut Decoder<'_>) -> CryptoResult<AttachmentDes
             Some(thumbnail.to_vec())
         },
     })
+}
+
+/// The server issues a capability as 32 random bytes in unpadded URL-safe Base64, so both
+/// readers refuse an ID shorter than 43 characters as well as a longer one.
+fn check_capability_id(capability_id: &str) -> CryptoResult<()> {
+    if capability_id.len() != CAPABILITY_ID_LENGTH
+        || !capability_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    Ok(())
 }
 
 fn decode_event(input: &[u8]) -> CryptoResult<(Option<ApplicationEvent>, Option<u8>)> {
@@ -993,6 +1001,11 @@ fn decode_cbor_body(kind: u16, decoder: &mut Decoder<'_>) -> CryptoResult<EventB
             let attachments = if map_len == 6 {
                 read_key(decoder, 5)?;
                 let count = read_array_len(decoder)?;
+                // The encoder omits key 5 rather than write an empty list, so `5: []` would
+                // be a second encoding of the same event.
+                if count == 0 {
+                    return Err(CryptoError::MalformedInput);
+                }
                 if count > 32 {
                     return Err(CryptoError::InputTooLarge);
                 }
@@ -1254,14 +1267,8 @@ fn framed_text(
 }
 
 fn decode_projection_attachment(reader: &mut Reader<'_>) -> CryptoResult<AttachmentDescriptor> {
-    let capability_id = framed_text(reader, 43, 43, true)?;
-    if !capability_id
-        .as_bytes()
-        .iter()
-        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
-    {
-        return Err(CryptoError::MalformedInput);
-    }
+    let capability_id = framed_text(reader, CAPABILITY_ID_LENGTH, CAPABILITY_ID_LENGTH, true)?;
+    check_capability_id(&capability_id)?;
     let key = reader.array()?;
     let header = reader.array()?;
     let stream_header = reader.array()?;
@@ -1621,10 +1628,10 @@ fn is_emoji_base(value: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        APPLICATION_VERSION, ApplicationEvent, CONVERSATION_RESPONSE_MAGIC, DECODE_RESPONSE_MAGIC,
-        DEVICE_CONTROL_DECODE_RESPONSE_MAGIC, DEVICE_CONTROL_MAGIC, ENCODE_REQUEST_MAGIC,
-        ENCODE_RESPONSE_MAGIC, EventBody, KIND_MESSAGE_CREATE, KIND_MESSAGE_EDIT,
-        KIND_REACTION_SET, decode_event, encode_event, operation,
+        APPLICATION_VERSION, ApplicationEvent, AttachmentDescriptor, CONVERSATION_RESPONSE_MAGIC,
+        DECODE_RESPONSE_MAGIC, DEVICE_CONTROL_DECODE_RESPONSE_MAGIC, DEVICE_CONTROL_MAGIC,
+        ENCODE_REQUEST_MAGIC, ENCODE_RESPONSE_MAGIC, EventBody, KIND_MESSAGE_CREATE,
+        KIND_MESSAGE_EDIT, KIND_REACTION_SET, decode_event, encode_event, operation,
     };
     use crate::{
         error::CryptoError,
@@ -1808,6 +1815,409 @@ mod tests {
         assert_eq!(left, right);
         let saved = operation(5, &[1; 16]).unwrap();
         assert_ne!(left[8..], saved[8..]);
+    }
+
+    fn capability(seed: u8) -> String {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        (0..43_usize)
+            .map(|index| char::from(ALPHABET[(index + usize::from(seed)) % ALPHABET.len()]))
+            .collect()
+    }
+
+    fn attachment(
+        seed: u8,
+        media_kind: u8,
+        dimensions: Option<(u32, u32)>,
+        caption: Option<&str>,
+        thumbnail: Option<Vec<u8>>,
+    ) -> AttachmentDescriptor {
+        let plaintext_size = 1_000 + u64::from(seed);
+        let encrypted_size = plaintext_size + 17;
+        let bucket_size = 65_536_u32;
+        let mut header = [seed; 66];
+        header[..8].copy_from_slice(b"CPAFV001");
+        header[8] = 1;
+        header[9] = 0;
+        header[10..14].copy_from_slice(&65_536_u32.to_be_bytes());
+        header[14..22].copy_from_slice(&plaintext_size.to_be_bytes());
+        header[22..30].copy_from_slice(&encrypted_size.to_be_bytes());
+        header[30..34].copy_from_slice(&bucket_size.to_be_bytes());
+        let (width, height) = dimensions.unwrap_or((0, 0));
+        AttachmentDescriptor {
+            capability_id: capability(seed),
+            key: [seed ^ 0xa5; 32],
+            header,
+            stream_header: [seed ^ 0x5a; 24],
+            encrypted_size,
+            bucket_size: u64::from(bucket_size),
+            plaintext_size,
+            display_name: format!("attachment-{seed}.bin"),
+            mime_type: if media_kind == 0 {
+                "image/png"
+            } else {
+                "application/pdf"
+            }
+            .to_owned(),
+            media_kind,
+            width,
+            height,
+            caption: caption.map(str::to_owned),
+            thumbnail,
+        }
+    }
+
+    fn attachment_event(
+        content_type: u8,
+        text: &str,
+        reply_to: Option<[u8; 16]>,
+        quote_fallback: Option<&str>,
+        attachments: Vec<AttachmentDescriptor>,
+    ) -> ApplicationEvent {
+        ApplicationEvent {
+            version: APPLICATION_VERSION,
+            event_id: [0x11; 16],
+            conversation_id: [0x12; 32],
+            kind: KIND_MESSAGE_CREATE,
+            sender_user_id: [0x13; 16],
+            sender_device_id: [0x14; 16],
+            sender_counter: 7,
+            created_ms: 1_760_000_000_000,
+            references: reply_to.into_iter().collect(),
+            body: EventBody::MessageCreate {
+                message_id: [0x15; 16],
+                content_type,
+                text: text.to_owned(),
+                reply_to,
+                quote_fallback: quote_fallback.map(str::to_owned),
+                attachments,
+            },
+        }
+    }
+
+    /// Builds the FFI projection field by field from the request layout, independently of
+    /// `push_projection_attachment`, so the round trip is not checked against itself.
+    fn attachment_projection(event: &ApplicationEvent) -> Vec<u8> {
+        let EventBody::MessageCreate {
+            message_id,
+            content_type,
+            text,
+            reply_to,
+            quote_fallback,
+            attachments,
+        } = &event.body
+        else {
+            panic!("not a message.create event");
+        };
+        let mut input = Vec::new();
+        input.extend_from_slice(ENCODE_REQUEST_MAGIC);
+        input.push(event.version);
+        input.extend_from_slice(&event.event_id);
+        input.extend_from_slice(&event.conversation_id);
+        push_u16(&mut input, event.kind);
+        input.extend_from_slice(&event.sender_user_id);
+        input.extend_from_slice(&event.sender_device_id);
+        push_u64(&mut input, event.sender_counter);
+        push_u64(&mut input, event.created_ms);
+        input.push(u8::try_from(event.references.len()).unwrap());
+        for reference in &event.references {
+            input.extend_from_slice(reference);
+        }
+        input.extend_from_slice(message_id);
+        input.push(*content_type);
+        push_frame(&mut input, text.as_bytes()).unwrap();
+        match reply_to {
+            Some(id) => {
+                input.push(1);
+                input.extend_from_slice(id);
+            }
+            None => input.push(0),
+        }
+        match quote_fallback {
+            Some(quote) => {
+                input.push(1);
+                push_frame(&mut input, quote.as_bytes()).unwrap();
+            }
+            None => input.push(0),
+        }
+        if *content_type != 0 {
+            input.push(u8::try_from(attachments.len()).unwrap());
+        }
+        for attachment in attachments {
+            push_frame(&mut input, attachment.capability_id.as_bytes()).unwrap();
+            input.extend_from_slice(&attachment.key);
+            input.extend_from_slice(&attachment.header);
+            input.extend_from_slice(&attachment.stream_header);
+            push_u64(&mut input, attachment.encrypted_size);
+            push_u64(&mut input, attachment.bucket_size);
+            push_u64(&mut input, attachment.plaintext_size);
+            push_frame(&mut input, attachment.display_name.as_bytes()).unwrap();
+            push_frame(&mut input, attachment.mime_type.as_bytes()).unwrap();
+            input.push(attachment.media_kind);
+            push_u32(&mut input, attachment.width);
+            push_u32(&mut input, attachment.height);
+            match &attachment.caption {
+                Some(caption) => {
+                    input.push(1);
+                    push_frame(&mut input, caption.as_bytes()).unwrap();
+                }
+                None => input.push(0),
+            }
+            let thumbnail = attachment.thumbnail.as_deref().unwrap_or_default();
+            push_u32(&mut input, u32::try_from(thumbnail.len()).unwrap());
+            input.extend_from_slice(thumbnail);
+        }
+        input
+    }
+
+    /// Offset of the message.create body's content-type value in canonical CBOR: key 9,
+    /// the body map header, key 0, the 16-byte message id header and id, then key 1.
+    fn content_type_offset(cbor: &[u8], body_map: u8) -> usize {
+        cbor.windows(4)
+            .position(|window| window == [0x09, body_map, 0x00, 0x50])
+            .unwrap()
+            + 4
+            + 16
+            + 1
+    }
+
+    #[test]
+    fn attachment_message_create_round_trips_as_canonical_bytes() {
+        let longest_name = "\u{e9}".repeat(64);
+        assert_eq!(longest_name.len(), 128);
+        let mut named_image = attachment(
+            30,
+            0,
+            Some((8192, 1)),
+            Some("sunset over the ridge"),
+            Some(vec![0xd8; 65_536]),
+        );
+        named_image.display_name = longest_name;
+        assert!(named_image.capability_id.contains('-'));
+        assert!(named_image.capability_id.contains('_'));
+
+        let cases = [
+            // A file with an empty message text and nothing optional.
+            attachment_event(1, "", None, None, vec![attachment(1, 1, None, None, None)]),
+            // An image at every descriptor bound: 128-byte name, 8192 width, 64 KiB thumbnail.
+            attachment_event(2, "look", None, None, vec![named_image]),
+            // Several descriptors mixing every optional field, in a reply with a quote.
+            attachment_event(
+                2,
+                "three of them",
+                Some([0x21; 16]),
+                Some("the earlier message"),
+                vec![
+                    attachment(2, 0, Some((1, 8192)), Some("first"), Some(vec![1, 2, 3])),
+                    attachment(3, 0, None, None, None),
+                    attachment(4, 1, None, Some("the contract"), None),
+                    attachment(5, 0, Some((640, 480)), None, Some(vec![0xff])),
+                ],
+            ),
+            // The maximum of 32 descriptors on a file message.
+            attachment_event(
+                1,
+                "a folder",
+                None,
+                None,
+                (0..32_u8)
+                    .map(|seed| {
+                        attachment(
+                            seed,
+                            seed % 2,
+                            (seed % 2 == 0).then_some((u32::from(seed) + 1, 64)),
+                            (seed % 3 == 0).then_some("caption"),
+                            (seed % 4 == 0).then(|| vec![seed; usize::from(seed) + 1]),
+                        )
+                    })
+                    .collect(),
+            ),
+        ];
+
+        for event in cases {
+            let encoded = encode_event(&event).unwrap();
+            assert!(
+                encoded
+                    .windows(4)
+                    .any(|window| window == [0x09, 0xa6, 0x00, 0x50]),
+                "the body is a six-entry map"
+            );
+            assert!(
+                encoded
+                    .windows(4)
+                    .any(|window| window == [0xae, 0x00, 0x78, 0x2b]),
+                "a descriptor is a fourteen-entry map led by a 43-byte capability"
+            );
+            let (decoded, unsupported_version) = decode_event(&encoded).unwrap();
+            assert_eq!(unsupported_version, None);
+            assert_eq!(decoded.as_ref(), Some(&event));
+            assert_eq!(encode_event(decoded.as_ref().unwrap()).unwrap(), encoded);
+
+            let projection = attachment_projection(&event);
+            let through_ffi = operation(1, &projection).unwrap();
+            assert_eq!(&through_ffi[..8], ENCODE_RESPONSE_MAGIC);
+            assert_eq!(&through_ffi[8..], encoded);
+            let projected = operation(2, &encoded).unwrap();
+            assert_eq!(&projected[..8], DECODE_RESPONSE_MAGIC);
+            assert_eq!(projected[8], 0);
+            assert_eq!(&projected[9..], &projection[8..]);
+        }
+    }
+
+    #[test]
+    fn attachment_descriptor_name_above_128_bytes_is_refused() {
+        for name in ["a".repeat(129), "\u{e9}".repeat(65)] {
+            let mut descriptor = attachment(1, 1, None, None, None);
+            descriptor.display_name = name;
+            let event = attachment_event(1, "", None, None, vec![descriptor]);
+            assert_eq!(
+                operation(1, &attachment_projection(&event)),
+                Err(CryptoError::InputTooLarge)
+            );
+            // The encoder trusts its validated projection, so it writes the hostile bytes
+            // a peer could send; the CBOR reader is the boundary that must refuse them.
+            let hostile = encode_event(&event).unwrap();
+            assert_eq!(decode_event(&hostile), Err(CryptoError::InputTooLarge));
+            assert_eq!(operation(2, &hostile), Err(CryptoError::InputTooLarge));
+        }
+    }
+
+    #[test]
+    fn attachment_descriptor_capability_of_wrong_length_or_alphabet_is_refused() {
+        let valid = capability(1);
+        for (capability_id, refusal) in [
+            (valid[..42].to_owned(), CryptoError::MalformedInput),
+            (valid[..1].to_owned(), CryptoError::MalformedInput),
+            (String::new(), CryptoError::MalformedInput),
+            (format!("{valid}A"), CryptoError::InputTooLarge),
+            (format!("{}+", &valid[..42]), CryptoError::MalformedInput),
+        ] {
+            let mut descriptor = attachment(1, 1, None, None, None);
+            descriptor.capability_id = capability_id;
+            let event = attachment_event(1, "", None, None, vec![descriptor]);
+            assert_eq!(operation(1, &attachment_projection(&event)), Err(refusal));
+            let hostile = encode_event(&event).unwrap();
+            assert_eq!(decode_event(&hostile), Err(refusal));
+            assert_eq!(operation(2, &hostile), Err(refusal));
+        }
+    }
+
+    #[test]
+    fn attachment_descriptor_key_of_wrong_length_is_refused() {
+        let descriptor = attachment(9, 1, None, None, None);
+        let event = attachment_event(1, "", None, None, vec![descriptor.clone()]);
+        let encoded = encode_event(&event).unwrap();
+        let mut key_field = vec![0x01, 0x58, 0x20];
+        key_field.extend_from_slice(&descriptor.key);
+        let offset = encoded
+            .windows(key_field.len())
+            .position(|window| window == key_field.as_slice())
+            .unwrap();
+
+        let mut short_key = encoded.clone();
+        short_key[offset + 2] = 0x1f;
+        short_key.remove(offset + 3);
+        let mut long_key = encoded;
+        long_key[offset + 2] = 0x21;
+        long_key.insert(offset + 3, 0x00);
+        for hostile in [short_key, long_key] {
+            assert_eq!(decode_event(&hostile), Err(CryptoError::MalformedInput));
+            assert_eq!(operation(2, &hostile), Err(CryptoError::MalformedInput));
+        }
+    }
+
+    #[test]
+    fn content_type_that_disagrees_with_the_attachment_list_is_refused() {
+        let descriptor = attachment(1, 1, None, None, None);
+        for (content_type, attachments) in [
+            (0, vec![descriptor.clone()]),
+            (1, Vec::new()),
+            (2, Vec::new()),
+        ] {
+            let event = attachment_event(content_type, "text", None, None, attachments);
+            assert_eq!(encode_event(&event), Err(CryptoError::MalformedInput));
+        }
+
+        // Projection: an attachment type with an empty list, and a text type followed by a
+        // descriptor the text layout does not read.
+        let empty_file = attachment_event(1, "", None, None, Vec::new());
+        assert_eq!(
+            operation(1, &attachment_projection(&empty_file)),
+            Err(CryptoError::MalformedInput)
+        );
+        let mut text_with_descriptor =
+            attachment_projection(&attachment_event(0, "text", None, None, Vec::new()));
+        let file_projection = attachment_projection(&attachment_event(
+            1,
+            "text",
+            None,
+            None,
+            vec![descriptor.clone()],
+        ));
+        text_with_descriptor.extend_from_slice(&file_projection[text_with_descriptor.len() + 1..]);
+        assert_eq!(
+            operation(1, &text_with_descriptor),
+            Err(CryptoError::MalformedInput)
+        );
+
+        // CBOR: relabel an attachment message as text, and a text message as an attachment.
+        let file = encode_event(&attachment_event(1, "", None, None, vec![descriptor])).unwrap();
+        let offset = content_type_offset(&file, 0xa6);
+        assert_eq!(file[offset], 1);
+        let mut file_as_text = file.clone();
+        file_as_text[offset] = 0;
+        assert_eq!(
+            decode_event(&file_as_text),
+            Err(CryptoError::MalformedInput)
+        );
+        let mut file_as_unknown = file;
+        file_as_unknown[offset] = 3;
+        assert_eq!(
+            decode_event(&file_as_unknown),
+            Err(CryptoError::UnsupportedOperation)
+        );
+
+        let text = encode_event(&attachment_event(0, "text", None, None, Vec::new())).unwrap();
+        let offset = content_type_offset(&text, 0xa5);
+        assert_eq!(text[offset], 0);
+        for content_type in [1, 2] {
+            let mut text_as_attachment = text.clone();
+            text_as_attachment[offset] = content_type;
+            assert_eq!(
+                decode_event(&text_as_attachment),
+                Err(CryptoError::MalformedInput)
+            );
+        }
+
+        // An explicit empty attachment list (`5: []`) is never written: with the text type it
+        // would be a second encoding of the same event, and with an attachment type the
+        // message would carry no attachment.
+        let body_map = text
+            .windows(4)
+            .position(|window| window == [0x09, 0xa5, 0x00, 0x50])
+            .unwrap()
+            + 1;
+        for content_type in [0, 1, 2] {
+            let mut empty_list = text.clone();
+            empty_list[body_map] = 0xa6;
+            empty_list[offset] = content_type;
+            empty_list.extend_from_slice(&[0x05, 0x80]);
+            assert_eq!(decode_event(&empty_list), Err(CryptoError::MalformedInput));
+        }
+    }
+
+    #[test]
+    fn more_than_32_attachment_descriptors_are_refused() {
+        let attachments = (0..33_u8)
+            .map(|seed| attachment(seed, 1, None, None, None))
+            .collect();
+        let event = attachment_event(1, "", None, None, attachments);
+        assert_eq!(
+            operation(1, &attachment_projection(&event)),
+            Err(CryptoError::InputTooLarge)
+        );
+        let hostile = encode_event(&event).unwrap();
+        assert_eq!(decode_event(&hostile), Err(CryptoError::InputTooLarge));
     }
 
     fn hex(bytes: &[u8]) -> String {

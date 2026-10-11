@@ -342,9 +342,9 @@ corrupted chunks and a missing final tag, each of which deletes the output, a ca
 stage of an upload and a download, the bucket sizes, the resumed download, and a file sent
 from one simulated device and opened on another through one in-memory server. Not tested:
 a process that dies part-way, beyond the first sweep that deletes what one left; fuzzing;
-decompression bombs, because pictures are decoded by Android code that no host test runs;
-and the encoding of a descriptor in the Rust core, whose round-trip test carries text
-messages only.
+and decompression bombs, because pictures are decoded by Android code that no host test
+runs. Since 2026-10-12 the Rust core's own tests encode and decode messages that carry
+descriptors (ADR-089, Not verified).
 
 ## API reference
 

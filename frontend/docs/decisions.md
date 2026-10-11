@@ -435,12 +435,21 @@ byte; `git status` showed no change from it after each.
 - **No run against the live server and its nginx.** The upload, the download and the
   resumed download were run against fake servers only; the range a resume needs is
   nginx's work.
-- **No test encodes a descriptor.** The Rust core writes and reads a message's descriptors
-  (`encode_cbor_attachment` and `decode_projection_attachment` in
-  `native/crypto_core/src/application.rs`), but its round-trip test generates text messages
-  only, and its fixture is one. The Rust core does not run in a host test, so the
-  end-to-end test above carries the decoded event. Adding the Rust test is follow-up work;
-  this phase changed no Rust code.
+- **A descriptor's encoding: Rust test added 2026-10-12.** When the phase closed, no test
+  encoded a descriptor: the Rust core's round-trip test generated text messages only, and its
+  fixture is one. Six tests in the test module of `native/crypto_core/src/application.rs`
+  now do. Messages of content type 1 and 2 with one, four and 32 descriptors, with
+  and without a caption, a size in pixels and a thumbnail, encode, decode to an equal event
+  and encode again to the same bytes, and they cross the FFI projection both ways. The tests
+  also refuse a name above 128 bytes, a capability of the wrong length or alphabet, a key of
+  the wrong length, 33 descriptors, and a content type that disagrees with the attachment
+  list. Two of them found defects in the decoders, fixed the same day. Both readers took a
+  capability shorter than 43 characters, which `backend/attachments/API.md` rules out. The
+  CBOR reader took an empty list, `5: []`, which on a text message is a second encoding of
+  the same event. The encoder writes the same bytes as before, so no wire format changed:
+  the decoders now refuse two inputs it never writes. `cargo test --locked` passes all 84
+  tests of the crate. The host end-to-end test above still carries the decoded event,
+  because the Rust core does not run in a host test.
 
 ### Rejected alternatives
 
