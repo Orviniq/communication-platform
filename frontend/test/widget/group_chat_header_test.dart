@@ -319,7 +319,8 @@ Future<GoRouter> _pumpGroupChat(
           injectedState: _state(name),
           injectedMessages: const [],
           currentUserId: _owner,
-          onSend: (_) async => const Result.success(null),
+          onSend: (_, {replyToMessageId, quoteFallback}) async =>
+              const Result.success(null),
         ),
         routes: [
           GoRoute(

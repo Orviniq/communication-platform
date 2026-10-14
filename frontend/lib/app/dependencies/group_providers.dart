@@ -166,6 +166,7 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
     ),
     sendMessage: SendGroupMessage(repository: repository, sender: sender),
     retryMessage: RetryGroupMessage(repository: repository, sender: sender),
+    setReaction: SetGroupReaction(repository: repository, sender: sender),
   );
 });
 

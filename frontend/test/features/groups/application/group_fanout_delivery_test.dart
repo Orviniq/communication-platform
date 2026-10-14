@@ -97,8 +97,13 @@ void main() {
 
   tearDown(() => database.close());
 
-  /// Writes a group message the way a send does, and returns its event id.
-  Future<String> write(String text) async {
+  /// Commits one event of the group's conversation as the local echo of a
+  /// send, and returns its event id.
+  Future<String> commit(
+    ApplicationEventKind kind,
+    List<Uint8List> references,
+    ApplicationEventBody Function(Uint8List eventId) body,
+  ) async {
     counter += 1;
     final eventIdBytes = Uint8List.fromList(
       List<int>.generate(16, (index) => (counter * 17 + index) & 0xff),
@@ -118,13 +123,13 @@ void main() {
           version: ApplicationMessageProtocolV1.version,
           eventId: eventIdBytes,
           conversationId: _hexBytes(group.groupId),
-          kindValue: ApplicationEventKind.messageCreate.wireValue,
+          kindValue: kind.wireValue,
           senderUserId: protocolUuidBytes(_owner),
           senderDeviceId: protocolUuidBytes(_ownerDevice),
           senderCounter: counter,
           createdMs: now.millisecondsSinceEpoch + counter,
-          references: const [],
-          body: MessageCreateBody(messageId: eventIdBytes, text: text),
+          references: references,
+          body: body(eventIdBytes),
         ),
         canonicalBytes: canonical,
         currentUserId: _owner,
@@ -137,6 +142,24 @@ void main() {
     );
     expect(echoed, isA<Success<void>>());
     return eventId;
+  }
+
+  /// Writes a group message the way a send does, and returns its event id.
+  Future<String> write(String text) => commit(
+    ApplicationEventKind.messageCreate,
+    const [],
+    (eventId) => MessageCreateBody(messageId: eventId, text: text),
+  );
+
+  /// Writes a reaction to [targetEventId] the way a send does, and returns the
+  /// reaction's event id. A null [emoji] removes the reaction.
+  Future<String> react(String targetEventId, String? emoji) {
+    final target = _hexBytes(targetEventId);
+    return commit(
+      ApplicationEventKind.reactionSet,
+      [target],
+      (_) => ReactionSetBody(targetMessageId: target, emoji: emoji),
+    );
   }
 
   /// Seals the copies a written message is owed, as the delivery cycle does.
@@ -227,6 +250,25 @@ void main() {
     expect(crypto.calls, hasLength(3));
     expect(await delivery(eventId), ChatDeliveryViewState.queued);
     expect(await progress(), {eventId: GroupFanoutProgress(sent: 0, total: 3)});
+  });
+
+  test('a reaction in a group makes one copy for each live device, as the '
+      'message did', () async {
+    final message = await write('to everyone');
+    expect(await seal(message), isA<Success<void>>());
+    final reaction = await react(message, '\u{1F44D}');
+    expect(reaction, isNot(message));
+
+    expect(await seal(reaction), isA<Success<void>>());
+
+    expect(await copiesOf(reaction), [
+      _memberPhone,
+      _memberLaptop,
+      _secondDevice,
+    ]);
+    expect(await copiesOf(reaction), await copiesOf(message));
+    // Progress is a message's own: a reaction has no bubble to show it on.
+    expect((await progress()).keys, [message]);
   });
 
   test('a stale_devices answer removes the device from the set', () async {

@@ -31,12 +31,16 @@ final class ConversationGroupMessageSender implements GroupMessageSenderPort {
     required String currentDeviceId,
     required String groupId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   }) async {
     final sent = await conversations.sendText(
       currentUserId: currentUserId,
       currentDeviceId: currentDeviceId,
       target: GroupConversationTarget(groupId),
       text: text,
+      replyToMessageId: replyToMessageId,
+      quoteFallback: quoteFallback,
     );
     return sent.fold(
       onSuccess: (_) => const Result.success(null),
@@ -51,12 +55,31 @@ final class ConversationGroupMessageSender implements GroupMessageSenderPort {
     required String groupId,
     required String messageId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   }) => conversations.retrySend(
     currentUserId: currentUserId,
     currentDeviceId: currentDeviceId,
     target: GroupConversationTarget(groupId),
     messageId: messageId,
     text: text,
+    replyToMessageId: replyToMessageId,
+    quoteFallback: quoteFallback,
+  );
+
+  @override
+  Future<Result<void>> setReaction({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required String? emoji,
+  }) => conversations.setReaction(
+    currentUserId: currentUserId,
+    currentDeviceId: currentDeviceId,
+    conversationId: groupId,
+    messageId: messageId,
+    emoji: emoji,
   );
 }
 

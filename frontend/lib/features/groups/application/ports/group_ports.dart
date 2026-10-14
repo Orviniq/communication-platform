@@ -112,21 +112,40 @@ abstract interface class GroupLiveDeviceResolverPort implements Port {
 /// the same durable path to the wire: a local echo, then one pairwise copy for
 /// every live device of every member.
 abstract interface class GroupMessageSenderPort implements Port {
+  /// [replyToMessageId] and [quoteFallback] make the message a reply: the
+  /// reference to the replied message, and the quote shown where that message
+  /// is not at hand.
   Future<Result<void>> sendText({
     required String currentUserId,
     required String currentDeviceId,
     required String groupId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   });
 
   /// Puts a message the user was told had failed back on its way, as the same
-  /// message rather than a second one beside it.
+  /// message rather than a second one beside it. A reply keeps its reference
+  /// and its quote through [replyToMessageId] and [quoteFallback].
   Future<Result<void>> retryText({
     required String currentUserId,
     required String currentDeviceId,
     required String groupId,
     required String messageId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
+  });
+
+  /// Sets this user's reaction to [messageId], or removes it when [emoji] is
+  /// null. A reaction is an event of the group's conversation, so it goes to
+  /// every member as a message does.
+  Future<Result<void>> setReaction({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required String? emoji,
   });
 }
 

@@ -5,6 +5,7 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -33,6 +34,7 @@ class GroupChatPage extends ConsumerWidget {
     this.currentUserId,
     this.onSend,
     this.onRetry,
+    this.onReaction,
     super.key,
   });
 
@@ -45,6 +47,7 @@ class GroupChatPage extends ConsumerWidget {
   final String? currentUserId;
   final SendGroupMessageCallback? onSend;
   final RetryGroupMessageCallback? onRetry;
+  final SetGroupReactionCallback? onReaction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,6 +66,7 @@ class GroupChatPage extends ConsumerWidget {
         currentUserId: currentUserId ?? injectedState!.members.first.userId,
         onSend: onSend!,
         onRetry: onRetry,
+        onReaction: onReaction,
       );
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -95,18 +99,31 @@ class GroupChatPage extends ConsumerWidget {
                 state: state,
                 timeline: timeline,
                 currentUserId: userId,
-                onSend: (text) => resolved.sendMessage(
-                  groupId: groupId,
-                  senderUserId: userId,
-                  senderDeviceId: deviceId,
-                  text: text,
-                ),
-                onRetry: (messageId, text) => resolved.retryMessage(
+                onSend: (text, {replyToMessageId, quoteFallback}) =>
+                    resolved.sendMessage(
+                      groupId: groupId,
+                      senderUserId: userId,
+                      senderDeviceId: deviceId,
+                      text: text,
+                      replyToMessageId: replyToMessageId,
+                      quoteFallback: quoteFallback,
+                    ),
+                onRetry: (messageId, text, {replyToMessageId, quoteFallback}) =>
+                    resolved.retryMessage(
+                      groupId: groupId,
+                      senderUserId: userId,
+                      senderDeviceId: deviceId,
+                      messageId: messageId,
+                      text: text,
+                      replyToMessageId: replyToMessageId,
+                      quoteFallback: quoteFallback,
+                    ),
+                onReaction: (messageId, emoji) => resolved.setReaction(
                   groupId: groupId,
                   senderUserId: userId,
                   senderDeviceId: deviceId,
                   messageId: messageId,
-                  text: text,
+                  emoji: emoji,
                 ),
                 onLoadOlder: () async => (await window()).loadOlder(),
                 onReveal: (messageId) async =>
@@ -127,6 +144,7 @@ class GroupChatView extends StatefulWidget {
     required this.currentUserId,
     required this.onSend,
     this.onRetry,
+    this.onReaction,
     this.onLoadOlder,
     this.onReveal,
     super.key,
@@ -140,6 +158,10 @@ class GroupChatView extends StatefulWidget {
   /// Null where the view has no retry path: a retry is then reported as
   /// failed, never as made.
   final RetryGroupMessageCallback? onRetry;
+
+  /// Null where the view has no reaction path: a reaction is then reported as
+  /// failed, never as made.
+  final SetGroupReactionCallback? onReaction;
 
   /// Opens the window further back, for the timeline's older-messages marker.
   final Future<void> Function()? onLoadOlder;
@@ -277,10 +299,16 @@ class _GroupChatViewState extends State<GroupChatView> {
 
   void _handleIntent(ChatIntent intent) {
     _composerKey.currentState?.handleIntent(intent);
-    if (intent case SendTextIntent(:final text)) {
-      unawaited(_send(text));
+    if (intent case SendTextIntent(
+      :final text,
+      :final replyToMessageId,
+      :final quoteFallback,
+    )) {
+      unawaited(_send(text, replyToMessageId, quoteFallback));
     } else if (intent case RetryMessageIntent(:final message)) {
       unawaited(_retry(message));
+    } else if (intent case SetReactionIntent(:final messageId, :final emoji)) {
+      unawaited(_react(messageId, emoji));
     } else if (intent is LoadOlderMessagesIntent) {
       unawaited(widget.onLoadOlder?.call());
     } else if (intent case JumpToMessageIntent(:final messageId)) {
@@ -301,9 +329,17 @@ class _GroupChatViewState extends State<GroupChatView> {
     }
   }
 
-  Future<void> _send(String text) async {
+  Future<void> _send(
+    String text,
+    String? replyToMessageId,
+    String? quoteFallback,
+  ) async {
     setState(() => _sendFailed = false);
-    final result = await widget.onSend(text);
+    final result = await widget.onSend(
+      text,
+      replyToMessageId: replyToMessageId,
+      quoteFallback: quoteFallback,
+    );
     if (!mounted) return;
     // Only a failure is recorded. Sends can overlap now, and one that went
     // through says nothing about another that was refused.
@@ -320,9 +356,31 @@ class _GroupChatViewState extends State<GroupChatView> {
       return;
     }
     setState(() => _retryFailed = false);
-    final result = await onRetry(message.id, message.text ?? '');
+    final result = await onRetry(
+      message.id,
+      message.text ?? '',
+      replyToMessageId: message.replyToMessageId,
+      quoteFallback: message.replyQuote,
+    );
     if (!mounted) return;
     setState(() => _retryFailed = result is FailureResult<void>);
+  }
+
+  /// Sets or, with a null [emoji], removes this user's reaction. A refusal is
+  /// said in the words a direct chat uses for a refused action.
+  Future<void> _react(String messageId, String? emoji) async {
+    final onReaction = widget.onReaction;
+    final Result<void> result = onReaction == null
+        ? const Result.failure(
+            ValidationFailure(ValidationFailureKind.invalidInput),
+          )
+        : await onReaction(messageId, emoji);
+    if (!mounted || result is! FailureResult<void>) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context).chatActionFailedMessage),
+      ),
+    );
   }
 }
 

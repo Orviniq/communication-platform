@@ -9,9 +9,23 @@ typedef CreateGroupCallback =
     );
 typedef MutateGroupCallback =
     Future<Result<GroupState>> Function(GroupControlOperation operation);
-typedef SendGroupMessageCallback = Future<Result<void>> Function(String text);
+typedef SendGroupMessageCallback =
+    Future<Result<void>> Function(
+      String text, {
+      String? replyToMessageId,
+      String? quoteFallback,
+    });
 typedef RetryGroupMessageCallback =
-    Future<Result<void>> Function(String messageId, String text);
+    Future<Result<void>> Function(
+      String messageId,
+      String text, {
+      String? replyToMessageId,
+      String? quoteFallback,
+    });
+
+/// Sets this user's reaction to a message, or removes it when [emoji] is null.
+typedef SetGroupReactionCallback =
+    Future<Result<void>> Function(String messageId, String? emoji);
 
 final class GroupPickerContact {
   const GroupPickerContact({

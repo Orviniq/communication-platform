@@ -6,6 +6,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/groups/infrastructure/group_pairwise_adapters.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
@@ -647,6 +648,61 @@ void main() {
       expect(protocolBytesToHex(body.replyToMessageId!), _messageOne);
       expect(body.quoteFallback, 'the question');
       expect(event.references, [body.replyToMessageId]);
+    });
+
+    test('the group sender port carries a reply, a retry and a reaction into '
+        'the group conversation', () async {
+      final port = ConversationGroupMessageSender(sender);
+
+      expect(
+        await port.sendText(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          groupId: _directConversationHex,
+          text: 'an answer',
+          replyToMessageId: _messageOne,
+          quoteFallback: 'the question',
+        ),
+        isA<Success<void>>(),
+      );
+      fanout.hasFailedSend = false;
+      expect(
+        await port.retryText(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          groupId: _directConversationHex,
+          messageId: 'aabb',
+          text: 'an answer',
+          replyToMessageId: _messageOne,
+          quoteFallback: 'the question',
+        ),
+        isA<Success<void>>(),
+      );
+      expect(
+        await port.setReaction(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          groupId: _directConversationHex,
+          messageId: _messageOne,
+          emoji: '🎉',
+        ),
+        isA<Success<void>>(),
+      );
+
+      expect(fanout.events, hasLength(3));
+      for (final committed in fanout.events.take(2)) {
+        final body = committed.event.body as MessageCreateBody;
+        expect(protocolBytesToHex(body.replyToMessageId!), _messageOne);
+        expect(body.quoteFallback, 'the question');
+      }
+      expect(
+        fanout.events.last.event.kindValue,
+        ApplicationEventKind.reactionSet.wireValue,
+      );
+      expect(
+        fanout.events.map((committed) => committed.conversationKind),
+        everyElement(ConversationKind.group.index),
+      );
     });
 
     test('a retry with nothing to re-arm keeps the reply', () async {

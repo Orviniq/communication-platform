@@ -16,6 +16,7 @@ import 'package:communication_platform/features/groups/presentation/group_info_p
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -151,7 +152,8 @@ void main() {
           ),
         ],
         currentUserId: _member,
-        onSend: (_) async => throw StateError('composer must be disabled'),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            throw StateError('composer must be disabled'),
       ),
     );
 
@@ -171,7 +173,8 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => const Result.success(null),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
       ),
     );
 
@@ -210,7 +213,8 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => const Result.success(null),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
       ),
     );
 
@@ -234,7 +238,7 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (text) {
+        onSend: (text, {replyToMessageId, quoteFallback}) {
           sent.add(text);
           return finished.future;
         },
@@ -275,9 +279,10 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => const Result.failure(
-          SecurityFailure(SecurityFailureKind.policyBlocked),
-        ),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.failure(
+              SecurityFailure(SecurityFailureKind.policyBlocked),
+            ),
       ),
     );
     final field = find.byKey(const ValueKey('chat-composer-field'));
@@ -309,7 +314,8 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) => answers.removeAt(0).future,
+        onSend: (_, {replyToMessageId, quoteFallback}) =>
+            answers.removeAt(0).future,
       ),
     );
     final field = find.byKey(const ValueKey('chat-composer-field'));
@@ -354,7 +360,8 @@ void main() {
             ),
           ],
           currentUserId: _owner,
-          onSend: (_) async => const Result.success(null),
+          onSend: (_, {replyToMessageId, quoteFallback}) async =>
+              const Result.success(null),
         ),
       );
       return tester
@@ -394,8 +401,9 @@ void main() {
           ),
         ],
         currentUserId: _owner,
-        onSend: (_) async => const Result.success(null),
-        onRetry: (messageId, text) async {
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
+        onRetry: (messageId, text, {replyToMessageId, quoteFallback}) async {
           retried.add((messageId, text));
           return const Result.success(null);
         },
@@ -527,6 +535,210 @@ void main() {
       expect(border(_answerId), 1);
     });
   });
+
+  group(
+    'a group message can be replied to and reacted to (ADR-090 D2, D3)',
+    () {
+      testWidgets('a reply reaches the send path with the replied message and '
+          'its quote', (tester) async {
+        final sent = <(String, String?, String?)>[];
+        await _pumpThread(
+          tester,
+          onSend: (text, {replyToMessageId, quoteFallback}) async {
+            sent.add((text, replyToMessageId, quoteFallback));
+            return const Result.success(null);
+          },
+        );
+
+        await _openActions(tester, _questionId);
+        await tester.tap(find.text('Reply').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('chat-composer-field')),
+          'My answer',
+        );
+        await tester.pump();
+        await tester.tap(_sendButton);
+        await tester.pumpAndSettle();
+
+        expect(sent, [('My answer', _questionId, 'Original question')]);
+      });
+
+      testWidgets('a plain message carries no reply', (tester) async {
+        final sent = <(String, String?, String?)>[];
+        await _pumpThread(
+          tester,
+          onSend: (text, {replyToMessageId, quoteFallback}) async {
+            sent.add((text, replyToMessageId, quoteFallback));
+            return const Result.success(null);
+          },
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('chat-composer-field')),
+          'Hello',
+        );
+        await tester.pump();
+        await tester.tap(_sendButton);
+        await tester.pumpAndSettle();
+
+        expect(sent, [('Hello', null, null)]);
+      });
+
+      testWidgets('a failed reply retries with its reference and its quote', (
+        tester,
+      ) async {
+        const failedId = '77777777777777777777777777777777';
+        final retried = <(String, String, String?, String?)>[];
+        await _pump(
+          tester,
+          GroupChatPage(
+            groupId: _groupId,
+            injectedState: _state(),
+            injectedMessages: [
+              _message(_questionId, sender: _admin, text: 'Original question'),
+              _message(
+                failedId,
+                sender: _owner,
+                text: 'My answer',
+                at: 200,
+                replyTo: _questionId,
+                transport: MessageTransportState.permanentlyFailed,
+              ),
+            ],
+            currentUserId: _owner,
+            onSend: (_, {replyToMessageId, quoteFallback}) async =>
+                const Result.success(null),
+            onRetry:
+                (messageId, text, {replyToMessageId, quoteFallback}) async {
+                  retried.add((
+                    messageId,
+                    text,
+                    replyToMessageId,
+                    quoteFallback,
+                  ));
+                  return const Result.success(null);
+                },
+          ),
+        );
+
+        await tester.tap(find.text('Retry as a new encrypted send'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+
+        expect(retried, [
+          (failedId, 'My answer', _questionId, 'Original question'),
+        ]);
+      });
+
+      testWidgets('a reaction from the selector reaches the use case with its '
+          'emoji', (tester) async {
+        final semantics = tester.ensureSemantics();
+        final reacted = <(String, String?)>[];
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async {
+            reacted.add((messageId, emoji));
+            return const Result.success(null);
+          },
+        );
+
+        await _openActions(tester, _questionId);
+        await tester.tap(find.bySemanticsLabel('React with \u{1F525}'));
+        await tester.pumpAndSettle();
+
+        expect(reacted, [(_questionId, '\u{1F525}')]);
+        semantics.dispose();
+      });
+
+      testWidgets('a double tap reaches the use case with a thumbs up', (
+        tester,
+      ) async {
+        final reacted = <(String, String?)>[];
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async {
+            reacted.add((messageId, emoji));
+            return const Result.success(null);
+          },
+        );
+
+        // The question's own bubble: the answer quotes the same words.
+        final question = find.descendant(
+          of: find.byKey(const ValueKey('message-$_questionId')),
+          matching: find.text('Original question'),
+        );
+        await tester.tap(question);
+        await tester.pump(const Duration(milliseconds: 40));
+        await tester.tap(question);
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(reacted, [(_questionId, '\u{1F44D}')]);
+      });
+
+      testWidgets('a tap on your own reaction chip removes the reaction', (
+        tester,
+      ) async {
+        final reacted = <(String, String?)>[];
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async {
+            reacted.add((messageId, emoji));
+            return const Result.success(null);
+          },
+        );
+
+        // Owner, the current user, is one of the two who reacted.
+        await tester.tap(find.text('\u{1F44D} 2'));
+        // The bubble's double-tap recognizer holds the arena before a tap wins.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(reacted, [(_answerId, null)]);
+      });
+
+      testWidgets('a refused reaction says the action could not be completed', (
+        tester,
+      ) async {
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async => const Result.failure(
+            SecurityFailure(SecurityFailureKind.policyBlocked),
+          ),
+        );
+        const message =
+            'That action could not be completed. '
+            'No security guarantee was weakened.';
+        expect(find.text(message), findsNothing);
+
+        await tester.tap(find.text('\u{1F44D} 2'));
+        // The bubble's double-tap recognizer holds the arena before a tap wins.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(find.text(message), findsOneWidget);
+      });
+
+      testWidgets('a reaction on a page with no reaction path is reported as '
+          'failed, never as made', (tester) async {
+        await _pumpThread(tester);
+
+        await tester.tap(find.text('\u{1F44D} 2'));
+        // The bubble's double-tap recognizer holds the arena before a tap wins.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'That action could not be completed. '
+            'No security guarantee was weakened.',
+          ),
+          findsOneWidget,
+        );
+      });
+    },
+  );
 
   testWidgets('group details say what one message costs', (tester) async {
     await _pump(
@@ -768,7 +980,11 @@ const _ownId = '66666666666666666666666666666666';
 
 /// A short thread: a question from Admin, Member's edited and starred answer
 /// with two reactions, and a message of the current user, Owner.
-Future<void> _pumpThread(WidgetTester tester) => _pump(
+Future<void> _pumpThread(
+  WidgetTester tester, {
+  SendGroupMessageCallback? onSend,
+  SetGroupReactionCallback? onReaction,
+}) => _pump(
   tester,
   GroupChatPage(
     groupId: _groupId,
@@ -797,7 +1013,11 @@ Future<void> _pumpThread(WidgetTester tester) => _pump(
       ),
     ],
     currentUserId: _owner,
-    onSend: (_) async => const Result.success(null),
+    onSend:
+        onSend ??
+        (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
+    onReaction: onReaction,
   ),
 );
 
