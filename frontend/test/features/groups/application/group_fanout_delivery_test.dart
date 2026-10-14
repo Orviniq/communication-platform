@@ -213,6 +213,26 @@ void main() {
         (eventId) => MessageCreateBody(messageId: eventId, text: 'hello'),
       );
 
+  /// A receipt for [messageId], as received from [senderDevice]: a read
+  /// receipt, or with [read] false a delivered one.
+  Future<String> receiveReceipt(
+    String senderUser,
+    String senderDevice,
+    String messageId, {
+    bool read = true,
+  }) {
+    final id = _hexBytes(messageId);
+    return receive(
+      senderUser,
+      senderDevice,
+      read
+          ? ApplicationEventKind.receiptRead
+          : ApplicationEventKind.receiptDelivered,
+      [id],
+      (_) => ReceiptBody(messageIds: [id]),
+    );
+  }
+
   /// Writes a reaction to [targetEventId] the way a send does, and returns the
   /// reaction's event id. A null [emoji] removes the reaction.
   Future<String> react(String targetEventId, String? emoji) {
@@ -279,6 +299,20 @@ void main() {
         )
         .singleWhere((message) => message.id == eventId)
         .delivery;
+  }
+
+  /// The receipt state the conversation holds for [eventId].
+  Future<MessageReceiptState> receiptState(String eventId) async {
+    final page = await DriftConversationDomainRepository(database)
+        .watchMessages(
+          currentUserId: _owner,
+          conversationId: group.groupId,
+          window: const NewestConversationMessages(100),
+        )
+        .first;
+    return page.messages
+        .singleWhere((message) => message.messageId == eventId)
+        .receiptState;
   }
 
   Future<Map<String, GroupFanoutProgress>> progress() =>
@@ -568,6 +602,61 @@ void main() {
     );
     expect(plan.first, contains('message_id=? AND event_id=?'));
     expect(plan.last, startsWith('SEARCH message USING INDEX'));
+  });
+
+  // Two ticks on an own message as soon as one member read it (ADR-091 D1).
+
+  test('a read receipt from a member makes an own message read, and it shows '
+      'two ticks while a copy is still owed', () async {
+    final message = await write('read by one member');
+    await seal(message);
+    expect(await delivery(message), ChatDeliveryViewState.queued);
+
+    await receiveReceipt(_member, _memberLaptop, message);
+
+    expect(await receiptState(message), MessageReceiptState.read);
+    expect(await delivery(message), ChatDeliveryViewState.read);
+    // Not one copy has gone yet, and the other members still wait for theirs.
+    expect(await progress(), {message: GroupFanoutProgress(sent: 0, total: 3)});
+  });
+
+  test('a failed message read by a member keeps its failed mark', () async {
+    final message = await write('some copies failed');
+    await seal(message);
+    // The send failed for good, after one member's copy had gone.
+    await (database.update(
+      database.messages,
+    )..where((row) => row.messageId.equals(message))).write(
+      MessagesCompanion(
+        status: Value(MessageTransportState.permanentlyFailed.index),
+      ),
+    );
+
+    await receiveReceipt(_member, _memberPhone, message);
+
+    expect(await receiptState(message), MessageReceiptState.read);
+    expect(await delivery(message), ChatDeliveryViewState.failed);
+  });
+
+  test('a receipt from the sender of the message changes nothing', () async {
+    final message = await write('read on my other device');
+    await seal(message);
+
+    await receiveReceipt(_owner, _ownerTablet, message);
+
+    expect(await receiptState(message), MessageReceiptState.none);
+    expect(await delivery(message), ChatDeliveryViewState.queued);
+  });
+
+  test('a delivered receipt in a group draws no mark of its own', () async {
+    final message = await write('delivered to one member');
+    await seal(message);
+
+    await receiveReceipt(_member, _memberPhone, message, read: false);
+
+    expect(await receiptState(message), MessageReceiptState.delivered);
+    // The transport decides: copies are still owed.
+    expect(await delivery(message), ChatDeliveryViewState.queued);
   });
 
   test('beside a read receipt, an event keeps the audience of the whole '
