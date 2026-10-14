@@ -759,12 +759,15 @@ history; up to ~50 members; roles **owner → admins → members**.
 
 **Layout.** Same skeleton as the DM screen (§8), with group differences:
 1. **Top bar:**
-   - Center: group photo + name + a subtitle with member count / a few names (decrypted
-     locally).
-   - Tapping title/photo → **Group Info** (§12.2).
-   - Overflow (**⋮**): **Search in chat**, **Mute**, **Group info**, **Leave group**
-     (→ confirm), and admin/owner-only entries here or in Group Info (**Add members**,
-     **Edit group**).
+   - Header: the group avatar, the group name and the member count (decrypted locally), each
+     name and count on one line, cut with an ellipsis when it does not fit.
+   - The whole bar between the back button and **Search** is one target for the header, as high
+     as the bar: a tap anywhere on it → **Group Info** (§12.2). To a screen reader it is one
+     button that reads the name and the count once and names Group Info as its result.
+     There is no separate Info button.
+   - **Search in chat** is the one action button; it opens the in-conversation search sheet.
+   - Overflow (**⋮**) — **not built.** The entries once planned for it (**Mute**, **Leave
+     group**, **Add members**, **Edit group**) are all in Group Info (§12.2).
 2. **Message list:** as §8, but incoming bubbles also show the **sender's name/avatar**.
    Inline system lines appear for membership changes ("X was added", "Y left").
 3. **Input bar:** as §8, with no upload tray: a group chat sends no attachment in this phase,

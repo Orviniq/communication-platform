@@ -9,6 +9,7 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
@@ -175,22 +176,13 @@ class _GroupChatViewState extends State<GroupChatView> {
     return Scaffold(
       key: const ValueKey('group-chat-screen'),
       appBar: AppBar(
-        title: InkWell(
-          onTap: () => context.push('/groups/${state.groupId}/info'),
-          child: Semantics(
-            button: true,
-            label: strings.groupInfoTitle,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(state.metadata.name, maxLines: 1),
-                Text(
-                  strings.groupMemberCount(state.activeMembers.length),
-                  style: context.tokens.typography.label,
-                ),
-              ],
-            ),
-          ),
+        // The back button's slot is wider than the button, so the free span
+        // starts inside the slot. A negative spacing starts the title there;
+        // the header gives the width back at its end (`_GroupChatHeader`).
+        titleSpacing: -_buttonSlotInset,
+        title: _GroupChatHeader(
+          state: state,
+          onOpenInfo: () => context.push('/groups/${state.groupId}/info'),
         ),
         actions: [
           // The same sheet a direct conversation opens, over the same
@@ -202,12 +194,6 @@ class _GroupChatViewState extends State<GroupChatView> {
             icon: AppIcons.search,
             semanticLabel: strings.chatSearchAction,
             onPressed: () => unawaited(_search(viewMessages)),
-            kind: AppButtonKind.ghost,
-          ),
-          AppIconButton(
-            icon: AppIcons.info,
-            semanticLabel: strings.groupInfoTitle,
-            onPressed: () => context.push('/groups/${state.groupId}/info'),
             kind: AppButtonKind.ghost,
           ),
         ],
@@ -318,6 +304,81 @@ class _GroupChatViewState extends State<GroupChatView> {
     final result = await widget.onRetry(failed);
     if (!mounted) return;
     setState(() => _retryFailed = result is FailureResult<void>);
+  }
+}
+
+/// What the 56 px slot of a 48 px bar button leaves on each side of it.
+const _buttonSlotInset = (kToolbarHeight - AppFocus.minimumTarget) / 2;
+
+/// The top bar's title: the group's avatar, name and member count, and one
+/// target that opens Group Info.
+///
+/// The target is the whole bar between the back button and Search, and as high
+/// as the bar, so a thumb needs no aim. The header used to be the `Column` of
+/// two lines inside an `InkWell`, which shrank to its text: 108 by 44 px for
+/// a short name at 360 px wide, with a dead gap beside it.
+///
+/// The bar starts the title `_buttonSlotInset` before the free span (see the
+/// `titleSpacing` above), and lays it out that much wider, so the end padding
+/// here is what stops the target at Search instead of under it.
+///
+/// One semantics node carries the tap, so a screen reader finds one control
+/// and reads the name once. The avatar's own label is left out for that, and
+/// so is the tap action of the `InkWell` with it (`excludeSemantics` drops the
+/// action of a tappable child), which the node therefore carries itself.
+class _GroupChatHeader extends StatelessWidget {
+  const _GroupChatHeader({required this.state, required this.onOpenInfo});
+
+  final GroupState state;
+  final VoidCallback onOpenInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final name = state.metadata.name;
+    final members = strings.groupMemberCount(state.activeMembers.length);
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: _buttonSlotInset),
+      child: Semantics(
+        button: true,
+        label: '$name, $members',
+        hint: strings.groupInfoTitle,
+        onTap: onOpenInfo,
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: onOpenInfo,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kToolbarHeight),
+            child: Row(
+              children: [
+                ContactAvatar(
+                  username: name,
+                  semanticLabel: name,
+                  authenticatedSeed: groupAvatarSeed(state.groupId),
+                  radius: 20,
+                ),
+                const SizedBox(width: AppSpacing.x3),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        members,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.tokens.typography.label,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
