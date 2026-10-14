@@ -176,9 +176,3 @@ final groupProvider = StreamProvider.autoDispose.family<GroupState?, String>((
   final repository = await ref.watch(groupRepositoryProvider.future);
   yield* repository.watchGroup(groupId);
 });
-
-final groupMessagesProvider = StreamProvider.autoDispose
-    .family<List<GroupMessage>, String>((ref, groupId) async* {
-      final repository = await ref.watch(groupRepositoryProvider.future);
-      yield* repository.watchMessages(groupId);
-    });

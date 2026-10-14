@@ -228,9 +228,6 @@ final class _Repository implements GroupRepositoryPort {
   @override
   Stream<GroupState?> watchGroup(String groupId) => throw UnimplementedError();
   @override
-  Stream<List<GroupMessage>> watchMessages(String groupId) =>
-      throw UnimplementedError();
-  @override
   Stream<Map<String, GroupFanoutProgress>> watchFanoutProgress(
     String groupId,
   ) => throw UnimplementedError();

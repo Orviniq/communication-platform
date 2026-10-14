@@ -558,31 +558,6 @@ void main() {
           ),
         );
 
-    test('reads as sending until none of its copies is owed', () async {
-      await commitCreate(_groupA);
-      await message('m1', MessageTransportState.preparing);
-      await message('m2', MessageTransportState.queued);
-      await message('m3', MessageTransportState.partiallyAccepted);
-      await message('m4', MessageTransportState.relayAccepted);
-      await message('m5', MessageTransportState.permanentlyFailed);
-      await message('m6', MessageTransportState.received, sender: _member);
-
-      final read = await repository.watchMessages(_groupA).first;
-
-      expect(
-        {for (final item in read) item.messageId: item.delivery},
-        {
-          'm1': GroupMessageDelivery.preparing,
-          'm2': GroupMessageDelivery.queued,
-          // The server holds some copies and not others: the send has not ended.
-          'm3': GroupMessageDelivery.sending,
-          'm4': GroupMessageDelivery.sent,
-          'm5': GroupMessageDelivery.failed,
-          'm6': GroupMessageDelivery.received,
-        },
-      );
-    });
-
     test('counts accepted copies of the devices still in the set', () async {
       await commitCreate(_groupA);
       await message('m1', MessageTransportState.partiallyAccepted);

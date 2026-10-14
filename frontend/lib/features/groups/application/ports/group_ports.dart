@@ -11,8 +11,6 @@ import 'package:communication_platform/features/groups/domain/group_sync_payload
 abstract interface class GroupRepositoryPort {
   Stream<GroupState?> watchGroup(String groupId);
 
-  Stream<List<GroupMessage>> watchMessages(String groupId);
-
   /// The copies still owed for this device's own messages in a group, by
   /// message id. A message is absent before its copies exist and after the
   /// last of them has settled.
