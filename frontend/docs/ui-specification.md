@@ -825,15 +825,19 @@ failed. Without a read, the message shows the clock while a copy is owed, and on
 copy is owed. A group has no delivered mark: it sends no delivered receipt. Read receipts are
 always on, as in a direct chat, and there is no setting.
 
-**Reader list.** Specified by [ADR-091](decisions.md) (Proposed). Not built yet. The message
-sheet of an own group message shows **Seen by N**, where N is the number of members who read
-it, or **Not seen yet**. **Seen by N** opens the reader list. The list shows each member who
-read the message once: the member's display name, or a short form of the user id for a member
-the roster does not name, and the read time. The newest read is first. A member read on
-several devices shows the earliest time; a member whose read time is unknown shows no time.
-The list changes while it is open. Only the sender of the message sees the list: the message
-sheet of a message from another member shows neither line, because only the sender of a
-message gets its read receipts.
+**Reader list** ([ADR-091](decisions.md)). The message sheet of an own group message that is
+not deleted shows a row above its actions: **Seen by N**, where N is the number of members who
+read it, or **Not seen yet**. The row follows the database while the sheet is open, and it is
+one button with the count in its label. A tap on it closes the sheet and opens the reader list
+in a sheet of its own, titled **Seen by**. The list shows each member who read the message once:
+the member's avatar, the member's display name, or a short form of the user id for a member the
+roster does not name, and the read time. The time is written as a message time is, with the
+date before it when the read was not today. A member whose read time could not be placed shows
+**Time unknown**. The newest read is first. A member read on several devices shows the earliest
+time. The list changes while it is open, and with no reader it says **Not seen yet**. A screen
+reader reads each entry as one item, the name and the time. Only the sender of the message sees
+the list: the message sheet of a message from another member shows neither line, because only
+the sender of a message gets its read receipts, and a direct chat shows no row and no list.
 The read time is the reader's phone clock when the read was recorded, corrected as a message
 time is, and it is a display value as a message time is. It never shows earlier than the
 message's own time: a reader whose clock is further behind than that correction shows the
