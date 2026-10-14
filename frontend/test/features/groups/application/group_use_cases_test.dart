@@ -395,6 +395,172 @@ void main() {
       );
       expect(sender.retried, isEmpty);
     });
+
+    test(
+      'a reply reaches the sender with its reference and its quote',
+      () async {
+        final group = await create([_alice]);
+        final sender = _Sender();
+
+        final result =
+            await SendGroupMessage(repository: repository, sender: sender)(
+              groupId: group.groupId,
+              senderUserId: _local,
+              senderDeviceId: _localDevice,
+              text: 'an answer',
+              replyToMessageId: 'cd' * 16,
+              quoteFallback: 'the question',
+            );
+
+        expect(result, isA<Success<void>>());
+        expect(sender.sentReplies, [('cd' * 16, 'the question')]);
+      },
+    );
+
+    test('a message that is no reply carries no reference', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      await SendGroupMessage(repository: repository, sender: sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        text: 'hello',
+      );
+
+      expect(sender.sentReplies, [(null, null)]);
+    });
+
+    test('a retry keeps the reference and the quote of the reply', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      final result =
+          await RetryGroupMessage(repository: repository, sender: sender)(
+            groupId: group.groupId,
+            senderUserId: _local,
+            senderDeviceId: _localDevice,
+            messageId: 'ab' * 16,
+            text: 'an answer',
+            replyToMessageId: 'cd' * 16,
+            quoteFallback: 'the question',
+          );
+
+      expect(result, isA<Success<void>>());
+      expect(sender.retriedReplies, [('cd' * 16, 'the question')]);
+    });
+  });
+
+  group('reacting to a message', () {
+    SetGroupReaction reaction(_Sender sender) =>
+        SetGroupReaction(repository: repository, sender: sender);
+
+    test('goes to the group from an active member', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      final result = await reaction(sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+        emoji: '\u{1F44D}',
+      );
+
+      expect(result, isA<Success<void>>());
+      expect(sender.reacted, [(group.groupId, 'ab' * 16, '\u{1F44D}')]);
+    });
+
+    test('with no emoji removes the reaction', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      final result = await reaction(sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+        emoji: null,
+      );
+
+      expect(result, isA<Success<void>>());
+      expect(sender.reacted, [(group.groupId, 'ab' * 16, null)]);
+    });
+
+    test('is refused for a member the group has removed', () async {
+      final group = await create([_alice, _bob]);
+      await mutate(group, RemoveGroupMemberOperation(_alice));
+      final sender = _Sender();
+
+      final result = await reaction(sender)(
+        groupId: group.groupId,
+        senderUserId: _alice,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+        emoji: '\u{1F44D}',
+      );
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.reacted, isEmpty);
+    });
+
+    test('is refused in a group this account has left', () async {
+      final group = await create([_alice]);
+      repository.overlay = GroupLifecycle.left;
+      final sender = _Sender();
+
+      final result = await reaction(sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+        emoji: '\u{1F44D}',
+      );
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.reacted, isEmpty);
+    });
+
+    test('is refused in a group this device does not know', () async {
+      final sender = _Sender();
+
+      final result = await reaction(sender)(
+        groupId: 'ee' * 32,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+        emoji: '\u{1F44D}',
+      );
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.reacted, isEmpty);
+    });
+
+    test('is refused while the roster may be stale', () async {
+      final group = await create([_alice]);
+      repository.overlay = GroupLifecycle.stateRecoveryRequired;
+      final sender = _Sender();
+
+      final result = await reaction(sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+        emoji: '\u{1F44D}',
+      );
+
+      expect(result, isA<FailureResult<void>>());
+      expect(sender.reacted, isEmpty);
+    });
   });
 }
 
@@ -510,18 +676,27 @@ final class _Identity implements GroupIdentityPort {
 final class _Sender implements GroupMessageSenderPort {
   final sent = <(String, String)>[];
 
+  /// The reply reference and quote of each send, in the order of [sent].
+  final sentReplies = <(String?, String?)>[];
+
   @override
   Future<Result<void>> sendText({
     required String currentUserId,
     required String currentDeviceId,
     required String groupId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   }) async {
     sent.add((groupId, text));
+    sentReplies.add((replyToMessageId, quoteFallback));
     return const Result.success(null);
   }
 
   final retried = <(String, String)>[];
+
+  /// The reply reference and quote of each retry, in the order of [retried].
+  final retriedReplies = <(String?, String?)>[];
 
   @override
   Future<Result<void>> retryText({
@@ -530,8 +705,25 @@ final class _Sender implements GroupMessageSenderPort {
     required String groupId,
     required String messageId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   }) async {
     retried.add((groupId, messageId));
+    retriedReplies.add((replyToMessageId, quoteFallback));
+    return const Result.success(null);
+  }
+
+  final reacted = <(String, String, String?)>[];
+
+  @override
+  Future<Result<void>> setReaction({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required String? emoji,
+  }) async {
+    reacted.add((groupId, messageId, emoji));
     return const Result.success(null);
   }
 }

@@ -254,6 +254,8 @@ final class SendGroupMessage {
     required String senderUserId,
     required String senderDeviceId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   }) async {
     final normalized = text.trim();
     if (normalized.isEmpty ||
@@ -265,26 +267,17 @@ final class SendGroupMessage {
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
     }
-    final groupResult = await repository.readGroup(groupId);
-    if (groupResult case FailureResult(failure: final failure)) {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
       return Result.failure(failure);
-    }
-    final group = (groupResult as Success<GroupState?>).value;
-    if (group == null ||
-        !GroupAuthorization.allows(
-          group,
-          senderUserId,
-          GroupPermission.sendMessages,
-        )) {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.policyBlocked),
-      );
     }
     return sender.sendText(
       currentUserId: senderUserId.toLowerCase(),
       currentDeviceId: senderDeviceId.toLowerCase(),
-      groupId: group.groupId,
+      groupId: (allowed as Success<GroupState>).value.groupId,
       text: normalized,
+      replyToMessageId: replyToMessageId,
+      quoteFallback: quoteFallback,
     );
   }
 }
@@ -305,30 +298,77 @@ final class RetryGroupMessage {
     required String senderDeviceId,
     required String messageId,
     required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
   }) async {
-    final groupResult = await repository.readGroup(groupId);
-    if (groupResult case FailureResult(failure: final failure)) {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
       return Result.failure(failure);
-    }
-    final group = (groupResult as Success<GroupState?>).value;
-    if (group == null ||
-        !GroupAuthorization.allows(
-          group,
-          senderUserId,
-          GroupPermission.sendMessages,
-        )) {
-      return const Result.failure(
-        SecurityFailure(SecurityFailureKind.policyBlocked),
-      );
     }
     return sender.retryText(
       currentUserId: senderUserId.toLowerCase(),
       currentDeviceId: senderDeviceId.toLowerCase(),
-      groupId: group.groupId,
+      groupId: (allowed as Success<GroupState>).value.groupId,
       messageId: messageId,
       text: text,
+      replyToMessageId: replyToMessageId,
+      quoteFallback: quoteFallback,
     );
   }
+}
+
+/// Sets or removes a reaction to a message of a group.
+///
+/// A reaction is an event of the group's conversation, so it goes to every
+/// member as a message does, and it is held to the rule a message is held to:
+/// a member this group no longer lets send, or a group this device has left,
+/// is sent nothing.
+final class SetGroupReaction {
+  const SetGroupReaction({required this.repository, required this.sender});
+
+  final GroupRepositoryPort repository;
+  final GroupMessageSenderPort sender;
+
+  /// A null [emoji] removes the reaction this user set.
+  Future<Result<void>> call({
+    required String groupId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required String messageId,
+    required String? emoji,
+  }) async {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return sender.setReaction(
+      currentUserId: senderUserId.toLowerCase(),
+      currentDeviceId: senderDeviceId.toLowerCase(),
+      groupId: (allowed as Success<GroupState>).value.groupId,
+      messageId: messageId,
+      emoji: emoji,
+    );
+  }
+}
+
+/// The group, once [userId] is known to be allowed to send into it.
+Future<Result<GroupState>> _requireSender(
+  GroupRepositoryPort repository,
+  String groupId,
+  String userId,
+) async {
+  final groupResult = await repository.readGroup(groupId);
+  if (groupResult case FailureResult(failure: final failure)) {
+    return Result.failure(failure);
+  }
+  final group = (groupResult as Success<GroupState?>).value;
+  if (group == null ||
+      !GroupAuthorization.allows(group, userId, GroupPermission.sendMessages)) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.policyBlocked),
+    );
+  }
+  return Result.success(group);
 }
 
 final class GroupUseCases {
@@ -337,12 +377,14 @@ final class GroupUseCases {
     required this.mutate,
     required this.sendMessage,
     required this.retryMessage,
+    required this.setReaction,
   });
 
   final CreateGroup create;
   final MutateGroup mutate;
   final SendGroupMessage sendMessage;
   final RetryGroupMessage retryMessage;
+  final SetGroupReaction setReaction;
 }
 
 /// Who a locally signed control event is owed to, and in which payloads.

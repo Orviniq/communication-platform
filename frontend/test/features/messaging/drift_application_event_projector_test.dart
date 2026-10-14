@@ -115,6 +115,59 @@ void main() {
     },
   );
 
+  test('a reaction from a member of a group conversation is projected and '
+      'shown on its message (ADR-090 D3)', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final messageId = _id(60, 16);
+    await _apply(
+      database,
+      _commit(
+        eventSeed: 60,
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: currentUser,
+        senderDevice: currentDevice,
+        counter: 1,
+        body: MessageCreateBody(messageId: messageId, text: 'to the group'),
+        conversationKind: ConversationKind.group,
+        peerUserId: null,
+        localOrigin: true,
+        authenticatedAt: authenticatedAt,
+      ),
+    );
+    final applied = await _apply(
+      database,
+      _commit(
+        eventSeed: 61,
+        kind: ApplicationEventKind.reactionSet,
+        senderUser: peerUser,
+        senderDevice: peerDevice,
+        counter: 1,
+        references: [messageId],
+        body: ReactionSetBody(targetMessageId: messageId, emoji: '👍'),
+        conversationKind: ConversationKind.group,
+        peerUserId: null,
+        authenticatedAt: authenticatedAt,
+      ),
+    );
+    expect(applied.disposition, ApplicationApplyDisposition.applied);
+
+    final rows = await database.select(database.messageReactions).get();
+    expect(rows.map((row) => (row.messageId, row.reactingUserId)), [
+      (protocolBytesToHex(messageId), peerUser),
+    ]);
+    final page = await DriftConversationDomainRepository(database)
+        .watchMessages(
+          currentUserId: currentUser,
+          conversationId: protocolBytesToHex(_id(9, 32)),
+          window: const NewestConversationMessages(100),
+        )
+        .first;
+    final reactions = page.messages.single.reactions;
+    expect(reactions.map((reaction) => reaction.reactingUserId), [peerUser]);
+    expect(reactions.map((reaction) => reaction.emoji), ['👍']);
+  });
+
   test(
     'authorization, edit winner, and remote tombstone rules fail closed',
     () async {

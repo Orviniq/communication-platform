@@ -768,18 +768,35 @@ history; up to ~50 members; roles **owner → admins → members**.
    - **Search in chat** is the one action button; it opens the in-conversation search sheet.
    - Overflow (**⋮**) — **not built.** The entries once planned for it (**Mute**, **Leave
      group**, **Add members**, **Edit group**) are all in Group Info (§12.2).
-2. **Message list:** as §8, but incoming bubbles also show the **sender's name/avatar**.
-   Inline system lines appear for membership changes ("X was added", "Y left").
+2. **Message list:** as §8, read through the same projection ([ADR-090](decisions.md) D1).
+   The first bubble of each run from another member carries that member's display name from
+   the roster, or a short form of the user id for a sender the roster does not name; there is
+   no avatar beside a bubble. A reply quotes the name of the member who wrote the replied
+   message. A group shows no pinned banner. Inline system lines for membership changes ("X was
+   added", "Y left") are **not built**.
 3. **Input bar:** as §8, with no upload tray: a group chat sends no attachment in this phase,
    and its attachment button opens the sheet in its not-built mode (§8.2,
    [ADR-089](decisions.md) D1). By default all members can post; if you implement any
    posting restriction, disabled states must explain why. A send never replaces it: the bar
    keeps its focus, and the keyboard stays up, while a message is sent and between messages
-   ([ADR-088](decisions.md)).
+   ([ADR-088](decisions.md)). A group keeps a draft on this phone, as a direct chat does: an
+   unsent text is still in the bar when the group is opened again.
 
-**Message interactions:** identical to §8 (reply, react, edit own, forward, copy, star,
-pin, delete-for-me / delete-for-everyone). A pin is visible to all members via the pinned
-banner.
+**Message interactions** ([ADR-090](decisions.md)): **Reply**, **React**, **Forward**,
+**Copy**, **Star** and **Delete for me**, each as in §8. A reaction goes to each member, under
+the rule of a group send. Forward lists every other conversation and Saved Messages; a
+message forwarded into a group goes through the group's own send, and the picker of an
+attachment message lists no group, because a group sends no attachment. A forward to several
+conversations goes on past one that refuses it, and then says that the action failed.
+**Pin**, **Edit** and **Delete for everyone** are **not offered in a group yet**: each needs
+the member roles of the signed roster, which the client does not read for messages yet, so
+the message sheet and the delete dialog leave them out.
+
+**Read on this phone.** An open group chat marks its messages read on this phone, as a direct
+chat does: when it becomes visible with the application in front, and when a message arrives
+while it is visible. Its unread count clears, and no alert sounds for the group on screen. It
+sends **no read receipt**, so a group shows no read ticks yet; phase 4 (ADR-091) designs
+them.
 
 **Role-gated actions** (owner/admins only): appear on member rows within Group Info
 (§12.2), not on individual messages.

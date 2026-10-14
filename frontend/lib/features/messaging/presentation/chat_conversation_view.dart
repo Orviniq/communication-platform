@@ -7,6 +7,7 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
@@ -305,89 +306,17 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     );
   }
 
-  Future<void> _showForwardPicker(ChatMessageViewModel message) async {
-    final strings = AppLocalizations.of(context);
-    final selected = <String>{};
-    // Resolved here, once, because here is where it is wanted.
-    final forwardTargets =
-        widget.forwardTargets?.call() ?? const <ChatListItemViewModel>[];
-    await showAppSheet<void>(
-      context: context,
-      semanticLabel: strings.chatForwardAction,
-      childScrolls: true,
-      child: StatefulBuilder(
-        builder: (context, setModalState) => SizedBox(
-          height: mathMin(MediaQuery.sizeOf(context).height * .7, 560),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                strings.chatForwardAction,
-                style: context.tokens.typography.section,
-              ),
-              const SizedBox(height: AppSpacing.x2),
-              Expanded(
-                child: forwardTargets.isEmpty
-                    ? AppStatePanel.empty(
-                        title: strings.chatsEmptyTitle,
-                        message: strings.chatsEmptyMessage,
-                      )
-                    : ListView.builder(
-                        itemCount: forwardTargets.length,
-                        itemBuilder: (context, index) {
-                          final target = forwardTargets[index];
-                          final selectionKey = target.savedMessages
-                              ? 'saved'
-                              : target.conversationId;
-                          return CheckboxListTile(
-                            value: selected.contains(selectionKey),
-                            title: Text(target.title),
-                            secondary: target.savedMessages
-                                ? const AppIcon(AppIcons.saved)
-                                : ContactAvatar(
-                                    username: target.title,
-                                    semanticLabel: target.title,
-                                    radius: 18,
-                                  ),
-                            onChanged: (value) {
-                              setModalState(() {
-                                if (value ?? false) {
-                                  selected.add(selectionKey);
-                                } else {
-                                  selected.remove(selectionKey);
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
-              ),
-              AppButton(
-                label: strings.chatForwardAction,
-                onPressed: selected.isEmpty
-                    ? null
-                    : () {
-                        final targets = forwardTargets.where((target) {
-                          final key = target.savedMessages
-                              ? 'saved'
-                              : target.conversationId;
-                          return selected.contains(key);
-                        });
-                        popAppModal(context);
-                        widget.onIntent(
-                          ForwardToConversationsIntent(
-                            message: message,
-                            targets: targets,
-                          ),
-                        );
-                      },
-              ),
-            ],
-          ),
+  Future<void> _showForwardPicker(ChatMessageViewModel message) =>
+      showChatForwardPicker(
+        context: context,
+        message: message,
+        // Resolved here, once, because here is where it is wanted.
+        targets:
+            widget.forwardTargets?.call() ?? const <ChatListItemViewModel>[],
+        onForward: (targets) => widget.onIntent(
+          ForwardToConversationsIntent(message: message, targets: targets),
         ),
-      ),
-    );
-  }
+      );
 
   /// Clearing is local, and the dialog says so.
   ///

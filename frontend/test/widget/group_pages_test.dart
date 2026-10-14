@@ -13,8 +13,10 @@ import 'package:communication_platform/features/groups/presentation/create_group
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_info_page.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -142,18 +144,16 @@ void main() {
       GroupChatPage(
         groupId: _groupId,
         injectedState: removed,
-        injectedMessages: const [
-          GroupMessage(
-            messageId: '11111111111111111111111111111111',
-            groupId: _groupId,
-            senderUserId: _owner,
+        injectedMessages: [
+          _message(
+            '11111111111111111111111111111111',
+            sender: _owner,
             text: 'Past message remains readable',
-            createdMs: 100,
-            delivery: GroupMessageDelivery.received,
           ),
         ],
         currentUserId: _member,
-        onSend: (_) async => throw StateError('composer must be disabled'),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            throw StateError('composer must be disabled'),
       ),
     );
 
@@ -173,7 +173,8 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => const Result.success(null),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
       ),
     );
 
@@ -212,7 +213,8 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => const Result.success(null),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
       ),
     );
 
@@ -236,7 +238,7 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (text) {
+        onSend: (text, {replyToMessageId, quoteFallback}) {
           sent.add(text);
           return finished.future;
         },
@@ -277,9 +279,10 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) async => const Result.failure(
-          SecurityFailure(SecurityFailureKind.policyBlocked),
-        ),
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.failure(
+              SecurityFailure(SecurityFailureKind.policyBlocked),
+            ),
       ),
     );
     final field = find.byKey(const ValueKey('chat-composer-field'));
@@ -311,7 +314,8 @@ void main() {
         injectedState: _state(),
         injectedMessages: const [],
         currentUserId: _owner,
-        onSend: (_) => answers.removeAt(0).future,
+        onSend: (_, {replyToMessageId, quoteFallback}) =>
+            answers.removeAt(0).future,
       ),
     );
     final field = find.byKey(const ValueKey('chat-composer-field'));
@@ -341,24 +345,23 @@ void main() {
     // A word short enough that the row under it, the time and the mark, is
     // what sizes the bubble. Anything added to that row while the message is
     // on its way shows as a wider bubble that narrows again once it is sent.
-    Future<double> bubbleWidth(GroupMessageDelivery delivery) async {
+    Future<double> bubbleWidth(MessageTransportState transport) async {
       await _pump(
         tester,
         GroupChatPage(
           groupId: _groupId,
           injectedState: _state(),
           injectedMessages: [
-            GroupMessage(
-              messageId: messageId,
-              groupId: _groupId,
-              senderUserId: _owner,
+            _message(
+              messageId,
+              sender: _owner,
               text: 'Hi',
-              createdMs: 100,
-              delivery: delivery,
+              transport: transport,
             ),
           ],
           currentUserId: _owner,
-          onSend: (_) async => const Result.success(null),
+          onSend: (_, {replyToMessageId, quoteFallback}) async =>
+              const Result.success(null),
         ),
       );
       return tester
@@ -366,14 +369,15 @@ void main() {
           .width;
     }
 
-    final queued = await bubbleWidth(GroupMessageDelivery.queued);
+    final queued = await bubbleWidth(MessageTransportState.queued);
     expect(find.byTooltip('queued offline'), findsOneWidget);
 
-    final sending = await bubbleWidth(GroupMessageDelivery.sending);
+    // The server holds some copies and not others.
+    final sending = await bubbleWidth(MessageTransportState.partiallyAccepted);
     expect(find.byTooltip('sending to server'), findsOneWidget);
     expect(find.byTooltip('accepted by server relay'), findsNothing);
 
-    final sent = await bubbleWidth(GroupMessageDelivery.sent);
+    final sent = await bubbleWidth(MessageTransportState.relayAccepted);
     expect(find.byTooltip('accepted by server relay'), findsOneWidget);
 
     expect(queued, sent);
@@ -382,26 +386,25 @@ void main() {
 
   testWidgets('a failed group send retries that same message', (tester) async {
     const messageId = '33333333333333333333333333333333';
-    final retried = <String>[];
+    final retried = <(String, String)>[];
     await _pump(
       tester,
       GroupChatPage(
         groupId: _groupId,
         injectedState: _state(),
-        injectedMessages: const [
-          GroupMessage(
-            messageId: messageId,
-            groupId: _groupId,
-            senderUserId: _owner,
+        injectedMessages: [
+          _message(
+            messageId,
+            sender: _owner,
             text: 'Not everyone has this yet',
-            createdMs: 100,
-            delivery: GroupMessageDelivery.failed,
+            transport: MessageTransportState.permanentlyFailed,
           ),
         ],
         currentUserId: _owner,
-        onSend: (_) async => const Result.success(null),
-        onRetry: (message) async {
-          retried.add(message.messageId);
+        onSend: (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
+        onRetry: (messageId, text, {replyToMessageId, quoteFallback}) async {
+          retried.add((messageId, text));
           return const Result.success(null);
         },
       ),
@@ -412,8 +415,330 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
-    expect(retried, [messageId]);
+    expect(retried, [(messageId, 'Not everyone has this yet')]);
   });
+
+  group('a group message shows what a direct message shows (ADR-090)', () {
+    testWidgets('a reply quotes the name of the member who wrote the replied '
+        'message', (tester) async {
+      await _pumpThread(tester);
+
+      final reply = find.byKey(const ValueKey('message-$_answerId'));
+      expect(
+        find.descendant(of: reply, matching: find.text('Admin')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: reply, matching: find.text('Original question')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: reply, matching: find.text('Replied message')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('reactions show their chips', (tester) async {
+      await _pumpThread(tester);
+
+      expect(find.text('\u{1F44D} 2'), findsOneWidget);
+    });
+
+    testWidgets('an edited message shows its edited label', (tester) async {
+      await _pumpThread(tester);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('message-$_answerId')),
+          matching: find.text('edited'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('message-$_questionId')),
+          matching: find.text('edited'),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a starred message shows its star', (tester) async {
+      await _pumpThread(tester);
+
+      Finder star(String messageId) => find.descendant(
+        of: find.byKey(ValueKey('message-$messageId')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is AppIcon && widget.data == AppIcons.star,
+        ),
+      );
+      expect(star(_answerId), findsOneWidget);
+      expect(star(_questionId), findsNothing);
+    });
+
+    testWidgets('the message sheet offers no Pin and no Edit, even on an own '
+        'message', (tester) async {
+      await _pumpThread(tester);
+
+      await _openActions(tester, _ownId);
+
+      expect(find.text('Reply'), findsOneWidget);
+      expect(find.text('Star on this device'), findsOneWidget);
+      expect(find.text('Pin'), findsNothing);
+      expect(find.text('Unpin'), findsNothing);
+      expect(find.text('Edit'), findsNothing);
+    });
+
+    testWidgets('the delete dialog offers no Delete for everyone', (
+      tester,
+    ) async {
+      await _pumpThread(tester);
+
+      await _openActions(tester, _ownId);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete for me'), findsOneWidget);
+      expect(find.text('Delete for everyone'), findsNothing);
+    });
+
+    testWidgets('a tap on a search result highlights that message', (
+      tester,
+    ) async {
+      await _pumpThread(tester);
+      double border(String messageId) =>
+          ((tester
+                              .widget<AnimatedContainer>(
+                                find.byKey(ValueKey('message-$messageId')),
+                              )
+                              .decoration!
+                          as BoxDecoration)
+                      .border!
+                  as Border)
+              .top
+              .width;
+      expect(border(_questionId), 1);
+
+      await tester.tap(find.byTooltip('Search in chat'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('conversation-search-field')),
+        'question',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('conversation-search-hit-$_questionId')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(border(_questionId), 3);
+      expect(border(_answerId), 1);
+    });
+  });
+
+  group(
+    'a group message can be replied to and reacted to (ADR-090 D2, D3)',
+    () {
+      testWidgets('a reply reaches the send path with the replied message and '
+          'its quote', (tester) async {
+        final sent = <(String, String?, String?)>[];
+        await _pumpThread(
+          tester,
+          onSend: (text, {replyToMessageId, quoteFallback}) async {
+            sent.add((text, replyToMessageId, quoteFallback));
+            return const Result.success(null);
+          },
+        );
+
+        await _openActions(tester, _questionId);
+        await tester.tap(find.text('Reply').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('chat-composer-field')),
+          'My answer',
+        );
+        await tester.pump();
+        await tester.tap(_sendButton);
+        await tester.pumpAndSettle();
+
+        expect(sent, [('My answer', _questionId, 'Original question')]);
+      });
+
+      testWidgets('a plain message carries no reply', (tester) async {
+        final sent = <(String, String?, String?)>[];
+        await _pumpThread(
+          tester,
+          onSend: (text, {replyToMessageId, quoteFallback}) async {
+            sent.add((text, replyToMessageId, quoteFallback));
+            return const Result.success(null);
+          },
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('chat-composer-field')),
+          'Hello',
+        );
+        await tester.pump();
+        await tester.tap(_sendButton);
+        await tester.pumpAndSettle();
+
+        expect(sent, [('Hello', null, null)]);
+      });
+
+      testWidgets('a failed reply retries with its reference and its quote', (
+        tester,
+      ) async {
+        const failedId = '77777777777777777777777777777777';
+        final retried = <(String, String, String?, String?)>[];
+        await _pump(
+          tester,
+          GroupChatPage(
+            groupId: _groupId,
+            injectedState: _state(),
+            injectedMessages: [
+              _message(_questionId, sender: _admin, text: 'Original question'),
+              _message(
+                failedId,
+                sender: _owner,
+                text: 'My answer',
+                at: 200,
+                replyTo: _questionId,
+                transport: MessageTransportState.permanentlyFailed,
+              ),
+            ],
+            currentUserId: _owner,
+            onSend: (_, {replyToMessageId, quoteFallback}) async =>
+                const Result.success(null),
+            onRetry:
+                (messageId, text, {replyToMessageId, quoteFallback}) async {
+                  retried.add((
+                    messageId,
+                    text,
+                    replyToMessageId,
+                    quoteFallback,
+                  ));
+                  return const Result.success(null);
+                },
+          ),
+        );
+
+        await tester.tap(find.text('Retry as a new encrypted send'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+
+        expect(retried, [
+          (failedId, 'My answer', _questionId, 'Original question'),
+        ]);
+      });
+
+      testWidgets('a reaction from the selector reaches the use case with its '
+          'emoji', (tester) async {
+        final semantics = tester.ensureSemantics();
+        final reacted = <(String, String?)>[];
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async {
+            reacted.add((messageId, emoji));
+            return const Result.success(null);
+          },
+        );
+
+        await _openActions(tester, _questionId);
+        await tester.tap(find.bySemanticsLabel('React with \u{1F525}'));
+        await tester.pumpAndSettle();
+
+        expect(reacted, [(_questionId, '\u{1F525}')]);
+        semantics.dispose();
+      });
+
+      testWidgets('a double tap reaches the use case with a thumbs up', (
+        tester,
+      ) async {
+        final reacted = <(String, String?)>[];
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async {
+            reacted.add((messageId, emoji));
+            return const Result.success(null);
+          },
+        );
+
+        // The question's own bubble: the answer quotes the same words.
+        final question = find.descendant(
+          of: find.byKey(const ValueKey('message-$_questionId')),
+          matching: find.text('Original question'),
+        );
+        await tester.tap(question);
+        await tester.pump(const Duration(milliseconds: 40));
+        await tester.tap(question);
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(reacted, [(_questionId, '\u{1F44D}')]);
+      });
+
+      testWidgets('a tap on your own reaction chip removes the reaction', (
+        tester,
+      ) async {
+        final reacted = <(String, String?)>[];
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async {
+            reacted.add((messageId, emoji));
+            return const Result.success(null);
+          },
+        );
+
+        // Owner, the current user, is one of the two who reacted.
+        await tester.tap(find.text('\u{1F44D} 2'));
+        // The bubble's double-tap recognizer holds the arena before a tap wins.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(reacted, [(_answerId, null)]);
+      });
+
+      testWidgets('a refused reaction says the action could not be completed', (
+        tester,
+      ) async {
+        await _pumpThread(
+          tester,
+          onReaction: (messageId, emoji) async => const Result.failure(
+            SecurityFailure(SecurityFailureKind.policyBlocked),
+          ),
+        );
+        const message =
+            'That action could not be completed. '
+            'No security guarantee was weakened.';
+        expect(find.text(message), findsNothing);
+
+        await tester.tap(find.text('\u{1F44D} 2'));
+        // The bubble's double-tap recognizer holds the arena before a tap wins.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(find.text(message), findsOneWidget);
+      });
+
+      testWidgets('a reaction on a page with no reaction path is reported as '
+          'failed, never as made', (tester) async {
+        await _pumpThread(tester);
+
+        await tester.tap(find.text('\u{1F44D} 2'));
+        // The bubble's double-tap recognizer holds the arena before a tap wins.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'That action could not be completed. '
+            'No security guarantee was weakened.',
+          ),
+          findsOneWidget,
+        );
+      });
+    },
+  );
 
   testWidgets('group details say what one message costs', (tester) async {
     await _pump(
@@ -648,6 +973,96 @@ Future<void> _pump(
   );
   await tester.pumpAndSettle();
 }
+
+const _questionId = '44444444444444444444444444444444';
+const _answerId = '55555555555555555555555555555555';
+const _ownId = '66666666666666666666666666666666';
+
+/// A short thread: a question from Admin, Member's edited and starred answer
+/// with two reactions, and a message of the current user, Owner.
+Future<void> _pumpThread(
+  WidgetTester tester, {
+  SendGroupMessageCallback? onSend,
+  SetGroupReactionCallback? onReaction,
+}) => _pump(
+  tester,
+  GroupChatPage(
+    groupId: _groupId,
+    injectedState: _state(),
+    injectedMessages: [
+      _message(_questionId, sender: _admin, text: 'Original question', at: 100),
+      _message(
+        _answerId,
+        sender: _member,
+        text: 'An answer',
+        at: 200,
+        replyTo: _questionId,
+        edited: true,
+        starred: true,
+        reactions: const [
+          MessageReaction(reactingUserId: _owner, emoji: '\u{1F44D}'),
+          MessageReaction(reactingUserId: _admin, emoji: '\u{1F44D}'),
+        ],
+      ),
+      _message(
+        _ownId,
+        sender: _owner,
+        text: 'Mine',
+        at: 300,
+        transport: MessageTransportState.relayAccepted,
+      ),
+    ],
+    currentUserId: _owner,
+    onSend:
+        onSend ??
+        (_, {replyToMessageId, quoteFallback}) async =>
+            const Result.success(null),
+    onReaction: onReaction,
+  ),
+);
+
+/// Opens the message sheet of one bubble.
+Future<void> _openActions(WidgetTester tester, String messageId) async {
+  await tester.tap(find.byKey(ValueKey('message-$messageId')));
+  // The bubble's double-tap recognizer holds the arena before a tap wins.
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pumpAndSettle();
+}
+
+/// One row of the group's conversation, as local storage hands it on.
+ConversationMessage _message(
+  String messageId, {
+  required String sender,
+  required String text,
+  MessageTransportState transport = MessageTransportState.received,
+  int at = 100,
+  String? replyTo,
+  bool edited = false,
+  bool starred = false,
+  List<MessageReaction> reactions = const [],
+}) => ConversationMessage(
+  messageId: messageId,
+  conversationId: _groupId,
+  senderUserId: sender,
+  senderDeviceId: 'device',
+  text: text,
+  replyToMessageId: replyTo,
+  quoteFallback: null,
+  createdMs: at,
+  orderingMs: at,
+  orderingEventId: messageId,
+  timestampState: MessageTimestampState.plausible,
+  revision: edited ? 1 : 0,
+  edited: edited,
+  deletedForEveryone: false,
+  deletedForMe: false,
+  pinned: false,
+  starred: starred,
+  unread: false,
+  transportState: transport,
+  receiptState: MessageReceiptState.none,
+  reactions: reactions,
+);
 
 /// Send, once the composer holds a draft to send.
 final Finder _sendButton = find.byWidgetPredicate(

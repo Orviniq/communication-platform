@@ -166,6 +166,7 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
     ),
     sendMessage: SendGroupMessage(repository: repository, sender: sender),
     retryMessage: RetryGroupMessage(repository: repository, sender: sender),
+    setReaction: SetGroupReaction(repository: repository, sender: sender),
   );
 });
 
@@ -176,9 +177,3 @@ final groupProvider = StreamProvider.autoDispose.family<GroupState?, String>((
   final repository = await ref.watch(groupRepositoryProvider.future);
   yield* repository.watchGroup(groupId);
 });
-
-final groupMessagesProvider = StreamProvider.autoDispose
-    .family<List<GroupMessage>, String>((ref, groupId) async* {
-      final repository = await ref.watch(groupRepositoryProvider.future);
-      yield* repository.watchMessages(groupId);
-    });

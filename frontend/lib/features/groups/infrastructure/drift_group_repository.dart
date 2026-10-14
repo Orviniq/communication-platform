@@ -46,37 +46,6 @@ final class DriftGroupRepository extends DriftRepositoryBase
       .watchSingleOrNull()
       .map((row) => row == null ? null : _projectedState(row));
 
-  @override
-  Stream<List<GroupMessage>> watchMessages(String groupId) {
-    final query = database.select(database.messages)
-      ..where((row) => row.conversationId.equals(groupId))
-      ..orderBy([
-        (row) => OrderingTerm.asc(row.orderingMs),
-        (row) => OrderingTerm.asc(row.orderingEventId),
-      ]);
-    return query.watch().map(
-      (rows) => List.unmodifiable(
-        rows
-            .where((row) => !row.deletedForMe)
-            .map(
-              (row) => GroupMessage(
-                messageId: row.messageId,
-                groupId: row.conversationId,
-                senderUserId: row.senderUserId,
-                text: row.deletedForEveryone
-                    ? ''
-                    : utf8.decode(
-                        row.projectionCiphertext,
-                        allowMalformed: false,
-                      ),
-                createdMs: row.createdAt.millisecondsSinceEpoch,
-                delivery: _messageDelivery(row.status),
-              ),
-            ),
-      ),
-    );
-  }
-
   /// The copies of a local message create carry its event id, which is also
   /// the message's id. Only messages whose fan-out has not ended are counted,
   /// so the work follows the sends in flight however long the history is.
@@ -893,27 +862,6 @@ Uint8List _hexBytes(String value) {
     for (var index = 0; index < value.length; index += 2)
       int.parse(value.substring(index, index + 2), radix: 16),
   ]);
-}
-
-/// How a group message reads, from the transport state its row carries.
-///
-/// A fan-out the server has accepted part of has not ended, so it reads as
-/// sending: a message reads as sent only once none of its copies is still
-/// owed. An ordinal this build does not know reads as the projector reads it.
-GroupMessageDelivery _messageDelivery(int status) {
-  if (status < 0 || status >= MessageTransportState.values.length) {
-    return GroupMessageDelivery.localOnly;
-  }
-  return switch (MessageTransportState.values[status]) {
-    MessageTransportState.received => GroupMessageDelivery.received,
-    MessageTransportState.localOnly => GroupMessageDelivery.localOnly,
-    MessageTransportState.preparing => GroupMessageDelivery.preparing,
-    MessageTransportState.queued => GroupMessageDelivery.queued,
-    MessageTransportState.sending ||
-    MessageTransportState.partiallyAccepted => GroupMessageDelivery.sending,
-    MessageTransportState.relayAccepted => GroupMessageDelivery.sent,
-    MessageTransportState.permanentlyFailed => GroupMessageDelivery.failed,
-  };
 }
 
 final class _GroupConflict implements Exception {
