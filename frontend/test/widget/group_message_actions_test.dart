@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
@@ -8,6 +7,7 @@ import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
@@ -18,12 +18,16 @@ import 'package:communication_platform/features/contacts/domain/contact_model.da
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/direct_chat_page.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/features/server_config/domain/server_config_model.dart';
@@ -32,9 +36,11 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/attachment_descriptor_fixture.dart';
 import '../support/authentication_harness.dart' as auth;
 
 const _deviceId = '00000000-0000-0000-0000-000000000011';
@@ -44,12 +50,17 @@ const _directId =
     'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
 const _groupId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _leftGroupId =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const _messageId = '10101010101010101010101010101010';
+const _secondMessageId = '11111111111111111111111111111111';
+const _arrivingMessageId = '12121212121212121212121212121212';
 
 void main() {
   late LocalDatabase database;
   late _Fanout fanout;
   late _GroupSender groupSender;
+  final strings = lookupAppLocalizations(const Locale('en'));
 
   setUp(() async {
     database = LocalDatabase(NativeDatabase.memory());
@@ -60,6 +71,174 @@ void main() {
 
   tearDown(() async {
     await database.close();
+  });
+
+  /// The routed group chat over two messages from another member.
+  Future<ProviderContainer> openGroup(
+    WidgetTester tester, {
+    bool unread = false,
+    VisibleConversationRegistry? registry,
+    List<ConversationSummary> others = const [],
+  }) async {
+    await _seedConversation(
+      database,
+      conversationId: _groupId,
+      kind: ConversationKind.group,
+      unread: unread,
+      messages: [
+        (id: _messageId, sender: _member, text: 'hello team'),
+        (id: _secondMessageId, sender: _member, text: 'see you there'),
+      ],
+    );
+    return _pump(
+      tester,
+      database: database,
+      fanout: fanout,
+      groupSender: groupSender,
+      groups: {_groupId: _group(_groupId, 'Team')},
+      summaries: [
+        _summary(_groupId, ConversationKind.group, title: 'Team'),
+        ...others,
+      ],
+      registry: registry,
+      page: const GroupChatPage(groupId: _groupId),
+    );
+  }
+
+  group('a group chat', () {
+    testWidgets('Copy writes the message text to the clipboard', (
+      tester,
+    ) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await openGroup(tester);
+
+      await _openActions(tester, 'hello team');
+      await tester.tap(find.text(strings.chatCopyAction));
+      await tester.pumpAndSettle();
+
+      expect(copied, ['hello team']);
+    });
+
+    testWidgets('Star and Delete for me reach the local state with the '
+        'message id', (tester) async {
+      await openGroup(tester);
+
+      await _openActions(tester, 'hello team');
+      await tester.tap(find.text(strings.chatStarAction));
+      await tester.pumpAndSettle();
+      expect((await _row(database, _messageId)).starred, isTrue);
+      expect((await _row(database, _secondMessageId)).starred, isFalse);
+
+      await _openActions(tester, 'see you there');
+      await tester.tap(find.text(strings.chatDeleteAction));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(strings.chatDeleteForMeAction));
+      await tester.pumpAndSettle();
+      expect((await _row(database, _secondMessageId)).deletedForMe, isTrue);
+      expect((await _row(database, _messageId)).deletedForMe, isFalse);
+      expect(find.text(strings.chatActionFailedMessage), findsNothing);
+    });
+
+    testWidgets('a draft is kept, and a reopened group shows it in the '
+        'composer', (tester) async {
+      final container = await openGroup(tester);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-composer-field')),
+        'unsent words',
+      );
+      await tester.pump();
+      // Leaving the group: the composer writes its draft as it goes.
+      await tester.pumpWidget(_app(container, const SizedBox.shrink()));
+      await tester.pumpAndSettle();
+      expect(
+        utf8.decode((await _conversation(database)).draftCiphertext!),
+        'unsent words',
+      );
+
+      await tester.pumpWidget(
+        _app(container, const GroupChatPage(groupId: _groupId)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byKey(const ValueKey('chat-composer-field')),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        'unsent words',
+      );
+    });
+  });
+
+  group('the local read mark', () {
+    testWidgets('opening a group with unread messages clears its unread '
+        'count and commits no receipt', (tester) async {
+      await openGroup(tester, unread: true);
+
+      expect((await _conversation(database)).unreadCount, 0);
+      expect((await _row(database, _messageId)).unread, isFalse);
+      expect((await _row(database, _secondMessageId)).unread, isFalse);
+      // Every event the shared send path commits passes the fan-out, a
+      // receipt included.
+      expect(fanout.events, isEmpty);
+      expect(groupSender.texts, isEmpty);
+    });
+
+    testWidgets('a message that arrives while the group is on screen does '
+        'not stay unread', (tester) async {
+      await openGroup(tester);
+
+      await _insertMessage(
+        database,
+        conversationId: _groupId,
+        message: (id: _arrivingMessageId, sender: _member, text: 'just now'),
+        at: 1700000000100,
+        unread: true,
+      );
+      await (database.update(database.conversations)
+            ..where((row) => row.conversationId.equals(_groupId)))
+          .write(const ConversationsCompanion(unreadCount: Value(1)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('just now'), findsOneWidget);
+      expect((await _row(database, _arrivingMessageId)).unread, isFalse);
+      expect((await _conversation(database)).unreadCount, 0);
+      expect(fanout.events, isEmpty);
+    });
+
+    testWidgets('the registry of what is on screen names the group while it '
+        'is open', (tester) async {
+      final registry = VisibleConversationRegistry(observeLifecycle: false);
+      addTearDown(registry.dispose);
+      final container = await openGroup(tester, registry: registry);
+
+      expect(registry.conversationId, _groupId);
+
+      await tester.pumpWidget(_app(container, const SizedBox.shrink()));
+      await tester.pumpAndSettle();
+      expect(registry.conversationId, isNull);
+    });
   });
 
   group('forward', () {
@@ -99,8 +278,220 @@ void main() {
       expect(groupSender.texts, [(groupId: _groupId, text: 'pass it on')]);
       expect(fanout.events, isEmpty);
     });
+
+    testWidgets('from a group into a direct chat and into Saved Messages', (
+      tester,
+    ) async {
+      await openGroup(
+        tester,
+        others: [_summary(_directId, ConversationKind.direct, peer: _peer)],
+      );
+
+      await _openActions(tester, 'hello team');
+      await tester.tap(find.text(strings.chatForwardAction));
+      await tester.pumpAndSettle();
+      // The open group is not a target of its own forward.
+      expect(_targetTitles(tester), [
+        strings.savedMessagesTitle,
+        chatShortIdentity(_peer),
+      ]);
+      await tester.tap(find.text(strings.savedMessagesTitle).last);
+      await tester.pump();
+      await tester.tap(find.text(chatShortIdentity(_peer)).last);
+      await tester.pump();
+      await tester.tap(find.text(strings.chatForwardAction).last);
+      await tester.pumpAndSettle();
+
+      expect(groupSender.texts, isEmpty);
+      expect(fanout.events, hasLength(2));
+      final saved = fanout.events.singleWhere(
+        (event) => event.conversationKind == ConversationKind.saved.index,
+      );
+      final direct = fanout.events.singleWhere(
+        (event) => event.conversationKind == ConversationKind.direct.index,
+      );
+      expect(direct.peerUserId, _peer);
+      for (final event in [saved, direct]) {
+        expect((event.event.body as MessageCreateBody).text, 'hello team');
+      }
+      expect(find.text(strings.chatActionFailedMessage), findsNothing);
+    });
+
+    testWidgets('the picker of an attachment message lists no group', (
+      tester,
+    ) async {
+      ChatListItemViewModel target(
+        String id,
+        String title, {
+        bool group = false,
+        bool saved = false,
+      }) => ChatListItemViewModel(
+        conversationId: id,
+        title: title,
+        preview: '',
+        timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+        unreadCount: 0,
+        muted: false,
+        pinned: false,
+        savedMessages: saved,
+        peerUserId: group || saved ? null : _peer,
+        group: group,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          builder: (context, child) =>
+              AppDesignSystem(child: child ?? const SizedBox.shrink()),
+          home: ChatConversationView(
+            model: _timeline([
+              _viewModel('a file and a caption', attachment: true),
+              _viewModel('plain words'),
+            ]),
+            forwardTargets: () => [
+              target('', 'Saved Messages', saved: true),
+              target(_groupId, 'Team', group: true),
+              target(_directId, 'Someone'),
+            ],
+            onIntent: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openActions(tester, 'a file and a caption');
+      await tester.tap(find.text(strings.chatForwardAction));
+      await tester.pumpAndSettle();
+      expect(_targetTitles(tester), ['Saved Messages', 'Someone']);
+      popAppModal(tester.element(find.byType(CheckboxListTile).first));
+      await tester.pumpAndSettle();
+
+      // The same picker over a text message lists the group.
+      await _openActions(tester, 'plain words');
+      await tester.tap(find.text(strings.chatForwardAction));
+      await tester.pumpAndSettle();
+      expect(_targetTitles(tester), ['Saved Messages', 'Team', 'Someone']);
+    });
+
+    testWidgets('a refused group target does not stop the other targets, and '
+        'the user is told', (tester) async {
+      await _seedConversation(
+        database,
+        conversationId: _directId,
+        kind: ConversationKind.direct,
+        peerUserId: _peer,
+        messages: [(id: _messageId, sender: _peer, text: 'pass it on')],
+      );
+      await _pump(
+        tester,
+        database: database,
+        fanout: fanout,
+        groupSender: groupSender,
+        groups: {
+          // This account was removed from the newer group, so the rule of a
+          // group send refuses it.
+          _leftGroupId: _group(_leftGroupId, 'Left Team', member: false),
+          _groupId: _group(_groupId, 'Team'),
+        },
+        summaries: [
+          _summary(_directId, ConversationKind.direct, peer: _peer),
+          _summary(
+            _leftGroupId,
+            ConversationKind.group,
+            title: 'Left Team',
+            at: 1700000000900,
+          ),
+          _summary(_groupId, ConversationKind.group, title: 'Team'),
+        ],
+        page: const DirectChatPage(
+          peerUserId: _peer,
+          conversationId: _directId,
+        ),
+      );
+
+      await _openActions(tester, 'pass it on');
+      await tester.tap(find.text(strings.chatForwardAction));
+      await tester.pumpAndSettle();
+      // Saved Messages, then the refused group, then the group after it.
+      final titles = _targetTitles(tester);
+      expect(titles, [strings.savedMessagesTitle, 'Left Team', 'Team']);
+      for (final title in titles) {
+        await tester.tap(find.text(title).last);
+        await tester.pump();
+      }
+      await tester.tap(find.text(strings.chatForwardAction).last);
+      await tester.pumpAndSettle();
+
+      expect(groupSender.texts, [(groupId: _groupId, text: 'pass it on')]);
+      expect(fanout.events, hasLength(1));
+      expect(
+        fanout.events.single.conversationKind,
+        ConversationKind.saved.index,
+      );
+      expect(find.text(strings.chatActionFailedMessage), findsOneWidget);
+    });
   });
 }
+
+/// The titles the open forward picker lists, in order.
+List<String> _targetTitles(WidgetTester tester) => [
+  for (final tile in tester.widgetList<CheckboxListTile>(
+    find.byType(CheckboxListTile),
+  ))
+    (tile.title! as Text).data!,
+];
+
+Future<Message> _row(LocalDatabase database, String messageId) =>
+    (database.select(
+      database.messages,
+    )..where((row) => row.messageId.equals(messageId))).getSingle();
+
+Future<Conversation> _conversation(LocalDatabase database) => (database.select(
+  database.conversations,
+)..where((row) => row.conversationId.equals(_groupId))).getSingle();
+
+ChatTimelineViewModel _timeline(List<ChatMessageViewModel> messages) =>
+    ChatTimelineViewModel(
+      state: ChatTimelineLoadState.data,
+      conversationId: _directId,
+      title: 'Someone',
+      savedMessages: false,
+      securityGate: ChatSecurityGate.ready,
+      offline: false,
+      hasMoreBefore: false,
+      loadingBefore: false,
+      olderLoadFailed: false,
+      typing: false,
+      pinnedMessages: const [],
+      messages: messages,
+    );
+
+ChatMessageViewModel _viewModel(String text, {bool attachment = false}) =>
+    ChatMessageViewModel(
+      id: attachment ? _messageId : _secondMessageId,
+      authorId: _peer,
+      authorName: 'Someone',
+      outgoing: false,
+      kind: attachment
+          ? ChatTimelineContentKind.attachment
+          : ChatTimelineContentKind.text,
+      text: text,
+      timestamp: DateTime(2026, 10, 14, attachment ? 10 : 11),
+      delivery: ChatDeliveryViewState.received,
+      firstInAuthorGroup: true,
+      lastInAuthorGroup: true,
+      edited: false,
+      deleted: false,
+      pinned: false,
+      starred: false,
+      unread: false,
+      timestampSkewed: false,
+      canEdit: false,
+      canDeleteForEveryone: false,
+      attachments: attachment ? [testAttachmentDescriptor()] : const [],
+    );
 
 typedef _SeedMessage = ({String id, String sender, String text});
 
@@ -303,7 +694,15 @@ Future<ProviderContainer> _pump(
       .read(authenticationControllerProvider.notifier)
       .login(username: 'reader', password: 'correct horse battery');
   expect(signedIn, isTrue);
-  await tester.pumpWidget(
+  await tester.pumpWidget(_app(container, page));
+  await tester.pumpAndSettle();
+  // Unmounted inside the test, so a draft the composer flushes as it leaves
+  // is written while the database is still open.
+  addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+  return container;
+}
+
+Widget _app(ProviderContainer container, Widget page) =>
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
@@ -315,14 +714,7 @@ Future<ProviderContainer> _pump(
             AppDesignSystem(child: child ?? const SizedBox.shrink()),
         home: page,
       ),
-    ),
-  );
-  await tester.pumpAndSettle();
-  // Unmounted inside the test, so a draft the composer flushes as it leaves
-  // is written while the database is still open.
-  addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
-  return container;
-}
+    );
 
 /// Opens the message sheet of the bubble that shows [text].
 Future<void> _openActions(WidgetTester tester, String text) async {

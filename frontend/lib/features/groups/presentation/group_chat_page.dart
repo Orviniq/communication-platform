@@ -14,15 +14,19 @@ import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
 import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
+import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
+import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -72,16 +76,129 @@ class GroupChatPage extends ConsumerWidget {
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
     if (userId == null) return groupErrorPage(context);
+    return _GroupChatSession(
+      key: ValueKey(userId),
+      groupId: groupId,
+      currentUserId: userId,
+    );
+  }
+}
+
+/// The routed group chat: one group, read and written as this account.
+///
+/// Owns what a direct chat's page owns (ADR-090 D5, D6): the group's place in
+/// the registry of what is on screen, the marking of its messages read, and
+/// the local state of its messages and its draft.
+class _GroupChatSession extends ConsumerStatefulWidget {
+  const _GroupChatSession({
+    required this.groupId,
+    required this.currentUserId,
+    super.key,
+  });
+
+  final String groupId;
+  final String currentUserId;
+
+  @override
+  ConsumerState<_GroupChatSession> createState() => _GroupChatSessionState();
+}
+
+class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
+  VisibleConversationReadMarker? _readMarker;
+
+  /// The group's own conversation, read as a direct chat reads its own
+  /// (ADR-090 D1): the conversation id of a group is the group id.
+  ConversationMessagesRequest get _request =>
+      (currentUserId: widget.currentUserId, conversationId: widget.groupId);
+
+  @override
+  void initState() {
+    super.initState();
+    // Subscribed and not watched, as in a direct chat: the forward picker
+    // reads the list at the moment it opens, and nothing else here draws it.
+    ref.listenManual(
+      conversationSummariesProvider(widget.currentUserId),
+      (_, _) {},
+    );
+    _localStateSubscription = ref.listenManual(
+      manageLocalConversationStateProvider.future,
+      (_, _) {},
+    );
+    _readMarker = VisibleConversationReadMarker(
+      registry: ref.read(visibleConversationProvider),
+      conversationId: widget.groupId,
+      markRead: _markRead,
+    );
+    // After the first frame, once the scope built below has told the registry
+    // that this group is on screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _readMarker?.start());
+    // A message that lands in the group the user is looking at has been read
+    // by them.
+    ref.listenManual(conversationMessagesProvider(_request), (_, next) {
+      final page = next.value?.page;
+      if (page != null && page.messages.any((message) => message.unread)) {
+        _readMarker?.notify();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _readMarker?.dispose();
+    _readMarker = null;
+    super.dispose();
+  }
+
+  /// Clears the group's unread state on this phone, silently, as a direct
+  /// chat does.
+  Future<void> _markRead() async {
+    try {
+      final deviceId = await ref.read(currentMessagingDeviceIdProvider.future);
+      final markRead = await ref.read(
+        markConversationVisiblyReadProvider((
+          userId: widget.currentUserId,
+          deviceId: deviceId,
+        )).future,
+      );
+      await markRead(
+        currentUserId: widget.currentUserId,
+        currentDeviceId: deviceId,
+        conversationId: widget.groupId,
+        // A group sends no read receipt yet. Phase 4 sends the read receipts
+        // of a group, to the sender of each message read (ADR-091).
+        allowReadReceipts: false,
+      );
+    } on Object {
+      // Reading a screen is not a place to raise a failure, and the next time
+      // the group becomes visible this runs again.
+    }
+  }
+
+  /// The local state of the group's messages and draft.
+  ///
+  /// A subscription rather than a `ref.read`, because the composer writes its
+  /// draft as it leaves the tree, and by then this element is deactivated and
+  /// `ref.read` can no longer find the provider scope above it. The
+  /// subscription reads its container directly until this state is disposed,
+  /// which is after the composer.
+  late final ProviderSubscription<Future<ManageLocalConversationState>>
+  _localStateSubscription;
+
+  Future<ManageLocalConversationState> _localState() =>
+      _localStateSubscription.read();
+
+  @override
+  Widget build(BuildContext context) {
+    final groupId = widget.groupId;
+    final userId = widget.currentUserId;
     final group = ref.watch(groupProvider(groupId));
-    // The group's own conversation, read as a direct chat reads its own
-    // (ADR-090 D1): the conversation id of a group is the group id.
-    final request = (currentUserId: userId, conversationId: groupId);
-    final messages = ref.watch(conversationMessagesProvider(request));
+    final messages = ref.watch(conversationMessagesProvider(_request));
     final device = ref.watch(currentMessagingDeviceIdProvider);
     final useCases = ref.watch(groupUseCasesProvider);
+    final draft = ref.watch(conversationDraftProvider(groupId)).value;
     Future<ConversationTimelineWindow> window() =>
-        ref.read(conversationTimelineWindowProvider(request).future);
-    return group.when(
+        ref.read(conversationTimelineWindowProvider(_request).future);
+    final page = group.when(
       loading: () => groupLoadingPage(context),
       error: (_, _) => groupErrorPage(context),
       data: (state) {
@@ -99,6 +216,7 @@ class GroupChatPage extends ConsumerWidget {
                 state: state,
                 timeline: timeline,
                 currentUserId: userId,
+                initialDraft: draft,
                 onSend: (text, {replyToMessageId, quoteFallback}) =>
                     resolved.sendMessage(
                       groupId: groupId,
@@ -125,6 +243,27 @@ class GroupChatPage extends ConsumerWidget {
                   messageId: messageId,
                   emoji: emoji,
                 ),
+                onSaveDraft: (text) async => (await _localState()).saveDraft(
+                  conversationId: groupId,
+                  text: text,
+                ),
+                onStar: (messageId, starred) async => (await _localState())
+                    .setStar(messageId: messageId, starred: starred),
+                onDeleteForMe: (messageId) async =>
+                    (await _localState()).deleteForMe(messageId),
+                forwardTargets: () => chatForwardTargets(
+                  ref,
+                  currentUserId: userId,
+                  conversationId: groupId,
+                  savedMessages: false,
+                  strings: AppLocalizations.of(context),
+                ),
+                onForward: (message, targets) => forwardChatMessage(
+                  ref,
+                  currentUserId: userId,
+                  message: message,
+                  targets: targets,
+                ),
                 onLoadOlder: () async => (await window()).loadOlder(),
                 onReveal: (messageId) async =>
                     (await window()).reveal(messageId),
@@ -133,6 +272,13 @@ class GroupChatPage extends ConsumerWidget {
           ),
         );
       },
+    );
+    // The alert layer reads this, so it does not announce a message into the
+    // group the user is looking at.
+    return VisibleConversationScope(
+      registry: ref.watch(visibleConversationProvider),
+      conversationId: groupId,
+      child: page,
     );
   }
 }
@@ -145,6 +291,12 @@ class GroupChatView extends StatefulWidget {
     required this.onSend,
     this.onRetry,
     this.onReaction,
+    this.initialDraft,
+    this.onSaveDraft,
+    this.onStar,
+    this.onDeleteForMe,
+    this.forwardTargets,
+    this.onForward,
     this.onLoadOlder,
     this.onReveal,
     super.key,
@@ -162,6 +314,25 @@ class GroupChatView extends StatefulWidget {
   /// Null where the view has no reaction path: a reaction is then reported as
   /// failed, never as made.
   final SetGroupReactionCallback? onReaction;
+
+  /// The draft the composer was left with, read once when the group opens.
+  final String? initialDraft;
+
+  /// Null where the view keeps no draft.
+  final SaveGroupDraftCallback? onSaveDraft;
+
+  /// Null where the view has no local state: a star or a delete for me is
+  /// then reported as failed, never as made.
+  final SetGroupStarCallback? onStar;
+  final DeleteGroupMessageForMeCallback? onDeleteForMe;
+
+  /// Where a forward may go, resolved when the picker opens: every other
+  /// conversation and Saved Messages.
+  final ValueGetter<List<ChatListItemViewModel>>? forwardTargets;
+
+  /// Null where the view has no forward path: a forward is then reported as
+  /// failed, never as made.
+  final ForwardGroupMessageCallback? onForward;
 
   /// Opens the window further back, for the timeline's older-messages marker.
   final Future<void> Function()? onLoadOlder;
@@ -240,6 +411,7 @@ class _GroupChatViewState extends State<GroupChatView> {
           securityGate: gate,
           offline: false,
           savedMessages: false,
+          initialDraft: widget.initialDraft,
           attachments: ChatAttachmentAvailability.notBuilt,
           onIntent: _handleIntent,
         ),
@@ -309,6 +481,19 @@ class _GroupChatViewState extends State<GroupChatView> {
       unawaited(_retry(message));
     } else if (intent case SetReactionIntent(:final messageId, :final emoji)) {
       unawaited(_react(messageId, emoji));
+    } else if (intent case CopyMessageIntent(:final text)) {
+      unawaited(Clipboard.setData(ClipboardData(text: text)));
+    } else if (intent case SetStarIntent(:final messageId, :final starred)) {
+      unawaited(_local(widget.onStar?.call(messageId, starred)));
+    } else if (intent case DeleteForMeIntent(:final messageId)) {
+      unawaited(_local(widget.onDeleteForMe?.call(messageId)));
+    } else if (intent case SaveDraftIntent(:final text)) {
+      // Also sent as the composer leaves the tree, so nothing here may touch
+      // this view's state. A draft that cannot be written says nothing, as in
+      // a direct chat.
+      unawaited(widget.onSaveDraft?.call(text));
+    } else if (intent case ForwardMessageIntent(:final message)) {
+      unawaited(_showForwardPicker(message));
     } else if (intent is LoadOlderMessagesIntent) {
       unawaited(widget.onLoadOlder?.call());
     } else if (intent case JumpToMessageIntent(:final messageId)) {
@@ -366,15 +551,33 @@ class _GroupChatViewState extends State<GroupChatView> {
     setState(() => _retryFailed = result is FailureResult<void>);
   }
 
-  /// Sets or, with a null [emoji], removes this user's reaction. A refusal is
-  /// said in the words a direct chat uses for a refused action.
-  Future<void> _react(String messageId, String? emoji) async {
-    final onReaction = widget.onReaction;
-    final Result<void> result = onReaction == null
-        ? const Result.failure(
-            ValidationFailure(ValidationFailureKind.invalidInput),
-          )
-        : await onReaction(messageId, emoji);
+  /// Sets or, with a null [emoji], removes this user's reaction.
+  Future<void> _react(String messageId, String? emoji) =>
+      _local(widget.onReaction?.call(messageId, emoji));
+
+  /// The shared picker, over every other conversation. An attachment message
+  /// lists no group, because a group sends no attachment (ADR-089 D1).
+  Future<void> _showForwardPicker(ChatMessageViewModel message) =>
+      showChatForwardPicker(
+        context: context,
+        message: message,
+        targets:
+            widget.forwardTargets?.call() ?? const <ChatListItemViewModel>[],
+        onForward: (targets) {
+          final onForward = widget.onForward;
+          unawaited(_local(onForward?.call(message, targets)));
+        },
+      );
+
+  /// Waits for an action the user asked for, and says so when it was refused,
+  /// in the words a direct chat uses for a refused action. A null [action]
+  /// is one this view has no path for, which is a refusal too.
+  Future<void> _local(Future<Result<void>>? action) async {
+    final Result<void> result =
+        await action ??
+        const Result.failure(
+          ValidationFailure(ValidationFailureKind.invalidInput),
+        );
     if (!mounted || result is! FailureResult<void>) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
