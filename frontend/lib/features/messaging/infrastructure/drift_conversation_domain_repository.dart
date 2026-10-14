@@ -206,6 +206,76 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
     }
   }
 
+  @override
+  Stream<List<MessageReader>> watchMessageReaders(String messageId) {
+    final receipts = database.receipts;
+    final messages = database.messages;
+    // `MIN` skips a null, so a member's time is the earliest one known over
+    // their devices, and null only when none of them has one. The message's
+    // time is the same on each row of the group.
+    final readAtMs = receipts.readAtMs.min();
+    final messageMs = messages.orderingMs.max();
+    final query =
+        database.selectOnly(receipts).join([
+            innerJoin(
+              messages,
+              messages.messageId.equalsExp(receipts.messageId),
+              useColumns: false,
+            ),
+          ])
+          ..addColumns([receipts.userId, readAtMs, messageMs])
+          ..where(
+            receipts.messageId.equals(messageId) &
+                receipts.receiptState.equals(MessageReceiptState.read.index),
+          )
+          ..groupBy([receipts.userId]);
+    // Watching both tables re-runs this on every message write, so a list
+    // that did not change is not handed on again.
+    return query
+        .watch()
+        .map((rows) {
+          final readers = [
+            for (final row in rows)
+              MessageReader(
+                userId: row.read(receipts.userId)!,
+                readAtMs: _notBeforeMessage(
+                  row.read(readAtMs),
+                  row.read(messageMs) ?? 0,
+                ),
+              ),
+          ]..sort(_newestReadFirst);
+          return List<MessageReader>.unmodifiable(readers);
+        })
+        .distinct(_sameReaders);
+  }
+
+  /// A reader's clock can be further behind than the projector corrects
+  /// (ADR-091 D8), and a read cannot have come before the message it reads.
+  static int? _notBeforeMessage(int? readAtMs, int messageMs) =>
+      readAtMs == null ? null : math.max(readAtMs, messageMs);
+
+  static int _newestReadFirst(MessageReader left, MessageReader right) {
+    final leftMs = left.readAtMs;
+    final rightMs = right.readAtMs;
+    if (leftMs != rightMs) {
+      if (leftMs == null) return 1;
+      if (rightMs == null) return -1;
+      return rightMs.compareTo(leftMs);
+    }
+    return left.userId.compareTo(right.userId);
+  }
+
+  static bool _sameReaders(
+    List<MessageReader> left,
+    List<MessageReader> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index += 1) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
+  }
+
   /// Everything one emission of [watchMessages] needs, in five statements.
   ///
   /// Four of them are set-based over the whole window rather than per message,

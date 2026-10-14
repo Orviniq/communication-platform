@@ -1261,6 +1261,10 @@ final class _Repository implements ConversationRepositoryPort {
   }) => const Stream.empty();
 
   @override
+  Stream<List<MessageReader>> watchMessageReaders(String messageId) =>
+      const Stream.empty();
+
+  @override
   Future<Result<ConversationMessageCursor?>> olderMessageCursor({
     required String conversationId,
     required ConversationMessageCursor before,
