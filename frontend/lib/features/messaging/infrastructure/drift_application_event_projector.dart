@@ -1013,6 +1013,10 @@ final class DriftApplicationEventProjector {
 
     final receiptStates =
         <({String userId, String deviceId}), MessageReceiptState>{};
+    // The earliest plausible ordering time of a read from each device
+    // (ADR-091 D8). An `ordering_ms` of 0 is a clock the projector could not
+    // place, so it is no time at all rather than the earliest one.
+    final readTimes = <({String userId, String deviceId}), int>{};
     var readOnOwnDevice = false;
     for (final receipt in facts.where(
       (fact) =>
@@ -1040,6 +1044,11 @@ final class DriftApplicationEventProjector {
       }
       if (state == MessageReceiptState.read) {
         readOnOwnDevice |= receipt.row.senderUserId == currentUserId;
+        final orderingMs = receipt.row.orderingMs;
+        final earliest = readTimes[key];
+        if (orderingMs != 0 && (earliest == null || orderingMs < earliest)) {
+          readTimes[key] = orderingMs;
+        }
       }
     }
     final receipts =
@@ -1049,6 +1058,9 @@ final class DriftApplicationEventProjector {
               userId: entry.key.userId,
               deviceId: entry.key.deviceId,
               state: entry.value,
+              readAtMs: entry.value == MessageReceiptState.read
+                  ? readTimes[entry.key]
+                  : null,
             ),
         ]..sort((left, right) {
           final user = left.userId.compareTo(right.userId);
@@ -1209,6 +1221,7 @@ final class DriftApplicationEventProjector {
                 deviceId: receipt.deviceId,
                 receiptState: receipt.state.index,
                 projectionCiphertext: Uint8List(0),
+                readAtMs: Value(receipt.readAtMs),
               ),
             );
       }
@@ -1622,11 +1635,16 @@ final class _ProjectedReceipt {
     required this.userId,
     required this.deviceId,
     required this.state,
+    required this.readAtMs,
   });
 
   final String userId;
   final String deviceId;
   final MessageReceiptState state;
+
+  /// Null unless [state] is read and a read from this device had a plausible
+  /// clock.
+  final int? readAtMs;
 }
 
 int _compareEditFacts(_EventFact left, _EventFact right) {

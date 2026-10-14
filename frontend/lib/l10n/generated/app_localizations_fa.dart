@@ -782,6 +782,39 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatMessageActionsLabel => 'عملیات پیام';
 
   @override
+  String chatSeenByCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'دیده‌شده توسط $count نفر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatNotSeenYet => 'هنوز دیده نشده';
+
+  @override
+  String get chatReadersOpenHint =>
+      'نشان می‌دهد چه کسانی و چه زمانی این پیام را خوانده‌اند';
+
+  @override
+  String get chatReadersTitle => 'دیده‌شده توسط';
+
+  @override
+  String get chatReadTimeUnknown => 'زمان نامشخص';
+
+  @override
+  String chatReadDateAndTime(String date, String time) {
+    return '$date، $time';
+  }
+
+  @override
+  String chatReaderSemantics(String name, String time) {
+    return '$name: $time';
+  }
+
+  @override
   String get chatReplyAction => 'پاسخ';
 
   @override

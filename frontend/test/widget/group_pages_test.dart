@@ -418,6 +418,108 @@ void main() {
     expect(retried, [(messageId, 'Not everyone has this yet')]);
   });
 
+  group('two ticks on an own group message (ADR-091 D1)', () {
+    const messageId = '77777777777777777777777777777777';
+
+    Future<void> pumpOne(WidgetTester tester, ConversationMessage message) =>
+        _pump(
+          tester,
+          GroupChatPage(
+            groupId: _groupId,
+            injectedState: _state(),
+            injectedMessages: [message],
+            currentUserId: _owner,
+            onSend: (_, {replyToMessageId, quoteFallback}) async =>
+                const Result.success(null),
+            onRetry:
+                (messageId, text, {replyToMessageId, quoteFallback}) async =>
+                    const Result.success(null),
+          ),
+        );
+
+    /// The marks in the bubble of [messageId] drawn with [icon].
+    Finder mark(AppIconData icon) => find.descendant(
+      of: find.byKey(const ValueKey('message-$messageId')),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is AppIcon && widget.data == icon,
+      ),
+    );
+
+    testWidgets('a message one member read shows two ticks while a copy is '
+        'still owed', (tester) async {
+      await pumpOne(
+        tester,
+        _message(
+          messageId,
+          sender: _owner,
+          text: 'Hi',
+          transport: MessageTransportState.partiallyAccepted,
+          receipt: MessageReceiptState.read,
+        ),
+      );
+
+      expect(mark(AppIcons.read), findsOneWidget);
+      expect(mark(AppIcons.clock), findsNothing);
+      expect(find.byTooltip('read receipt received'), findsOneWidget);
+    });
+
+    testWidgets('a failed message a member read keeps its failed mark and '
+        'Retry', (tester) async {
+      await pumpOne(
+        tester,
+        _message(
+          messageId,
+          sender: _owner,
+          text: 'Not everyone has this yet',
+          transport: MessageTransportState.permanentlyFailed,
+          receipt: MessageReceiptState.read,
+        ),
+      );
+
+      expect(mark(AppIcons.error), findsOneWidget);
+      expect(mark(AppIcons.read), findsNothing);
+      expect(find.text('Retry as a new encrypted send'), findsOneWidget);
+    });
+
+    testWidgets('a delivered state shows the mark of the transport', (
+      tester,
+    ) async {
+      await pumpOne(
+        tester,
+        _message(
+          messageId,
+          sender: _owner,
+          text: 'Hi',
+          transport: MessageTransportState.partiallyAccepted,
+          receipt: MessageReceiptState.delivered,
+        ),
+      );
+
+      expect(mark(AppIcons.clock), findsOneWidget);
+      expect(mark(AppIcons.delivered), findsNothing);
+    });
+
+    testWidgets('a message from another member shows no tick', (tester) async {
+      await pumpOne(
+        tester,
+        _message(
+          messageId,
+          sender: _member,
+          text: 'Hi',
+          receipt: MessageReceiptState.read,
+        ),
+      );
+
+      for (final tick in [
+        AppIcons.accepted,
+        AppIcons.delivered,
+        AppIcons.read,
+      ]) {
+        expect(mark(tick), findsNothing);
+      }
+    });
+  });
+
   group('a group message shows what a direct message shows (ADR-090)', () {
     testWidgets('a reply quotes the name of the member who wrote the replied '
         'message', (tester) async {
@@ -1035,6 +1137,7 @@ ConversationMessage _message(
   required String sender,
   required String text,
   MessageTransportState transport = MessageTransportState.received,
+  MessageReceiptState receipt = MessageReceiptState.none,
   int at = 100,
   String? replyTo,
   bool edited = false,
@@ -1060,7 +1163,7 @@ ConversationMessage _message(
   starred: starred,
   unread: false,
   transportState: transport,
-  receiptState: MessageReceiptState.none,
+  receiptState: receipt,
   reactions: reactions,
 );
 

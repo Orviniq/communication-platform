@@ -19,6 +19,7 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_message_readers.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
@@ -39,6 +40,7 @@ class GroupChatPage extends ConsumerWidget {
     this.onSend,
     this.onRetry,
     this.onReaction,
+    this.watchReaders,
     super.key,
   });
 
@@ -52,6 +54,9 @@ class GroupChatPage extends ConsumerWidget {
   final SendGroupMessageCallback? onSend;
   final RetryGroupMessageCallback? onRetry;
   final SetGroupReactionCallback? onReaction;
+
+  /// What an injected page reads of who read a message. Null: no reader row.
+  final WatchGroupMessageReadersCallback? watchReaders;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,6 +76,7 @@ class GroupChatPage extends ConsumerWidget {
         onSend: onSend!,
         onRetry: onRetry,
         onReaction: onReaction,
+        watchReaders: watchReaders,
       );
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -149,8 +155,8 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
     super.dispose();
   }
 
-  /// Clears the group's unread state on this phone, silently, as a direct
-  /// chat does.
+  /// Clears the group's unread state on this phone, as a direct chat does, and
+  /// tells the sender of each message read that it was read (ADR-091).
   Future<void> _markRead() async {
     try {
       final deviceId = await ref.read(currentMessagingDeviceIdProvider.future);
@@ -164,13 +170,28 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
         currentUserId: widget.currentUserId,
         currentDeviceId: deviceId,
         conversationId: widget.groupId,
-        // A group sends no read receipt yet. Phase 4 sends the read receipts
-        // of a group, to the sender of each message read (ADR-091).
-        allowReadReceipts: false,
+        allowReadReceipts: await _mayReportReads(),
       );
     } on Object {
       // Reading a screen is not a place to raise a failure, and the next time
       // the group becomes visible this runs again.
+    }
+  }
+
+  /// Whether a read here is reported to the senders: only while this account
+  /// may send into the group. A group it left, or one waiting for its state,
+  /// is read on this phone alone.
+  Future<bool> _mayReportReads() async {
+    try {
+      final group = await ref.read(groupProvider(widget.groupId).future);
+      return group != null &&
+          GroupAuthorization.allows(
+            group,
+            widget.currentUserId,
+            GroupPermission.sendMessages,
+          );
+    } on Object {
+      return false;
     }
   }
 
@@ -186,6 +207,13 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
 
   Future<ManageLocalConversationState> _localState() =>
       _localStateSubscription.read();
+
+  /// The readers of one message of this group, from local storage. Opened
+  /// when a message sheet asks, and only for the sender of that message.
+  Stream<List<MessageReader>> _watchReaders(String messageId) =>
+      Stream.fromFuture(
+        ref.read(conversationRepositoryProvider.future),
+      ).asyncExpand((repository) => repository.watchMessageReaders(messageId));
 
   @override
   Widget build(BuildContext context) {
@@ -267,6 +295,7 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
                 onLoadOlder: () async => (await window()).loadOlder(),
                 onReveal: (messageId) async =>
                     (await window()).reveal(messageId),
+                watchReaders: _watchReaders,
               ),
             ),
           ),
@@ -299,6 +328,7 @@ class GroupChatView extends StatefulWidget {
     this.onForward,
     this.onLoadOlder,
     this.onReveal,
+    this.watchReaders,
     super.key,
   });
 
@@ -340,6 +370,10 @@ class GroupChatView extends StatefulWidget {
   /// Opens the window far enough back to hold a message, for a jump to it.
   final Future<void> Function(String messageId)? onReveal;
 
+  /// Follows who read one message. Null where the view has no reader list:
+  /// the message sheet then shows no reader row.
+  final WatchGroupMessageReadersCallback? watchReaders;
+
   @override
   State<GroupChatView> createState() => _GroupChatViewState();
 }
@@ -353,6 +387,20 @@ class _GroupChatViewState extends State<GroupChatView> {
   final _projection = ChatMessageProjection();
   var _sendFailed = false;
   var _retryFailed = false;
+
+  /// One for the life of the page: the scope that hands it to the bubbles
+  /// compares it by identity, and an open sheet follows it. It reads the
+  /// members from the widget as they are when an answer arrives.
+  ChatMessageReaders? _readers;
+
+  ChatMessageReaders? get _readersOrNull {
+    if (widget.watchReaders == null) return null;
+    return _readers ??= _GroupMessageReaders(
+      source: (messageId) =>
+          widget.watchReaders?.call(messageId) ?? const Stream.empty(),
+      memberOf: (userId) => widget.state.member(userId),
+    );
+  }
 
   /// The message a search result or a reply quote asked for. The timeline
   /// scrolls when this changes.
@@ -392,6 +440,11 @@ class _GroupChatViewState extends State<GroupChatView> {
       messages: viewMessages,
       highlightedMessageId: _highlightedMessageId,
     );
+    final readers = _readersOrNull;
+    final timelineView = ChatTimelineAdapter(
+      model: timeline,
+      onIntent: _handleIntent,
+    );
     final chat = Column(
       children: [
         if (state.lifecycle != GroupLifecycle.active)
@@ -400,7 +453,10 @@ class _GroupChatViewState extends State<GroupChatView> {
         if (_retryFailed)
           GroupInlineError(message: strings.chatActionFailedMessage),
         Expanded(
-          child: ChatTimelineAdapter(model: timeline, onIntent: _handleIntent),
+          // The sheet of an own message reads who read it from here.
+          child: readers == null
+              ? timelineView
+              : ChatReadersScope(readers: readers, child: timelineView),
         ),
         // Always in the tree, as in a direct conversation. A send only queues
         // the message, and the timeline shows it the moment it is written, so
@@ -584,6 +640,45 @@ class _GroupChatViewState extends State<GroupChatView> {
         content: Text(AppLocalizations.of(context).chatActionFailedMessage),
       ),
     );
+  }
+}
+
+/// The readers of a group's messages, named as the group names its members.
+///
+/// A member the group does not name, or names with an empty string, shows the
+/// short id the timeline gives an unknown author.
+final class _GroupMessageReaders implements ChatMessageReaders {
+  const _GroupMessageReaders({required this.source, required this.memberOf});
+
+  final WatchGroupMessageReadersCallback source;
+  final GroupMember? Function(String userId) memberOf;
+
+  @override
+  Stream<List<ChatMessageReader>> watch(String messageId) =>
+      source(messageId).map(
+        (readers) => [
+          for (final reader in readers)
+            ChatMessageReader(
+              userId: reader.userId,
+              name: _nameOf(reader.userId),
+              // The seed Group Info gives the same member.
+              avatarSeed: groupAvatarSeed(
+                memberOf(reader.userId)?.userId ?? reader.userId,
+              ),
+              readAt: switch (reader.readAtMs) {
+                final ms? => DateTime.fromMillisecondsSinceEpoch(
+                  ms,
+                  isUtc: true,
+                ).toLocal(),
+                null => null,
+              },
+            ),
+        ],
+      );
+
+  String _nameOf(String userId) {
+    final name = memberOf(userId)?.displayName;
+    return name == null || name.isEmpty ? chatShortIdentity(userId) : name;
   }
 }
 

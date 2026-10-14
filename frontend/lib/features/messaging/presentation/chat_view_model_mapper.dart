@@ -196,10 +196,15 @@ abstract final class ChatViewModelMapper {
     if (message.transportState == MessageTransportState.permanentlyFailed) {
       return ChatDeliveryViewState.failed;
     }
+    // One member's read is enough for two ticks in a group, also while copies
+    // for the others are owed; only a failure, which Retry answers, outranks
+    // it (ADR-091 D1).
     if (message.receiptState == MessageReceiptState.read) {
       return ChatDeliveryViewState.read;
     }
-    if (message.receiptState == MessageReceiptState.delivered) {
+    // A group sends no delivered receipt, and a delivered state there has no
+    // mark of its own: the transport decides (ADR-091 D2).
+    if (!group && message.receiptState == MessageReceiptState.delivered) {
       return ChatDeliveryViewState.delivered;
     }
     return switch (message.transportState) {

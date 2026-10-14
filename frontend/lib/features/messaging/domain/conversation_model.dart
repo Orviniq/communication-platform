@@ -300,6 +300,27 @@ final class PendingDeliveredReceipt {
   final String localDeviceId;
 }
 
+/// One member who read a message, and when (ADR-091 D7 and D8).
+///
+/// [readAtMs] is the earliest known read time over the member's devices, never
+/// earlier than the message's own time. Null when no device of the member read
+/// it on a clock this device could place.
+final class MessageReader {
+  const MessageReader({required this.userId, required this.readAtMs});
+
+  final String userId;
+  final int? readAtMs;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MessageReader &&
+      other.userId == userId &&
+      other.readAtMs == readAtMs;
+
+  @override
+  int get hashCode => Object.hash(userId, readAtMs);
+}
+
 final class TypingProjection {
   const TypingProjection({
     required this.conversationId,

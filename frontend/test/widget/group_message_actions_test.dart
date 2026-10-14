@@ -8,6 +8,7 @@ import 'package:communication_platform/app/dependencies/local_storage_providers.
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
@@ -24,6 +25,7 @@ import 'package:communication_platform/features/messaging/application/conversati
 import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
@@ -40,12 +42,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/application_event_harness.dart';
 import '../support/attachment_descriptor_fixture.dart';
 import '../support/authentication_harness.dart' as auth;
 
 const _deviceId = '00000000-0000-0000-0000-000000000011';
 const _peer = '00000000-0000-0000-0000-000000000002';
 const _member = '00000000-0000-0000-0000-000000000003';
+const _otherMember = '00000000-0000-0000-0000-000000000004';
 const _directId =
     'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
 const _groupId =
@@ -55,6 +59,7 @@ const _leftGroupId =
 const _messageId = '10101010101010101010101010101010';
 const _secondMessageId = '11111111111111111111111111111111';
 const _arrivingMessageId = '12121212121212121212121212121212';
+const _otherMessageId = '13131313131313131313131313131313';
 
 void main() {
   late LocalDatabase database;
@@ -73,29 +78,32 @@ void main() {
     await database.close();
   });
 
-  /// The routed group chat over two messages from another member.
+  /// The routed group chat over two messages from another member, or over
+  /// [messages].
   Future<ProviderContainer> openGroup(
     WidgetTester tester, {
     bool unread = false,
     VisibleConversationRegistry? registry,
     List<ConversationSummary> others = const [],
+    List<_SeedMessage> messages = const [
+      (id: _messageId, sender: _member, text: 'hello team'),
+      (id: _secondMessageId, sender: _member, text: 'see you there'),
+    ],
+    GroupState? state,
   }) async {
     await _seedConversation(
       database,
       conversationId: _groupId,
       kind: ConversationKind.group,
       unread: unread,
-      messages: [
-        (id: _messageId, sender: _member, text: 'hello team'),
-        (id: _secondMessageId, sender: _member, text: 'see you there'),
-      ],
+      messages: messages,
     );
     return _pump(
       tester,
       database: database,
       fanout: fanout,
       groupSender: groupSender,
-      groups: {_groupId: _group(_groupId, 'Team')},
+      groups: {_groupId: state ?? _group(_groupId, 'Team')},
       summaries: [
         _summary(_groupId, ConversationKind.group, title: 'Team'),
         ...others,
@@ -191,23 +199,85 @@ void main() {
     });
   });
 
-  group('the local read mark', () {
-    testWidgets('opening a group with unread messages clears its unread '
-        'count and commits no receipt', (tester) async {
-      await openGroup(tester, unread: true);
+  group('the read mark and its receipts (ADR-091)', () {
+    /// The ids each committed read receipt names, in the order committed.
+    /// Every event the shared send path commits passes the fan-out, a receipt
+    /// included.
+    List<List<String>> readReceipts() => [
+      for (final committed in fanout.events)
+        if (committed.event.kind == ApplicationEventKind.receiptRead)
+          [
+            for (final id in (committed.event.body as ReceiptBody).messageIds)
+              protocolBytesToHex(id),
+          ],
+    ];
+
+    testWidgets('opening a group with unread messages of two members clears '
+        'its unread count and commits one read receipt for each member', (
+      tester,
+    ) async {
+      await openGroup(
+        tester,
+        unread: true,
+        messages: const [
+          (id: _messageId, sender: _member, text: 'hello team'),
+          (id: _otherMessageId, sender: _otherMember, text: 'hi all'),
+          (id: _secondMessageId, sender: _member, text: 'see you there'),
+        ],
+      );
 
       expect((await _conversation(database)).unreadCount, 0);
       expect((await _row(database, _messageId)).unread, isFalse);
+      expect((await _row(database, _otherMessageId)).unread, isFalse);
       expect((await _row(database, _secondMessageId)).unread, isFalse);
-      // Every event the shared send path commits passes the fan-out, a
-      // receipt included.
-      expect(fanout.events, isEmpty);
+      expect(fanout.events, hasLength(2));
+      expect(
+        readReceipts().map((ids) => ids.toSet()),
+        unorderedEquals([
+          {_messageId, _secondMessageId},
+          {_otherMessageId},
+        ]),
+      );
+      expect(
+        fanout.events.map((committed) => committed.conversationKind),
+        everyElement(ConversationKind.group.index),
+      );
       expect(groupSender.texts, isEmpty);
     });
 
+    testWidgets('a group this account left is read on this phone, and '
+        'commits no receipt', (tester) async {
+      await openGroup(
+        tester,
+        unread: true,
+        state: _group(_groupId, 'Team', member: false),
+      );
+
+      expect((await _conversation(database)).unreadCount, 0);
+      expect((await _row(database, _messageId)).unread, isFalse);
+      expect(fanout.events, isEmpty);
+    });
+
+    testWidgets('a group waiting for its state is read on this phone, and '
+        'commits no receipt', (tester) async {
+      await openGroup(
+        tester,
+        unread: true,
+        state: _group(
+          _groupId,
+          'Team',
+          lifecycle: GroupLifecycle.stateRecoveryRequired,
+        ),
+      );
+
+      expect((await _conversation(database)).unreadCount, 0);
+      expect(fanout.events, isEmpty);
+    });
+
     testWidgets('a message that arrives while the group is on screen does '
-        'not stay unread', (tester) async {
+        'not stay unread, and its sender is told', (tester) async {
       await openGroup(tester);
+      expect(fanout.events, isEmpty);
 
       await _insertMessage(
         database,
@@ -224,7 +294,9 @@ void main() {
       expect(find.text('just now'), findsOneWidget);
       expect((await _row(database, _arrivingMessageId)).unread, isFalse);
       expect((await _conversation(database)).unreadCount, 0);
-      expect(fanout.events, isEmpty);
+      expect(readReceipts(), [
+        [_arrivingMessageId],
+      ]);
     });
 
     testWidgets('the registry of what is on screen names the group while it '
@@ -240,6 +312,171 @@ void main() {
       expect(registry.conversationId, isNull);
     });
   });
+
+  group(
+    'read receipts reach the sender and its reader list (ADR-091 D1, D7)',
+    () {
+      const sentMs = 1700000000000;
+      const otherDevice = '00000000-0000-0000-0000-000000000044';
+      const memberDevice = '00000000-0000-0000-0000-000000000033';
+      final groupBytes = Uint8List.fromList(List<int>.filled(32, 0xaa));
+      final messageId = sequentialId(1);
+      final messageKey = ValueKey('message-${protocolBytesToHex(messageId)}');
+      var eventSeed = 0;
+      final counters = <String, int>{};
+
+      setUp(() {
+        eventSeed = 0;
+        counters.clear();
+      });
+
+      /// One event of the group's conversation, applied as this phone receives
+      /// it (or, for the message, as it wrote it).
+      Future<void> apply({
+        required ApplicationEventKind kind,
+        required String user,
+        required String device,
+        required ApplicationEventBody body,
+        required int createdMs,
+        List<Uint8List> references = const [],
+      }) async {
+        final counter = (counters[device] ?? 0) + 1;
+        counters[device] = counter;
+        final applied = await applyCommit(
+          database,
+          applicationCommit(
+            eventId: sequentialId(100 + eventSeed++),
+            kind: kind,
+            senderUser: user,
+            senderDevice: device,
+            counter: counter,
+            body: body,
+            references: references,
+            conversationKind: ConversationKind.group,
+            peer: null,
+            localOrigin: device == _deviceId,
+            createdMs: createdMs,
+            conversationId: groupBytes,
+            currentUser: auth.userId,
+            currentDevice: _deviceId,
+          ),
+        );
+        expect(applied.disposition, ApplicationApplyDisposition.applied);
+      }
+
+      Future<void> read(String user, String device, int createdMs) => apply(
+        kind: ApplicationEventKind.receiptRead,
+        user: user,
+        device: device,
+        body: ReceiptBody(messageIds: [messageId]),
+        references: [messageId],
+        createdMs: createdMs,
+      );
+
+      Finder mark(AppIconData icon) => find.descendant(
+        of: find.byKey(messageKey),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is AppIcon && widget.data == icon,
+        ),
+      );
+
+      String timeLabel(WidgetTester tester, int ms) {
+        final material = MaterialLocalizations.of(
+          tester.element(find.byType(Scaffold).first),
+        );
+        final readAt = DateTime.fromMillisecondsSinceEpoch(
+          ms,
+          isUtc: true,
+        ).toLocal();
+        return strings.chatReadDateAndTime(
+          material.formatMediumDate(readAt),
+          material.formatTimeOfDay(TimeOfDay.fromDateTime(readAt)),
+        );
+      }
+
+      testWidgets('two members read an own message: two ticks after the first, '
+          '"Seen by 2" and the list with both, the newest first', (
+        tester,
+      ) async {
+        await apply(
+          kind: ApplicationEventKind.messageCreate,
+          user: auth.userId,
+          device: _deviceId,
+          body: MessageCreateBody(messageId: messageId, text: 'to the group'),
+          createdMs: sentMs,
+        );
+        await _pump(
+          tester,
+          database: database,
+          fanout: fanout,
+          groupSender: groupSender,
+          groups: {_groupId: _group(_groupId, 'Team')},
+          summaries: [
+            _summary(_groupId, ConversationKind.group, title: 'Team'),
+          ],
+          page: const GroupChatPage(groupId: _groupId),
+        );
+        expect(find.text('to the group'), findsOneWidget);
+        expect(mark(AppIcons.read), findsNothing);
+
+        // The first member to read draws the second tick.
+        await read(_otherMember, otherDevice, sentMs + 5000);
+        await tester.pumpAndSettle();
+        expect(mark(AppIcons.read), findsOneWidget);
+
+        await _openActions(tester, 'to the group');
+        expect(find.text(strings.chatSeenByCount(1)), findsOneWidget);
+
+        // The second member's receipt arrives while the sheet is open.
+        await read(_member, memberDevice, sentMs + 40000);
+        await tester.pumpAndSettle();
+        expect(find.text('Seen by 2'), findsOneWidget);
+        expect(mark(AppIcons.read), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('chat-readers-row')));
+        await tester.pumpAndSettle();
+
+        final member = find.byKey(const ValueKey('chat-reader-$_member'));
+        final other = find.byKey(const ValueKey('chat-reader-$_otherMember'));
+        expect(member, findsOneWidget);
+        expect(other, findsOneWidget);
+        expect(
+          tester.getTopLeft(member).dy,
+          lessThan(tester.getTopLeft(other).dy),
+          reason: 'the newest read is first',
+        );
+        expect(
+          find.descendant(of: member, matching: find.text('Member')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: member,
+            matching: find.text(timeLabel(tester, sentMs + 40000)),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: other, matching: find.text('Other')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: other,
+            matching: find.text(timeLabel(tester, sentMs + 5000)),
+          ),
+          findsOneWidget,
+        );
+
+        // Closed inside the test: the sheet's query is cancelled here, drift
+        // schedules a timer when one is, and it has to run before the test
+        // ends.
+        popAppModal(tester.element(member));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 1));
+      });
+    },
+  );
 
   group('forward', () {
     testWidgets('from a direct chat into a group, the group use case gets '
@@ -571,34 +808,44 @@ ConversationSummary _summary(
 
 /// A group the signed-in account belongs to, or, with [member] false, one
 /// that no longer lets it send.
-GroupState _group(String groupId, String name, {bool member = true}) =>
-    GroupState(
-      groupId: groupId,
-      metadata: GroupMetadata(name: name, description: ''),
-      invitationPolicy: GroupInvitationPolicy.ownerAndAdmins,
-      historySharingPolicy: GroupHistorySharingPolicy.newMessagesOnly,
-      members: [
-        GroupMember(
-          userId: _member,
-          displayName: 'Member',
-          role: GroupRole.owner,
-          verified: true,
-        ),
-        GroupMember(
-          userId: auth.userId,
-          displayName: 'Reader',
-          role: GroupRole.member,
-          verified: true,
-          membership: member
-              ? GroupMembershipState.active
-              : GroupMembershipState.removed,
-        ),
-      ],
-      controlRevision: 1,
-      controlStateHash:
-          '1010101010101010101010101010101010101010101010101010101010101010',
-      lifecycle: GroupLifecycle.active,
-    );
+GroupState _group(
+  String groupId,
+  String name, {
+  bool member = true,
+  GroupLifecycle lifecycle = GroupLifecycle.active,
+}) => GroupState(
+  groupId: groupId,
+  metadata: GroupMetadata(name: name, description: ''),
+  invitationPolicy: GroupInvitationPolicy.ownerAndAdmins,
+  historySharingPolicy: GroupHistorySharingPolicy.newMessagesOnly,
+  members: [
+    GroupMember(
+      userId: _member,
+      displayName: 'Member',
+      role: GroupRole.owner,
+      verified: true,
+    ),
+    GroupMember(
+      userId: auth.userId,
+      displayName: 'Reader',
+      role: GroupRole.member,
+      verified: true,
+      membership: member
+          ? GroupMembershipState.active
+          : GroupMembershipState.removed,
+    ),
+    GroupMember(
+      userId: _otherMember,
+      displayName: 'Other',
+      role: GroupRole.member,
+      verified: true,
+    ),
+  ],
+  controlRevision: 1,
+  controlStateHash:
+      '1010101010101010101010101010101010101010101010101010101010101010',
+  lifecycle: lifecycle,
+);
 
 Future<ProviderContainer> _pump(
   WidgetTester tester, {

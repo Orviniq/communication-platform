@@ -40,6 +40,14 @@ abstract interface class ConversationRepositoryPort implements RepositoryPort {
     required String messageId,
   });
 
+  /// The members who read [messageId], re-emitted whenever a receipt of it
+  /// changes (ADR-091 D7).
+  ///
+  /// One entry for each member with a read row, the newest read first and the
+  /// entries with no known time last. A member whose devices only delivered the
+  /// message is not a reader.
+  Stream<List<MessageReader>> watchMessageReaders(String messageId);
+
   Future<Result<int>> reserveSenderCounter(String deviceId);
 
   Future<Result<int>> nextEditRevision({
@@ -79,6 +87,14 @@ abstract interface class ConversationRepositoryPort implements RepositoryPort {
   Future<Result<void>> deleteConversationForMe(String conversationId);
 
   Future<Result<List<String>>> markConversationRead(String conversationId);
+
+  /// The sender of each of [messageIds] that is a message of
+  /// [conversationId], keyed by message id. A message that conversation does
+  /// not hold has no entry.
+  Future<Result<Map<String, String>>> readMessageSenders({
+    required String conversationId,
+    required List<String> messageIds,
+  });
 
   Future<Result<void>> markConversationUnread({
     required String conversationId,

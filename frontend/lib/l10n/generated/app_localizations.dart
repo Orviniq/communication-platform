@@ -1454,6 +1454,48 @@ abstract class AppLocalizations {
   /// **'Message actions'**
   String get chatMessageActionsLabel;
 
+  /// No description provided for @chatSeenByCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, other{Seen by {count}}}'**
+  String chatSeenByCount(int count);
+
+  /// No description provided for @chatNotSeenYet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not seen yet'**
+  String get chatNotSeenYet;
+
+  /// No description provided for @chatReadersOpenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows who read this message and when'**
+  String get chatReadersOpenHint;
+
+  /// No description provided for @chatReadersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Seen by'**
+  String get chatReadersTitle;
+
+  /// No description provided for @chatReadTimeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Time unknown'**
+  String get chatReadTimeUnknown;
+
+  /// No description provided for @chatReadDateAndTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{date}, {time}'**
+  String chatReadDateAndTime(String date, String time);
+
+  /// No description provided for @chatReaderSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: {time}'**
+  String chatReaderSemantics(String name, String time);
+
   /// No description provided for @chatReplyAction.
   ///
   /// In en, this message translates to:

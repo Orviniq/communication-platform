@@ -786,6 +786,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageActionsLabel => 'Message actions';
 
   @override
+  String chatSeenByCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Seen by $count',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatNotSeenYet => 'Not seen yet';
+
+  @override
+  String get chatReadersOpenHint => 'Shows who read this message and when';
+
+  @override
+  String get chatReadersTitle => 'Seen by';
+
+  @override
+  String get chatReadTimeUnknown => 'Time unknown';
+
+  @override
+  String chatReadDateAndTime(String date, String time) {
+    return '$date, $time';
+  }
+
+  @override
+  String chatReaderSemantics(String name, String time) {
+    return '$name: $time';
+  }
+
+  @override
   String get chatReplyAction => 'Reply';
 
   @override

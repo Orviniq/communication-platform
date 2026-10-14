@@ -331,7 +331,15 @@ final class SendConversationEvents {
     }
     final conversation =
         (conversationResult as Success<_OutboundConversation>).value;
-    if (conversation.kind != ConversationKind.direct) {
+    // A group takes read receipts and no delivered receipt, each for the
+    // messages of one sender, because its send seals a receipt for the sender
+    // of the messages it names (ADR-091 D2, D3). Saved Messages takes none.
+    if (conversation.kind == ConversationKind.group && read) {
+      final oneSender = await _requireOneSender(conversationId, messageIds);
+      if (oneSender case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+    } else if (conversation.kind != ConversationKind.direct) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.policyBlocked),
       );
@@ -362,6 +370,28 @@ final class SendConversationEvents {
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
     }
+  }
+
+  /// Succeeds when each of [messageIds] is a message of [conversationId] and
+  /// one member sent all of them. Checked before anything is written.
+  Future<Result<void>> _requireOneSender(
+    String conversationId,
+    List<String> messageIds,
+  ) async {
+    final ids = [for (final messageId in messageIds) messageId.toLowerCase()];
+    final sendersResult = await repository.readMessageSenders(
+      conversationId: conversationId,
+      messageIds: ids,
+    );
+    return sendersResult.fold(
+      onSuccess: (senders) =>
+          ids.every(senders.containsKey) && senders.values.toSet().length == 1
+          ? const Result.success(null)
+          : const Result.failure(
+              ValidationFailure(ValidationFailureKind.invalidInput),
+            ),
+      onFailure: Result.failure,
+    );
   }
 
   Future<Result<void>> _sendMutation({
@@ -774,18 +804,16 @@ final class MarkConversationVisiblyRead {
     if (!allowReadReceipts || ids.isEmpty) {
       return const Result.success(null);
     }
-    for (
-      var offset = 0;
-      offset < ids.length;
-      offset += ApplicationMessageProtocolV1.maximumReferences
-    ) {
-      final end = (offset + ApplicationMessageProtocolV1.maximumReferences)
-          .clamp(0, ids.length);
+    final batchesResult = await _receipts(conversationId, ids);
+    if (batchesResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    for (final batch in (batchesResult as Success<List<List<String>>>).value) {
       final sent = await sender.sendReceipt(
         currentUserId: currentUserId,
         currentDeviceId: currentDeviceId,
         conversationId: conversationId,
-        messageIds: ids.sublist(offset, end),
+        messageIds: batch,
         read: true,
       );
       if (sent case FailureResult(failure: final failure)) {
@@ -794,6 +822,58 @@ final class MarkConversationVisiblyRead {
     }
     return const Result.success(null);
   }
+
+  /// The message ids of each read receipt that reports [ids], at most 64 in
+  /// each. A group reports the messages of each sender in receipts of their
+  /// own, since a group receipt goes to the sender of the messages it names
+  /// (ADR-091 D4).
+  Future<Result<List<List<String>>>> _receipts(
+    String conversationId,
+    List<String> ids,
+  ) async {
+    final conversation = await repository.readConversation(conversationId);
+    if (conversation case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final kind = (conversation as Success<ConversationSummary?>).value?.kind;
+    if (kind != ConversationKind.group) {
+      return Result.success(_batches(ids));
+    }
+    final sendersResult = await repository.readMessageSenders(
+      conversationId: conversationId,
+      messageIds: ids,
+    );
+    if (sendersResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final senders = (sendersResult as Success<Map<String, String>>).value;
+    final bySender = <String, List<String>>{};
+    for (final id in ids) {
+      // A message gone from the group names nobody to tell.
+      final senderUserId = senders[id];
+      if (senderUserId != null) {
+        (bySender[senderUserId] ??= []).add(id);
+      }
+    }
+    return Result.success([
+      for (final messages in bySender.values) ..._batches(messages),
+    ]);
+  }
+
+  static List<List<String>> _batches(List<String> ids) => [
+    for (
+      var offset = 0;
+      offset < ids.length;
+      offset += ApplicationMessageProtocolV1.maximumReferences
+    )
+      ids.sublist(
+        offset,
+        (offset + ApplicationMessageProtocolV1.maximumReferences).clamp(
+          0,
+          ids.length,
+        ),
+      ),
+  ];
 }
 
 final class _NewEventIdentity {

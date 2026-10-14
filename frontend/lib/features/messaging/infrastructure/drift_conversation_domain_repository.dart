@@ -206,6 +206,76 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
     }
   }
 
+  @override
+  Stream<List<MessageReader>> watchMessageReaders(String messageId) {
+    final receipts = database.receipts;
+    final messages = database.messages;
+    // `MIN` skips a null, so a member's time is the earliest one known over
+    // their devices, and null only when none of them has one. The message's
+    // time is the same on each row of the group.
+    final readAtMs = receipts.readAtMs.min();
+    final messageMs = messages.orderingMs.max();
+    final query =
+        database.selectOnly(receipts).join([
+            innerJoin(
+              messages,
+              messages.messageId.equalsExp(receipts.messageId),
+              useColumns: false,
+            ),
+          ])
+          ..addColumns([receipts.userId, readAtMs, messageMs])
+          ..where(
+            receipts.messageId.equals(messageId) &
+                receipts.receiptState.equals(MessageReceiptState.read.index),
+          )
+          ..groupBy([receipts.userId]);
+    // Watching both tables re-runs this on every message write, so a list
+    // that did not change is not handed on again.
+    return query
+        .watch()
+        .map((rows) {
+          final readers = [
+            for (final row in rows)
+              MessageReader(
+                userId: row.read(receipts.userId)!,
+                readAtMs: _notBeforeMessage(
+                  row.read(readAtMs),
+                  row.read(messageMs) ?? 0,
+                ),
+              ),
+          ]..sort(_newestReadFirst);
+          return List<MessageReader>.unmodifiable(readers);
+        })
+        .distinct(_sameReaders);
+  }
+
+  /// A reader's clock can be further behind than the projector corrects
+  /// (ADR-091 D8), and a read cannot have come before the message it reads.
+  static int? _notBeforeMessage(int? readAtMs, int messageMs) =>
+      readAtMs == null ? null : math.max(readAtMs, messageMs);
+
+  static int _newestReadFirst(MessageReader left, MessageReader right) {
+    final leftMs = left.readAtMs;
+    final rightMs = right.readAtMs;
+    if (leftMs != rightMs) {
+      if (leftMs == null) return 1;
+      if (rightMs == null) return -1;
+      return rightMs.compareTo(leftMs);
+    }
+    return left.userId.compareTo(right.userId);
+  }
+
+  static bool _sameReaders(
+    List<MessageReader> left,
+    List<MessageReader> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index += 1) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
+  }
+
   /// Everything one emission of [watchMessages] needs, in five statements.
   ///
   /// Four of them are set-based over the whole window rather than per message,
@@ -781,6 +851,43 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             .write(const ConversationsCompanion(unreadCount: Value(0)));
         return List.unmodifiable(unread.map((message) => message.messageId));
       });
+
+  @override
+  Future<Result<Map<String, String>>> readMessageSenders({
+    required String conversationId,
+    required List<String> messageIds,
+  }) async {
+    try {
+      final senders = <String, String>{};
+      // Bounded statements: a conversation read after a long time away can
+      // clear more messages than one statement may bind.
+      for (var offset = 0; offset < messageIds.length; offset += 500) {
+        final chunk = messageIds.sublist(
+          offset,
+          (offset + 500).clamp(0, messageIds.length),
+        );
+        final query = database.selectOnly(database.messages)
+          ..addColumns([
+            database.messages.messageId,
+            database.messages.senderUserId,
+          ])
+          ..where(
+            database.messages.messageId.isIn(chunk) &
+                database.messages.conversationId.equals(conversationId),
+          );
+        for (final row in await query.get()) {
+          senders[row.read(database.messages.messageId)!] = row.read(
+            database.messages.senderUserId,
+          )!;
+        }
+      }
+      return Result.success(Map.unmodifiable(senders));
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
 
   @override
   Future<Result<void>> markConversationUnread({

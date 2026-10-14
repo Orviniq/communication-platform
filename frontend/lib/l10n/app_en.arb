@@ -314,6 +314,22 @@
     }
   },
   "chatMessageActionsLabel": "Message actions",
+  "chatSeenByCount": "{count, plural, other{Seen by {count}}}",
+  "@chatSeenByCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "chatNotSeenYet": "Not seen yet",
+  "chatReadersOpenHint": "Shows who read this message and when",
+  "chatReadersTitle": "Seen by",
+  "chatReadTimeUnknown": "Time unknown",
+  "chatReadDateAndTime": "{date}, {time}",
+  "@chatReadDateAndTime": {
+    "placeholders": {"date": {"type": "String"}, "time": {"type": "String"}}
+  },
+  "chatReaderSemantics": "{name}: {time}",
+  "@chatReaderSemantics": {
+    "placeholders": {"name": {"type": "String"}, "time": {"type": "String"}}
+  },
   "chatReplyAction": "Reply",
   "chatEditAction": "Edit",
   "chatForwardAction": "Forward",

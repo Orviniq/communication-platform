@@ -1267,13 +1267,12 @@ void main() {
 
     final upgraded = LocalDatabase(NativeDatabase(databaseFile));
 
-    expect(LocalDatabase.currentSchemaVersion, 23);
     expect(
       await upgraded
           .customSelect('PRAGMA user_version')
           .map((row) => row.read<int>('user_version'))
           .getSingle(),
-      23,
+      LocalDatabase.currentSchemaVersion,
     );
     final objects = await upgraded
         .customSelect('SELECT name, tbl_name FROM sqlite_master')
@@ -1373,6 +1372,107 @@ void main() {
       await upgraded.close();
     },
   );
+
+  test('version-twenty-three upgrade adds the read time of a receipt and '
+      'keeps each row without one', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final versionTwentyThree = sqlite3.open(databaseFile.path)
+      ..execute('ALTER TABLE receipts DROP COLUMN read_at_ms')
+      ..execute(
+        'INSERT INTO conversations (conversation_id, kind, '
+        'list_projection_ciphertext, sort_key) VALUES (?, ?, ?, ?)',
+        <Object?>[
+          'conversation-v23',
+          1,
+          Uint8List.fromList(const [1]),
+          0,
+        ],
+      )
+      ..execute(
+        'INSERT INTO messages (message_id, conversation_id, current_event_id, '
+        'projection_ciphertext, status, revision, created_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          'message-v23',
+          'conversation-v23',
+          'event-v23',
+          Uint8List.fromList(const [2]),
+          4,
+          0,
+          0,
+        ],
+      )
+      ..execute(
+        'INSERT INTO receipts (message_id, user_id, device_id, receipt_state, '
+        'projection_ciphertext) VALUES (?, ?, ?, ?, ?)',
+        <Object?>['message-v23', _userV19, _deviceV19, 2, Uint8List(0)],
+      )
+      ..execute('PRAGMA user_version = 23');
+    versionTwentyThree.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info(receipts)')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(columns, contains('read_at_ms'));
+    final rows = await upgraded.select(upgraded.receipts).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.messageId, 'message-v23');
+    expect(rows.single.receiptState, 2);
+    expect(rows.single.readAtMs, isNull);
+    expect(LocalDatabase.currentSchemaVersion, 24);
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      24,
+    );
+    await upgraded.close();
+  });
+
+  test(
+    'the read-time column tolerates a database that already has it',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final stampedBack = sqlite3.open(databaseFile.path)
+        ..execute('PRAGMA user_version = 23');
+      stampedBack.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      final columns = await upgraded
+          .customSelect('PRAGMA table_info(receipts)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(columns.where((name) => name == 'read_at_ms'), hasLength(1));
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
+
+  test('a new database has the read time of a receipt', () async {
+    final fresh = LocalDatabase(NativeDatabase.memory());
+    addTearDown(fresh.close);
+    final columns = await fresh
+        .customSelect('PRAGMA table_info(receipts)')
+        .map((row) => (row.read<String>('name'), row.read<int>('notnull')))
+        .get();
+    expect(columns, contains(('read_at_ms', 0)));
+  });
 }
 
 /// `voice_rooms` as schema 22 created it, before schema 23 deleted it.

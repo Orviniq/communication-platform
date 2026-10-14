@@ -20383,6 +20383,17 @@ class $ReceiptsTable extends Receipts with TableInfo<$ReceiptsTable, Receipt> {
         type: DriftSqlType.blob,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _readAtMsMeta = const VerificationMeta(
+    'readAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> readAtMs = GeneratedColumn<int>(
+    'read_at_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -20390,6 +20401,7 @@ class $ReceiptsTable extends Receipts with TableInfo<$ReceiptsTable, Receipt> {
     deviceId,
     receiptState,
     projectionCiphertext,
+    readAtMs,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -20449,6 +20461,12 @@ class $ReceiptsTable extends Receipts with TableInfo<$ReceiptsTable, Receipt> {
     } else if (isInserting) {
       context.missing(_projectionCiphertextMeta);
     }
+    if (data.containsKey('read_at_ms')) {
+      context.handle(
+        _readAtMsMeta,
+        readAtMs.isAcceptableOrUnknown(data['read_at_ms']!, _readAtMsMeta),
+      );
+    }
     return context;
   }
 
@@ -20478,6 +20496,10 @@ class $ReceiptsTable extends Receipts with TableInfo<$ReceiptsTable, Receipt> {
         DriftSqlType.blob,
         data['${effectivePrefix}projection_ciphertext'],
       )!,
+      readAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}read_at_ms'],
+      ),
     );
   }
 
@@ -20493,12 +20515,19 @@ class Receipt extends DataClass implements Insertable<Receipt> {
   final String deviceId;
   final int receiptState;
   final Uint8List projectionCiphertext;
+
+  /// When this device read the message (ADR-091 D8): the `ordering_ms` of the
+  /// earliest `receipt.read` from it that names the message. Null on a
+  /// delivered row, on a row from before schema 24, and when each of those
+  /// receipts carried an implausible clock.
+  final int? readAtMs;
   const Receipt({
     required this.messageId,
     required this.userId,
     required this.deviceId,
     required this.receiptState,
     required this.projectionCiphertext,
+    this.readAtMs,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -20508,6 +20537,9 @@ class Receipt extends DataClass implements Insertable<Receipt> {
     map['device_id'] = Variable<String>(deviceId);
     map['receipt_state'] = Variable<int>(receiptState);
     map['projection_ciphertext'] = Variable<Uint8List>(projectionCiphertext);
+    if (!nullToAbsent || readAtMs != null) {
+      map['read_at_ms'] = Variable<int>(readAtMs);
+    }
     return map;
   }
 
@@ -20518,6 +20550,9 @@ class Receipt extends DataClass implements Insertable<Receipt> {
       deviceId: Value(deviceId),
       receiptState: Value(receiptState),
       projectionCiphertext: Value(projectionCiphertext),
+      readAtMs: readAtMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(readAtMs),
     );
   }
 
@@ -20534,6 +20569,7 @@ class Receipt extends DataClass implements Insertable<Receipt> {
       projectionCiphertext: serializer.fromJson<Uint8List>(
         json['projectionCiphertext'],
       ),
+      readAtMs: serializer.fromJson<int?>(json['readAtMs']),
     );
   }
   @override
@@ -20547,6 +20583,7 @@ class Receipt extends DataClass implements Insertable<Receipt> {
       'projectionCiphertext': serializer.toJson<Uint8List>(
         projectionCiphertext,
       ),
+      'readAtMs': serializer.toJson<int?>(readAtMs),
     };
   }
 
@@ -20556,12 +20593,14 @@ class Receipt extends DataClass implements Insertable<Receipt> {
     String? deviceId,
     int? receiptState,
     Uint8List? projectionCiphertext,
+    Value<int?> readAtMs = const Value.absent(),
   }) => Receipt(
     messageId: messageId ?? this.messageId,
     userId: userId ?? this.userId,
     deviceId: deviceId ?? this.deviceId,
     receiptState: receiptState ?? this.receiptState,
     projectionCiphertext: projectionCiphertext ?? this.projectionCiphertext,
+    readAtMs: readAtMs.present ? readAtMs.value : this.readAtMs,
   );
   Receipt copyWithCompanion(ReceiptsCompanion data) {
     return Receipt(
@@ -20574,6 +20613,7 @@ class Receipt extends DataClass implements Insertable<Receipt> {
       projectionCiphertext: data.projectionCiphertext.present
           ? data.projectionCiphertext.value
           : this.projectionCiphertext,
+      readAtMs: data.readAtMs.present ? data.readAtMs.value : this.readAtMs,
     );
   }
 
@@ -20584,7 +20624,8 @@ class Receipt extends DataClass implements Insertable<Receipt> {
           ..write('userId: $userId, ')
           ..write('deviceId: $deviceId, ')
           ..write('receiptState: $receiptState, ')
-          ..write('projectionCiphertext: $projectionCiphertext')
+          ..write('projectionCiphertext: $projectionCiphertext, ')
+          ..write('readAtMs: $readAtMs')
           ..write(')'))
         .toString();
   }
@@ -20596,6 +20637,7 @@ class Receipt extends DataClass implements Insertable<Receipt> {
     deviceId,
     receiptState,
     $driftBlobEquality.hash(projectionCiphertext),
+    readAtMs,
   );
   @override
   bool operator ==(Object other) =>
@@ -20608,7 +20650,8 @@ class Receipt extends DataClass implements Insertable<Receipt> {
           $driftBlobEquality.equals(
             other.projectionCiphertext,
             this.projectionCiphertext,
-          ));
+          ) &&
+          other.readAtMs == this.readAtMs);
 }
 
 class ReceiptsCompanion extends UpdateCompanion<Receipt> {
@@ -20617,6 +20660,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
   final Value<String> deviceId;
   final Value<int> receiptState;
   final Value<Uint8List> projectionCiphertext;
+  final Value<int?> readAtMs;
   final Value<int> rowid;
   const ReceiptsCompanion({
     this.messageId = const Value.absent(),
@@ -20624,6 +20668,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
     this.deviceId = const Value.absent(),
     this.receiptState = const Value.absent(),
     this.projectionCiphertext = const Value.absent(),
+    this.readAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ReceiptsCompanion.insert({
@@ -20632,6 +20677,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
     required String deviceId,
     required int receiptState,
     required Uint8List projectionCiphertext,
+    this.readAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
        userId = Value(userId),
@@ -20644,6 +20690,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
     Expression<String>? deviceId,
     Expression<int>? receiptState,
     Expression<Uint8List>? projectionCiphertext,
+    Expression<int>? readAtMs,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -20653,6 +20700,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
       if (receiptState != null) 'receipt_state': receiptState,
       if (projectionCiphertext != null)
         'projection_ciphertext': projectionCiphertext,
+      if (readAtMs != null) 'read_at_ms': readAtMs,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -20663,6 +20711,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
     Value<String>? deviceId,
     Value<int>? receiptState,
     Value<Uint8List>? projectionCiphertext,
+    Value<int?>? readAtMs,
     Value<int>? rowid,
   }) {
     return ReceiptsCompanion(
@@ -20671,6 +20720,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
       deviceId: deviceId ?? this.deviceId,
       receiptState: receiptState ?? this.receiptState,
       projectionCiphertext: projectionCiphertext ?? this.projectionCiphertext,
+      readAtMs: readAtMs ?? this.readAtMs,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -20695,6 +20745,9 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
         projectionCiphertext.value,
       );
     }
+    if (readAtMs.present) {
+      map['read_at_ms'] = Variable<int>(readAtMs.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -20709,6 +20762,7 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
           ..write('deviceId: $deviceId, ')
           ..write('receiptState: $receiptState, ')
           ..write('projectionCiphertext: $projectionCiphertext, ')
+          ..write('readAtMs: $readAtMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -38292,6 +38346,7 @@ typedef $$ReceiptsTableCreateCompanionBuilder =
       required String deviceId,
       required int receiptState,
       required Uint8List projectionCiphertext,
+      Value<int?> readAtMs,
       Value<int> rowid,
     });
 typedef $$ReceiptsTableUpdateCompanionBuilder =
@@ -38301,6 +38356,7 @@ typedef $$ReceiptsTableUpdateCompanionBuilder =
       Value<String> deviceId,
       Value<int> receiptState,
       Value<Uint8List> projectionCiphertext,
+      Value<int?> readAtMs,
       Value<int> rowid,
     });
 
@@ -38352,6 +38408,11 @@ class $$ReceiptsTableFilterComposer
 
   ColumnFilters<Uint8List> get projectionCiphertext => $composableBuilder(
     column: $table.projectionCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get readAtMs => $composableBuilder(
+    column: $table.readAtMs,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -38408,6 +38469,11 @@ class $$ReceiptsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get readAtMs => $composableBuilder(
+    column: $table.readAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$MessagesTableOrderingComposer get messageId {
     final $$MessagesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -38456,6 +38522,9 @@ class $$ReceiptsTableAnnotationComposer
     column: $table.projectionCiphertext,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get readAtMs =>
+      $composableBuilder(column: $table.readAtMs, builder: (column) => column);
 
   $$MessagesTableAnnotationComposer get messageId {
     final $$MessagesTableAnnotationComposer composer = $composerBuilder(
@@ -38514,6 +38583,7 @@ class $$ReceiptsTableTableManager
                 Value<String> deviceId = const Value.absent(),
                 Value<int> receiptState = const Value.absent(),
                 Value<Uint8List> projectionCiphertext = const Value.absent(),
+                Value<int?> readAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ReceiptsCompanion(
                 messageId: messageId,
@@ -38521,6 +38591,7 @@ class $$ReceiptsTableTableManager
                 deviceId: deviceId,
                 receiptState: receiptState,
                 projectionCiphertext: projectionCiphertext,
+                readAtMs: readAtMs,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -38530,6 +38601,7 @@ class $$ReceiptsTableTableManager
                 required String deviceId,
                 required int receiptState,
                 required Uint8List projectionCiphertext,
+                Value<int?> readAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ReceiptsCompanion.insert(
                 messageId: messageId,
@@ -38537,6 +38609,7 @@ class $$ReceiptsTableTableManager
                 deviceId: deviceId,
                 receiptState: receiptState,
                 projectionCiphertext: projectionCiphertext,
+                readAtMs: readAtMs,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
