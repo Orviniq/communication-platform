@@ -380,7 +380,11 @@ final class SendConversationEvents {
       }
       final conversation =
           (conversationResult as Success<_OutboundConversation>).value;
-      if (conversation.kind == ConversationKind.group ||
+      // A group takes a reaction and nothing else here: an edit, a delete for
+      // everyone and a pin each change what the other members read, and wait
+      // for the member roles of the signed roster (ADR-090 D4).
+      if ((conversation.kind == ConversationKind.group &&
+              kind != ApplicationEventKind.reactionSet) ||
           (conversation.kind == ConversationKind.saved &&
               kind == ApplicationEventKind.messageDelete)) {
         return const Result.failure(

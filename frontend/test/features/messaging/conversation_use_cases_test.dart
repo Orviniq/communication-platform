@@ -506,6 +506,171 @@ void main() {
     },
   );
 
+  group('into a group conversation (ADR-090 D3, D4)', () {
+    const policyBlocked = SecurityFailure(SecurityFailureKind.policyBlocked);
+
+    setUp(() {
+      repository.conversation = const ConversationSummary(
+        conversationId: _directConversationHex,
+        kind: ConversationKind.group,
+        peerUserId: null,
+        lastMessage: null,
+        lastActivityMs: 0,
+        unreadCount: 0,
+        mutedUntil: null,
+        draft: null,
+        pinnedMessageIds: {},
+      );
+    });
+
+    test('a reaction commits one event of the kind reactionSet', () async {
+      expect(
+        await sender.setReaction(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageOne,
+          emoji: '🎉',
+        ),
+        isA<Success<void>>(),
+      );
+
+      expect(fanout.events, hasLength(1));
+      final committed = fanout.events.single;
+      expect(
+        committed.event.kindValue,
+        ApplicationEventKind.reactionSet.wireValue,
+      );
+      expect(committed.conversationKind, ConversationKind.group.index);
+      expect(committed.peerUserId, isNull);
+      final body = committed.event.body as ReactionSetBody;
+      expect(body.emoji, '🎉');
+      expect(protocolBytesToHex(body.targetMessageId), _messageOne);
+      expect(committed.event.references, [body.targetMessageId]);
+    });
+
+    test('a reaction removed with a null emoji is committed as such', () async {
+      await sender.setReaction(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        conversationId: _directConversationHex,
+        messageId: _messageOne,
+        emoji: null,
+      );
+
+      expect(
+        (fanout.events.single.event.body as ReactionSetBody).emoji,
+        isNull,
+      );
+    });
+
+    test(
+      'an invalid reaction value is refused before anything is sent',
+      () async {
+        expect(
+          await sender.setReaction(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            conversationId: _directConversationHex,
+            messageId: _messageOne,
+            emoji: '👍👎',
+          ),
+          isA<FailureResult<void>>(),
+        );
+        expect(fanout.events, isEmpty);
+      },
+    );
+
+    test('an edit, a delete for everyone and a pin are each refused and '
+        'commit nothing', () async {
+      expect(
+        await sender.editMessage(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageOne,
+          replacementText: 'changed',
+        ),
+        isA<FailureResult<void>>().having(
+          (result) => result.failure,
+          'failure',
+          policyBlocked,
+        ),
+      );
+      expect(
+        await sender.deleteForEveryone(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageOne,
+        ),
+        isA<FailureResult<void>>().having(
+          (result) => result.failure,
+          'failure',
+          policyBlocked,
+        ),
+      );
+      expect(
+        await sender.setPin(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageOne,
+          pinned: true,
+        ),
+        isA<FailureResult<void>>().having(
+          (result) => result.failure,
+          'failure',
+          policyBlocked,
+        ),
+      );
+      expect(fanout.events, isEmpty);
+      expect(sweep.sweeps, 0);
+    });
+
+    test('a reply goes out with its reference and its quote', () async {
+      expect(
+        await sender.sendText(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          target: const GroupConversationTarget(_directConversationHex),
+          text: 'an answer',
+          replyToMessageId: _messageOne,
+          quoteFallback: 'the question',
+        ),
+        isA<Success<SendMessageOutcome>>(),
+      );
+
+      final event = fanout.events.single.event;
+      final body = event.body as MessageCreateBody;
+      expect(body.text, 'an answer');
+      expect(protocolBytesToHex(body.replyToMessageId!), _messageOne);
+      expect(body.quoteFallback, 'the question');
+      expect(event.references, [body.replyToMessageId]);
+    });
+
+    test('a retry with nothing to re-arm keeps the reply', () async {
+      fanout.hasFailedSend = false;
+
+      expect(
+        await sender.retrySend(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          target: const GroupConversationTarget(_directConversationHex),
+          messageId: 'aabb',
+          text: 'an answer',
+          replyToMessageId: _messageOne,
+          quoteFallback: 'the question',
+        ),
+        isA<Success<void>>(),
+      );
+
+      final body = fanout.events.single.event.body as MessageCreateBody;
+      expect(protocolBytesToHex(body.replyToMessageId!), _messageOne);
+      expect(body.quoteFallback, 'the question');
+    });
+  });
+
   group('a reaction value is one grapheme within the wire bound', () {
     // `message-protocol.md`: the value of a reaction event is "one normalized
     // emoji grapheme or null". The encoder writes whatever string it is given
