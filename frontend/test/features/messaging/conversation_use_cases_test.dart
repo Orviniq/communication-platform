@@ -727,6 +727,207 @@ void main() {
     });
   });
 
+  group('read receipts in a group (ADR-091 D2 to D4)', () {
+    const otherMember = '00000000-0000-0000-0000-000000000003';
+
+    setUp(() {
+      repository.conversation = const ConversationSummary(
+        conversationId: _directConversationHex,
+        kind: ConversationKind.group,
+        peerUserId: null,
+        lastMessage: null,
+        lastActivityMs: 0,
+        unreadCount: 0,
+        mutedUntil: null,
+        draft: null,
+        pinnedMessageIds: {},
+      );
+    });
+
+    Future<Result<void>> receipt(List<String> messageIds, {bool read = true}) =>
+        sender.sendReceipt(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageIds: messageIds,
+          read: read,
+        );
+
+    /// The ids each committed receipt names, in the order they were sent.
+    List<List<String>> receipts() => [
+      for (final committed in fanout.events)
+        [
+          for (final id in (committed.event.body as ReceiptBody).messageIds)
+            protocolBytesToHex(id),
+        ],
+    ];
+
+    test(
+      'a read receipt is accepted, and a delivered receipt is refused',
+      () async {
+        repository.senders = {_messageOne: peerUser, _messageTwo: peerUser};
+
+        expect(await receipt([_messageOne, _messageTwo]), isA<Success<void>>());
+        expect(
+          fanout.events.single.event.kind,
+          ApplicationEventKind.receiptRead,
+        );
+        expect(
+          fanout.events.single.conversationKind,
+          ConversationKind.group.index,
+        );
+        expect(receipts(), [
+          [_messageOne, _messageTwo],
+        ]);
+
+        expect(
+          await receipt([_messageOne], read: false),
+          isA<FailureResult<void>>().having(
+            (result) => result.failure,
+            'failure',
+            const SecurityFailure(SecurityFailureKind.policyBlocked),
+          ),
+        );
+        expect(fanout.events, hasLength(1));
+      },
+    );
+
+    test('a receipt that names messages of two senders is refused, and '
+        'nothing is written', () async {
+      repository.senders = {_messageOne: peerUser, _messageTwo: otherMember};
+
+      expect(
+        await receipt([_messageOne, _messageTwo]),
+        isA<FailureResult<void>>().having(
+          (result) => result.failure,
+          'failure',
+          const ValidationFailure(ValidationFailureKind.invalidInput),
+        ),
+      );
+      expect(fanout.events, isEmpty);
+      // Not even a sender counter is spent on it.
+      expect(repository.counter, 0);
+    });
+
+    test('a receipt that names a message the group does not hold is refused, '
+        'and nothing is written', () async {
+      repository.senders = {_messageOne: peerUser};
+
+      expect(
+        await receipt([_messageOne, _messageTwo]),
+        isA<FailureResult<void>>(),
+      );
+      expect(fanout.events, isEmpty);
+      expect(repository.counter, 0);
+    });
+
+    test('a visible read sends one receipt for each sender, and splits more '
+        'than 64 messages of one sender', () async {
+      final fromPeer = [for (var index = 0; index < 70; index += 1) _id(index)];
+      final fromOther = [_id(100), _id(101)];
+      // As the timeline orders them: the two senders interleaved.
+      repository
+        ..senders = {
+          for (final id in fromPeer) id: peerUser,
+          for (final id in fromOther) id: otherMember,
+        }
+        ..unreadIds = [
+          fromPeer.first,
+          fromOther.first,
+          ...fromPeer.skip(1),
+          fromOther.last,
+        ];
+
+      expect(
+        await MarkConversationVisiblyRead(
+          repository: repository,
+          sender: sender,
+        )(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          allowReadReceipts: true,
+        ),
+        isA<Success<void>>(),
+      );
+
+      expect(receipts(), [
+        fromPeer.sublist(0, 64),
+        fromPeer.sublist(64),
+        fromOther,
+      ]);
+      expect(
+        fanout.events.map((committed) => committed.event.kind),
+        everyElement(ApplicationEventKind.receiptRead),
+      );
+    });
+
+    test(
+      'a visible read without consent clears the group and sends nothing',
+      () async {
+        repository
+          ..senders = {_messageOne: peerUser}
+          ..unreadIds = [_messageOne];
+
+        expect(
+          await MarkConversationVisiblyRead(
+            repository: repository,
+            sender: sender,
+          )(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            conversationId: _directConversationHex,
+            allowReadReceipts: false,
+          ),
+          isA<Success<void>>(),
+        );
+        expect(repository.unreadIds, isEmpty);
+        expect(fanout.events, isEmpty);
+      },
+    );
+  });
+
+  test('a direct chat still sends one receipt of up to 64 ids, in the order '
+      'read', () async {
+    final unread = [for (var index = 0; index < 70; index += 1) _id(index)];
+    repository
+      ..conversation = const ConversationSummary(
+        conversationId: _directConversationHex,
+        kind: ConversationKind.direct,
+        peerUserId: peerUser,
+        lastMessage: null,
+        lastActivityMs: 0,
+        unreadCount: 70,
+        mutedUntil: null,
+        draft: null,
+        pinnedMessageIds: {},
+      )
+      ..unreadIds = unread;
+
+    expect(
+      await MarkConversationVisiblyRead(repository: repository, sender: sender)(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        conversationId: _directConversationHex,
+        allowReadReceipts: true,
+      ),
+      isA<Success<void>>(),
+    );
+
+    expect(
+      [
+        for (final committed in fanout.events)
+          [
+            for (final id in (committed.event.body as ReceiptBody).messageIds)
+              protocolBytesToHex(id),
+          ],
+      ],
+      [unread.sublist(0, 64), unread.sublist(64)],
+    );
+    // A direct chat has one sender to tell, and asks for no senders.
+    expect(repository.senderReads, 0);
+  });
+
   group('a reaction value is one grapheme within the wire bound', () {
     // `message-protocol.md`: the value of a reaction event is "one normalized
     // emoji grapheme or null". The encoder writes whatever string it is given
@@ -857,6 +1058,9 @@ const _directConversationHex =
 const _messageOne = '10101010101010101010101010101010';
 const _messageTwo = '11111111111111111111111111111111';
 
+/// A distinct message id for each [index].
+String _id(int index) => 'b${index.toRadixString(16).padLeft(31, '0')}';
+
 final class _Clock implements TimeSource {
   const _Clock();
 
@@ -938,6 +1142,10 @@ final class _Repository implements ConversationRepositoryPort {
   List<String> unreadIds = [];
   List<PendingDeliveredReceipt> pending = [];
 
+  /// The sender of each message the conversation holds.
+  Map<String, String> senders = {};
+  int senderReads = 0;
+
   @override
   Future<Result<void>> completePendingDeliveredReceipts({
     required String localDeviceId,
@@ -968,6 +1176,17 @@ final class _Repository implements ConversationRepositoryPort {
     final result = List<String>.of(unreadIds);
     unreadIds = [];
     return Result.success(result);
+  }
+
+  @override
+  Future<Result<Map<String, String>>> readMessageSenders({
+    required String conversationId,
+    required List<String> messageIds,
+  }) async {
+    senderReads += 1;
+    return Result.success({
+      for (final messageId in messageIds) messageId: ?senders[messageId],
+    });
   }
 
   @override

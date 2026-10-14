@@ -80,6 +80,14 @@ abstract interface class ConversationRepositoryPort implements RepositoryPort {
 
   Future<Result<List<String>>> markConversationRead(String conversationId);
 
+  /// The sender of each of [messageIds] that is a message of
+  /// [conversationId], keyed by message id. A message that conversation does
+  /// not hold has no entry.
+  Future<Result<Map<String, String>>> readMessageSenders({
+    required String conversationId,
+    required List<String> messageIds,
+  });
+
   Future<Result<void>> markConversationUnread({
     required String conversationId,
     required String currentUserId,

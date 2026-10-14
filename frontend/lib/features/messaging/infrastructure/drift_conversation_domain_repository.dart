@@ -783,6 +783,43 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
       });
 
   @override
+  Future<Result<Map<String, String>>> readMessageSenders({
+    required String conversationId,
+    required List<String> messageIds,
+  }) async {
+    try {
+      final senders = <String, String>{};
+      // Bounded statements: a conversation read after a long time away can
+      // clear more messages than one statement may bind.
+      for (var offset = 0; offset < messageIds.length; offset += 500) {
+        final chunk = messageIds.sublist(
+          offset,
+          (offset + 500).clamp(0, messageIds.length),
+        );
+        final query = database.selectOnly(database.messages)
+          ..addColumns([
+            database.messages.messageId,
+            database.messages.senderUserId,
+          ])
+          ..where(
+            database.messages.messageId.isIn(chunk) &
+                database.messages.conversationId.equals(conversationId),
+          );
+        for (final row in await query.get()) {
+          senders[row.read(database.messages.messageId)!] = row.read(
+            database.messages.senderUserId,
+          )!;
+        }
+      }
+      return Result.success(Map.unmodifiable(senders));
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
   Future<Result<void>> markConversationUnread({
     required String conversationId,
     required String currentUserId,

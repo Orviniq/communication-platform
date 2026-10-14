@@ -131,6 +131,55 @@ void main() {
     },
   );
 
+  test('the senders of named messages are read from their own conversation '
+      'only', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final repository = DriftConversationDomainRepository(database);
+    for (final conversationId in ['group', 'other']) {
+      await database
+          .into(database.conversations)
+          .insert(
+            ConversationsCompanion.insert(
+              conversationId: conversationId,
+              kind: ConversationKind.group.index,
+              listProjectionCiphertext: Uint8List(0),
+              sortKey: 10,
+            ),
+          );
+    }
+    for (final (messageId, conversationId, sender) in [
+      ('first', 'group', 'member-a'),
+      ('second', 'group', 'member-b'),
+      ('elsewhere', 'other', 'member-a'),
+    ]) {
+      await database
+          .into(database.messages)
+          .insert(
+            MessagesCompanion.insert(
+              messageId: messageId,
+              conversationId: conversationId,
+              currentEventId: 'event-$messageId',
+              projectionCiphertext: Uint8List(0),
+              status: MessageTransportState.received.index,
+              revision: 0,
+              createdAt: DateTime.utc(2026, 10, 14),
+              senderUserId: Value(sender),
+            ),
+          );
+    }
+
+    final senders = await repository.readMessageSenders(
+      conversationId: 'group',
+      messageIds: ['first', 'second', 'elsewhere', 'missing'],
+    );
+
+    expect((senders as Success<Map<String, String>>).value, {
+      'first': 'member-a',
+      'second': 'member-b',
+    });
+  });
+
   test('marking a conversation read again writes nothing at all', () async {
     final database = LocalDatabase(NativeDatabase.memory());
     addTearDown(database.close);
