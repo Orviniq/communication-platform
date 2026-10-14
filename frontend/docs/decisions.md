@@ -101,6 +101,209 @@ is not silently edited out of history.
 | ADR-088 | Accepted (2026-10-09); withdraws the copy count of ADR-075 item 5 | The group chat keeps its composer in the tree while a message is sent, as a direct conversation does, so the focus and the keyboard stay where they were, and the progress bar that replaced it is deleted. A group message in flight shows the mark of its state and no text beside it: "Copies sent: 45 of 150", its two strings, the message view model's field and the group screen's progress map that carried it, and the provider that fed them are deleted. A message is still marked sent only when no copy is owed, and a failed one still offers a retry. The repository's read of what is owed stays, and no screen reads it | Taking the composer out for the length of a send took the keyboard with it after every message, and the send only writes and queues the message, as a direct one does, so there was nothing to wait for. The count was several times wider than the time and the mark beside it: on the code before this change a bubble measured 404 px while its message was sending and 131 px once it was accepted, in a widget test 800 px wide, and the mark already says where the message is. Costs: a person no longer sees how far a large group's fan-out has got, and two sends can now overlap, so the inline error is only ever raised by a send and never cleared by one that succeeds. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-089 | Accepted (2026-10-11); proposed 2026-10-10 | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
 | ADR-090 | Accepted (2026-10-14); proposed 2026-10-14 | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
+| ADR-091 | Proposed (2026-10-14) | A group sends read receipts and no delivered receipt. An own group message shows two ticks as soon as one member other than its sender has read it, without waiting for the other members or for owed copies; a failed message keeps its failed mark and Retry. A group read receipt names the messages of one sender, and goes to the live devices of that sender, when that sender is an active member, and to the reader's other live devices; `MarkConversationVisiblyRead` sends one receipt for each sender, with up to 64 ids each, on the triggers of a direct chat. The sender sees the reader list of an own group message: each member who read it, once, with the read time, the newest first, behind "Seen by N" or "Not seen yet" in the message sheet. The read time is the `ordering_ms` of the earliest `receipt.read` from a device that names the message, kept in a new nullable column of `receipts` (schema 24). Always on, with no setting | The owner's test of groups on phones: a group message never shows two ticks, because a group sends no receipt. The owner decided on 2026-10-14 that the first reader draws the second tick, and that the sender sees who read the message and when. A receipt is an encrypted application event that the server relays, so none of this needs a server change, and the `receipts` table already holds one row for each reader device. A receipt sent to each member would cost about 7,300 copies for one message read by 49 members of a 50-member group with 3 devices each, and would tell each member who read the messages of other members; sent to the sender alone it costs about 245. Costs: the second tick says that one member read the message, not that each did; a read time is the reader's clock, corrected as a message time is. Proposed: nothing is built yet. Adds one local column (schema 24); changes no wire format, protocol, dependency or backend file. |
+
+## ADR-091 in full — a group message is read when one member reads it, and its sender sees who (2026-10-14)
+
+**Status:** Proposed, 2026-10-14. Client protocol, UI and local-state decision. The owner tested
+group chats on phones: a message in a group never shows two ticks. This record writes the design
+only, and phase 4 builds it in three prompts (below); it is accepted when the third lands. The
+owner reads the design before phase 4 starts. **Changes no wire format, event kind, event field,
+dependency, cryptographic construction or backend file.** Phase 4 adds one nullable column to the
+local `receipts` table (schema 24).
+
+**Cites:** server ADR-0001 (a group is a set of pairwise sessions); ADR-074 (the second tick is
+reserved for *seen*); ADR-075 item 5 as ADR-088 amended it; ADR-088; ADR-090 D6;
+`message-protocol.md`, "Receipts and typing" and "Groups"; `ui-specification.md` §9;
+`backend/CLIENT_CONTRACT.md` §F.
+
+### The question
+
+A group message never shows two ticks, because a group sends no receipt. What should two ticks
+mean in a group, who should a group receipt go to, and how does the sender learn who read a
+message, and when, without the server learning it?
+
+### The facts
+
+From the code at commit `9c60fc3`, the merge of ADR-090. The prompt for this record named
+`362dd35`; each fact below was read again at `9c60fc3`.
+
+- **A receipt is an application event between phones.** `receipt.read` and `receipt.delivered`
+  name up to 64 message ids each (`ApplicationMessageProtocolV1.maximumReferences`). The server
+  relays their envelopes as it relays any other. It has no receipt endpoint:
+  `backend/openapi.json` holds 28 paths, and none of them is about receipts.
+- **Receipts are private.** `ui-specification.md`, "Core rules", calls read and delivery receipts
+  private, encrypted signals. `message-protocol.md`, "Receipts and typing": a delivered receipt
+  goes after the message is stored, and a read receipt only after the conversation is visibly
+  read.
+- **Delivered receipts are direct only.** The projector queues a delivered receipt for each
+  received message of a direct conversation, and for no other kind (`pendingDeliveredReceipt` in
+  `drift_application_event_projector.dart`). `pending_application_receipts.target_user_id` names
+  the sender of the message.
+- **Read receipts.** `MarkConversationVisiblyRead` (`conversation_use_cases.dart`) clears the
+  unread messages of a conversation, and then, when `allowReadReceipts` is true, sends read
+  receipts of up to 64 ids each through `SendConversationEvents.sendReceipt`. `sendReceipt`
+  refuses each conversation that is not direct.
+- **The send audience of a group.** `SendConversationEvents._send` commits each event through
+  `commitLocalEcho`. For a group, `DriftGroupSendAudienceResolver`
+  (`drift_group_access_adapters.dart`) gives each active member except this account, for each
+  event kind, and refuses the send unless this account holds `GroupPermission.sendMessages`,
+  which each active member of an active group holds. The fan-out coordinator
+  (`pairwise_fanout_coordinator.dart`) seals one copy for each live device of each user in that
+  set and for the other live devices of this account; an empty set is a note to this account's
+  own devices.
+- **Admission.** A receiving phone admits a group event only from an active member, and only
+  while its own account is an active member (`DriftGroupConversationMembership`). The projector
+  reads the facts of one conversation, so a receipt changes only messages of the conversation it
+  was sent in.
+- **The fold.** The projector folds the receipts of a message by user and device and keeps the
+  highest state for each pair. It ignores a receipt from the sender of the message. A read
+  receipt from another device of this account clears the unread flag.
+- **The table.** `receipts` has the primary key `message_id`, `user_id`, `device_id`, the column
+  `receipt_state` and a `projection_ciphertext`. It has no time.
+- **Event times.** `application_events` keeps `created_ms` (the clock of the sending phone),
+  `ordering_ms` and `authenticated_at` of each event. The projector sets `ordering_ms` with
+  `_orderingTimestamp`: 0 for a clock before 2000 or more than 5 minutes ahead of the
+  authentication time; the conversation's newest message time plus 1 ms when the clock is behind
+  that time by at most 60 seconds (`maximumOrderingClockSkewMs`); and the clock itself
+  otherwise. A message shows its `ordering_ms` as its time.
+- **One read is enough today.** `_receiptStatesIn` (`drift_conversation_domain_repository.dart`)
+  gives each message the highest state over all its rows, so one member's read receipt gives the
+  state "read".
+- **The marks.** `app_icons.dart` reserves the second tick, `AppIcons.read`, for *seen*
+  (ADR-074). Each arrival state is one tick, told apart by colour and by its label.
+  `ChatMessageProjection._delivery` (`chat_view_model_mapper.dart`) already orders a group
+  message's mark as D1 below asks: the failed mark over all, then "read" over each transport
+  state, then the clock while a copy is owed (`partiallyAccepted` in a group), then one tick.
+- **ADR-075, as ADR-088 amended it:** a group message shows as sent only when no copy is owed.
+  Until then it shows the sending mark, a clock.
+- **ADR-090 D6:** an open group marks its messages read on this phone, on the triggers of a
+  direct chat, with `allowReadReceipts: false`, so it sends no receipt.
+
+### The owner's decisions (2026-10-14)
+
+- A group message shows two ticks as soon as one member, other than its sender, has read it. It
+  does not wait for the other members.
+- The sender sees the list of members who read the message, as in Telegram, with the time at
+  which each member read it.
+
+### D1. Two ticks
+
+An own group message shows two ticks as soon as one member, other than its sender, has read it.
+It does not wait for the other members. It does not wait for owed copies. A failed message keeps
+its failed mark and its Retry, because Retry is the only way to reach the members whose copy
+failed. Without a read: the clock while a copy is owed, and one tick when no copy is owed.
+
+### D2. Read receipts only
+
+A group sends no delivered receipt. The second tick means "read", and a delivered state has no
+mark of its own. In a group, a delivered receipt would cost one receipt for each member and each
+message.
+
+### D3. Audience
+
+A group read receipt names the messages of one sender only. It goes to the live devices of that
+sender, when that sender is an active member. It also goes to the other live devices of the
+reader. When the sender is not an active member, it goes to the reader's other devices only. The
+send audience of a receipt event comes from the messages that it names
+(`application_event_targets` and `messages.sender_user_id`). A receipt event that names messages
+of two senders is refused.
+
+### D4. Batches
+
+`MarkConversationVisiblyRead` puts the read messages of a group into groups by sender. It sends
+one receipt for each sender, with up to 64 ids each.
+
+### D5. Triggers
+
+A group sends read receipts on the triggers of a direct chat: the conversation becomes visible
+while the app is in front, and an unread message arrives while it is visible.
+
+### D6. Admission
+
+The receiving phone keeps its rules. It admits a receipt only from an active member. It ignores a
+receipt from the sender of the message. A receipt names only messages of its own conversation.
+
+### D7. Reader list
+
+The sender of a group message sees its reader list. The list shows each member who read the
+message one time. Each entry shows the member's display name and the read time. An unknown member
+shows a short id. The newest read is first. The list changes while it is open. The message sheet
+of an own group message shows "Seen by N", or "Not seen yet". Only the sender sees the list.
+Other members get no receipt of that message.
+
+### D8. Read time
+
+The read time of one device is the `ordering_ms` of the earliest `receipt.read` event from that
+device that names the message. It is the clock of the reader's phone when it recorded the read,
+corrected as a message time is (`_orderingTimestamp` in the projector): a clock up to 60 seconds
+behind the conversation's newest message is moved to just after it, so a read recorded within
+that skew does not show before the message. A clock further behind keeps its own value and can
+still show a read before the message; a clock up to 5 minutes ahead keeps its value too. It is a
+display value, as a message time is. An `ordering_ms` of 0 means an implausible clock: the time
+is unknown. The reader list shows the earliest time over the member's devices, or no time when
+none is known.
+
+### D9. Storage
+
+The `receipts` table gets a nullable integer column for the read time (schema 24). Both paths of
+the projector write it: the event that applies one fact, and the rebuild of a conversation. A row
+from before schema 24 keeps no time. A delivered row has no time.
+
+### D10. Always on
+
+Group read receipts are always on, as in a direct chat. There is no setting.
+
+### D11. Privacy
+
+A receipt is encrypted. The server sees one more envelope from the reader's device to each device
+of the sender, as for a receipt in a direct chat. It does not see the content. Other members
+learn nothing.
+
+### D12. No wire change
+
+No new event kind, no new field and no server change.
+
+### Rejected
+
+- **A server endpoint for read states.** The server would learn who read which message, and
+  when. The server is a relay of encrypted content (server ADR-0001), and `backend/` is read-only
+  for client work.
+- **Two ticks only when each member read the message.** The owner chose the first reader.
+- **A receipt to each member of the group.** The cost below, and each member would learn who read
+  the messages of other members.
+- **Delivered receipts in a group.** D2.
+- **A setting that turns group read receipts off.** The owner chose the behaviour of a direct
+  chat.
+
+### The cost
+
+A group of 50 members with 3 devices each sends about 150 copies of one message. If a read
+receipt went to each member, each receipt would cost 149 copies — the 3 devices of each of the 49
+other members and the 2 other devices of the reader — so one message read by 49 members would
+cost 49 × 149 = 7,301, about 7,300 copies of receipts. With the audience of D3, a receipt goes only to the 3 devices of the sender
+and to the 2 other devices of the reader, so the same reads cost about 49 × 5 = 245 copies. D4
+keeps that to one receipt for each sender a reader reads at a time, not one for each message.
+
+Other costs:
+
+- **The second tick says less in a group.** It says that one member read the message, not that
+  each did. The reader list says who.
+- **A read time is the reader's clock.** D8 corrects a small skew only.
+- **A reader whose other devices are offline** learns of the read on those devices when they
+  next drain, as in a direct chat.
+
+### The plan of phase 4
+
+| Prompt | Work |
+|---|---|
+| `04-1` | D2 to D6: the receipt goes to the sender. D1: two ticks. |
+| `04-2` | D8 and D9: the read time in the local database. |
+| `04-3` | D7: the reader list. ADR-091 Accepted. |
+
+### Not done here
+
+Nothing is built. No code, test, table or screen changes with this record.
 
 ## ADR-090 in full — a group reads its messages as a direct chat does (2026-10-14)
 
