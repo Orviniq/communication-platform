@@ -794,9 +794,10 @@ the message sheet and the delete dialog leave them out.
 
 **Read on this phone.** An open group chat marks its messages read on this phone, as a direct
 chat does: when it becomes visible with the application in front, and when a message arrives
-while it is visible. Its unread count clears, and no alert sounds for the group on screen. It
-sends **no read receipt**, so a group shows no read ticks yet; phase 4 (ADR-091) designs
-them.
+while it is visible. Its unread count clears, and no alert sounds for the group on screen.
+While this account may send into the group, the read also sends one read receipt for each
+sender of the messages read, to that sender alone ([ADR-091](decisions.md)); a group this
+account left, or one waiting for its state, is read on this phone alone.
 
 **Role-gated actions** (owner/admins only): appear on member rows within Group Info
 (§12.2), not on individual messages.
@@ -816,13 +817,13 @@ accepted mark only when none is still owed. A copy for a device the server repor
 is no longer owed; a copy for a device whose mailbox is full stays owed until it is
 accepted. A failed send offers a retry of the same message.
 
-**Read ticks.** Specified by [ADR-091](decisions.md) (Proposed). Not built yet. An own group
-message shows two ticks (`AppIcons.read`) as soon as one member, other than its sender, has
-read it. It does not wait for the other members, and it does not wait for owed copies. A
-failed message keeps its failed mark and its **Retry**, because a retry is the only way to
-reach the members whose copy failed. Without a read, the message shows the clock while a
-copy is owed, and one tick when no copy is owed. A group has no delivered mark: it sends no
-delivered receipt. Read receipts are always on, as in a direct chat, and there is no setting.
+**Read ticks** ([ADR-091](decisions.md)). An own group message shows two ticks
+(`AppIcons.read`) as soon as one member, other than its sender, has read it. It does not wait
+for the other members, and it does not wait for owed copies. A failed message keeps its failed
+mark and its **Retry**, because a retry is the only way to reach the members whose copy
+failed. Without a read, the message shows the clock while a copy is owed, and one tick when no
+copy is owed. A group has no delivered mark: it sends no delivered receipt. Read receipts are
+always on, as in a direct chat, and there is no setting.
 
 **Reader list.** Specified by [ADR-091](decisions.md) (Proposed). Not built yet. The message
 sheet of an own group message shows **Seen by N**, where N is the number of members who read

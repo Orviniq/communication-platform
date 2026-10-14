@@ -184,7 +184,7 @@ as gone leaves the count.
 
 ### Group read receipts
 
-Specified by ADR-091 (Proposed). Not built yet.
+Specified by ADR-091 (Proposed). Not built yet: the read time.
 
 - **Read receipts only.** A group sends `receipt.read` and never `receipt.delivered`. The
   second tick means read, and a delivered state has no mark of its own.
