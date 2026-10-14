@@ -100,6 +100,133 @@ is not silently edited out of history.
 | ADR-087 | Accepted (2026-10-09) | The Chats top bar's search icon opens a full-screen search page at `/chats/search`, with a Chats section and a Contacts section and no message section, and the field above the list is deleted. The Chats title carries the delivery engine's status, from its live phase only: Connecting…, Syncing… or Waiting to reconnect… once the engine has been in a state other than settled for one second without a break, with a small spinner before the first two (the still `AppIcons.connecting` when animations are off), and "Chats" again the moment the engine settles. ADR-060 D11's four content-free states and its mapping of the nine phases stay. The status line above the list, the long offline notice, and the shell's connection strip with its state and the `?offline=true` query that fed it are deleted, and `/connection` opens `/chats` after every start | The search icon only moved the focus to a field on the same page, so the icon and the field did one job twice and the field held the list's height for good; a page gives search room for a second section and its scope. ADR-060 D11's line appeared and disappeared with each sync cycle and moved the list by its own height each time, where a title has no neighbour to push, and a stalled engine is still on the title after one second. The offline notice and the strip followed how the session opened, which does not change when the connection returns, so each stayed on screen after the connection was back; the strip also showed on the Chats tab root only and repeated what the title now says. A message section is not built: a chat's summary carries its latest message only, and a search across every conversation's history is a new storage query that needs its own design. Costs: for the second before the title speaks, a start with no server looks like any other, and a screen reader names the Chats route by the status while one shows. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-088 | Accepted (2026-10-09); withdraws the copy count of ADR-075 item 5 | The group chat keeps its composer in the tree while a message is sent, as a direct conversation does, so the focus and the keyboard stay where they were, and the progress bar that replaced it is deleted. A group message in flight shows the mark of its state and no text beside it: "Copies sent: 45 of 150", its two strings, the message view model's field and the group screen's progress map that carried it, and the provider that fed them are deleted. A message is still marked sent only when no copy is owed, and a failed one still offers a retry. The repository's read of what is owed stays, and no screen reads it | Taking the composer out for the length of a send took the keyboard with it after every message, and the send only writes and queues the message, as a direct one does, so there was nothing to wait for. The count was several times wider than the time and the mark beside it: on the code before this change a bubble measured 404 px while its message was sending and 131 px once it was accepted, in a widget test 800 px wide, and the mark already says where the message is. Costs: a person no longer sees how far a large group's fan-out has got, and two sends can now overlap, so the inline error is only ever raised by a send and never cleared by one that succeeds. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-089 | Accepted (2026-10-11); proposed 2026-10-10 | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
+| ADR-090 | Proposed (2026-10-14) | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
+
+## ADR-090 in full — a group reads its messages as a direct chat does (2026-10-14)
+
+**Status:** Proposed, 2026-10-14. Client UI and local-state decision. The owner tested group
+chats on phones on 2026-10-09: a reply lost its reference, a reaction did nothing, and the other
+actions of the message sheet did nothing. Changes the group chat screen, the message view model
+and its mapper, the message sheet, and the group repository's port. **Changes no table, wire
+format, protocol, dependency, cryptographic construction, schema version or backend file.**
+Built in three steps on one branch: D1 and D4 first, then D2 and D3, then D5 and D6; it is
+accepted when the third lands.
+
+**Cites:** ADR-075 item 5 as ADR-088 amended it; ADR-088; ADR-089 D1; `ui-specification.md` §9;
+`backend/CLIENT_CONTRACT.md` §F.
+
+### The question
+
+A group chat draws the bubble of a direct chat, and that bubble offers every action of a direct
+chat. Which of those actions should work in a group, and what has to change for them to work?
+
+### The cause
+
+From the code at commit `362dd35`:
+
+- `GroupChatView` draws the shared bubble, `ChatMessageBuilder`, which offers each action of a
+  direct chat.
+- The page built its view models from `GroupMessage`, which held the id, the group, the sender,
+  the text, the time and a `GroupMessageDelivery`. It held no reply, no reaction, no receipt, no
+  pin, no star and no edit.
+- `DriftGroupRepository.watchMessages` filled `GroupMessage` from the `messages` table, and
+  `groupMessagesProvider` streamed it.
+- The page's `_handleIntent` answered a text send (the text only), a retry, the reply and edit
+  strip of the composer and the paperclip's "not built" sheet. It dropped every other intent with
+  no error, so a reply went out as a plain message and a reaction did nothing.
+- The page never set `highlightedMessageId`, and the timeline scrolls only when that value
+  changes, so a search result and a reply quote did not jump.
+- For a sender the roster does not name, the page showed the raw user id as the author.
+
+A group already has a `conversations` row whose id is the group id, and its messages are rows of
+`messages` under that id, so the read path of a direct chat can read a group as it is.
+
+### D1. One timeline
+
+The group chat reads its messages through the projection of a direct chat:
+`conversationMessagesProvider` with the group id as the conversation id, mapped by one
+`ChatMessageProjection` held for the life of the page, as `direct_chat_page.dart` holds its own.
+The page answers the older-messages marker with `loadOlder()` and a jump with `reveal(id)`, and
+sets the highlighted message, so a search result and a reply quote jump. A group shows no pinned
+messages.
+
+- **The rules of a group.** The projection maps a group with `mapGroup`. Each author is named by
+  the member's display name, or by `chatShortIdentity` for a user the roster does not name, and
+  the reply author the same way. `partiallyAccepted` shows the sending mark: a group message
+  shows as sent only when no copy is owed (ADR-075, ADR-088), and `permanentlyFailed` still shows
+  the failed mark and Retry. Each other transport state maps as in a direct chat.
+- **Cost of a rename.** Each element remembers the names it was derived with. A member who
+  changes their display name re-derives their own messages and the replies that quote them; every
+  other message keeps its view model instance.
+- **The injected page.** The page's injected mode takes `ConversationMessage` rows and maps them
+  through the same projection as the routed page, so a test cannot pass on a mapping the
+  application does not use.
+- **Deleted.** `GroupMessage`, `GroupMessageDelivery`, `GroupRepositoryPort.watchMessages`,
+  `DriftGroupRepository.watchMessages` and its delivery mapping, `groupMessagesProvider`, and the
+  page's own delivery mapping and retry stub. The retry callback takes the message id and text.
+  `watchFanoutProgress` and `GroupFanoutProgress` stay: the fan-out tests observe through them
+  (ADR-088).
+
+### D2. Replies
+
+A reply in a group keeps its reference, as in a direct chat. Its quote shows the name of the
+member who wrote the replied message.
+
+### D3. Reactions
+
+Each active member can react to a group message. A reaction goes to each member, as a message
+does, and its send obeys the rule of a group send: the sender must hold
+`GroupPermission.sendMessages`.
+
+### D4. Not in groups yet
+
+Pin, Edit and Delete for everyone stay off in a group. Each needs the member roles of the signed
+roster, to decide who may change a message another member reads, and the projector does not read
+those roles: `_authorizedGroupModerator` in `drift_application_event_projector.dart` is false on
+purpose. The message view model gains `canPin`, true unless set, so a direct chat does not
+change; in a group `canPin`, `canEdit` and `canDeleteForEveryone` are false, and the message
+sheet hides Pin, Edit and Delete for everyone.
+
+### D5. Local actions
+
+Copy, Star, Delete for me and drafts work in a group, as they do in a direct chat: none of them
+leaves the phone. Forward works from a group, and into a group from each chat. An attachment
+message cannot be forwarded into a group, because a group sends no attachment (ADR-089 D1).
+
+### D6. Read on this phone
+
+An open group chat marks its messages read on this phone, on the triggers of a direct chat. The
+unread count clears, and the alert layer knows the group is on screen. This decision sends no
+read receipt: ADR-091 designs read receipts for a group.
+
+### Rejected
+
+- **Add reply and reaction fields to `GroupMessage`.** It keeps a second projection beside the
+  first. The two drift apart with each field a direct chat gains, and read receipts would need
+  the same work again.
+- **Draw the group chat with `ChatConversationView`.** Its top bar, its menus and its attachment
+  flow are those of a direct chat: the contact link, the pinned banner and the paperclip that
+  opens the pickers. The group page keeps its own frame — the top bar of phase 1, the lifecycle
+  notice, the inline errors and the wide side panel — and shares the timeline, the bubble, the
+  composer and the search sheet.
+
+### Costs
+
+- **Search covers the loaded window.** The old group read loaded the whole history with no
+  limit. The window loads the newest page and what the reader has paged back to, which is what
+  a direct chat's search covers too. The sheet's notice claims messages stored on this phone, not
+  all of them.
+- **No pins, edits or deletes for everyone in a group** until the projector reads the roster's
+  roles.
+- **A message deleted for me** shows the deleted placeholder in a group, as in a direct chat; the
+  old group read left the row out.
+- **No read receipt in a group** until ADR-091.
+
+### What this does not do
+
+It changes no send path, no group use case and no receipt code, and neither refusal of
+`SendConversationEvents` (`sendReceipt` and `_sendMutation`) in the first step. It runs nothing
+on a device.
 
 ## ADR-089 in full — a direct chat sends a file, through the system's own pickers (2026-10-10)
 
