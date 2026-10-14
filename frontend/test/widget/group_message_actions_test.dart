@@ -46,6 +46,7 @@ import '../support/authentication_harness.dart' as auth;
 const _deviceId = '00000000-0000-0000-0000-000000000011';
 const _peer = '00000000-0000-0000-0000-000000000002';
 const _member = '00000000-0000-0000-0000-000000000003';
+const _otherMember = '00000000-0000-0000-0000-000000000004';
 const _directId =
     'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
 const _groupId =
@@ -55,6 +56,7 @@ const _leftGroupId =
 const _messageId = '10101010101010101010101010101010';
 const _secondMessageId = '11111111111111111111111111111111';
 const _arrivingMessageId = '12121212121212121212121212121212';
+const _otherMessageId = '13131313131313131313131313131313';
 
 void main() {
   late LocalDatabase database;
@@ -73,29 +75,32 @@ void main() {
     await database.close();
   });
 
-  /// The routed group chat over two messages from another member.
+  /// The routed group chat over two messages from another member, or over
+  /// [messages].
   Future<ProviderContainer> openGroup(
     WidgetTester tester, {
     bool unread = false,
     VisibleConversationRegistry? registry,
     List<ConversationSummary> others = const [],
+    List<_SeedMessage> messages = const [
+      (id: _messageId, sender: _member, text: 'hello team'),
+      (id: _secondMessageId, sender: _member, text: 'see you there'),
+    ],
+    GroupState? state,
   }) async {
     await _seedConversation(
       database,
       conversationId: _groupId,
       kind: ConversationKind.group,
       unread: unread,
-      messages: [
-        (id: _messageId, sender: _member, text: 'hello team'),
-        (id: _secondMessageId, sender: _member, text: 'see you there'),
-      ],
+      messages: messages,
     );
     return _pump(
       tester,
       database: database,
       fanout: fanout,
       groupSender: groupSender,
-      groups: {_groupId: _group(_groupId, 'Team')},
+      groups: {_groupId: state ?? _group(_groupId, 'Team')},
       summaries: [
         _summary(_groupId, ConversationKind.group, title: 'Team'),
         ...others,
@@ -191,23 +196,85 @@ void main() {
     });
   });
 
-  group('the local read mark', () {
-    testWidgets('opening a group with unread messages clears its unread '
-        'count and commits no receipt', (tester) async {
-      await openGroup(tester, unread: true);
+  group('the read mark and its receipts (ADR-091)', () {
+    /// The ids each committed read receipt names, in the order committed.
+    /// Every event the shared send path commits passes the fan-out, a receipt
+    /// included.
+    List<List<String>> readReceipts() => [
+      for (final committed in fanout.events)
+        if (committed.event.kind == ApplicationEventKind.receiptRead)
+          [
+            for (final id in (committed.event.body as ReceiptBody).messageIds)
+              protocolBytesToHex(id),
+          ],
+    ];
+
+    testWidgets('opening a group with unread messages of two members clears '
+        'its unread count and commits one read receipt for each member', (
+      tester,
+    ) async {
+      await openGroup(
+        tester,
+        unread: true,
+        messages: const [
+          (id: _messageId, sender: _member, text: 'hello team'),
+          (id: _otherMessageId, sender: _otherMember, text: 'hi all'),
+          (id: _secondMessageId, sender: _member, text: 'see you there'),
+        ],
+      );
 
       expect((await _conversation(database)).unreadCount, 0);
       expect((await _row(database, _messageId)).unread, isFalse);
+      expect((await _row(database, _otherMessageId)).unread, isFalse);
       expect((await _row(database, _secondMessageId)).unread, isFalse);
-      // Every event the shared send path commits passes the fan-out, a
-      // receipt included.
-      expect(fanout.events, isEmpty);
+      expect(fanout.events, hasLength(2));
+      expect(
+        readReceipts().map((ids) => ids.toSet()),
+        unorderedEquals([
+          {_messageId, _secondMessageId},
+          {_otherMessageId},
+        ]),
+      );
+      expect(
+        fanout.events.map((committed) => committed.conversationKind),
+        everyElement(ConversationKind.group.index),
+      );
       expect(groupSender.texts, isEmpty);
     });
 
+    testWidgets('a group this account left is read on this phone, and '
+        'commits no receipt', (tester) async {
+      await openGroup(
+        tester,
+        unread: true,
+        state: _group(_groupId, 'Team', member: false),
+      );
+
+      expect((await _conversation(database)).unreadCount, 0);
+      expect((await _row(database, _messageId)).unread, isFalse);
+      expect(fanout.events, isEmpty);
+    });
+
+    testWidgets('a group waiting for its state is read on this phone, and '
+        'commits no receipt', (tester) async {
+      await openGroup(
+        tester,
+        unread: true,
+        state: _group(
+          _groupId,
+          'Team',
+          lifecycle: GroupLifecycle.stateRecoveryRequired,
+        ),
+      );
+
+      expect((await _conversation(database)).unreadCount, 0);
+      expect(fanout.events, isEmpty);
+    });
+
     testWidgets('a message that arrives while the group is on screen does '
-        'not stay unread', (tester) async {
+        'not stay unread, and its sender is told', (tester) async {
       await openGroup(tester);
+      expect(fanout.events, isEmpty);
 
       await _insertMessage(
         database,
@@ -224,7 +291,9 @@ void main() {
       expect(find.text('just now'), findsOneWidget);
       expect((await _row(database, _arrivingMessageId)).unread, isFalse);
       expect((await _conversation(database)).unreadCount, 0);
-      expect(fanout.events, isEmpty);
+      expect(readReceipts(), [
+        [_arrivingMessageId],
+      ]);
     });
 
     testWidgets('the registry of what is on screen names the group while it '
@@ -571,34 +640,44 @@ ConversationSummary _summary(
 
 /// A group the signed-in account belongs to, or, with [member] false, one
 /// that no longer lets it send.
-GroupState _group(String groupId, String name, {bool member = true}) =>
-    GroupState(
-      groupId: groupId,
-      metadata: GroupMetadata(name: name, description: ''),
-      invitationPolicy: GroupInvitationPolicy.ownerAndAdmins,
-      historySharingPolicy: GroupHistorySharingPolicy.newMessagesOnly,
-      members: [
-        GroupMember(
-          userId: _member,
-          displayName: 'Member',
-          role: GroupRole.owner,
-          verified: true,
-        ),
-        GroupMember(
-          userId: auth.userId,
-          displayName: 'Reader',
-          role: GroupRole.member,
-          verified: true,
-          membership: member
-              ? GroupMembershipState.active
-              : GroupMembershipState.removed,
-        ),
-      ],
-      controlRevision: 1,
-      controlStateHash:
-          '1010101010101010101010101010101010101010101010101010101010101010',
-      lifecycle: GroupLifecycle.active,
-    );
+GroupState _group(
+  String groupId,
+  String name, {
+  bool member = true,
+  GroupLifecycle lifecycle = GroupLifecycle.active,
+}) => GroupState(
+  groupId: groupId,
+  metadata: GroupMetadata(name: name, description: ''),
+  invitationPolicy: GroupInvitationPolicy.ownerAndAdmins,
+  historySharingPolicy: GroupHistorySharingPolicy.newMessagesOnly,
+  members: [
+    GroupMember(
+      userId: _member,
+      displayName: 'Member',
+      role: GroupRole.owner,
+      verified: true,
+    ),
+    GroupMember(
+      userId: auth.userId,
+      displayName: 'Reader',
+      role: GroupRole.member,
+      verified: true,
+      membership: member
+          ? GroupMembershipState.active
+          : GroupMembershipState.removed,
+    ),
+    GroupMember(
+      userId: _otherMember,
+      displayName: 'Other',
+      role: GroupRole.member,
+      verified: true,
+    ),
+  ],
+  controlRevision: 1,
+  controlStateHash:
+      '1010101010101010101010101010101010101010101010101010101010101010',
+  lifecycle: lifecycle,
+);
 
 Future<ProviderContainer> _pump(
   WidgetTester tester, {

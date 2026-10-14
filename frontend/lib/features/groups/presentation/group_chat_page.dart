@@ -149,8 +149,8 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
     super.dispose();
   }
 
-  /// Clears the group's unread state on this phone, silently, as a direct
-  /// chat does.
+  /// Clears the group's unread state on this phone, as a direct chat does, and
+  /// tells the sender of each message read that it was read (ADR-091).
   Future<void> _markRead() async {
     try {
       final deviceId = await ref.read(currentMessagingDeviceIdProvider.future);
@@ -164,13 +164,28 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
         currentUserId: widget.currentUserId,
         currentDeviceId: deviceId,
         conversationId: widget.groupId,
-        // A group sends no read receipt yet. Phase 4 sends the read receipts
-        // of a group, to the sender of each message read (ADR-091).
-        allowReadReceipts: false,
+        allowReadReceipts: await _mayReportReads(),
       );
     } on Object {
       // Reading a screen is not a place to raise a failure, and the next time
       // the group becomes visible this runs again.
+    }
+  }
+
+  /// Whether a read here is reported to the senders: only while this account
+  /// may send into the group. A group it left, or one waiting for its state,
+  /// is read on this phone alone.
+  Future<bool> _mayReportReads() async {
+    try {
+      final group = await ref.read(groupProvider(widget.groupId).future);
+      return group != null &&
+          GroupAuthorization.allows(
+            group,
+            widget.currentUserId,
+            GroupPermission.sendMessages,
+          );
+    } on Object {
+      return false;
     }
   }
 
