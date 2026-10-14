@@ -5,7 +5,6 @@ import 'package:communication_platform/app/dependencies/messaging_providers.dart
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
-import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -13,8 +12,12 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
+import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -35,7 +38,10 @@ class GroupChatPage extends ConsumerWidget {
 
   final String groupId;
   final GroupState? injectedState;
-  final List<GroupMessage>? injectedMessages;
+
+  /// The messages an injected page shows, as local storage would hand them to
+  /// the routed page: the same rows go through the same projection.
+  final List<ConversationMessage>? injectedMessages;
   final String? currentUserId;
   final SendGroupMessageCallback? onSend;
   final RetryGroupMessageCallback? onRetry;
@@ -45,19 +51,32 @@ class GroupChatPage extends ConsumerWidget {
     if (injectedState != null && injectedMessages != null && onSend != null) {
       return GroupChatView(
         state: injectedState!,
-        messages: injectedMessages!,
+        timeline: ConversationTimelineState(
+          page: ConversationMessagePage(
+            messages: injectedMessages!,
+            pinned: const [],
+            hasMoreBefore: false,
+          ),
+          loadingBefore: false,
+          olderLoadFailed: false,
+        ),
         currentUserId: currentUserId ?? injectedState!.members.first.userId,
         onSend: onSend!,
-        onRetry: onRetry ?? _retryUnavailable,
+        onRetry: onRetry,
       );
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
     if (userId == null) return groupErrorPage(context);
     final group = ref.watch(groupProvider(groupId));
-    final messages = ref.watch(groupMessagesProvider(groupId));
+    // The group's own conversation, read as a direct chat reads its own
+    // (ADR-090 D1): the conversation id of a group is the group id.
+    final request = (currentUserId: userId, conversationId: groupId);
+    final messages = ref.watch(conversationMessagesProvider(request));
     final device = ref.watch(currentMessagingDeviceIdProvider);
     final useCases = ref.watch(groupUseCasesProvider);
+    Future<ConversationTimelineWindow> window() =>
+        ref.read(conversationTimelineWindowProvider(request).future);
     return group.when(
       loading: () => groupLoadingPage(context),
       error: (_, _) => groupErrorPage(context),
@@ -66,7 +85,7 @@ class GroupChatPage extends ConsumerWidget {
         return messages.when(
           loading: () => groupLoadingPage(context),
           error: (_, _) => groupErrorPage(context),
-          data: (items) => device.when(
+          data: (timeline) => device.when(
             loading: () => groupLoadingPage(context),
             error: (_, _) => groupErrorPage(context),
             data: (deviceId) => useCases.when(
@@ -74,7 +93,7 @@ class GroupChatPage extends ConsumerWidget {
               error: (_, _) => groupErrorPage(context),
               data: (resolved) => GroupChatView(
                 state: state,
-                messages: items,
+                timeline: timeline,
                 currentUserId: userId,
                 onSend: (text) => resolved.sendMessage(
                   groupId: groupId,
@@ -82,13 +101,16 @@ class GroupChatPage extends ConsumerWidget {
                   senderDeviceId: deviceId,
                   text: text,
                 ),
-                onRetry: (message) => resolved.retryMessage(
+                onRetry: (messageId, text) => resolved.retryMessage(
                   groupId: groupId,
                   senderUserId: userId,
                   senderDeviceId: deviceId,
-                  messageId: message.messageId,
-                  text: message.text,
+                  messageId: messageId,
+                  text: text,
                 ),
+                onLoadOlder: () async => (await window()).loadOlder(),
+                onReveal: (messageId) async =>
+                    (await window()).reveal(messageId),
               ),
             ),
           ),
@@ -101,18 +123,29 @@ class GroupChatPage extends ConsumerWidget {
 class GroupChatView extends StatefulWidget {
   const GroupChatView({
     required this.state,
-    required this.messages,
+    required this.timeline,
     required this.currentUserId,
     required this.onSend,
-    required this.onRetry,
+    this.onRetry,
+    this.onLoadOlder,
+    this.onReveal,
     super.key,
   });
 
   final GroupState state;
-  final List<GroupMessage> messages;
+  final ConversationTimelineState timeline;
   final String currentUserId;
   final SendGroupMessageCallback onSend;
-  final RetryGroupMessageCallback onRetry;
+
+  /// Null where the view has no retry path: a retry is then reported as
+  /// failed, never as made.
+  final RetryGroupMessageCallback? onRetry;
+
+  /// Opens the window further back, for the timeline's older-messages marker.
+  final Future<void> Function()? onLoadOlder;
+
+  /// Opens the window far enough back to hold a message, for a jump to it.
+  final Future<void> Function(String messageId)? onReveal;
 
   @override
   State<GroupChatView> createState() => _GroupChatViewState();
@@ -120,18 +153,33 @@ class GroupChatView extends StatefulWidget {
 
 class _GroupChatViewState extends State<GroupChatView> {
   final _composerKey = GlobalKey<ChatComposerBuilderState>();
+
+  /// One for the life of the page, as a direct chat holds its own: what it
+  /// returns for the messages that did not change is the same objects, which
+  /// is what keeps the timeline from redrawing rows nothing happened to.
+  final _projection = ChatMessageProjection();
   var _sendFailed = false;
   var _retryFailed = false;
+
+  /// The message a search result or a reply quote asked for. The timeline
+  /// scrolls when this changes.
+  String? _highlightedMessageId;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final state = widget.state;
     final gate = _chatGate(state.lifecycle);
-    final viewMessages = <ChatMessageViewModel>[
-      for (var index = 0; index < widget.messages.length; index++)
-        _messageView(widget.messages[index], index),
-    ];
+    final names = {
+      for (final member in state.members) member.userId: member.displayName,
+    };
+    final viewMessages = _projection.mapGroup(
+      widget.timeline.page.messages,
+      currentUserId: widget.currentUserId,
+      currentUserName: strings.chatYouAuthor,
+      memberName: (userId) =>
+          names[userId.toLowerCase()] ?? chatShortIdentity(userId),
+    );
     final timeline = ChatTimelineViewModel(
       state: viewMessages.isEmpty
           ? ChatTimelineLoadState.empty
@@ -141,12 +189,15 @@ class _GroupChatViewState extends State<GroupChatView> {
       savedMessages: false,
       securityGate: gate,
       offline: false,
-      hasMoreBefore: false,
-      loadingBefore: false,
-      olderLoadFailed: false,
+      hasMoreBefore: widget.timeline.page.hasMoreBefore,
+      loadingBefore: widget.timeline.loadingBefore,
+      olderLoadFailed: widget.timeline.olderLoadFailed,
       typing: false,
+      // A pin needs the member roles of the signed roster, which a group
+      // does not read yet (ADR-090 D4).
       pinnedMessages: const [],
       messages: viewMessages,
+      highlightedMessageId: _highlightedMessageId,
     );
     final chat = Column(
       children: [
@@ -186,10 +237,7 @@ class _GroupChatViewState extends State<GroupChatView> {
         ),
         actions: [
           // The same sheet a direct conversation opens, over the same
-          // kind of list: `watchMessages` loads a group's local history
-          // without a limit, so the scope this sheet states — everything
-          // stored on this phone for this conversation — is true here
-          // too.
+          // list: the messages of the window this page has loaded.
           AppIconButton(
             icon: AppIcons.search,
             semanticLabel: strings.chatSearchAction,
@@ -227,48 +275,19 @@ class _GroupChatViewState extends State<GroupChatView> {
         onJumpToMessage: (id) => _handleIntent(JumpToMessageIntent(id)),
       );
 
-  ChatMessageViewModel _messageView(GroupMessage message, int index) {
-    final member = widget.state.member(message.senderUserId);
-    final outgoing =
-        message.senderUserId.toLowerCase() ==
-        widget.currentUserId.toLowerCase();
-    final previous = index == 0 ? null : widget.messages[index - 1];
-    final next = index == widget.messages.length - 1
-        ? null
-        : widget.messages[index + 1];
-    return ChatMessageViewModel(
-      id: message.messageId,
-      authorId: message.senderUserId,
-      authorName: member?.displayName ?? message.senderUserId,
-      outgoing: outgoing,
-      kind: ChatTimelineContentKind.text,
-      text: message.text,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-        message.createdMs,
-        isUtc: true,
-      ).toLocal(),
-      delivery: _deliveryView(message.delivery),
-      firstInAuthorGroup:
-          previous == null || previous.senderUserId != message.senderUserId,
-      lastInAuthorGroup:
-          next == null || next.senderUserId != message.senderUserId,
-      edited: false,
-      deleted: false,
-      pinned: false,
-      starred: false,
-      unread: false,
-      timestampSkewed: false,
-      canEdit: false,
-      canDeleteForEveryone: false,
-    );
-  }
-
   void _handleIntent(ChatIntent intent) {
     _composerKey.currentState?.handleIntent(intent);
     if (intent case SendTextIntent(:final text)) {
       unawaited(_send(text));
     } else if (intent case RetryMessageIntent(:final message)) {
-      unawaited(_retry(message.id));
+      unawaited(_retry(message));
+    } else if (intent is LoadOlderMessagesIntent) {
+      unawaited(widget.onLoadOlder?.call());
+    } else if (intent case JumpToMessageIntent(:final messageId)) {
+      // A search result or a reply quote. The window opens far enough back to
+      // hold the message, and the timeline jumps once it is there.
+      setState(() => _highlightedMessageId = messageId);
+      unawaited(widget.onReveal?.call(messageId));
     } else if (intent is OpenAttachmentIntent) {
       // A group chat sends no attachment in this phase, and its paperclip
       // says so rather than doing nothing (ADR-089 D1).
@@ -291,17 +310,17 @@ class _GroupChatViewState extends State<GroupChatView> {
     if (result is FailureResult<void>) setState(() => _sendFailed = true);
   }
 
-  Future<void> _retry(String messageId) async {
-    final failed = widget.messages
-        .where(
-          (message) =>
-              message.messageId == messageId &&
-              message.delivery == GroupMessageDelivery.failed,
-        )
-        .firstOrNull;
-    if (failed == null) return;
+  /// Sends a failed message again, as the same message: its id and its text.
+  Future<void> _retry(ChatMessageViewModel message) async {
+    if (message.delivery != ChatDeliveryViewState.failed) return;
+    final onRetry = widget.onRetry;
+    if (onRetry == null) {
+      // No retry path: a retry this view cannot make is never shown as made.
+      setState(() => _retryFailed = true);
+      return;
+    }
     setState(() => _retryFailed = false);
-    final result = await widget.onRetry(failed);
+    final result = await onRetry(message.id, message.text ?? '');
     if (!mounted) return;
     setState(() => _retryFailed = result is FailureResult<void>);
   }
@@ -381,24 +400,6 @@ class _GroupChatHeader extends StatelessWidget {
     );
   }
 }
-
-/// A group message is sent only once none of its copies is still owed, so a
-/// fan-out the server has accepted part of never shows the accepted mark.
-ChatDeliveryViewState _deliveryView(GroupMessageDelivery delivery) =>
-    switch (delivery) {
-      GroupMessageDelivery.received => ChatDeliveryViewState.received,
-      GroupMessageDelivery.localOnly => ChatDeliveryViewState.localOnly,
-      GroupMessageDelivery.preparing => ChatDeliveryViewState.encrypting,
-      GroupMessageDelivery.queued => ChatDeliveryViewState.queued,
-      GroupMessageDelivery.sending => ChatDeliveryViewState.sending,
-      GroupMessageDelivery.sent => ChatDeliveryViewState.accepted,
-      GroupMessageDelivery.failed => ChatDeliveryViewState.failed,
-    };
-
-/// What a view built without a retry path answers: a refusal, so a retry it
-/// cannot make is never reported as made.
-Future<Result<void>> _retryUnavailable(GroupMessage message) async =>
-    const Result.failure(SecurityFailure(SecurityFailureKind.policyBlocked));
 
 ChatSecurityGate _chatGate(GroupLifecycle lifecycle) => switch (lifecycle) {
   GroupLifecycle.active => ChatSecurityGate.ready,
