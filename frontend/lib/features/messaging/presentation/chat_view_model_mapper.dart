@@ -87,14 +87,22 @@ abstract final class ChatViewModelMapper {
     peerName: peerName,
   );
 
+  /// One message, derived against the names its author and the author of the
+  /// message it replies to have now.
+  ///
+  /// [group] applies the rules of a group (ADR-090): a message shows as sent
+  /// only once none of its copies is owed, and the actions that need the
+  /// member roles of the signed roster — Edit, Delete for everyone and Pin —
+  /// are not offered.
   static ChatMessageViewModel _message(
     ConversationMessage message, {
     required ConversationMessage? previous,
     required ConversationMessage? next,
-    required Map<String, ConversationMessage> byId,
+    required ConversationMessage? reply,
     required String currentUserId,
-    required String currentUserName,
-    required String peerName,
+    required String authorName,
+    required String? replyAuthor,
+    required bool group,
   }) {
     final outgoing =
         message.senderUserId.toLowerCase() == currentUserId.toLowerCase();
@@ -113,13 +121,10 @@ abstract final class ChatViewModelMapper {
         ownReactions.add(reaction.emoji);
       }
     }
-    final reply = message.replyToMessageId == null
-        ? null
-        : byId[message.replyToMessageId];
     return ChatMessageViewModel(
       id: message.messageId,
       authorId: message.senderUserId,
-      authorName: outgoing ? currentUserName : peerName,
+      authorName: authorName,
       outgoing: outgoing,
       kind: message.attachments.isEmpty
           ? ChatTimelineContentKind.text
@@ -133,7 +138,7 @@ abstract final class ChatViewModelMapper {
         message.createdMs,
         isUtc: true,
       ).toLocal(),
-      delivery: _delivery(message),
+      delivery: _delivery(message, group: group),
       firstInAuthorGroup: !groupedWithPrevious,
       lastInAuthorGroup: !groupedWithNext,
       edited: message.edited,
@@ -142,14 +147,11 @@ abstract final class ChatViewModelMapper {
       starred: message.starred,
       unread: !outgoing && message.unread,
       timestampSkewed: message.timestampState == MessageTimestampState.skewed,
-      canEdit: outgoing && !message.deletedForEveryone,
-      canDeleteForEveryone: outgoing && !message.deletedForEveryone,
+      canEdit: !group && outgoing && !message.deletedForEveryone,
+      canDeleteForEveryone: !group && outgoing && !message.deletedForEveryone,
+      canPin: !group,
       replyToMessageId: message.replyToMessageId,
-      replyAuthor: reply == null
-          ? null
-          : reply.senderUserId.toLowerCase() == currentUserId.toLowerCase()
-          ? currentUserName
-          : peerName,
+      replyAuthor: replyAuthor,
       replyQuote: _quoteOf(reply) ?? message.quoteFallback,
       reactions: [
         for (final entry in reactionCounts.entries)
@@ -184,7 +186,10 @@ abstract final class ChatViewModelMapper {
             const Duration(minutes: 5).inMilliseconds;
   }
 
-  static ChatDeliveryViewState _delivery(ConversationMessage message) {
+  static ChatDeliveryViewState _delivery(
+    ConversationMessage message, {
+    required bool group,
+  }) {
     if (message.transportState == MessageTransportState.received) {
       return ChatDeliveryViewState.received;
     }
@@ -204,6 +209,11 @@ abstract final class ChatViewModelMapper {
       MessageTransportState.preparing => ChatDeliveryViewState.encrypting,
       MessageTransportState.queued => ChatDeliveryViewState.queued,
       MessageTransportState.sending => ChatDeliveryViewState.sending,
+      // A group message is one copy for each device of each member, and it
+      // is sent only once none of them is owed (ADR-075, ADR-088). A fan-out
+      // the server has accepted part of is still on its way.
+      MessageTransportState.partiallyAccepted when group =>
+        ChatDeliveryViewState.sending,
       MessageTransportState.relayAccepted ||
       MessageTransportState.partiallyAccepted => ChatDeliveryViewState.accepted,
       MessageTransportState.permanentlyFailed => ChatDeliveryViewState.failed,
@@ -232,6 +242,7 @@ final class ChatMessageProjection {
   String? _currentUserId;
   String? _currentUserName;
   String? _peerName;
+  bool? _group;
   var _derivations = 0;
 
   /// How many elements this projection has derived since it was created.
@@ -241,6 +252,8 @@ final class ChatMessageProjection {
   @visibleForTesting
   int get derivations => _derivations;
 
+  /// A direct conversation, or Saved Messages: every author that is not the
+  /// current user is [peerName].
   List<ChatMessageViewModel> map(
     List<ConversationMessage> source, {
     required String currentUserId,
@@ -250,14 +263,78 @@ final class ChatMessageProjection {
     // The three names every element is derived against. A contact projection
     // arriving renames every author at once, and nothing memoized under the
     // old name is still true.
+    _reset(
+      currentUserId: currentUserId,
+      currentUserName: currentUserName,
+      peerName: peerName,
+      group: false,
+    );
+    return _project(
+      source,
+      currentUserId: currentUserId,
+      currentUserName: currentUserName,
+      memberName: (_) => peerName,
+      group: false,
+    );
+  }
+
+  /// A group (ADR-090): each author that is not the current user is named by
+  /// [memberName], and the rules of a group apply.
+  ///
+  /// A rename does not clear what is memoized. Each element remembers the
+  /// names it was derived with, so a member who changes their display name
+  /// re-derives their own messages and the replies that quote them, and no
+  /// other.
+  List<ChatMessageViewModel> mapGroup(
+    List<ConversationMessage> source, {
+    required String currentUserId,
+    required String currentUserName,
+    required String Function(String userId) memberName,
+  }) {
+    _reset(
+      currentUserId: currentUserId,
+      currentUserName: currentUserName,
+      peerName: null,
+      group: true,
+    );
+    return _project(
+      source,
+      currentUserId: currentUserId,
+      currentUserName: currentUserName,
+      memberName: memberName,
+      group: true,
+    );
+  }
+
+  void _reset({
+    required String currentUserId,
+    required String currentUserName,
+    required String? peerName,
+    required bool group,
+  }) {
     if (_currentUserId != currentUserId ||
         _currentUserName != currentUserName ||
-        _peerName != peerName) {
+        _peerName != peerName ||
+        _group != group) {
       _memoized = {};
       _currentUserId = currentUserId;
       _currentUserName = currentUserName;
       _peerName = peerName;
+      _group = group;
     }
+  }
+
+  List<ChatMessageViewModel> _project(
+    List<ConversationMessage> source, {
+    required String currentUserId,
+    required String currentUserName,
+    required String Function(String userId) memberName,
+    required bool group,
+  }) {
+    final currentUser = currentUserId.toLowerCase();
+    String nameOf(String userId) => userId.toLowerCase() == currentUser
+        ? currentUserName
+        : memberName(userId);
     // Built only for a page that holds a reply, and then only once. It is the
     // one index the derivation needs, and a page of a long conversation is
     // usually a page nobody replied inside.
@@ -278,6 +355,8 @@ final class ChatMessageProjection {
         message,
       );
       final groupedWithNext = ChatViewModelMapper._grouped(message, next);
+      final authorName = nameOf(message.senderUserId);
+      final replyAuthor = reply == null ? null : nameOf(reply.senderUserId);
       final memoized = _memoized[message.messageId];
       if (memoized != null &&
           memoized.describes(
@@ -285,6 +364,8 @@ final class ChatMessageProjection {
             groupedWithPrevious: groupedWithPrevious,
             groupedWithNext: groupedWithNext,
             reply: reply,
+            authorName: authorName,
+            replyAuthor: replyAuthor,
           )) {
         views.add(memoized.view);
         continue;
@@ -294,10 +375,11 @@ final class ChatMessageProjection {
         message,
         previous: previous,
         next: next,
-        byId: byId ?? const {},
+        reply: reply,
         currentUserId: currentUserId,
-        currentUserName: currentUserName,
-        peerName: peerName,
+        authorName: authorName,
+        replyAuthor: replyAuthor,
+        group: group,
       );
       _memoized[message.messageId] = _MemoizedMessage(
         source: message,
@@ -344,16 +426,22 @@ final class _MemoizedMessage {
   final String? replyText;
   final ChatMessageViewModel view;
 
+  /// The names, as well as the message, are inputs: in a group each author
+  /// has a name of their own, which a roster change can rename.
   bool describes(
     ConversationMessage message, {
     required bool groupedWithPrevious,
     required bool groupedWithNext,
     required ConversationMessage? reply,
+    required String authorName,
+    required String? replyAuthor,
   }) =>
       this.groupedWithPrevious == groupedWithPrevious &&
       this.groupedWithNext == groupedWithNext &&
       replyAuthorId == reply?.senderUserId &&
       replyText == reply?.text &&
+      view.authorName == authorName &&
+      view.replyAuthor == replyAuthor &&
       _sameMessage(source, message);
 }
 

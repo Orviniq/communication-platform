@@ -463,18 +463,19 @@ class ChatMessageBuilder extends StatelessWidget {
               );
             },
           ),
-          _MessageAction(
-            label: message.pinned
-                ? strings.chatUnpinAction
-                : strings.chatPinAction,
-            icon: AppIcons.pin,
-            onPressed: () {
-              popAppModal(context);
-              onIntent(
-                SetPinIntent(messageId: message.id, pinned: !message.pinned),
-              );
-            },
-          ),
+          if (message.canPin)
+            _MessageAction(
+              label: message.pinned
+                  ? strings.chatUnpinAction
+                  : strings.chatPinAction,
+              icon: AppIcons.pin,
+              onPressed: () {
+                popAppModal(context);
+                onIntent(
+                  SetPinIntent(messageId: message.id, pinned: !message.pinned),
+                );
+              },
+            ),
           _MessageAction(
             label: strings.chatDeleteAction,
             icon: AppIcons.delete,

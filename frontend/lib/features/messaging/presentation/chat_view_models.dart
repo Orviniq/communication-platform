@@ -87,6 +87,7 @@ final class ChatMessageViewModel {
     required this.timestampSkewed,
     required this.canEdit,
     required this.canDeleteForEveryone,
+    this.canPin = true,
     this.replyToMessageId,
     this.replyAuthor,
     this.replyQuote,
@@ -113,6 +114,11 @@ final class ChatMessageViewModel {
   final bool timestampSkewed;
   final bool canEdit;
   final bool canDeleteForEveryone;
+
+  /// Whether the message sheet offers Pin. A group does not: a pin there
+  /// needs the member roles of the signed roster (ADR-090 D4).
+  final bool canPin;
+
   final String? replyToMessageId;
   final String? replyAuthor;
   final String? replyQuote;
