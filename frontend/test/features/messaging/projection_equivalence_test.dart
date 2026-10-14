@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +42,28 @@ void main() {
   for (var seed = 0; seed < 24; seed += 1) {
     test('an incremental projection equals a rebuilt one (seed $seed)', () {
       return _assertEquivalent(seed);
+    });
+  }
+
+  // Read receipts in a group, with their read times (ADR-091 D8 and D9): two
+  // members, one of them on two devices, on clocks the projector keeps, moves
+  // forward and cannot place.
+  for (var seed = 0; seed < 12; seed += 1) {
+    test("a group's read times are the same both ways (seed $seed)", () {
+      return _assertSequenceEquivalent(
+        _groupReceiptSequence(seed),
+        'group seed $seed',
+        expectProjected: (database) async {
+          // The comparison means something only if the rows hold times, and
+          // the one row whose only read had an implausible clock holds none.
+          final times = await database
+              .customSelect('SELECT read_at_ms FROM receipts')
+              .map((row) => row.read<int?>('read_at_ms'))
+              .get();
+          expect(times, hasLength(7));
+          expect(times.whereType<int>(), hasLength(6));
+        },
+      );
     });
   }
 
@@ -87,8 +110,14 @@ void main() {
   });
 }
 
-Future<void> _assertEquivalent(int seed) async {
-  final sequence = _adversarialSequence(seed);
+Future<void> _assertEquivalent(int seed) =>
+    _assertSequenceEquivalent(_adversarialSequence(seed), 'seed $seed');
+
+Future<void> _assertSequenceEquivalent(
+  List<ApplicationEventCommit> sequence,
+  String label, {
+  Future<void> Function(LocalDatabase database)? expectProjected,
+}) async {
   final incremental = LocalDatabase(NativeDatabase.memory());
   final rebuilt = LocalDatabase(NativeDatabase.memory());
   final fromNothing = LocalDatabase(NativeDatabase.memory());
@@ -104,7 +133,7 @@ Future<void> _assertEquivalent(int seed) async {
     await rebuildConversation(rebuilt, harnessConversationId);
 
     final reason =
-        'seed $seed, step $step, '
+        '$label, step $step, '
         '${ApplicationEventKind.fromWireValue(commit.event.kindValue)?.name}, '
         'event ${protocolBytesToHex(commit.event.eventId).substring(0, 8)}';
     expect(mirrored.disposition, applied.disposition, reason: reason);
@@ -123,8 +152,98 @@ Future<void> _assertEquivalent(int seed) async {
   expect(
     await projectionSnapshot(incremental),
     await projectionSnapshot(fromNothing),
-    reason: 'seed $seed, rebuilt from the log alone',
+    reason: '$label, rebuilt from the log alone',
   );
+  await expectProjected?.call(incremental);
+}
+
+/// A group conversation whose own messages two members read, shuffled.
+///
+/// The second member reads on two devices, and one of those devices reads the
+/// same message twice. The clocks are plausible, behind the conversation by
+/// less than the correction and by more, and too far ahead to place, so a row
+/// holds each kind of read time. A reaction lands after some of the reads.
+List<ApplicationEventCommit> _groupReceiptSequence(int seed) {
+  const memberUserId = '00000000-0000-0000-0000-000000000003';
+  const memberDeviceId = '00000000-0000-0000-0000-000000000033';
+  const sentMs = 1700000000000;
+  final messages = [
+    for (var index = 0; index < 3; index += 1) sequentialId(index),
+  ];
+  final counters = <String, int>{};
+  var event = 200;
+
+  ApplicationEventCommit build({
+    required ApplicationEventKind kind,
+    required String senderUser,
+    required String senderDevice,
+    required ApplicationEventBody body,
+    required int createdMs,
+    List<Uint8List> references = const [],
+  }) {
+    final counter = (counters[senderDevice] ?? 0) + 1;
+    counters[senderDevice] = counter;
+    return applicationCommit(
+      eventId: sequentialId(event++),
+      kind: kind,
+      senderUser: senderUser,
+      senderDevice: senderDevice,
+      counter: counter,
+      references: references,
+      conversationKind: ConversationKind.group,
+      peer: null,
+      localOrigin: senderDevice == localDeviceId,
+      createdMs: createdMs,
+      body: body,
+    );
+  }
+
+  ApplicationEventCommit read(
+    String user,
+    String device,
+    List<Uint8List> ids,
+    int createdMs,
+  ) => build(
+    kind: ApplicationEventKind.receiptRead,
+    senderUser: user,
+    senderDevice: device,
+    references: ids,
+    body: ReceiptBody(messageIds: ids),
+    createdMs: createdMs,
+  );
+
+  final creates = [
+    for (var index = 0; index < messages.length; index += 1)
+      build(
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: localUserId,
+        senderDevice: localDeviceId,
+        body: MessageCreateBody(messageId: messages[index], text: 'm$index'),
+        createdMs: sentMs + index * 1000,
+      ),
+  ];
+  final reads = [
+    // Plausible, and the same device again, earlier.
+    read(peerUserId, peerDeviceId, messages, sentMs + 9000),
+    read(peerUserId, peerDeviceId, [messages[0]], sentMs + 4000),
+    // Behind by less than the correction, and by more.
+    read(peerUserId, secondPeerDeviceId, [
+      messages[0],
+      messages[1],
+    ], sentMs - 20000),
+    read(memberUserId, memberDeviceId, [messages[2]], sentMs - 180000),
+    // Too far ahead to place.
+    read(memberUserId, memberDeviceId, [messages[0]], sentMs + 3600000),
+    build(
+      kind: ApplicationEventKind.reactionSet,
+      senderUser: memberUserId,
+      senderDevice: memberDeviceId,
+      references: [messages[0]],
+      body: ReactionSetBody(targetMessageId: messages[0], emoji: '\u{1F44D}'),
+      createdMs: sentMs + 12000,
+    ),
+  ];
+  return [...creates, ...reads]..shuffle(Random(seed));
 }
 
 /// A deliberately hostile delivery order over a deliberately hostile log.
