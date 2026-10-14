@@ -253,6 +253,13 @@
     }
   },
   "chatMessageActionsLabel": "عملیات پیام",
+  "chatSeenByCount": "{count, plural, other{دیده‌شده توسط {count} نفر}}",
+  "chatNotSeenYet": "هنوز دیده نشده",
+  "chatReadersOpenHint": "نشان می‌دهد چه کسانی و چه زمانی این پیام را خوانده‌اند",
+  "chatReadersTitle": "دیده‌شده توسط",
+  "chatReadTimeUnknown": "زمان نامشخص",
+  "chatReadDateAndTime": "{date}، {time}",
+  "chatReaderSemantics": "{name}: {time}",
   "chatReplyAction": "پاسخ",
   "chatEditAction": "ویرایش",
   "chatForwardAction": "بازفرستادن",

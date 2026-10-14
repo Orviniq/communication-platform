@@ -1,6 +1,7 @@
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 
 typedef CreateGroupCallback =
@@ -38,6 +39,11 @@ typedef SetGroupStarCallback =
 /// Deletes a message from this phone only.
 typedef DeleteGroupMessageForMeCallback =
     Future<Result<void>> Function(String messageId);
+
+/// Follows the members who read one message of the group, each once, with
+/// the time of their earliest read, the newest first (ADR-091 D7, D8).
+typedef WatchGroupMessageReadersCallback =
+    Stream<List<MessageReader>> Function(String messageId);
 
 /// Sends a message on to each of [targets]: a failure when any refused.
 typedef ForwardGroupMessageCallback =

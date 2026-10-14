@@ -7,6 +7,7 @@ import 'package:communication_platform/app/design_system/app_text_direction.dart
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_message_readers.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -395,6 +396,13 @@ class ChatMessageBuilder extends StatelessWidget {
 
   Future<void> _showActions(BuildContext context) async {
     final strings = AppLocalizations.of(context);
+    // Read here, with the bubble's own context: the sheet is a new route and
+    // does not see the scope above the timeline. Only the sender of a message
+    // sees who read it (ADR-091 D7), and a deleted message has no readers to
+    // show.
+    final readers = message.outgoing && !message.deleted
+        ? ChatReadersScope.maybeOf(context)
+        : null;
     await showAppAnchoredSheet<void>(
       context: context,
       semanticLabel: strings.chatMessageActionsLabel,
@@ -411,6 +419,21 @@ class ChatMessageBuilder extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (readers != null)
+            ChatReadersRow(
+              readers: readers,
+              messageId: message.id,
+              onOpen: () {
+                popAppModal(context);
+                unawaited(
+                  showChatReaderList(
+                    context: context,
+                    readers: readers,
+                    messageId: message.id,
+                  ),
+                );
+              },
+            ),
           _MessageAction(
             label: strings.chatReplyAction,
             icon: AppIcons.reply,
