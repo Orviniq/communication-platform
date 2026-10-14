@@ -37,6 +37,10 @@ Uint8List sequentialId(int index) => Uint8List.fromList([
 /// The shape the projector's own contract test builds privately, shared here
 /// because the equivalence, cost and crash tests all need to build adversarial
 /// sequences out of every event kind rather than out of message creates alone.
+///
+/// [conversationId], [currentUser] and [currentDevice] let a test whose
+/// conversation and account are its own, such as a group, apply an event as
+/// received there.
 ApplicationEventCommit applicationCommit({
   required Uint8List eventId,
   required ApplicationEventKind kind,
@@ -50,11 +54,14 @@ ApplicationEventCommit applicationCommit({
   bool localOrigin = false,
   int? createdMs,
   Uint8List? canonicalBytes,
+  Uint8List? conversationId,
+  String currentUser = localUserId,
+  String currentDevice = localDeviceId,
 }) {
   final event = ApplicationEventRecord(
     version: ApplicationMessageProtocolV1.version,
     eventId: eventId,
-    conversationId: harnessConversationId,
+    conversationId: conversationId ?? harnessConversationId,
     kindValue: kind.wireValue,
     senderUserId: protocolUuidBytes(senderUser),
     senderDeviceId: protocolUuidBytes(senderDevice),
@@ -68,8 +75,8 @@ ApplicationEventCommit applicationCommit({
     canonicalBytes:
         canonicalBytes ??
         Uint8List.fromList([kind.wireValue, counter & 0xff, ...eventId]),
-    currentUserId: localUserId,
-    currentDeviceId: localDeviceId,
+    currentUserId: currentUser,
+    currentDeviceId: currentDevice,
     conversationKind: conversationKind.index,
     peerUserId: peer,
     localOrigin: localOrigin,

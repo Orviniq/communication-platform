@@ -12,6 +12,7 @@ import 'package:communication_platform/features/groups/infrastructure/drift_grou
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pairwise_send_preparation_adapter.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
@@ -26,6 +27,8 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/application_event_harness.dart';
+
 /// A group message on its way out, from the moment it is written to the moment
 /// its last copy settles, against the real group store, the real audience
 /// resolver and the real durable outbox (`backend/CLIENT_CONTRACT.md` §F).
@@ -36,6 +39,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// sync store records a real one.
 const _owner = '10000000-0000-4000-8000-000000000001';
 const _ownerDevice = '20000000-0000-4000-8000-000000000001';
+const _ownerTablet = '20000000-0000-4000-8000-000000000002';
 const _member = '30000000-0000-4000-8000-000000000001';
 const _memberPhone = '40000000-0000-4000-8000-000000000001';
 const _memberLaptop = '40000000-0000-4000-8000-000000000002';
@@ -53,9 +57,11 @@ void main() {
   late PairwiseSendPreparationAdapter preparation;
   late GroupState group;
   late int counter;
+  late _SelectRecorder selects;
 
   setUp(() async {
-    database = LocalDatabase(NativeDatabase.memory());
+    selects = _SelectRecorder();
+    database = LocalDatabase(NativeDatabase.memory().interceptWith(selects));
     groups = DriftGroupRepository(database);
     sync = DriftSyncStore(database);
     resolver = _Resolver({
@@ -151,6 +157,62 @@ void main() {
     (eventId) => MessageCreateBody(messageId: eventId, text: text),
   );
 
+  /// Writes a read receipt for [messageIds] the way a send does, and returns
+  /// the receipt's event id.
+  Future<String> readReceipt(List<String> messageIds) {
+    final ids = [for (final messageId in messageIds) _hexBytes(messageId)];
+    return commit(
+      ApplicationEventKind.receiptRead,
+      ids,
+      (_) => ReceiptBody(messageIds: ids),
+    );
+  }
+
+  var received = 0;
+
+  /// Applies one event of the group's conversation as received from
+  /// [senderDevice], the way the receive path hands an admitted event to the
+  /// projector, and returns its event id.
+  Future<String> receive(
+    String senderUser,
+    String senderDevice,
+    ApplicationEventKind kind,
+    List<Uint8List> references,
+    ApplicationEventBody Function(Uint8List eventId) body,
+  ) async {
+    received += 1;
+    final eventId = sequentialId(1000 + received);
+    final applied = await applyCommit(
+      database,
+      applicationCommit(
+        eventId: eventId,
+        kind: kind,
+        senderUser: senderUser,
+        senderDevice: senderDevice,
+        counter: received,
+        body: body(eventId),
+        references: references,
+        conversationKind: ConversationKind.group,
+        peer: null,
+        conversationId: _hexBytes(group.groupId),
+        currentUser: _owner,
+        currentDevice: _ownerDevice,
+      ),
+    );
+    expect(applied.disposition, ApplicationApplyDisposition.applied);
+    return protocolBytesToHex(eventId);
+  }
+
+  /// A message of another member, as received, and its message id.
+  Future<String> receiveMessage(String senderUser, String senderDevice) =>
+      receive(
+        senderUser,
+        senderDevice,
+        ApplicationEventKind.messageCreate,
+        const [],
+        (eventId) => MessageCreateBody(messageId: eventId, text: 'hello'),
+      );
+
   /// Writes a reaction to [targetEventId] the way a send does, and returns the
   /// reaction's event id. A null [emoji] removes the reaction.
   Future<String> react(String targetEventId, String? emoji) {
@@ -230,6 +292,13 @@ void main() {
             .get())
       row.recipientDeviceId,
   ];
+
+  Future<Set<String>> recipientsOf(String eventId) async => {
+    for (final row in await (database.select(
+      database.outboxOperations,
+    )..where((row) => row.eventId.equals(eventId))).get())
+      row.recipientUserId,
+  };
 
   Future<List<String>> sessionDevices() async => [
     for (final row in await database.select(database.pairwiseSessions).get())
@@ -395,6 +464,126 @@ void main() {
       ),
       isNot(contains(_second)),
     );
+  });
+
+  // A read receipt goes to the sender of the messages it names, and to the
+  // reader's other devices, and to nobody else (ADR-091 D3).
+
+  /// This account reads on a second device too, which the reader's own copy
+  /// of each receipt is for.
+  void readOnTwoDevices() => resolver.devices[_owner] = [
+    _device(_owner, _ownerDevice),
+    _device(_owner, _ownerTablet),
+  ];
+
+  test(
+    'a read receipt goes to each live device of the sender of the '
+    'message it names, and to the other live devices of this account',
+    () async {
+      readOnTwoDevices();
+      final message = await receiveMessage(_member, _memberPhone);
+      final receipt = await readReceipt([message]);
+
+      expect(await seal(receipt), isA<Success<void>>());
+
+      expect(await copiesOf(receipt), [
+        _ownerTablet,
+        _memberPhone,
+        _memberLaptop,
+      ]);
+      expect(await recipientsOf(receipt), {_owner, _member});
+    },
+  );
+
+  test('a read receipt reaches only the other devices of this account once '
+      'the sender is no longer a member', () async {
+    readOnTwoDevices();
+    final message = await receiveMessage(_member, _memberPhone);
+    final removed =
+        await MutateGroup(
+          repository: groups,
+          crypto: const _GroupCrypto(),
+          identity: _Identity(900),
+          clock: const _Clock(),
+        )(
+          groupId: group.groupId,
+          actorUserId: _owner,
+          actorDeviceId: _ownerDevice,
+          operation: RemoveGroupMemberOperation(_member),
+        );
+    expect(removed, isA<Success<GroupState>>());
+    final receipt = await readReceipt([message]);
+
+    expect(await seal(receipt), isA<Success<void>>());
+
+    expect(await copiesOf(receipt), [_ownerTablet]);
+    expect(await recipientsOf(receipt), {_owner});
+  });
+
+  test('a read receipt that names messages of two senders reaches only the '
+      'other devices of this account', () async {
+    readOnTwoDevices();
+    final fromMember = await receiveMessage(_member, _memberPhone);
+    final fromSecond = await receiveMessage(_second, _secondDevice);
+    final receipt = await readReceipt([fromMember, fromSecond]);
+
+    expect(await seal(receipt), isA<Success<void>>());
+
+    expect(await copiesOf(receipt), [_ownerTablet]);
+  });
+
+  test('the audience of a read receipt is read by key, and not by a scan of '
+      'every target on the device', () async {
+    final message = await receiveMessage(_member, _memberPhone);
+    final receipt = await readReceipt([message]);
+
+    selects.recording = true;
+    final audience = await DriftGroupSendAudienceResolver(
+      database: database,
+      groups: groups,
+    ).resolveAudience(eventId: receipt, currentUserId: _owner);
+    selects.recording = false;
+
+    expect((audience as Success<Set<String>?>).value, {_member});
+    final read = selects.statements.singleWhere(
+      (statement) => statement.sql.contains('application_event_targets'),
+    );
+    final plan = [
+      for (final row
+          in await database
+              .customSelect(
+                'EXPLAIN QUERY PLAN ${read.sql}',
+                variables: [
+                  for (final arg in read.args) Variable<String>(arg! as String),
+                ],
+              )
+              .get())
+        row.read<String>('detail'),
+    ];
+    expect(plan, hasLength(2), reason: plan.join('\n'));
+    expect(
+      plan.first,
+      startsWith('SEARCH target USING COVERING INDEX'),
+      reason: plan.join('\n'),
+    );
+    expect(plan.first, contains('message_id=? AND event_id=?'));
+    expect(plan.last, startsWith('SEARCH message USING INDEX'));
+  });
+
+  test('beside a read receipt, an event keeps the audience of the whole '
+      'group', () async {
+    readOnTwoDevices();
+    final message = await receiveMessage(_member, _memberPhone);
+    final reaction = await react(message, '\u{1F44D}');
+
+    expect(await seal(reaction), isA<Success<void>>());
+
+    expect(await copiesOf(reaction), [
+      _ownerTablet,
+      _memberPhone,
+      _memberLaptop,
+      _secondDevice,
+    ]);
   });
 }
 
@@ -577,4 +766,20 @@ final class _Clock implements TimeSource {
 
   @override
   DateTime now() => DateTime.utc(2026, 9, 13, 9);
+}
+
+/// Records each select issued while [recording], so its plan can be read.
+final class _SelectRecorder extends QueryInterceptor {
+  final statements = <({String sql, List<Object?> args})>[];
+  bool recording = false;
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (recording) statements.add((sql: statement, args: args));
+    return super.runSelect(executor, statement, args);
+  }
 }

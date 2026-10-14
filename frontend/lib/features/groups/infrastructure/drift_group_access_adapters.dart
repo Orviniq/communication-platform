@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
@@ -6,6 +9,7 @@ import 'package:communication_platform/features/local_storage/infrastructure/dat
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
+import 'package:drift/drift.dart' show Variable;
 
 /// Names the members an owed group message is for, when its send is
 /// prepared rather than when it was written, so that a member removed in
@@ -24,19 +28,21 @@ final class DriftGroupSendAudienceResolver implements PairwiseSendAudiencePort {
     required String eventId,
     required String currentUserId,
   }) async {
+    final StoredApplicationEvent event;
     final Conversation? conversation;
     try {
-      final event = await (database.select(
+      final stored = await (database.select(
         database.storedApplicationEvents,
       )..where((row) => row.eventId.equals(eventId))).getSingleOrNull();
-      if (event == null) {
+      if (stored == null) {
         // Nothing left to decide for. The preparation settles itself when it
         // finds its record gone.
         return const Result.success(null);
       }
+      event = stored;
       conversation =
           await (database.select(database.conversations)..where(
-                (row) => row.conversationId.equals(event.conversationId),
+                (row) => row.conversationId.equals(stored.conversationId),
               ))
               .getSingleOrNull();
     } on Object {
@@ -67,10 +73,99 @@ final class DriftGroupSendAudienceResolver implements PairwiseSendAudiencePort {
         SecurityFailure(SecurityFailureKind.policyBlocked),
       );
     }
+    if (event.kind == ApplicationEventKind.receiptRead.wireValue ||
+        event.kind == ApplicationEventKind.receiptDelivered.wireValue) {
+      return _receiptAudience(event, group, local);
+    }
     return Result.success({
       for (final member in group.activeMembers)
         if (member.userId != local) member.userId,
     });
+  }
+
+  /// A receipt is for the sender of the messages it names, while that sender
+  /// is an active member, and for nobody else (ADR-091 D3). Each other member
+  /// would learn who read the messages of others.
+  ///
+  /// A receipt that names messages of two senders, or a message this group's
+  /// conversation does not hold, is for no member: its copies go to this
+  /// account's other devices only.
+  Future<Result<Set<String>?>> _receiptAudience(
+    StoredApplicationEvent event,
+    GroupState group,
+    String local,
+  ) async {
+    final Set<String>? senders;
+    try {
+      senders = await _sendersNamedBy(event);
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+    if (senders == null || senders.length != 1) {
+      return const Result.success({});
+    }
+    final sender = senders.single;
+    return Result.success({
+      if (sender != local &&
+          group.activeMembers.any((member) => member.userId == sender))
+        sender,
+    });
+  }
+
+  /// The senders of the messages [receipt] names, or null when one of them is
+  /// not a message of the receipt's own conversation.
+  ///
+  /// The names come from the stored body, and each is then looked up in
+  /// `application_event_targets` by its whole primary key. That table's key
+  /// leads with the message id and nothing indexes its event id, so a lookup
+  /// by the event alone would read every target of every event on the device.
+  Future<Set<String>?> _sendersNamedBy(StoredApplicationEvent receipt) async {
+    final named = _namedMessageIds(receipt);
+    if (named == null || named.isEmpty) {
+      return null;
+    }
+    final placeholders = List.filled(named.length, '?').join(', ');
+    // `CROSS JOIN` fixes the order: the targets by their key, then each
+    // message by its own, as the projector reads the facts of a message.
+    final rows = await database
+        .customSelect(
+          'SELECT target.message_id AS message_id, '
+          'message.sender_user_id AS sender_user_id '
+          'FROM application_event_targets target '
+          'CROSS JOIN messages message '
+          'ON message.message_id = target.message_id '
+          'WHERE target.message_id IN ($placeholders) '
+          'AND target.event_id = ? AND message.conversation_id = ?',
+          variables: [
+            for (final messageId in named) Variable<String>(messageId),
+            Variable<String>(receipt.eventId),
+            Variable<String>(receipt.conversationId),
+          ],
+          readsFrom: {database.applicationEventTargets, database.messages},
+        )
+        .get();
+    final found = {for (final row in rows) row.read<String>('message_id')};
+    if (!found.containsAll(named)) {
+      return null;
+    }
+    return {for (final row in rows) row.read<String>('sender_user_id')};
+  }
+
+  /// The message ids the projector stored for [receipt], or null when its
+  /// body is not the projection of a receipt.
+  static Set<String>? _namedMessageIds(StoredApplicationEvent receipt) {
+    try {
+      final body = jsonDecode(utf8.decode(receipt.bodyProjection));
+      final ids = body is Map<String, Object?> ? body['message_ids'] : null;
+      if (ids is! List<Object?> || ids.any((id) => id is! String)) {
+        return null;
+      }
+      return {for (final id in ids) id! as String};
+    } on FormatException {
+      return null;
+    }
   }
 }
 
