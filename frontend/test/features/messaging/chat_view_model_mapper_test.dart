@@ -83,22 +83,14 @@ void main() {
         _message('f', sender: _alice, at: 6, replyTo: 'c'),
       ]);
 
-      expect([for (final view in views) view.authorName], [
-        'Alice',
-        chatShortIdentity(_stranger),
-        'You',
-        'Bob',
-        'Alice',
-        'Alice',
-      ]);
-      expect([for (final view in views) view.replyAuthor], [
-        null,
-        null,
-        null,
-        'Alice',
-        chatShortIdentity(_stranger),
-        'You',
-      ]);
+      expect(
+        [for (final view in views) view.authorName],
+        ['Alice', chatShortIdentity(_stranger), 'You', 'Bob', 'Alice', 'Alice'],
+      );
+      expect(
+        [for (final view in views) view.replyAuthor],
+        [null, null, null, 'Alice', chatShortIdentity(_stranger), 'You'],
+      );
       // A user the roster does not name is never shown by the raw id.
       expect(views[1].authorName, isNot(_stranger));
     });
@@ -131,19 +123,21 @@ void main() {
     });
 
     test('a direct chat still shows a partly accepted message as accepted', () {
-      final view = ChatMessageProjection().map(
-        [
-          _message(
-            'm',
-            sender: _me,
-            at: 1,
-            transport: MessageTransportState.partiallyAccepted,
-          ),
-        ],
-        currentUserId: _me,
-        currentUserName: 'You',
-        peerName: 'Peer',
-      ).single;
+      final view = ChatMessageProjection()
+          .map(
+            [
+              _message(
+                'm',
+                sender: _me,
+                at: 1,
+                transport: MessageTransportState.partiallyAccepted,
+              ),
+            ],
+            currentUserId: _me,
+            currentUserName: 'You',
+            peerName: 'Peer',
+          )
+          .single;
 
       expect(view.delivery, ChatDeliveryViewState.accepted);
     });
