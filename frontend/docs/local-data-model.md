@@ -55,7 +55,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `inbox_envelopes` | Backend envelope ID/seq, processing and ack state |
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
 | `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
-| `receipts` | Per-message/device/user delivered/read projection |
+| `receipts` | Per-message/device/user delivered/read projection. `read_at_ms` (schema 24) is the read time of a read row: the `ordering_ms` of the earliest `receipt.read` from that device that names the message, skipping an `ordering_ms` of 0, which is a clock the projector could not place. It is null on a delivered row, on a read row whose every read had such a clock, and on a row from before schema 24. Both projection paths write it; a reaction, an edit, a delete or a pin does not rewrite it ([ADR-091](decisions.md) D8 and D9). The reader list of a message is one entry per user with a read row, at the earliest time over that user's devices, never earlier than the message's own `ordering_ms` |
 | `room_states` | One voice room this device holds: its encrypted projection (the name, and every member with a membership state), the accepted control revision and state hash, its lifecycle, and when this device last checked the room's member devices for a missing pairwise session. A room is client state exactly as a group is; the server holds no room ([ADR-077](decisions.md)) |
 | `room_control_events` | A room's accepted control transcript, one row per signed event in chain order, with the exact canonical bytes and signature, kept so that this device can hand the transcript to a member it adds |
 | `room_outbound_objects` | Exact room payloads owed to other devices — a signed control event, a state request, a transcript, an answer, or a request that starts a missing session — committed with the change or the check that produced them and marked routed once they are in the pairwise outbox |
@@ -390,6 +390,12 @@ under reason codes 48 to 51.
   list with their contents, and the connection's own setting is restored after it. A
   database this build made and something stamped back loses its room tables to the same drop
   and gets them back empty.
+
+- Schema version 24 adds the nullable `receipts.read_at_ms`, the read time of a read row
+  ([ADR-091](decisions.md) D9). Nothing is back-filled: a row written before the step keeps no
+  time until a later receipt or a rebuild rewrites the receipts of its message. The step reads
+  `PRAGMA table_info` before it adds the column, as the schema-12 step does, so a database whose
+  recorded version is behind its real shape upgrades as well. No other table or column changes.
 
 ## Retention and deletion
 

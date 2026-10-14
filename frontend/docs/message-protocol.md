@@ -184,7 +184,8 @@ as gone leaves the count.
 
 ### Group read receipts
 
-Specified by ADR-091 (Proposed). Not built yet: the read time.
+Specified by ADR-091 (Proposed). Built, with the read time kept in `receipts.read_at_ms`
+(schema 24); the reader list that shows it is not built yet (`ui-specification.md` §9).
 
 - **Read receipts only.** A group sends `receipt.read` and never `receipt.delivered`. The
   second tick means read, and a delivered state has no mark of its own.
@@ -208,7 +209,9 @@ Specified by ADR-091 (Proposed). Not built yet: the read time.
   `receipt.read` from that device that names the message: the reader's clock when it
   recorded the read, corrected as a message time is: a clock up to 60 seconds behind the
   conversation's newest message is moved to just after it. It is a display value, never an
-  authority. An `ordering_ms` of 0 marks an implausible clock, and the time is unknown.
+  authority. An `ordering_ms` of 0 marks an implausible clock, and the time is unknown. A
+  clock further behind is stored as it came, and the reader list shows the message's own time
+  in its place: a read never shows before the message it reads.
 - **Privacy.** A receipt is encrypted like any application event. The server sees one more
   padded envelope from the reader's device to each device of the sender, as for a receipt in
   a direct conversation, and not its content. Other members learn nothing about who read

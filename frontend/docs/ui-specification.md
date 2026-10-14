@@ -835,7 +835,9 @@ The list changes while it is open. Only the sender of the message sees the list:
 sheet of a message from another member shows neither line, because only the sender of a
 message gets its read receipts.
 The read time is the reader's phone clock when the read was recorded, corrected as a message
-time is, and it is a display value as a message time is.
+time is, and it is a display value as a message time is. It never shows earlier than the
+message's own time: a reader whose clock is further behind than that correction shows the
+message's time.
 
 ---
 

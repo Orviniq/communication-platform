@@ -186,6 +186,8 @@ From the code at commit `9c60fc3`, the merge of ADR-090. The prompt for this rec
   does not wait for the other members.
 - The sender sees the list of members who read the message, as in Telegram, with the time at
   which each member read it.
+- Asked before prompt `04-2`: the reader list never shows a read time earlier than the
+  message's own time. A reader whose clock is behind the message shows the message's time.
 
 ### D1. Two ticks
 
@@ -238,11 +240,13 @@ The read time of one device is the `ordering_ms` of the earliest `receipt.read` 
 device that names the message. It is the clock of the reader's phone when it recorded the read,
 corrected as a message time is (`_orderingTimestamp` in the projector): a clock up to 60 seconds
 behind the conversation's newest message is moved to just after it, so a read recorded within
-that skew does not show before the message. A clock further behind keeps its own value and can
-still show a read before the message; a clock up to 5 minutes ahead keeps its value too. It is a
-display value, as a message time is. An `ordering_ms` of 0 means an implausible clock: the time
-is unknown. The reader list shows the earliest time over the member's devices, or no time when
-none is known.
+that skew does not show before the message. A clock further behind keeps its own value in
+storage; a clock up to 5 minutes ahead keeps its value too. It is a display value, as a message
+time is. An `ordering_ms` of 0 means an implausible clock: the time is unknown. The reader list
+shows the earliest time over the member's devices, or no time when none is known. That time is
+never earlier than the message's own `ordering_ms`: an earlier one shows as the message's time
+(the owner, 2026-10-14). The clamp is applied when the list is read, so the stored value stays
+the corrected clock of the reader.
 
 ### D9. Storage
 
@@ -289,7 +293,8 @@ Other costs:
 
 - **The second tick says less in a group.** It says that one member read the message, not that
   each did. The reader list says who.
-- **A read time is the reader's clock.** D8 corrects a small skew only.
+- **A read time is the reader's clock.** D8 corrects a small skew only, and a larger one shows
+  as the message's own time, not the time of the read.
 - **A reader whose other devices are offline** learns of the read on those devices when they
   next drain, as in a direct chat.
 
