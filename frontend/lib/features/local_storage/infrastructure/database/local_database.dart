@@ -972,6 +972,12 @@ class Receipts extends Table {
       integer().check(receiptState.isBetweenValues(0, 2))();
   BlobColumn get projectionCiphertext => blob()();
 
+  /// When this device read the message (ADR-091 D8): the `ordering_ms` of the
+  /// earliest `receipt.read` from it that names the message. Null on a
+  /// delivered row, on a row from before schema 24, and when each of those
+  /// receipts carried an implausible clock.
+  IntColumn get readAtMs => integer().named('read_at_ms').nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {messageId, userId, deviceId};
 }
@@ -1280,7 +1286,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 23;
+  static const currentSchemaVersion = 24;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1963,6 +1969,22 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createTable(roomControlEvents);
           await migrator.createTable(roomOutboundObjects);
           await migrator.createTable(roomStateRequests);
+        }
+        if (from < 24) {
+          // The read time of a receipt row (ADR-091 D9). Nullable and not
+          // back-filled: a row written before this step keeps no time until a
+          // later receipt or a rebuild rewrites the receipts of its message.
+          //
+          // Checked rather than assumed, in the style of the schema-12 step: a
+          // database whose recorded version is behind its actual shape is a
+          // real condition, and an upgrade that fails on it leaves the
+          // application unable to open its own storage.
+          final columns = await customSelect(
+            'PRAGMA table_info(receipts)',
+          ).map((row) => row.read<String>('name')).get();
+          if (!columns.contains(receipts.readAtMs.$name)) {
+            await migrator.addColumn(receipts, receipts.readAtMs);
+          }
         }
         await _migrationHooks.afterUpgrade(from, to);
       });
