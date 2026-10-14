@@ -182,6 +182,39 @@ A message is sent only when none of its copies is still owed. Until then the con
 shows how many copies the server has accepted, and a copy for a device the server reports
 as gone leaves the count.
 
+### Group read receipts
+
+Specified by ADR-091 (Proposed). Not built yet.
+
+- **Read receipts only.** A group sends `receipt.read` and never `receipt.delivered`. The
+  second tick means read, and a delivered state has no mark of its own.
+- **One sender per receipt.** A group read receipt names messages of one sender only, at
+  most 64 of them. A device that reads messages of several senders sends one receipt for
+  each sender. A receipt event that names messages of two senders is refused before it is
+  sealed.
+- **Audience.** The recipients of a receipt come from the messages it names
+  (`application_event_targets` and `messages.sender_user_id`), not from the roster as a
+  whole. The receipt is sealed for every live device of that sender, when that sender is an
+  active member, and for every other live device of the reader. When the sender is not an
+  active member, it is sealed for the reader's other devices only. No other member gets a
+  copy.
+- **When.** A read receipt is sent on the triggers of a direct conversation: the
+  conversation becomes visible while the application is in front, and an unread message
+  arrives while it is visible. It names exactly the messages the local read mark cleared.
+- **Admission.** A receiving device admits a group receipt only from an active member, as
+  any group event (Group messages). It ignores a receipt from the sender of the message it
+  names, and a receipt changes only messages of the conversation it was sent in.
+- **Read time.** The read time of one device is the `ordering_ms` of the earliest
+  `receipt.read` from that device that names the message: the reader's clock when it
+  recorded the read, corrected as a message time is: a clock up to 60 seconds behind the
+  conversation's newest message is moved to just after it. It is a display value, never an
+  authority. An `ordering_ms` of 0 marks an implausible clock, and the time is unknown.
+- **Privacy.** A receipt is encrypted like any application event. The server sees one more
+  padded envelope from the reader's device to each device of the sender, as for a receipt in
+  a direct conversation, and not its content. Other members learn nothing about who read
+  the message.
+- **No wire change.** These rules add no event kind, no field and no server change.
+
 ### Control events
 
 The shared native core builds each control event as deterministic CBOR and signs it with

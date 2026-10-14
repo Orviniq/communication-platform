@@ -816,6 +816,26 @@ accepted mark only when none is still owed. A copy for a device the server repor
 is no longer owed; a copy for a device whose mailbox is full stays owed until it is
 accepted. A failed send offers a retry of the same message.
 
+**Read ticks.** Specified by [ADR-091](decisions.md) (Proposed). Not built yet. An own group
+message shows two ticks (`AppIcons.read`) as soon as one member, other than its sender, has
+read it. It does not wait for the other members, and it does not wait for owed copies. A
+failed message keeps its failed mark and its **Retry**, because a retry is the only way to
+reach the members whose copy failed. Without a read, the message shows the clock while a
+copy is owed, and one tick when no copy is owed. A group has no delivered mark: it sends no
+delivered receipt. Read receipts are always on, as in a direct chat, and there is no setting.
+
+**Reader list.** Specified by [ADR-091](decisions.md) (Proposed). Not built yet. The message
+sheet of an own group message shows **Seen by N**, where N is the number of members who read
+it, or **Not seen yet**. **Seen by N** opens the reader list. The list shows each member who
+read the message once: the member's display name, or a short form of the user id for a member
+the roster does not name, and the read time. The newest read is first. A member read on
+several devices shows the earliest time; a member whose read time is unknown shows no time.
+The list changes while it is open. Only the sender of the message sees the list: the message
+sheet of a message from another member shows neither line, because only the sender of a
+message gets its read receipts.
+The read time is the reader's phone clock when the read was recorded, corrected as a message
+time is, and it is a display value as a message time is.
+
 ---
 
 ## 10. Live Voice Room Screen
