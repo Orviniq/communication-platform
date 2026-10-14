@@ -6,7 +6,6 @@ import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
-import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_downloads.dart';
 import 'package:communication_platform/features/attachments/application/attachment_file_actions.dart';
@@ -21,6 +20,7 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
@@ -399,35 +399,14 @@ class _ProjectedConversationPageState
   /// It was a list mapped and re-identified on every build of this page, for a
   /// sheet almost every build never opens — every conversation on the device
   /// mapped again to draw one conversation's timeline.
-  List<ChatListItemViewModel> _forwardTargets(AppLocalizations strings) {
-    final summaries =
-        ref.read(conversationSummariesProvider(widget.currentUserId)).value ??
-        const <ConversationSummary>[];
-    final targets = ChatViewModelMapper.summaries(
-      summaries,
-      now: DateTime.now(),
-      savedMessagesTitle: strings.savedMessagesTitle,
-      peerTitle: chatShortIdentity,
-    ).where((item) => item.conversationId != widget.conversationId).toList();
-    if (!widget.savedMessages &&
-        !targets.any((target) => target.savedMessages)) {
-      targets.insert(
-        0,
-        ChatListItemViewModel(
-          conversationId: '',
-          title: strings.savedMessagesTitle,
-          preview: '',
-          timestamp: DateTime.fromMillisecondsSinceEpoch(0),
-          unreadCount: 0,
-          muted: false,
-          pinned: false,
-          savedMessages: true,
-          peerUserId: null,
-        ),
+  List<ChatListItemViewModel> _forwardTargets(AppLocalizations strings) =>
+      chatForwardTargets(
+        ref,
+        currentUserId: widget.currentUserId,
+        conversationId: widget.conversationId,
+        savedMessages: widget.savedMessages,
+        strings: strings,
       );
-    }
-    return targets;
-  }
 
   /// The paperclip: a photo, a file or a camera picture, through its preview
   /// step to an upload job of this session (ADR-089 D5).
@@ -640,31 +619,14 @@ class _ProjectedConversationPageState
           imageMessage: message.kind == ChatTimelineContentKind.image,
         );
       case ForwardToConversationsIntent(:final message, :final targets):
-        if (message.attachments.isEmpty &&
-            (message.text == null || message.text!.trim().isEmpty)) {
-          result = const Result.failure(
-            ValidationFailure(ValidationFailureKind.invalidInput),
-          );
-          break;
-        }
-        for (final target in targets) {
-          final sent = await sender.forward(
-            currentUserId: currentUserId,
-            currentDeviceId: deviceId,
-            target: target.savedMessages
-                ? const SavedConversationTarget()
-                : DirectConversationTarget(target.peerUserId!),
-            text: message.text ?? '',
-            quoteFallback: message.replyQuote,
-            attachments: message.attachments,
-            imageMessage: message.kind == ChatTimelineContentKind.image,
-          );
-          if (sent case FailureResult(failure: final failure)) {
-            result = Result.failure(failure);
-            break;
-          }
-        }
-        result ??= const Result.success(null);
+        // A group target goes through the group use cases, and a refused
+        // target does not stop the others (ADR-090 D5).
+        result = await forwardChatMessage(
+          ref,
+          currentUserId: currentUserId,
+          message: message,
+          targets: targets,
+        );
       default:
         break;
     }
