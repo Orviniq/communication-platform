@@ -118,11 +118,21 @@ jobs:
         # pytest-randomly reorders every run and prints the seed it used, so a
         # failure that depends on test order is reproducible from the log.
         #
+        # `-n auto` runs one pytest-xdist worker for each CPU of the runner. The
+        # controller prints the seed once and hands it to every worker, so all of
+        # them collect the same order; which worker ran a test is in the failure
+        # header. `pytest -n auto --randomly-seed=<seed>` reruns the same order in
+        # parallel, and the same command without `-n` runs it serially.
+        # Each worker has its own test database and Redis index, and `pytest.ini`
+        # sets `--dist loadgroup`; `backend/core/tests/workers.py` says why.
+        #
         # Measured, and gated: `--cov-fail-under` is what makes a branch the
         # suite stopped covering a failed build rather than a number in a report
         # nobody reads. It repeats `pytest.ini`'s floor on purpose, so the job
         # states the contract it enforces instead of inheriting it silently.
-        run: pytest --cov --cov-branch --cov-fail-under=98
+        # pytest-cov combines every worker's data before it reports, so the floor
+        # binds the whole suite and not one worker's share of it.
+        run: pytest -n auto --cov --cov-branch --cov-fail-under=98
       - name: No model change is missing its migration
         run: python manage.py makemigrations --check --dry-run
 
