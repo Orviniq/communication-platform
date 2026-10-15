@@ -135,7 +135,10 @@ is judged too much.
 
 **Rejected.** A username is low-entropy and a hash of one is reversed by dictionary in
 seconds. Both surfaces that exist need the name in the clear anyway: the login, and the
-directory a client searches to find a contact.
+exact-name lookup a client uses to find a contact
+([0028](docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)),
+which replaced the directory and compares the name a person typed with the stored one.
+There is no longer a list of names to search.
 
 **Reopens when.** Nothing. This one does not work.
 

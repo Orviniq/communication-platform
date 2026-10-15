@@ -780,9 +780,11 @@ revocation — which needs the record of issued credentials this design refuses 
 
 **What is exposed.** A session token lives `SESSION_TOKEN_DAYS`, 30 days by default, and
 nothing rotates it. Whoever holds a copy of one holds the calling device's whole
-authenticated surface for the rest of its lifetime: the directory, the profile and key
-backup blobs, the device list and the device-list log, the mailbox, the attachments, the
-relay credential and the WebSocket. Until
+authenticated surface for the rest of its lifetime: the exact-name lookup at fifty a day
+(ADR-0028 removed the directory that used to hand over every account name) and the
+account's own discoverability setting, the profile and key backup blobs, the device list
+and the device-list log, the mailbox, the attachments, the relay credential and the
+WebSocket. Until
 [ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md) the refresh
 token rotated on every use and a second presentation of a rotated one was reported as a
 replay, which ended every token of the device. That detection is gone with the refresh
