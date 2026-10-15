@@ -701,8 +701,16 @@ def test_the_output_carries_no_identifier_no_payload_and_no_path(
     row = queue_row(device, 1, age_days=8)
     blob = bytes(QueuedEnvelope.objects.get(id=row.id).blob)
     attachment, path = stored_attachment(attachments_root, age_days=31)
+    # The audit row's key is an integer from a sequence, so on a fresh database it
+    # is `1` — which the output's own counts contain, and the check below would then
+    # fail on a count rather than an id. A key no count of this run can reach keeps
+    # the check about the id.
     entry = LogEntry.objects.create(
-        user=active_user, object_repr="x", action_flag=ADDITION, change_message=""
+        pk=73_105_219,
+        user=active_user,
+        object_repr="x",
+        action_flag=ADDITION,
+        change_message="",
     )
     LogEntry.objects.filter(pk=entry.pk).update(
         action_time=timezone.now() - timedelta(days=91)

@@ -4,6 +4,7 @@ import threading
 import pytest
 from django.db import connections
 
+from core.tests.workers import many_connections
 from devices.models import OneTimePrekey
 from devices.schemas import MAX_STORED_OTPKS
 
@@ -283,6 +284,7 @@ def replenish_storm(new_http, headers, device_id, bodies):
     return answers
 
 
+@many_connections
 def test_concurrent_replenishments_lose_no_prekey_and_double_count_none(
     new_http, active_user, device, bearer
 ):
@@ -307,6 +309,7 @@ def test_concurrent_replenishments_lose_no_prekey_and_double_count_none(
     }
 
 
+@many_connections
 def test_concurrent_replenishments_of_one_batch_store_it_exactly_once(
     new_http, active_user, device, bearer
 ):
@@ -324,6 +327,7 @@ def test_concurrent_replenishments_of_one_batch_store_it_exactly_once(
     assert OneTimePrekey.objects.filter(device=device).count() == 4
 
 
+@many_connections
 def test_concurrent_replenishments_cannot_pass_the_stored_cap(
     new_http, active_user, device, bearer
 ):

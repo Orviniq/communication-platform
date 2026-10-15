@@ -16,6 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from core.buckets import DEVICELOG_BUCKETS
+from core.tests.workers import many_connections
 from devices.models import DeviceLogRecord
 from devices.schemas import page_bounds
 from devices.services import peer_log
@@ -186,6 +187,7 @@ def test_a_non_linking_record_is_accepted_and_served_unchanged(
     assert page["head_seq"] == 1
 
 
+@many_connections
 def test_parallel_appends_never_duplicate_or_gap_seq(
     new_http, active_user, device, bearer
 ):
@@ -367,6 +369,7 @@ def test_a_cursor_far_beyond_any_stored_sequence_is_answered_not_refused(
     assert enormous.json()["head_seq"] == LOG_LENGTH - 1
 
 
+@many_connections
 def test_parallel_batch_appends_land_as_contiguous_blocks_that_never_interleave(
     new_http, active_user, device, bearer
 ):

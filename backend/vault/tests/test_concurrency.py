@@ -16,9 +16,12 @@ from accounts.models import User
 from api.auth import issue_session
 from config.asgi import api_application, application
 from conftest import AsgiClient, flush_redis
+from core.tests.workers import many_connections
 from vault.models import KeyBackup
 
 from .conftest import KEYBACKUP_URL, PASSWORD, backup_blob, make_device
+
+pytestmark = many_connections
 
 RACE_ROUNDS = 20
 

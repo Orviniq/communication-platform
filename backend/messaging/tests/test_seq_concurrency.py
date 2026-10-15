@@ -10,12 +10,13 @@ import threading
 import pytest
 from django.db import connection, connections
 
+from core.tests.workers import many_connections
 from devices.models import Device
 from messaging.models import QueuedEnvelope
 
 from .conftest import envelope_blob, make_device
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), many_connections]
 
 CONCURRENT_SENDS = 12
 # The mixed race below runs senders and ackers at once, and every worker holds a

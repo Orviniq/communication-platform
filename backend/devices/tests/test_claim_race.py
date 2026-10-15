@@ -10,11 +10,12 @@ import threading
 import pytest
 from django.db import connections, transaction
 
+from core.tests.workers import many_connections
 from devices.models import OneTimePrekey
 
 from .conftest import connect_then_wait, make_device, stock_prekeys
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), many_connections]
 
 CONCURRENT_CLAIMS = 12
 
