@@ -37,8 +37,14 @@ ALIAS = "migration_replay"
 RETIRE_DATES = "0002_retire_the_activity_dates"
 BACKFILL_THE_DAY = "0004_backfill_the_queued_day"
 DROP_THE_DATE = "0003_drop_the_retired_date"
+DISCOVERABILITY = "0004_the_discoverability_setting"
 HISTORY = {
-    "accounts": [INITIAL, RETIRE_DATES, DROP_THE_DATE],
+    "accounts": [
+        INITIAL,
+        RETIRE_DATES,
+        DROP_THE_DATE,
+        DISCOVERABILITY,
+    ],
     "attachments": [INITIAL, "0002_drop_the_uploader_link"],
     "devices": [INITIAL, RETIRE_DATES, "0003_drop_the_retired_columns"],
     "messaging": [
@@ -986,6 +992,12 @@ LOCK_STRENGTH = [
 # `attachments_attachment` and `DROP CONSTRAINT` locks both sides. The concurrent
 # index drop in front of the queue's column is `atomic = False`, so like `0005` it is
 # absent from this map and held by the test below it instead.
+#
+# `accounts.0004_the_discoverability_setting` is the second `ADD COLUMN` of the
+# history and the first on the account table: one ACCESS EXCLUSIVE on `accounts_user`
+# for a catalogue write, 0.342 ms against a 200 000-row copy with `relfilenode`
+# unchanged. Its default stays in the database (`db_default`), so unlike the queue's
+# it is not followed by a `DROP DEFAULT`.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
@@ -993,6 +1005,7 @@ BLOCKING_LOCKS = {
     },
     ("accounts", RETIRE_DATES): {"accounts_profileblob": "AccessExclusiveLock"},
     ("accounts", DROP_THE_DATE): {"accounts_profileblob": "AccessExclusiveLock"},
+    ("accounts", DISCOVERABILITY): {"accounts_user": "AccessExclusiveLock"},
     ("attachments", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("attachments", "0002_drop_the_uploader_link"): {
         "accounts_user": "AccessExclusiveLock",

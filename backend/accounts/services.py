@@ -210,6 +210,24 @@ def directory():
     }
 
 
+def discoverability(user_id):
+    """Whether `lookup` can find this account. One column of a row the
+    authentication requirement has already read, read on its own because that
+    read loads `id` and `is_active` alone."""
+    return {
+        "discoverable": User.objects.filter(pk=user_id)
+        .values_list("discoverable", flat=True)
+        .get()
+    }
+
+
+def set_discoverability(user_id, discoverable):
+    """One `UPDATE` of one column, so setting the value it already holds changes
+    nothing and a repeat of the call is the call."""
+    User.objects.filter(pk=user_id).update(discoverable=discoverable)
+    return {"discoverable": discoverable}
+
+
 def peer_profile(user_id):
     profile = (
         ProfileBlob.objects.filter(user_id=user_id, user__is_active=True)

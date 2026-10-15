@@ -546,6 +546,92 @@ between them; the directory is a current answer, never a stable one.
 
 Scope `accounts`, default 300/min per account.
 
+## Read or change whether my name can be found
+
+**Method:** `GET`, `PUT`
+**Path:** `/api/v1/me/discoverability`
+
+The caller's own "find me by username" setting. On — the default for every account —
+`POST /api/v1/users/lookup` finds the account by its name; off, it answers that name
+exactly as it answers a name nobody holds. `GET` reads it and `PUT` sets it.
+
+Nothing else depends on it. A caller who already holds this account's `user_id` —
+from a group they share, or a contact who passed it on — reaches every route
+addressed by one whatever the setting says, and registration still reports the name
+as taken. A client that offers the toggle says so in its wording
+([`../../CLIENT_WORK.md`](../../CLIENT_WORK.md)).
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <session token>` |
+| `Content-Type` | PUT only | `application/json` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body** (PUT)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `discoverable` | boolean | yes | A JSON `true` or `false`. `"false"`, `0` and `null` are `400 invalid_request`, never read as an answer. Any other field is `400 invalid_request` |
+
+```json
+{ "discoverable": false }
+```
+
+**Retry semantics.** `PUT` sets the value rather than toggling it, so a repeat leaves
+the same state and answers the same body: retry freely. `GET` writes nothing and is
+safe to repeat.
+
+**Responses**
+
+### Read — `200 OK` (GET)
+
+```json
+{ "discoverable": true }
+```
+
+### Set — `200 OK` (PUT)
+
+```json
+{ "discoverable": false }
+```
+
+The value now stored.
+
+### Invalid request — `400 Bad Request` (PUT)
+
+```json
+{ "code": "invalid_request", "detail": { "discoverable": ["Input should be a valid boolean"] } }
+```
+
+### Body too large — `413 Payload Too Large` (PUT)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+### Register-scope token — `403 Forbidden`
+
+```json
+{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
+```
+
+### Rate limited — `429 Too Many Requests`
+
+Scope `accounts`, default 300/min per account.
+
 ## Read a user's profile
 
 **Method:** `GET`

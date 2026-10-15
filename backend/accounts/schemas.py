@@ -104,6 +104,13 @@ class LoginIn(RequestModel):
     device_id: Annotated[uuid.UUID | None, Field(strict=False)] = None
 
 
+class DiscoverabilityIn(RequestModel):
+    """The body of `PUT /api/v1/me/discoverability`. Strict, so `"false"` and `0`
+    are refused rather than read as an answer the owner did not give."""
+
+    discoverable: bool
+
+
 class EraseIn(RequestModel):
     """The body of `DELETE /api/v1/me`: the account's own password, and nothing
     else. `extra="forbid"` is what makes a mistyped field a refusal rather than an
@@ -166,6 +173,10 @@ class DirectoryUserOut(BaseModel):
 
 class DirectoryOut(BaseModel):
     users: list[DirectoryUserOut]
+
+
+class DiscoverabilityOut(BaseModel):
+    discoverable: bool
 
 
 class ProfileOut(BaseModel):

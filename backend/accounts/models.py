@@ -37,6 +37,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=False)  # the owner activates accounts
     is_staff = models.BooleanField(default=False)
     created_date = models.DateField(auto_now_add=True)
+    # Whether `POST /users/lookup` may find this account by its name (ADR-0028).
+    # The owner's choice, on by default. `db_default` as well as `default`, so the
+    # column keeps its default in the database: a row inserted by a release that
+    # does not know the column is findable, never refused.
+    discoverable = models.BooleanField(default=True, db_default=True)
 
     USERNAME_FIELD = "username"
     objects = UserManager()

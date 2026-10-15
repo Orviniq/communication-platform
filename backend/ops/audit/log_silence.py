@@ -296,6 +296,12 @@ async def _scripted_account_state_traffic(client, s):
     assert r.status_code == 200, f"config: {r.status_code}"
     r = await client.get("/api/v1/users", headers=auth)
     assert r.status_code == 200, f"directory: {r.status_code}"
+    r = await client.put(
+        "/api/v1/me/discoverability", json={"discoverable": False}, headers=auth
+    )
+    assert r.status_code == 200, f"hide: {r.status_code}"
+    r = await client.get("/api/v1/me/discoverability", headers=auth)
+    assert r.status_code == 200, f"setting read: {r.status_code}"
 
     s["profile blob"] = _b64_filled(min(PROFILE_BUCKETS), 0xC3)
     r = await client.put(

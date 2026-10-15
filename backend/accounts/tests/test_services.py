@@ -188,6 +188,30 @@ class TestDirectory:
         assert set(body["users"][0]) == {"user_id", "username"}
 
 
+class TestDiscoverability:
+    def test_a_new_account_is_discoverable(self, active_user):
+        assert services.discoverability(active_user.id) == {"discoverable": True}
+
+    def test_the_owner_turns_it_off_and_on_again(self, active_user):
+        assert services.set_discoverability(active_user.id, False) == {
+            "discoverable": False
+        }
+        assert services.discoverability(active_user.id) == {"discoverable": False}
+
+        services.set_discoverability(active_user.id, True)
+
+        assert services.discoverability(active_user.id) == {"discoverable": True}
+
+    def test_it_writes_the_one_column_of_the_one_account(self, active_user, bob):
+        """Scoped to the caller's own row: a `filter()` that lost its key would
+        hide every account on the server."""
+        services.set_discoverability(active_user.id, False)
+
+        assert list(
+            User.objects.order_by("username").values_list("username", "discoverable")
+        ) == [("alice", False), ("bob", True)]
+
+
 class TestProfiles:
     def stored(self, user, size=PROFILE_BUCKETS[0], version=1, fill=b"\x05"):
         return ProfileBlob.objects.create(user=user, blob=fill * size, version=version)

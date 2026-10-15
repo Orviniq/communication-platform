@@ -479,6 +479,34 @@
         "title": "DirectoryUserOut",
         "type": "object"
       },
+      "DiscoverabilityIn": {
+        "additionalProperties": false,
+        "description": "The body of `PUT /api/v1/me/discoverability`. Strict, so `\"false\"` and `0`\nare refused rather than read as an answer the owner did not give.",
+        "properties": {
+          "discoverable": {
+            "title": "Discoverable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "discoverable"
+        ],
+        "title": "DiscoverabilityIn",
+        "type": "object"
+      },
+      "DiscoverabilityOut": {
+        "properties": {
+          "discoverable": {
+            "title": "Discoverable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "discoverable"
+        ],
+        "title": "DiscoverabilityOut",
+        "type": "object"
+      },
       "DrainOut": {
         "properties": {
           "envelopes": {
@@ -3198,6 +3226,177 @@
         "summary": "Prekey Count",
         "tags": [
           "devices"
+        ]
+      }
+    },
+    "/api/v1/me/discoverability": {
+      "get": {
+        "operationId": "my_discoverability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "My Discoverability",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "put": {
+        "description": "Whether `POST /users/lookup` can find this account by its name. It changes\nnothing about any route addressed by a `user_id`.",
+        "operationId": "set_my_discoverability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverabilityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Set My Discoverability",
+        "tags": [
+          "accounts"
         ]
       }
     },

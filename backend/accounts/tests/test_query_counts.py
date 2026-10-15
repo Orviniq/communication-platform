@@ -33,6 +33,7 @@ RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
 ERASE_URL = "/api/v1/me"
 DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 MY_PROFILE_URL = "/api/v1/me/profile"
 
 
@@ -131,6 +132,36 @@ def test_the_directory_is_constant_query(
     )
 
     assert len(response.json()["users"]) == account_count
+
+
+def test_reading_the_setting_is_one_read(http, active_user, device, bearer):
+    response = counted(
+        http,
+        "GET",
+        DISCOVERABILITY_URL,
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json() == {"discoverable": True}
+
+
+@pytest.mark.parametrize("value", [False, True])
+def test_writing_the_setting_is_one_update_and_no_read(
+    http, active_user, device, bearer, value
+):
+    """No read before the write, so setting the value the row already holds costs
+    the same one statement as changing it."""
+    response = counted(
+        http,
+        "PUT",
+        DISCOVERABILITY_URL,
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+        json={"discoverable": value},
+    )
+
+    assert response.json() == {"discoverable": value}
 
 
 def test_reading_a_profile_is_one_lookup(http, active_user, device, bearer):

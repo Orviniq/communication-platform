@@ -760,26 +760,27 @@ changes no request shape, no response shape, no status and no header.
 
 ## What the client can build against now
 
-**The surface is frozen at `v1` from this merge.** It is **32 operations over 28
+**The surface is frozen at `v1` from this merge.** It is **34 operations over 29
 paths**, plus the `/ws` gateway, and nothing else answers:
 
 | App | Operations | What the client reaches there |
 |---|---|---|
 | [`devices`](backend/devices/API.md) | 13 | Device registration and revocation, the cross-signing identity, classical and ML-KEM prekeys, peer bundles and claims, the device-list log, and the peer-state batch |
-| [`accounts`](backend/accounts/API.md) | 9 | Register, login, renew, logout, the user directory, the encrypted profile, and account erasure |
+| [`accounts`](backend/accounts/API.md) | 11 | Register, login, renew, logout, the user directory, the discoverability setting, the encrypted profile, and account erasure |
 | [`messaging`](backend/messaging/API.md) | 3 | Fan-out send, per-device drain, ack |
 | [`attachments`](backend/attachments/API.md) | 2 | Bucketed upload and capability download |
 | [`vault`](backend/vault/API.md) | 2 | Read and write the recovery key backup |
 | [`core`](backend/core/API.md) | 2 | Health, and the published limits |
 | [`realtime`](backend/realtime/API.md) | 1 | The relay credential. The `/ws` gateway itself is a WebSocket and carries no OpenAPI operation, so `realtime/API.md` is the whole of its reference: its frames, its bucket rules and its close codes |
 
-By method that is 13 `GET`, 12 `POST`, 5 `PUT` and 2 `DELETE`. Every one of the 32
-declares `401`, `403`, `429`, `500` and `503`; 21 declare `400`, 15 `413`, 7 `404`
-and 7 `409`.
+By method that is 14 `GET`, 12 `POST`, 6 `PUT` and 2 `DELETE`. Every one of the 34
+declares `500` and `503`; 33 declare `429` (all but health), 32 `401` (all but
+health and register) and 31 `403` (all but those two and `POST /api/v1/me/devices`,
+which admits both token kinds); 22 declare `400`, 16 `413`, 7 `404` and 7 `409`.
 
-**3 of the 32 take no credential** — health, register and login. **One takes the
+**3 of the 34 take no credential** — health, register and login. **One takes the
 short-lived register-scope token** — `POST /api/v1/me/devices`, which is the route
-that mints the device a caller does not yet have. **The other 28 take a session token
+that mints the device a caller does not yet have. **The other 30 take a session token
 bound to a live device**, and there is exactly one kind of it: one token, thirty
 days, no refresh, revoked by a counter on the device row
 ([ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md)).

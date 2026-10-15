@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, Response, status
 from accounts import services
 from accounts.schemas import (
     DirectoryOut,
+    DiscoverabilityIn,
+    DiscoverabilityOut,
     EraseIn,
     LoginIn,
     LoginOut,
@@ -135,6 +137,32 @@ async def erase_account(
 )
 async def user_directory():
     return await run_unit(services.directory)
+
+
+@authenticated.get(
+    "/me/discoverability",
+    response_model=DiscoverabilityOut,
+    responses=errors(*FULL_DEVICE, "throttled"),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
+async def my_discoverability(principal: Principal = Depends(require_full_device)):
+    return await run_unit(services.discoverability, principal.user.id)
+
+
+@authenticated.put(
+    "/me/discoverability",
+    response_model=DiscoverabilityOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "payload_too_large", "throttled"),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
+async def set_my_discoverability(
+    payload: DiscoverabilityIn, principal: Principal = Depends(require_full_device)
+):
+    """Whether `POST /users/lookup` can find this account by its name. It changes
+    nothing about any route addressed by a `user_id`."""
+    return await run_unit(
+        services.set_discoverability, principal.user.id, payload.discoverable
+    )
 
 
 @authenticated.get(

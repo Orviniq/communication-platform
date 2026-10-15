@@ -343,6 +343,21 @@ def _directory(stage):
     return Call("GET", f"{PREFIX}/users", stage.auth)
 
 
+@sample("GET", f"{PREFIX}/me/discoverability", "200")
+def _my_discoverability(stage):
+    return Call("GET", f"{PREFIX}/me/discoverability", stage.auth)
+
+
+@sample("PUT", f"{PREFIX}/me/discoverability", "200")
+def _set_my_discoverability(stage):
+    return Call(
+        "PUT",
+        f"{PREFIX}/me/discoverability",
+        stage.auth,
+        body={"json": {"discoverable": False}},
+    )
+
+
 @sample("GET", PREFIX + "/users/{user_id}/profile", "200")
 def _peer_profile(stage):
     stage.peer_profile

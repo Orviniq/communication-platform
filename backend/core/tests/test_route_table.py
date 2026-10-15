@@ -37,6 +37,8 @@ EXPECTED = {
     # that app; the per-name cool-off is a second bound the scope does not give.
     ("DELETE", "/api/v1/me"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users"): (FULL_DEVICE, "accounts"),
+    ("GET", "/api/v1/me/discoverability"): (FULL_DEVICE, "accounts"),
+    ("PUT", "/api/v1/me/discoverability"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/profile"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/me/profile"): (FULL_DEVICE, "accounts"),
     ("PUT", "/api/v1/me/profile"): (FULL_DEVICE, "accounts"),

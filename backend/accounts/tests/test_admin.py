@@ -515,6 +515,69 @@ def test_a_change_form_save_writes_djangos_own_audit_row(client, owner, alice):
     assert LogEntry.objects.filter(object_id=str(alice.pk), action_flag=CHANGE).exists()
 
 
+def test_the_panel_neither_shows_nor_edits_the_discoverability_setting(
+    client, owner, alice
+):
+    """The owner's choice and nobody else's (ADR-0028). An operator who could flip
+    it could make a hidden account findable, and a column that showed it would be
+    a list of who chose to hide; neither is support work."""
+    from accounts.admin import AccountAdmin, AccountForm
+
+    configured = [
+        AccountAdmin.list_display,
+        AccountAdmin.list_filter,
+        AccountAdmin.search_fields,
+        AccountAdmin.fields,
+        AccountAdmin.readonly_fields,
+        AccountForm.Meta.fields,
+    ]
+    page = client.get(reverse("admin:accounts_user_change", args=[alice.pk]))
+    listing = client.get(reverse("admin:accounts_user_changelist"))
+
+    assert not any("discoverable" in names for names in configured)
+    assert page.status_code == listing.status_code == 200
+    assert b"discoverab" not in page.content.lower()
+    assert b"discoverab" not in listing.content.lower()
+
+
+def test_a_posted_setting_is_ignored_by_the_change_form(client, owner, alice):
+    client.post(
+        reverse("admin:accounts_user_change", args=[alice.pk]),
+        {"is_active": "on", "discoverable": ""},
+    )
+
+    alice.refresh_from_db()
+    assert alice.discoverable is True
+
+
+def test_a_change_form_save_cannot_undo_a_choice_the_owner_made_meanwhile(
+    client, owner, alice, monkeypatch
+):
+    """The lost update. The panel reads the row, the owner hides the account, the
+    panel saves: a save of every column writes back the `discoverable` the panel
+    read, and a hidden account is findable again because an operator touched a
+    field that had nothing to do with it. The save names only the columns its form
+    edits, so the owner's write survives."""
+    from accounts.admin import AccountAdmin
+
+    read_before_the_owner_hid = User.objects.get(pk=alice.pk)
+    User.objects.filter(pk=alice.pk).update(discoverable=False)
+    monkeypatch.setattr(
+        AccountAdmin,
+        "get_object",
+        lambda self, request, object_id, from_field=None: read_before_the_owner_hid,
+    )
+
+    client.post(
+        reverse("admin:accounts_user_change", args=[alice.pk]),
+        {"is_active": "on", "is_staff": "on"},
+    )
+
+    alice.refresh_from_db()
+    assert alice.is_staff is True
+    assert alice.discoverable is False
+
+
 def test_purging_an_attachment_deletes_the_file_and_audits_without_the_capability(
     client, owner, attachment, tmp_path, settings
 ):
