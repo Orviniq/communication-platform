@@ -129,13 +129,17 @@ class FieldManifestTests(SimpleTestCase):
         self.assertIn("devices.Device.label_blob", found)
 
 
-# The test-only toolchain this run added. Neither may reach the serving process:
-# `hypothesis` generates inputs and `pytest-cov` traces every line executed, and a
-# production module that imported either would carry a test dependency into the
-# offline install of ADR-0012 and a tracer into a request path.
-TEST_ONLY_PACKAGES = frozenset({"hypothesis", "pytest-cov"})
+# The test-only toolchain. None of it may reach the serving process: `hypothesis`
+# generates inputs and `pytest-cov` traces every line executed, and a production
+# module that imported either would carry a test dependency into the offline install
+# of ADR-0012 and a tracer into a request path. `pytest-xdist` and `execnet`, its
+# only dependency, spread the suite over worker processes and have no business in a
+# serving one either.
+TEST_ONLY_PACKAGES = frozenset({"hypothesis", "pytest-cov", "pytest-xdist", "execnet"})
 # The other two the suite runs on, named here because the same rule covers them.
-TEST_ONLY_IMPORTS = frozenset({"hypothesis", "pytest", "pytest_cov", "coverage"})
+TEST_ONLY_IMPORTS = frozenset(
+    {"hypothesis", "pytest", "pytest_cov", "coverage", "xdist", "execnet"}
+)
 
 PINNED = re.compile(r"^([A-Za-z0-9._-]+)==([^\s\\]+)", re.M)
 IMPORTS = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
