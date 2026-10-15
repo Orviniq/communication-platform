@@ -10,6 +10,7 @@ behind it and a connection the next drain waits on.
 import asyncio
 import logging
 import uuid
+from urllib.parse import urlsplit
 
 import pytest
 import redis.asyncio
@@ -45,11 +46,7 @@ async def test_the_subscriber_keeps_delivering_after_its_connection_drops(
     topic = bus.device_topic("dropped-connection-probe")
     await bus.get_subscriber().subscribe(topic, received.append)
 
-    killer = redis.asyncio.Redis.from_url(settings.REDIS_URL)
-    try:
-        await killer.execute_command("CLIENT", "KILL", "TYPE", "pubsub")
-    finally:
-        await killer.aclose()
+    await kill_the_subscription(settings)
 
     async with asyncio.timeout(DELIVERY_TIMEOUT):
         while not received:
@@ -135,11 +132,32 @@ async def test_a_bind_that_fails_before_it_registers_still_fails_the_handshake(
 
 
 async def kill_the_subscription(settings):
-    """Drop every pub/sub connection of this Redis instance, which is what a
-    restart, a failover or an idle reaper does to the one this worker holds."""
+    """Drop every pub/sub connection on this process's Redis database index, which
+    is what a restart, a failover or an idle reaper does to the one this worker
+    holds.
+
+    Not `CLIENT KILL TYPE pubsub` on its own. A connection belongs to the server
+    and not to a database index, so the type filter alone also drops the
+    subscriber of every other test process running beside this one under
+    pytest-xdist, and their sockets then miss a frame for a reason that is not
+    theirs. Each of those processes has an index of its own
+    (`core/tests/workers.py`), and `CLIENT LIST` names the index of every
+    connection. The address would not do: behind a container's port mapping the
+    server sees a different one than the client's socket reports, and a filter
+    that matches nothing kills nothing without an error — so the count is
+    asserted, and the drop this test recovers from is certain to have happened.
+    """
+    index = str(urlsplit(settings.REDIS_URL).path.lstrip("/") or 0)
     killer = redis.asyncio.Redis.from_url(settings.REDIS_URL)
     try:
-        await killer.execute_command("CLIENT", "KILL", "TYPE", "pubsub")
+        ours = [
+            client["id"]
+            for client in await killer.client_list(_type="pubsub")
+            if client["db"] == index
+        ]
+        assert ours, "this worker holds no pub/sub connection to drop"
+        for client_id in ours:
+            await killer.client_kill_filter(_id=client_id)
     finally:
         await killer.aclose()
 
