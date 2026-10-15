@@ -211,9 +211,9 @@ carries what is measured and what is excluded.
 pytest -n auto --cov --cov-branch
 ```
 
-`-n auto` starts one pytest-xdist worker per CPU, and the suite finishes in about a
-quarter of the serial time (`docs/architecture/GROUND-TRUTH.md` carries the
-measurements). A bare `pytest` stays serial on purpose: every worker creates and
+`-n auto` starts one pytest-xdist worker per CPU: the suite took 230 s serially and
+64 s on 14 workers on the developer machine, and 489 s and 208 s on CI's 4
+(`docs/architecture/GROUND-TRUTH.md` carries the measurements). A bare `pytest` stays serial on purpose: every worker creates and
 migrates a test database of its own, which makes a single file slower in parallel
 than alone. pytest-cov combines the workers' data before it reports, so the floor
 binds the whole suite either way. The `--randomly-seed` the run prints reproduces
