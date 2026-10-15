@@ -9,6 +9,7 @@ import threading
 import pytest
 from django.db import connections, transaction
 
+from core.tests.workers import many_connections
 from devices.models import Device
 
 from .conftest import (
@@ -19,7 +20,7 @@ from .conftest import (
     register_payload,
 )
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), many_connections]
 
 CONCURRENT_REGISTRATIONS = 4
 CAP = 10  # settings.MAX_DEVICES_PER_USER

@@ -13,6 +13,7 @@ import threading
 import pytest
 from django.db import connections
 
+from core.tests.workers import many_connections
 from devices.models import PqOneTimePrekey
 from devices.schemas import MAX_STORED_PQ_OTPKS, PQ_PUBKEY_LEN
 
@@ -178,6 +179,7 @@ def test_a_classical_only_bundle_omits_the_pq_fields_entirely(
     assert PqOneTimePrekey.objects.filter(device=peer_device).count() == 1
 
 
+@many_connections
 def test_one_pq_prekey_is_handed_to_at_most_one_concurrent_claimant(
     new_http, active_user, device, bearer, peer
 ):

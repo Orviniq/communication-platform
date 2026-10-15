@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from types import SimpleNamespace
 
@@ -15,7 +16,7 @@ from accounts.models import User
 from api import ratelimit
 from api.auth import issue_register_scope, issue_session
 from config.asgi import api_application, application
-from core.tests import artefact
+from core.tests import artefact, workers
 from devices.models import Device
 
 PASSWORD = "correct-horse-battery-staple"
@@ -27,6 +28,16 @@ BASE_URL = "http://testserver"
 # grade the server. The server imports no HTTP client: httpx is a test-only
 # dependency and this logger does not exist in production.
 logging.getLogger("httpx").disabled = True
+
+# Under pytest-xdist each worker takes a Redis database index of its own, because
+# `flush_redis_state` below empties the whole database before every test and
+# workers sharing one would erase each other's counters mid-test. Set here, before
+# any test runs and so before any client is built: every Redis client of the
+# process is built on first use from `settings.REDIS_URL`. A serial run keeps the
+# configured URL. `core/tests/workers.py` carries the scheme and its limits.
+settings.REDIS_URL = workers.redis_url_for(
+    settings.REDIS_URL, os.environ.get("PYTEST_XDIST_WORKER")
+)
 
 # The property tests run under `pytest-randomly`, which reseeds the global RNG for
 # every test, so an entropy-driven Hypothesis would explore a different set of

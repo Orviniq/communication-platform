@@ -12,6 +12,7 @@ from django.db import connection, connections
 from attachments import routes
 from attachments.models import Attachment
 from core.buckets import ATTACHMENT_BUCKETS
+from core.tests.workers import many_connections
 
 UPLOAD_URL = "/api/v1/attachments"
 SMALLEST = min(ATTACHMENT_BUCKETS)
@@ -55,6 +56,7 @@ def test_the_spool_threshold_is_the_copy_chunk():
 
 
 @pytest.mark.django_db(transaction=True)
+@many_connections
 def test_concurrent_uploads_never_overshoot_the_days_allowance(
     new_http, active_user, device, bearer, settings, attachments_root
 ):

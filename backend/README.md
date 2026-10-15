@@ -194,12 +194,42 @@ what you want. On a host that is also serving it is not: a run pointed at the
 serving instance's database resets every live rate limit and every login lockout,
 and nothing warns that it happened. Give a test run its own database index —
 `redis://:<password>@127.0.0.1:6379/1` — whenever a serving instance shares the
-host.
+host. **A parallel run empties one index per worker**: under `-n N` the workers
+take the configured index and the `N - 1` above it (`/1` to `/4` for `-n 4` on the
+URL above), never one below it, so keep a serving instance's index under the test
+one. Redis has 16 indexes by default, and a worker past the last fails with
+`DB index is out of range` rather than sharing one.
 
 Branch coverage is gated at 98 percent over `backend/`. `pytest` on its own does not
 measure it, so the inner loop stays fast and a single file can be run alone; the gate
-is `pytest --cov --cov-branch`, which is what CI runs and what `pytest.ini` binds the
-floor to. `pyproject.toml` carries what is measured and what is excluded.
+is `pytest --cov --cov-branch`, which `pytest.ini` binds the floor to. `pyproject.toml`
+carries what is measured and what is excluded.
+
+**Run the whole suite in parallel**, which is what CI runs:
+
+```sh
+pytest -n auto --cov --cov-branch
+```
+
+`-n auto` starts one pytest-xdist worker per CPU: the suite took 230 s serially and
+64 s on 14 workers on the developer machine, and 489 s and 208 s on CI's 4
+(`docs/architecture/GROUND-TRUTH.md` carries the measurements). A bare `pytest` stays serial on purpose: every worker creates and
+migrates a test database of its own, which makes a single file slower in parallel
+than alone. pytest-cov combines the workers' data before it reports, so the floor
+binds the whole suite either way. The `--randomly-seed` the run prints reproduces
+its order, with or without `-n`.
+
+Each worker holds its own state: pytest-django gives it its own test database
+(`test_chatapp_gw0`, `test_chatapp_gw1`, …), and `conftest.py` gives it its own
+Redis index, as above. Publish and subscribe channels and client connections belong
+to the whole Redis server rather than to an index, which `core/tests/workers.py`
+covers. PostgreSQL connections are shared too: the race tests open one connection
+from each of several threads, up to 15 at once, so they carry
+`core.tests.workers.many_connections`, and `pytest.ini`'s `--dist loadgroup` keeps
+them on one worker at a time. That bounds a run at 18 connections for that worker
+and 3 for each other one — 57 at `-n 14` against PostgreSQL's default
+`max_connections` of 100. **A new test that opens connections from threads needs
+that mark too**, or a wide run can exhaust the server's connections.
 
 Each app holds exactly one `0001_initial` migration. A developer database that
 recorded the history before it was regenerated cannot be migrated onto this one — drop

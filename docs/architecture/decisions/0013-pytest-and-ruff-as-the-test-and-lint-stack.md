@@ -1,6 +1,6 @@
 # 0013. pytest and ruff as the test and lint stack
 
-- Status: Accepted
+- Status: Accepted, amended 2026-10-15
 - Phase: 1 and 4
 - Date: 2026-09-03
 
@@ -19,7 +19,8 @@ was written.
 ## Decision
 
 The suite is pytest with pytest-django and pytest-asyncio. `pytest-randomly`
-gives every run a random order. `httpx` drives the API in tests. `hypothesis`
+gives every run a random order. `pytest-xdist` runs the whole suite in parallel,
+and a bare `pytest` stays serial (the amendment below). `httpx` drives the API in tests. `hypothesis`
 drives property-based tests. `ruff` is the only linter and formatter. No type
 checker is added.
 
@@ -89,3 +90,72 @@ phase 10 run 08 raised it to 98.
   approximated the dialect would be a gate that is confidently wrong, which is
   worse than no gate.
 - `django-test-auditor` owns the tests themselves.
+
+## Amendment, 2026-10-15: the suite runs in parallel
+
+`pytest-xdist` 3.8.0 joins `requirements/dev.txt`, with `execnet` 2.1.2, its only
+dependency. CI runs `pytest -n auto --cov --cov-branch --cov-fail-under=98`: one
+worker per CPU of the runner. A bare `pytest` stays serial. This amends rather than
+supersedes: every line above still holds, and xdist is one more tool in the stack
+this decision names, as `hypothesis` and `jsonschema` were.
+
+What makes the parallel run sound and not merely green:
+
+- **Each worker holds its own state.** pytest-django gives each worker its own test
+  database (`test_chatapp_gw0`, …). The root `conftest.py` gives each its own Redis
+  index — the configured one plus the worker's number — because `flush_redis_state`
+  empties the whole index before every test. Without it, a 14-worker run failed 66
+  tests: the lockout, rate-limit, allowance and contract suites erasing each
+  other's counters. `core/tests/workers.py` carries the scheme.
+- **What no index separates is handled by name.** Pub/sub channels and client
+  connections belong to the Redis server. Device topics are random ids, and the
+  one command that acts on connections, `CLIENT KILL` in
+  `realtime/tests/test_recovery.py`, now kills only the pub/sub connections of
+  its own index. The type filter it used before dropped every worker's
+  subscriber — and on a host that also serves, production's.
+- **PostgreSQL connections are a shared budget.** The race tests open a connection
+  from each of several threads, up to 15 at once, and the pool keeps them for ten
+  minutes; every other test holds at most 2, measured per test with the pool
+  emptied between tests. Those tests carry `xdist_group("connections")`, and
+  `pytest.ini` sets `--dist loadgroup`, so one worker at a time holds them. That
+  bounds a run at 18 + 3 × (workers − 1) connections: 57 at 14 workers, 27 on a
+  4-CPU runner, against the default 100. Ungrouped, a 14-worker run peaked at 95.
+- **Nothing else was made serial, on measurement.** The `pg_locks` probes read only
+  their own backend's locks (`pid = pg_backend_pid()`), the prune sweep's advisory
+  lock is scoped to its database (measured: the same key is refused in one
+  database and granted in a second), and the three tests with wall-clock bounds
+  kept at least 0.59 s of headroom at full 14-worker load, using at most 29 percent
+  of their bound — the same as on an idle machine.
+
+## Position fields of the amendment
+
+- **Forcing function.** The suite took 230 s locally and 489 s in CI serially, and
+  the flip trigger above names a suite that stops fitting a pre-push gate.
+  Parallelism keeps the stack and moves the runtime instead.
+- **Scale band.** Band 0 to band 4, unchanged: the suite, not the traffic, sets the
+  cost.
+- **Flip trigger.** A test needs state that can be neither split per worker nor
+  bounded — a second shared service, or a test whose correctness depends on the
+  machine being otherwise idle. The answer is a serial phase after the parallel
+  one, with `--cov-append`, and not a weaker test. A worker count past Redis's 16
+  indexes or past the connection bound is the other trigger.
+- **Cost.** A worker's database is created and migrated at the start of every run,
+  which is why a bare `pytest` stays serial: one small file takes 0.96 s alone and
+  2.49 s under `-n auto`. The seed reproduces the order and not the assignment of
+  tests to workers, which follows timing; a failure names its worker. A new test
+  that opens connections from threads must carry the mark, and nothing enforces
+  that. A parallel run empties one Redis index per worker. Past about 8 workers the
+  suite stops getting faster on the developer machine: the teardown of the
+  `transaction=True` tests, which truncates every table, costs 0.042 s alone and
+  0.22 s at 14 workers, and the migration replay's `DROP DATABASE` waits on a forced
+  checkpoint.
+- **Evidence.** `GROUND-TRUTH.md` §4 carries the measurements: the serial and
+  parallel times, the worker curve, the connection peaks grouped and ungrouped,
+  the timing-test headroom and the CI times before and after. pytest-cov combines
+  every worker's data before it reports, so the floor binds the whole suite: a
+  parallel run of one file under `--cov-fail-under=98` exits 1. `loadscope`, the
+  usual Django recommendation, was measured as no faster (57.5 and 58.6 s against
+  56.6 and 56.5 s) and peaked at 76 and 80 connections, because it cannot honour a
+  group. pytest-xdist and execnet are MIT, maintained under the pytest-dev
+  organisation, pure-Python wheels, with no advisory in OSV for any version.
+  **Currency:** current.
