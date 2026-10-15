@@ -23,7 +23,7 @@ from devices.models import Device
 # would sever the connection the test itself holds.
 pytestmark = pytest.mark.django_db(transaction=True)
 
-DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 DEVICES_URL = "/api/v1/me/devices"
 PROFILE_URL = "/api/v1/me/profile"
 KEYBACKUP_URL = "/api/v1/me/keybackup"
@@ -65,7 +65,7 @@ def token(raw):
 def test_a_live_device_token_is_accepted(http, active_user, device):
     access, _expires_in = issue_session(active_user, device)
 
-    assert http.get(DIRECTORY_URL, headers=token(access)).status_code == 200
+    assert http.get(DISCOVERABILITY_URL, headers=token(access)).status_code == 200
 
 
 def test_revoking_a_device_rejects_its_outstanding_session_token(
@@ -75,7 +75,7 @@ def test_revoking_a_device_rejects_its_outstanding_session_token(
     device.revoked_date = "2026-01-01"
     device.save(update_fields=["revoked_date"])
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -88,7 +88,7 @@ def test_bumping_token_generation_rejects_outstanding_session_tokens(
     device.token_generation += 1
     device.save(update_fields=["token_generation"])
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -98,7 +98,7 @@ def test_deleting_the_device_rejects_its_token(http, active_user, device):
     access, _expires_in = issue_session(active_user, device)
     device.delete()
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -109,7 +109,7 @@ def test_deactivating_the_account_rejects_its_tokens(http, active_user, device):
     active_user.is_active = False
     active_user.save(update_fields=["is_active"])
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -118,7 +118,7 @@ def test_deactivating_the_account_rejects_its_tokens(http, active_user, device):
 @pytest.mark.parametrize(
     "method, url",
     [
-        ("GET", DIRECTORY_URL),
+        ("GET", DISCOVERABILITY_URL),
         ("GET", "/api/v1/users/11111111-1111-1111-1111-111111111111/profile"),
         ("GET", PROFILE_URL),
         ("PUT", PROFILE_URL),
@@ -139,7 +139,7 @@ def test_register_scope_reaches_no_moved_route(http, active_user, method, url):
 
 
 def test_anonymous_requests_are_refused_with_a_challenge(http):
-    response = http.get(DIRECTORY_URL)
+    response = http.get(DISCOVERABILITY_URL)
 
     assert response.status_code == 401
     assert response.json()["code"] == "unauthenticated"
@@ -148,14 +148,14 @@ def test_anonymous_requests_are_refused_with_a_challenge(http):
 
 @pytest.mark.parametrize("header", ["", "Bearer", "Bearer ", "Token abc", "abc"])
 def test_a_malformed_authorization_header_is_unauthenticated(http, header):
-    response = http.get(DIRECTORY_URL, headers={"Authorization": header})
+    response = http.get(DISCOVERABILITY_URL, headers={"Authorization": header})
 
     assert response.status_code == 401
     assert response.json()["code"] == "unauthenticated"
 
 
 def test_a_garbage_token_is_an_invalid_token(http):
-    response = http.get(DIRECTORY_URL, headers=token("not-a-jwt"))
+    response = http.get(DISCOVERABILITY_URL, headers=token("not-a-jwt"))
 
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_token"
@@ -165,7 +165,7 @@ def test_an_expired_token_is_refused(http, active_user, device):
     expired = datetime.now(timezone.utc) - timedelta(minutes=1)
     access = signed(live_claims(active_user, device, exp=expired))
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_token"
@@ -174,7 +174,7 @@ def test_an_expired_token_is_refused(http, active_user, device):
 def test_an_unsigned_token_is_refused(http, active_user, device):
     """Pinning the algorithm list at decode is what stops `alg: none`."""
     response = http.get(
-        DIRECTORY_URL, headers=token(unsigned(live_claims(active_user, device)))
+        DISCOVERABILITY_URL, headers=token(unsigned(live_claims(active_user, device)))
     )
 
     assert response.status_code == 401
@@ -191,7 +191,7 @@ def test_a_token_signed_with_another_algorithm_is_refused(http, active_user, dev
         live_claims(active_user, device), settings.JWT_SIGNING_KEY, algorithm="HS512"
     )
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_token"
@@ -204,7 +204,7 @@ def test_a_token_signed_with_another_key_is_refused(http, active_user, device):
         algorithm="HS256",
     )
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_token"
@@ -219,7 +219,7 @@ def test_a_token_missing_a_required_claim_is_refused(http, active_user, device, 
     claims = live_claims(active_user, device)
     del claims[claim]
 
-    response = http.get(DIRECTORY_URL, headers=token(signed(claims)))
+    response = http.get(DISCOVERABILITY_URL, headers=token(signed(claims)))
 
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_token"
@@ -232,7 +232,7 @@ def test_an_unknown_token_type_is_refused(http, active_user, device, typ):
     than interpreted anywhere below it."""
     access = signed(live_claims(active_user, device, typ=typ))
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_token"
@@ -245,7 +245,7 @@ def test_a_register_token_that_names_a_device_still_reaches_no_session_route(
     carrying the device binding of a session token must not pass for one."""
     access = signed(live_claims(active_user, device, typ="register"))
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 403
     assert response.json()["code"] == "scope_forbidden"
@@ -256,7 +256,7 @@ def test_a_token_cannot_name_another_accounts_device(http, active_user, device, 
     device it does not own finds no row."""
     access = signed(live_claims(bob, device))
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -269,7 +269,7 @@ def test_a_token_whose_generation_runs_ahead_of_the_row_is_refused(
     row has not reached yet would otherwise survive every future revocation."""
     access = signed(live_claims(active_user, device, tgen=device.token_generation + 1))
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -278,7 +278,7 @@ def test_a_token_whose_generation_runs_ahead_of_the_row_is_refused(
 def test_a_token_naming_a_device_that_never_existed_is_refused(http, active_user, device):
     access = signed(live_claims(active_user, device, device_id=str(uuid.uuid4())))
 
-    response = http.get(DIRECTORY_URL, headers=token(access))
+    response = http.get(DISCOVERABILITY_URL, headers=token(access))
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
@@ -302,8 +302,10 @@ def test_revoking_one_device_leaves_the_other_devices_token_alive(
     device.revoked_date = "2026-01-01"
     device.save(update_fields=["revoked_date"])
 
-    assert http.get(DIRECTORY_URL, headers=token(revoked_access)).status_code == 401
-    assert http.get(DIRECTORY_URL, headers=token(surviving_access)).status_code == 200
+    assert http.get(DISCOVERABILITY_URL, headers=token(revoked_access)).status_code == 401
+    assert (
+        http.get(DISCOVERABILITY_URL, headers=token(surviving_access)).status_code == 200
+    )
 
 
 @pytest.mark.parametrize("scheme", ["Bearer", "bearer", "BEARER", "BeArEr"])
@@ -314,7 +316,9 @@ def test_the_bearer_scheme_is_matched_case_insensitively(
     lower case is not an attacker."""
     access, _expires_in = issue_session(active_user, device)
 
-    response = http.get(DIRECTORY_URL, headers={"Authorization": f"{scheme} {access}"})
+    response = http.get(
+        DISCOVERABILITY_URL, headers={"Authorization": f"{scheme} {access}"}
+    )
 
     assert response.status_code == 200
 
@@ -322,6 +326,8 @@ def test_the_bearer_scheme_is_matched_case_insensitively(
 def test_padding_around_the_token_is_ignored(http, active_user, device):
     access, _expires_in = issue_session(active_user, device)
 
-    response = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer   {access}  "})
+    response = http.get(
+        DISCOVERABILITY_URL, headers={"Authorization": f"Bearer   {access}  "}
+    )
 
     assert response.status_code == 200

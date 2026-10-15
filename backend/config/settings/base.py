@@ -149,6 +149,11 @@ THROTTLE_RATES = {
     "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
     "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),
     "relay": env("THROTTLE_RELAY", default="60/min"),
+    # 50/day per account: the exact-name lookup is the one surface that answers
+    # whether a name is in use to a caller who holds a session, so its scope is
+    # sized against a dictionary rather than against a client's traffic. A
+    # 10 000-name list costs one account 200 days (ADR-0028).
+    "lookup": env("THROTTLE_LOOKUP", default="50/day"),
 }
 
 # --- Request limits (ADR-0014) --------------------------------------------------

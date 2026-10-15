@@ -197,17 +197,28 @@ def logout(user_id, device_id):
     close_device_sockets(device_id)
 
 
-def directory():
-    """Every activated account, ordered by username. This is a small private
-    server and the directory is how clients pick conversation partners."""
-    return {
-        "users": [
-            {"user_id": str(row["id"]), "username": row["username"]}
-            for row in User.objects.filter(is_active=True)
-            .order_by("username")
-            .values("id", "username")
-        ]
-    }
+def lookup(username):
+    """The one account an exact name finds, or the same `404` whatever kept it
+    hidden (ADR-0028).
+
+    An unknown name, an inactive account and an account whose owner turned
+    discoverability off are one answer, reached by one statement with one shape:
+    the filter is in the query rather than in Python, so no branch here runs for
+    one of the three and not the others. The statement reads
+    `ix_user_findable_name`, which holds only the findable names, so the three
+    miss it alike and none of them reads a row.
+
+    Sliced rather than `.first()`, which would order by the primary key and put a
+    sort into a plan that can only ever return one row.
+    """
+    found = list(
+        User.objects.filter(username=username, is_active=True, discoverable=True).values(
+            "id", "username"
+        )[:1]
+    )
+    if not found:
+        raise ApiError(404, "not_found", "No account can be found by that name.")
+    return {"user_id": str(found[0]["id"]), "username": found[0]["username"]}
 
 
 def discoverability(user_id):

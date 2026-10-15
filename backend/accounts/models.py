@@ -46,6 +46,22 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = "username"
     objects = UserManager()
 
+    class Meta:
+        indexes = [
+            # The names `POST /users/lookup` may find, and no other. An unknown name,
+            # an inactive account's and a hidden account's all miss this index
+            # alike, so the three answers the route must not tell apart cost the
+            # same index pages and no heap page — where the unique index on
+            # `username` would read the row of the two that exist before filtering
+            # it out (measured, ADR-0028). Below a few hundred rows the planner
+            # scans the table instead, which is the same work for every name too.
+            models.Index(
+                fields=["username"],
+                name="ix_user_findable_name",
+                condition=models.Q(is_active=True, discoverable=True),
+            ),
+        ]
+
     def save(self, *args, **kwargs):
         self.username = self.username.lower()
         super().save(*args, **kwargs)

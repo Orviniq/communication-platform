@@ -13,7 +13,6 @@ from devices.models import Device
 # would sever the connection the test itself holds.
 pytestmark = pytest.mark.django_db(transaction=True)
 
-DIRECTORY_URL = "/api/v1/users"
 MY_PROFILE_URL = "/api/v1/me/profile"
 
 
@@ -28,56 +27,6 @@ def blob_of(nbytes, fill=b"\x00"):
 @pytest.fixture
 def headers(active_user, device, bearer):
     return bearer(active_user, device)
-
-
-class TestDirectory:
-    def test_lists_only_activated_accounts(self, http, active_user, headers):
-        User.objects.create_user(username="pending", password=PASSWORD)
-        User.objects.create_user(username="carol", password=PASSWORD, is_active=True)
-
-        response = http.get(DIRECTORY_URL, headers=headers)
-
-        usernames = [entry["username"] for entry in response.json()["users"]]
-        assert usernames == ["alice", "carol"]
-
-    def test_entries_carry_nothing_but_id_and_username(self, http, active_user, headers):
-        response = http.get(DIRECTORY_URL, headers=headers)
-
-        assert set(response.json()["users"][0]) == {"user_id", "username"}
-
-    def test_every_activated_account_fits_in_one_unpaginated_answer(
-        self, http, active_user, headers
-    ):
-        """The scale band caps this server well under fifty accounts, which is why
-        the directory has no pages: the whole list has to arrive in one body."""
-        for index in range(49):
-            User.objects.create_user(
-                username=f"user{index:02d}", password=PASSWORD, is_active=True
-            )
-
-        response = http.get(DIRECTORY_URL, headers=headers)
-
-        body = response.json()
-        assert set(body) == {"users"}
-        assert len(body["users"]) == 50
-        assert body["users"][0]["username"] == "alice"
-
-    def test_an_account_deactivated_between_two_reads_disappears_from_the_second(
-        self, http, active_user, headers
-    ):
-        """The directory is a current answer and never a stable one: the operator
-        deactivates accounts while clients are reading it."""
-        carol = User.objects.create_user(
-            username="carol", password=PASSWORD, is_active=True
-        )
-        before = http.get(DIRECTORY_URL, headers=headers)
-
-        carol.is_active = False
-        carol.save(update_fields=["is_active"])
-
-        after = http.get(DIRECTORY_URL, headers=headers)
-        assert [row["username"] for row in before.json()["users"]] == ["alice", "carol"]
-        assert [row["username"] for row in after.json()["users"]] == ["alice"]
 
 
 class TestReadProfile:

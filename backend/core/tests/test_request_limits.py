@@ -406,7 +406,9 @@ def test_a_route_waiting_on_the_loop_is_refused_at_the_deadline_the_settings_car
         fresh = create_app(django_asgi_app)
         client = AsgiClient(wrap(fresh), fresh, reraise=False)
         started = time.monotonic()
-        response = client.get("/api/v1/users", headers=bearer(active_user, device))
+        response = client.get(
+            "/api/v1/me/discoverability", headers=bearer(active_user, device)
+        )
         waited = time.monotonic() - started
 
     assert response.status_code == 503

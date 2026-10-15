@@ -27,7 +27,7 @@ from core.fields import BadBucket
 from devices.models import Device
 
 REGISTER_URL = "/api/v1/auth/register"
-DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 PROFILE_URL = "/api/v1/me/profile"
 GOOD_PASSWORD = "a-sufficiently-long-passphrase"
 LEAKED = "device-8a1f-had-41-undelivered-envelopes"
@@ -228,12 +228,12 @@ def off_bucket_blob():
 
 def a_revoked_token(surface):
     Device.objects.filter(id=surface["device"].id).update(revoked_date="2026-01-01")
-    return surface["http"].get(DIRECTORY_URL, headers=surface["auth"])
+    return surface["http"].get(DISCOVERABILITY_URL, headers=surface["auth"])
 
 
 def a_second_request_past_the_limit(surface):
-    surface["http"].get(DIRECTORY_URL, headers=surface["auth"])
-    return surface["http"].get(DIRECTORY_URL, headers=surface["auth"])
+    surface["http"].get(DISCOVERABILITY_URL, headers=surface["auth"])
+    return surface["http"].get(DISCOVERABILITY_URL, headers=surface["auth"])
 
 
 # code -> (status, the request that provokes it). Every mode a client can reach
@@ -247,15 +247,17 @@ FAILURES = {
             PROFILE_URL, json={"blob": off_bucket_blob(), "version": 1}, headers=s["auth"]
         ),
     ),
-    "unauthenticated": (401, lambda s: s["http"].get(DIRECTORY_URL)),
+    "unauthenticated": (401, lambda s: s["http"].get(DISCOVERABILITY_URL)),
     "invalid_token": (
         401,
-        lambda s: s["http"].get(DIRECTORY_URL, headers={"Authorization": "Bearer nope"}),
+        lambda s: s["http"].get(
+            DISCOVERABILITY_URL, headers={"Authorization": "Bearer nope"}
+        ),
     ),
     "token_revoked": (401, a_revoked_token),
     "scope_forbidden": (
         403,
-        lambda s: s["http"].get(DIRECTORY_URL, headers=s["register"]),
+        lambda s: s["http"].get(DISCOVERABILITY_URL, headers=s["register"]),
     ),
     "not_found": (404, lambda s: s["http"].get("/api/v1/no-such-route")),
     "method_not_allowed": (405, lambda s: s["http"].delete("/api/v1/health")),

@@ -86,6 +86,7 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
         "profile blob",
         "key backup blob",
         "renewed session token",
+        "unknown looked-up name",
     ):
         assert secrets.get(label), f"the audit never exercised the {label} step"
 
@@ -129,6 +130,8 @@ async def test_the_pass_drives_every_route_of_the_table():
         "attachment id",
         "queued envelope id",
         "relay credential",
+        "username",
+        "unknown looked-up name",
     ],
 )
 async def test_the_audit_catches_a_leak_of_every_kind_of_secret_it_collected(label):

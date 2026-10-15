@@ -283,9 +283,9 @@ async def _scripted_blob_traffic(client, s):
 
 
 async def _scripted_account_state_traffic(client, s):
-    """The account's own state: the directory, the profile blobs, the key backup,
-    and a token rotation. Adds each payload and each issued token to the secret
-    set."""
+    """The account's own state: the exact-name lookup and its setting, the
+    profile blobs, the key backup, and a token rotation. Adds each payload, each
+    name looked up and each issued token to the secret set."""
     from core.buckets import BACKUP_BUCKETS, PROFILE_BUCKETS
 
     auth = {"Authorization": f"Bearer {s['session token']}"}
@@ -294,14 +294,24 @@ async def _scripted_account_state_traffic(client, s):
     assert r.status_code == 200, f"health: {r.status_code}"
     r = await client.get("/api/v1/config", headers=auth)
     assert r.status_code == 200, f"config: {r.status_code}"
-    r = await client.get("/api/v1/users", headers=auth)
-    assert r.status_code == 200, f"directory: {r.status_code}"
+    # The account finds itself, hides, and is then missed exactly as a name
+    # nobody holds is — every outcome of the one route whose input is a name.
+    r = await client.post(
+        "/api/v1/users/lookup", json={"username": s["username"]}, headers=auth
+    )
+    assert r.status_code == 200, f"lookup: {r.status_code}"
     r = await client.put(
         "/api/v1/me/discoverability", json={"discoverable": False}, headers=auth
     )
     assert r.status_code == 200, f"hide: {r.status_code}"
     r = await client.get("/api/v1/me/discoverability", headers=auth)
     assert r.status_code == 200, f"setting read: {r.status_code}"
+    s["unknown looked-up name"] = f"aud{random_secrets.token_hex(6)}"
+    for name in (s["username"], s["unknown looked-up name"]):
+        r = await client.post(
+            "/api/v1/users/lookup", json={"username": name}, headers=auth
+        )
+        assert r.status_code == 404, f"missed lookup: {r.status_code}"
 
     s["profile blob"] = _b64_filled(min(PROFILE_BUCKETS), 0xC3)
     r = await client.put(

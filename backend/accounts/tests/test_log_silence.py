@@ -33,7 +33,8 @@ REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
 RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
-DIRECTORY_URL = "/api/v1/users"
+LOOKUP_URL = "/api/v1/users/lookup"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 MY_PROFILE_URL = "/api/v1/me/profile"
 
 
@@ -48,9 +49,9 @@ def profile_blob(fill=b"\xc3"):
 
 
 def test_the_whole_account_lifecycle_emits_no_name_password_or_token(http):
-    """Register, activate, log in twice, rotate, write and read a profile, list the
-    directory, log out. Every value any of those calls generated is then searched
-    for in every line the run emitted."""
+    """Register, activate, log in twice, rotate, write and read a profile, find
+    the account by its name, hide it, miss it, log out. Every value any of those
+    calls generated is then searched for in every line the run emitted."""
     with capture_all_logging() as lines:
         registered = http.post(REGISTER_URL, json={"username": NAME, "password": SECRET})
         user_id = registered.json()["user_id"]
@@ -76,11 +77,15 @@ def test_the_whole_account_lifecycle_emits_no_name_password_or_token(http):
         )
         http.get(MY_PROFILE_URL, headers=auth)
         http.get(f"/api/v1/users/{user_id}/profile", headers=auth)
-        http.get(DIRECTORY_URL, headers=auth)
+        found = http.post(LOOKUP_URL, headers=auth, json={"username": NAME})
+        hidden = http.put(DISCOVERABILITY_URL, headers=auth, json={"discoverable": False})
+        http.get(DISCOVERABILITY_URL, headers=auth)
+        missed = http.post(LOOKUP_URL, headers=auth, json={"username": NAME})
         loggedout = http.post(LOGOUT_URL, headers=auth)
 
     assert (registered.status_code, written.status_code) == (201, 200)
     assert (renewed.status_code, loggedout.status_code) == (200, 204)
+    assert (found.status_code, hidden.status_code, missed.status_code) == (200, 200, 404)
     assert_absent(
         lines,
         {
@@ -103,7 +108,10 @@ def test_no_account_request_puts_its_path_in_a_log_line(
     a request reached may be recovered from the log stream."""
     with capture_all_logging() as lines:
         http.post(LOGIN_URL, json={"username": "alice", "password": SECRET})
-        http.get(DIRECTORY_URL, headers=bearer(active_user, device))
+        http.post(
+            LOOKUP_URL, headers=bearer(active_user, device), json={"username": "alice"}
+        )
+        http.get(DISCOVERABILITY_URL, headers=bearer(active_user, device))
         http.get(MY_PROFILE_URL, headers=bearer(active_user, device))
 
     for line in lines:
@@ -145,9 +153,9 @@ def test_rejected_input_is_not_echoed_into_the_logs(
             REGISTER_URL, json={"username": bad_name, "password": SECRET}
         )
         bad_token = http.get(
-            DIRECTORY_URL, headers={"Authorization": f"Bearer {garbage_token}"}
+            DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {garbage_token}"}
         )
-        scoped_out = http.get(DIRECTORY_URL, headers=register_bearer(active_user))
+        scoped_out = http.get(DISCOVERABILITY_URL, headers=register_bearer(active_user))
 
     assert rejected.status_code == 400
     assert refused_name.status_code == 400
@@ -175,3 +183,43 @@ def test_the_capture_is_live_and_unscrubbed(active_user):
         )
 
     assert any(SECRET in line and "alice" in line for line in lines)
+
+
+def test_no_lookup_puts_the_name_it_was_asked_for_in_a_log_line(
+    http, active_user, device, bearer, settings, one_rate_limit_window
+):
+    """The lookup is the one authenticated route whose input is a name, and a name
+    in a log line is the who-looked-for-whom record the route exists to avoid. Every
+    outcome is driven — found, unknown, hidden, refused by shape, throttled — and
+    none may emit the name it was given or the id it answered."""
+    found_name, unknown_name, hidden_name = (
+        "canary_found",
+        "canary_unknown",
+        "canary_hide",
+    )
+    found = User.objects.create_user(username=found_name, is_active=True)
+    User.objects.create_user(username=hidden_name, is_active=True, discoverable=False)
+    headers = bearer(active_user, device)
+    # Four answers and then the refusal, all inside one pinned window.
+    settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "lookup": "4/day"}
+
+    with capture_all_logging() as lines:
+        answers = [
+            http.post(LOOKUP_URL, headers=headers, json={"username": name}).status_code
+            for name in (found_name, unknown_name, hidden_name, "canary refused")
+        ]
+        throttled = http.post(LOOKUP_URL, headers=headers, json={"username": found_name})
+
+    assert answers == [200, 404, 404, 400]
+    assert throttled.status_code == 429
+    assert_absent(
+        lines,
+        {
+            "found name": found_name,
+            "unknown name": unknown_name,
+            "hidden name": hidden_name,
+            "refused name": "canary refused",
+            "found id": str(found.id),
+            "caller id": str(active_user.id),
+        },
+    )

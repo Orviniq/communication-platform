@@ -1,7 +1,8 @@
 # accounts API
 
 Account lifecycle and identity: registration, login, session renewal and logout, the
-user directory, and encrypted profile blobs. Every route here is served by FastAPI.
+exact-username lookup and the setting that hides an account from it, and encrypted
+profile blobs. Every route here is served by FastAPI.
 
 All paths are under `/api/v1`. Requests and responses are JSON; binary values are
 base64 strings. Unless an endpoint says otherwise, it requires
@@ -487,21 +488,42 @@ Scope `accounts`, default 300/min per account. The same code carries the per-nam
 cool-off, whose `detail` reads "Too many sign-in attempts for this name. Wait and try
 again." Both set `Retry-After`.
 
-## List users
+## Find a user by username
 
-**Method:** `GET`
-**Path:** `/api/v1/users`
+**Method:** `POST`
+**Path:** `/api/v1/users/lookup`
 
-Returns every activated account, ordered by username: this is a small private server
-and the directory is how clients pick conversation partners. Entries carry only the id
-and username; nothing about devices or activity. Inactive accounts are absent. The list
-is not paginated, because the scale band caps it at fewer than 50 accounts.
+Finds one account by its exact username and answers its id and its name, nothing
+else. This is how a client turns a name a person told you into the `user_id` every
+other route addresses
+([ADR-0028](../../docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
+There is no list of accounts and no search: the server publishes no directory.
+
+- **Exact.** The name is lowercased, so `BoB` finds `bob`, and then compared for
+  equality. No prefix, no substring and no fuzzy match; `_` and `%` are characters,
+  not wildcards.
+- **One answer for three cases.** A name nobody holds, a name whose account is
+  awaiting activation or deactivated, and a name whose owner turned discoverability
+  off all answer the same `404` with the same body and the same headers. A client
+  cannot tell them apart and must not try.
+- **The name goes in the body.** Never in the path or a query string, because those
+  are what the layers in front of a server write down. A query string on this route is
+  ignored.
+- **The answer is a claim of the server.** It names an account; it proves nothing about
+  whose keys that account holds. Verify the identity before trusting it —
+  [`../CLIENT_CONTRACT.md`](../CLIENT_CONTRACT.md) §P.
+
+**What the setting does not hide.** An account that turned discoverability off is
+missing from this route and from nowhere else. Every route addressed by a `user_id`
+serves it to a caller who already holds the id, and `POST /api/v1/auth/register`
+still answers `409 username_taken` for its name. `backend/SECURITY.md` states both.
 
 **Headers**
 
 | Header | Required | Value |
 |---|---|---|
 | `Authorization` | yes | `Bearer <session token>` |
+| `Content-Type` | yes | `application/json` |
 
 **Path parameters**
 
@@ -517,24 +539,47 @@ is not paginated, because the scale band caps it at fewer than 50 accounts.
 
 **Request body**
 
-None.
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `username` | string | yes | At most 32 characters. Lowercased, then held to the registration rule: 3 to 32 lowercase letters, digits or underscores. Any other field is `400 invalid_request` |
 
-**Retry semantics.** Safe to repeat: the route writes nothing. Two calls a moment
-apart can differ all the same, because the operator activates and deactivates accounts
-between them; the directory is a current answer, never a stable one.
+```json
+{ "username": "alice" }
+```
+
+**Retry semantics.** Safe to repeat: the route writes nothing. Every call spends one
+unit of the `lookup` scope whatever it answers — a found name, a missed one and a
+refused body alike — so a client looks a name up when a person asks it to and keeps
+what it found, and never polls or re-checks a contact by name. Two calls can differ:
+the operator activates and deactivates accounts, and an owner can hide their name, at
+any moment.
 
 **Responses**
 
-### Listed — `200 OK`
+### Found — `200 OK`
 
 ```json
-{
-  "users": [
-    { "user_id": "6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10", "username": "alice" },
-    { "user_id": "b3a91c77-2e5d-4f28-a1c9-8d64e0f3b522", "username": "bob" }
-  ]
-}
+{ "user_id": "6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10", "username": "alice" }
 ```
+
+`username` is the name as the server holds it, lowercased.
+
+### Not a name this server can hold — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "username": ["3–32 chars: lowercase letters, digits, underscore."] } }
+```
+
+The rule registration publishes, and nothing about any account. The name is never
+echoed.
+
+### No account to show — `404 Not Found`
+
+```json
+{ "code": "not_found", "detail": "No account can be found by that name." }
+```
+
+Unknown, inactive and hidden, identically.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -542,9 +587,22 @@ between them; the directory is a current answer, never a stable one.
 { "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
 ```
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
 ### Rate limited — `429 Too Many Requests`
 
-Scope `accounts`, default 300/min per account.
+```json
+{ "code": "throttled", "detail": "Request was throttled." }
+```
+
+Scope `lookup`, default 50/day per account, set by `THROTTLE_LOOKUP`. The window is
+the UTC day, so `Retry-After` can be many hours. The scope is counted before the body
+is read for validity, so a refused name spends it too. When the counter store is
+unreachable the route answers `503 unavailable` rather than an unmetered lookup.
 
 ## Read or change whether my name can be found
 

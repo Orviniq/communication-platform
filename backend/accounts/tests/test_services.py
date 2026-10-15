@@ -3,7 +3,7 @@
 Each function here is one transaction, and what it leaves behind is a row or a
 raised `ApiError`. Driving them without a request is what makes the row state
 observable at the point the unit commits it; the same paths as they look through
-the HTTP surface are in `test_auth_api.py` and `test_directory_profile.py`.
+the HTTP surface are in `test_auth_api.py`, `test_lookup.py` and `test_profile.py`.
 """
 
 import base64
@@ -172,20 +172,36 @@ class TestLogout:
         assert Device.objects.count() == 0
 
 
-class TestDirectory:
-    def test_an_empty_directory_is_an_empty_list(self):
-        assert services.directory() == {"users": []}
+class TestLookup:
+    def test_an_exact_name_finds_the_account_and_names_nothing_else(self, active_user):
+        assert services.lookup("alice") == {
+            "user_id": str(active_user.id),
+            "username": "alice",
+        }
 
-    def test_only_activated_accounts_appear_and_they_are_ordered_by_name(
-        self, active_user
+    @pytest.mark.parametrize("name", ["alic", "lice", "alice_", "al%", "al_ce", ""])
+    def test_a_name_that_is_not_exactly_the_account_finds_nothing(
+        self, active_user, name
     ):
-        User.objects.create_user(username="carol", password=PASSWORD, is_active=True)
+        """No prefix, no substring and no pattern: the statement is an equality, so
+        the characters `LIKE` would read as wildcards are only characters."""
+        with pytest.raises(ApiError) as refused:
+            services.lookup(name)
+
+        assert refused.value.status_code == 404
+
+    def test_the_three_hidden_cases_raise_one_refusal(self, active_user):
         User.objects.create_user(username="pending", password=PASSWORD)
+        User.objects.filter(pk=active_user.pk).update(discoverable=False)
+        refusals = []
+        for name in ("nobody", "pending", "alice"):
+            with pytest.raises(ApiError) as refused:
+                services.lookup(name)
+            refusals.append(refusal(refused))
 
-        body = services.directory()
-
-        assert [row["username"] for row in body["users"]] == ["alice", "carol"]
-        assert set(body["users"][0]) == {"user_id", "username"}
+        assert (
+            refusals == [(404, "not_found", "No account can be found by that name.")] * 3
+        )
 
 
 class TestDiscoverability:

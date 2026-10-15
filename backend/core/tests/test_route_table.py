@@ -36,7 +36,10 @@ EXPECTED = {
     # irreversible one. It counts against `accounts` like every other route of
     # that app; the per-name cool-off is a second bound the scope does not give.
     ("DELETE", "/api/v1/me"): (FULL_DEVICE, "accounts"),
-    ("GET", "/api/v1/users"): (FULL_DEVICE, "accounts"),
+    # The exact-name lookup that replaced the directory (ADR-0028). Its scope is
+    # its own and the tightest an authenticated route carries, because it is the
+    # one that answers whether a name is in use.
+    ("POST", "/api/v1/users/lookup"): (FULL_DEVICE, "lookup"),
     ("GET", "/api/v1/me/discoverability"): (FULL_DEVICE, "accounts"),
     ("PUT", "/api/v1/me/discoverability"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/users/{user_id}/profile"): (FULL_DEVICE, "accounts"),

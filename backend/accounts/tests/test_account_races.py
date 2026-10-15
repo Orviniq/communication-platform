@@ -72,8 +72,8 @@ def storm(work, count=CONCURRENT):
 
 def test_two_registrations_of_one_name_settle_on_a_single_account(new_http):
     """The name race. Whatever the interleaving, one caller is told it created the
-    account and every other is told the name is taken, and the directory the
-    operator later activates has one row to activate."""
+    account and every other is told the name is taken, and the account list the
+    operator later activates from has one row to activate."""
 
     def register(_index):
         return new_http().post(

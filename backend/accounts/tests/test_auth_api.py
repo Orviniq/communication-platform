@@ -28,7 +28,7 @@ REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
 RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
-DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 
 
 class TestRegister:
@@ -208,7 +208,9 @@ class TestLogin:
 
         device.refresh_from_db()
         assert device.token_generation == 1
-        still_live = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {older}"})
+        still_live = http.get(
+            DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {older}"}
+        )
         assert still_live.status_code == 200
 
     def test_revoked_device_falls_back_to_register_scope(self, http, active_user, device):
@@ -298,7 +300,9 @@ class TestRenew:
 
         assert first != second
         for token in (headers["Authorization"].split()[1], first, second):
-            live = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {token}"})
+            live = http.get(
+                DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {token}"}
+            )
             assert live.status_code == 200
 
     def test_the_renewed_token_can_renew_again(self, http, active_user, device, bearer):
@@ -323,11 +327,11 @@ class TestRenew:
         headers = bearer(active_user, device)
         renewed = http.post(RENEW_URL, headers=headers).json()["token"]
         renewed_headers = {"Authorization": f"Bearer {renewed}"}
-        assert http.get(DIRECTORY_URL, headers=renewed_headers).status_code == 200
+        assert http.get(DISCOVERABILITY_URL, headers=renewed_headers).status_code == 200
 
         assert http.post(LOGOUT_URL, headers=headers).status_code == 204
 
-        dead = http.get(DIRECTORY_URL, headers=renewed_headers)
+        dead = http.get(DISCOVERABILITY_URL, headers=renewed_headers)
         assert dead.status_code == 401
         assert dead.json()["code"] == "token_revoked"
 
@@ -399,7 +403,7 @@ class TestLogout:
         assert device.token_generation == 2
         assert (
             http.get(
-                DIRECTORY_URL, headers={"Authorization": f"Bearer {sibling}"}
+                DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {sibling}"}
             ).status_code
             == 401
         )
@@ -497,7 +501,7 @@ class TestLoginLockout:
 
     def test_the_lock_is_keyed_on_the_name_and_not_on_existence(self, http):
         """A name that exists and one that does not lock the same way, so the
-        lock is not an oracle for the directory."""
+        lock is not an oracle for which names are taken."""
         from core.lockout import FAILURE_THRESHOLD
 
         self.fail(http, "ghost", FAILURE_THRESHOLD)
@@ -572,7 +576,7 @@ class TestTheAccountSideOfRevocation:
 
         http.post(LOGOUT_URL, headers=bearer(active_user, device))
 
-        assert http.get(DIRECTORY_URL, headers=untouched).status_code == 200
+        assert http.get(DISCOVERABILITY_URL, headers=untouched).status_code == 200
         second.refresh_from_db()
         assert second.token_generation == 1
 
@@ -598,7 +602,7 @@ class TestTheAccountSideOfRevocation:
         assert again.json()["scope"] == "full"
         assert (
             http.get(
-                DIRECTORY_URL,
+                DISCOVERABILITY_URL,
                 headers={"Authorization": f"Bearer {again.json()['token']}"},
             ).status_code
             == 200
@@ -631,7 +635,7 @@ class TestTheAccountSideOfRevocation:
         active_user.is_active = False
         active_user.save(update_fields=["is_active"])
 
-        frozen = http.get(DIRECTORY_URL, headers=auth)
+        frozen = http.get(DISCOVERABILITY_URL, headers=auth)
         device.refresh_from_db()
         assert frozen.status_code == 401
         assert frozen.json()["code"] == "token_revoked"
@@ -640,7 +644,7 @@ class TestTheAccountSideOfRevocation:
         active_user.is_active = True
         active_user.save(update_fields=["is_active"])
 
-        assert http.get(DIRECTORY_URL, headers=auth).status_code == 200
+        assert http.get(DISCOVERABILITY_URL, headers=auth).status_code == 200
         assert http.post(RENEW_URL, headers=auth).status_code == 200
 
     def test_a_deactivated_account_cannot_sign_in_to_mint_new_tokens(

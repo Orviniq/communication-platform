@@ -444,41 +444,6 @@
         "title": "DeviceRegisteredOut",
         "type": "object"
       },
-      "DirectoryOut": {
-        "properties": {
-          "users": {
-            "items": {
-              "$ref": "#/components/schemas/DirectoryUserOut"
-            },
-            "title": "Users",
-            "type": "array"
-          }
-        },
-        "required": [
-          "users"
-        ],
-        "title": "DirectoryOut",
-        "type": "object"
-      },
-      "DirectoryUserOut": {
-        "properties": {
-          "user_id": {
-            "format": "uuid",
-            "title": "User Id",
-            "type": "string"
-          },
-          "username": {
-            "title": "Username",
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "username"
-        ],
-        "title": "DirectoryUserOut",
-        "type": "object"
-      },
       "DiscoverabilityIn": {
         "additionalProperties": false,
         "description": "The body of `PUT /api/v1/me/discoverability`. Strict, so `\"false\"` and `0`\nare refused rather than read as an answer the owner did not give.",
@@ -823,6 +788,42 @@
           "password"
         ],
         "title": "LoginIn",
+        "type": "object"
+      },
+      "LookupIn": {
+        "additionalProperties": false,
+        "description": "The body of `POST /api/v1/users/lookup`: one name, and nothing else.\n\nThe name travels in the body and never in the path or a query string, because\na path is the part of a request that proxies, crash reports and access logs\nwrite down (ADR-0028). It is lowercased and held to the registration rule\nbefore it reaches a query, so a name no account can hold \u2014 a NUL byte among\nthem, which psycopg refuses outright \u2014 is `400 invalid_request` rather than a\n`500`. That refusal tells the caller the rule `POST /auth/register` already\npublishes and nothing about any account.",
+        "properties": {
+          "username": {
+            "maxLength": 32,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "LookupIn",
+        "type": "object"
+      },
+      "LookupOut": {
+        "description": "The one account an exact name found, and nothing about it but the two\nvalues the caller needs to address it.",
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username"
+        ],
+        "title": "LookupOut",
         "type": "object"
       },
       "OtpkCountOut": {
@@ -4234,19 +4235,40 @@
         ]
       }
     },
-    "/api/v1/users": {
-      "get": {
-        "operationId": "user_directory",
+    "/api/v1/users/lookup": {
+      "post": {
+        "description": "Find one account by its exact name (ADR-0028).\n\nA `POST` that writes nothing: the name is in the body because a path and a\nquery string are what the layers in front of this process write down. The\n`lookup` scope is the tight one, counted per account before the body is\nvalidated, so a refused name, a missed one and a found one spend it alike.",
+        "operationId": "lookup_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DirectoryOut"
+                  "$ref": "#/components/schemas/LookupOut"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
           },
           "401": {
             "content": {
@@ -4267,6 +4289,26 @@
               }
             },
             "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
           },
           "429": {
             "content": {
@@ -4299,7 +4341,7 @@
             "description": "`unavailable`"
           }
         },
-        "summary": "User Directory",
+        "summary": "Lookup User",
         "tags": [
           "accounts"
         ]

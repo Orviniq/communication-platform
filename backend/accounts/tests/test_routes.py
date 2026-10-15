@@ -25,7 +25,8 @@ REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
 RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
-DIRECTORY_URL = "/api/v1/users"
+LOOKUP_URL = "/api/v1/users/lookup"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 MY_PROFILE_URL = "/api/v1/me/profile"
 
 # Every route of this app that reads a body, and whether it needs a credential.
@@ -425,7 +426,7 @@ class TestRoutingRefusals:
             ("GET", REGISTER_URL, "POST"),
             ("GET", LOGIN_URL, "POST"),
             ("GET", RENEW_URL, "POST"),
-            ("DELETE", DIRECTORY_URL, "GET"),
+            ("DELETE", LOOKUP_URL, "POST"),
             ("POST", MY_PROFILE_URL, "GET"),
         ],
     )
@@ -439,7 +440,7 @@ class TestRoutingRefusals:
         assert allowed in response.headers["allow"]
 
     @pytest.mark.parametrize(
-        "url", [f"{LOGIN_URL}/", f"{DIRECTORY_URL}/", f"{MY_PROFILE_URL}/"]
+        "url", [f"{LOGIN_URL}/", f"{LOOKUP_URL}/", f"{MY_PROFILE_URL}/"]
     )
     def test_a_trailing_slash_is_a_refusal_and_never_a_redirect(self, http, url):
         """A redirect would rebuild an absolute address out of the scope path and
@@ -449,11 +450,15 @@ class TestRoutingRefusals:
         assert response.status_code == 404
         envelope(response, "not_found")
 
-    def test_the_directory_ignores_a_body_it_was_never_meant_to_read(self, http, headers):
-        response = http.request("GET", DIRECTORY_URL, headers=headers, json=[1, 2, 3])
+    def test_reading_the_setting_ignores_a_body_it_was_never_meant_to_read(
+        self, http, headers
+    ):
+        response = http.request(
+            "GET", DISCOVERABILITY_URL, headers=headers, json=[1, 2, 3]
+        )
 
         assert response.status_code == 200
-        assert [row["username"] for row in response.json()["users"]] == ["alice"]
+        assert response.json() == {"discoverable": True}
 
     def test_renew_ignores_a_malformed_body(self, http, active_user, device, bearer):
         """The route takes no body, so a client that sends one anyway is served
