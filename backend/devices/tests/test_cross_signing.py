@@ -12,6 +12,7 @@ import threading
 import pytest
 from django.db import connections
 
+from core.tests.workers import many_connections
 from devices.models import Device, UserIdentity
 from devices.schemas import MAX_KEY_INT, PUBKEY_MAX, PUBKEY_MIN
 
@@ -385,6 +386,7 @@ def publish_storm(new_http, headers, payloads):
     return answers
 
 
+@many_connections
 def test_concurrent_first_publishes_settle_on_exactly_one_identity(
     new_http, active_user, device, bearer
 ):
@@ -408,6 +410,7 @@ def test_concurrent_first_publishes_settle_on_exactly_one_identity(
     assert bytes(stored.master_pub) in {(seed * 32)[:32] for seed in seeds}
 
 
+@many_connections
 def test_concurrent_publishes_at_different_versions_keep_the_highest_accepted(
     new_http, active_user, device, bearer
 ):

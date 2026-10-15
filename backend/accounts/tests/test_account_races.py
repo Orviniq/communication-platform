@@ -19,8 +19,9 @@ from django.db import IntegrityError, connection, connections
 
 from accounts.models import ProfileBlob, User
 from core.buckets import PROFILE_BUCKETS
+from core.tests.workers import many_connections
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), many_connections]
 
 CONCURRENT = 4
 GOOD_PASSWORD = "a-sufficiently-long-passphrase"
