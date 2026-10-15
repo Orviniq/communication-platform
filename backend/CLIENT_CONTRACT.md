@@ -368,3 +368,31 @@ is [`../CLIENT_WORK.md`](../CLIENT_WORK.md); what follows is the protocol.
 - Treat a socket as a wake-up hint and never as the delivery contract. The durable
   queue is authoritative (§H), so reconnect with backoff and drain over REST rather
   than trusting a frame to arrive.
+
+## P. Finding a contact
+
+The server publishes no directory. `POST /api/v1/users/lookup` turns one exact name
+into one `user_id`, and that is the whole of contact discovery the server takes part
+in ([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
+
+- **The answer is a claim of the server.** A modified server can answer a lookup with
+  any account it likes — an account it created, holding keys it holds. The `user_id` a
+  lookup returns is a pointer and never an identity: verify the account's master key
+  out of band (§D) before the first message, exactly as §C requires of any peer. A
+  client that trusts a lookup has made the adversary of the threat model its directory.
+- **The contact list lives on the client.** It is never uploaded in any form the server
+  can read: not as a list, not as hashes of names, not as a set of `user_id`s on a
+  route. If it travels between the user's own devices, it travels inside end-to-end
+  encrypted blobs — the key backup, or a device-to-device transfer. A contact is held
+  by its `user_id`, so reaching it again never needs another lookup.
+- **Look up only what the user asked for.** One call when a person types a name.
+  Never in a loop, never as a refresh, never to re-check a known contact: each call is
+  a question asked of the adversary, naming who the user is looking for.
+- **Every `404` is the same `404`.** The server answers a name nobody holds, an
+  inactive account and an account hidden by its owner identically, and the client must
+  not try to tell them apart or describe the answer as "this account does not exist".
+- **The discoverability setting hides a name and nothing else.** Its wording must not
+  claim more: a caller who already holds the `user_id` reaches the account through
+  every route addressed by one, and registration still reports the name as taken
+  (`backend/SECURITY.md` § "Residual risk").
+

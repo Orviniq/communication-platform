@@ -40,7 +40,7 @@ from core.tests.test_route_table import EXPECTED
 from core.tests.test_route_table import FULL_DEVICE as RECORDED_FULL_DEVICE
 from devices.models import Device, UserIdentity
 
-DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 DEVICES_URL = "/api/v1/me/devices"
 RENEW_URL = "/api/v1/auth/renew"
 LOGIN_URL = "/api/v1/auth/login"
@@ -168,7 +168,7 @@ def test_a_bearer_header_is_never_more_than_a_string_handed_to_the_parser(raw):
         {
             "type": "http",
             "method": "GET",
-            "path": DIRECTORY_URL,
+            "path": DISCOVERABILITY_URL,
             "headers": [(b"authorization", header.encode("latin-1", "replace"))],
         }
     )
@@ -184,7 +184,12 @@ def test_a_bearer_header_is_never_more_than_a_string_handed_to_the_parser(raw):
 
 def request_with(*headers):
     return Request(
-        {"type": "http", "method": "GET", "path": DIRECTORY_URL, "headers": list(headers)}
+        {
+            "type": "http",
+            "method": "GET",
+            "path": DISCOVERABILITY_URL,
+            "headers": list(headers),
+        }
     )
 
 
@@ -423,7 +428,7 @@ class TestRevocation:
         assert decode_session(token)["jti"]  # still parses: the signature is intact
         assert load_device(decode_session(token)) is None
         assert load_device(decode_session(sibling)) is None
-        dead = http.get(DIRECTORY_URL, headers=headers)
+        dead = http.get(DISCOVERABILITY_URL, headers=headers)
         assert dead.status_code == 401
         assert dead.json()["code"] == "token_revoked"
 

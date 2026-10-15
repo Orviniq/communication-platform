@@ -36,7 +36,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 ERASE_URL = "/api/v1/me"
 LOGIN_URL = "/api/v1/auth/login"
-DIRECTORY_URL = "/api/v1/users"
+LOOKUP_URL = "/api/v1/users/lookup"
 
 
 @pytest.fixture
@@ -95,9 +95,9 @@ class TestTheCascade:
         assert response.status_code == 201
 
     def test_another_account_is_untouched(self, http, active_user, device, bearer, bob):
-        """The cascade is scoped to the account that asked. Bob's device, mailbox
-        and directory entry survive, which is the assertion a `filter()` that lost
-        its `user_id` would fail."""
+        """The cascade is scoped to the account that asked. Bob's account, device
+        and mailbox survive, which is the assertion a `filter()` that lost its
+        `user_id` would fail."""
         bob_device = Device.objects.create(
             user=bob,
             ik_pub=b"ik",
@@ -116,9 +116,11 @@ class TestTheCascade:
         assert Device.objects.filter(pk=bob_device.pk).exists()
         assert QueuedEnvelope.objects.filter(recipient_device_id=bob_device.pk).exists()
 
-    def test_the_account_leaves_the_directory(
+    def test_the_erased_name_is_found_by_no_lookup(
         self, http, active_user, device, bearer, bob
     ):
+        """Found the moment before, and the same `404` an unknown name gets the
+        moment after: the lookup reads the account row, and the row is gone."""
         bob_device = Device.objects.create(
             user=bob,
             ik_pub=b"ik",
@@ -127,11 +129,15 @@ class TestTheCascade:
             spk_sig=b"sig",
             registration_id=98,
         )
+        bobs = bearer(bob, bob_device)
+        before = http.post(LOOKUP_URL, headers=bobs, json={"username": "alice"})
 
         erase(http, bearer(active_user, device))
 
-        listed = http.get(DIRECTORY_URL, headers=bearer(bob, bob_device)).json()["users"]
-        assert [entry["username"] for entry in listed] == ["bob"]
+        after = http.post(LOOKUP_URL, headers=bobs, json={"username": "alice"})
+        unknown = http.post(LOOKUP_URL, headers=bobs, json={"username": "nobody"})
+        assert before.status_code == 200
+        assert (after.status_code, after.json()) == (404, unknown.json())
 
     def test_the_attachments_stay_for_the_sweep(self, http, active_user, device, bearer):
         """Nothing on an attachment row names an account (ADR-0025), so there is no

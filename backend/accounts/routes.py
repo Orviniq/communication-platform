@@ -1,5 +1,5 @@
-"""The accounts routes: registration, login, the token lifecycle, the user
-directory and the encrypted profile blobs.
+"""The accounts routes: registration, login, the token lifecycle, the exact
+username lookup and its setting, and the encrypted profile blobs.
 
 Two routers, and a route belongs to exactly one of them. `anonymous` declares
 that a route takes no credential; `authenticated` declares the default, which is
@@ -13,10 +13,13 @@ from fastapi import APIRouter, Depends, Response, status
 
 from accounts import services
 from accounts.schemas import (
-    DirectoryOut,
+    DiscoverabilityIn,
+    DiscoverabilityOut,
     EraseIn,
     LoginIn,
     LoginOut,
+    LookupIn,
+    LookupOut,
     ProfileIn,
     ProfileOut,
     RegisterIn,
@@ -127,14 +130,53 @@ async def erase_account(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@authenticated.post(
+    "/users/lookup",
+    response_model=LookupOut,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "not_found",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("lookup"))],
+)
+async def lookup_user(payload: LookupIn):
+    """Find one account by its exact name (ADR-0028).
+
+    A `POST` that writes nothing: the name is in the body because a path and a
+    query string are what the layers in front of this process write down. The
+    `lookup` scope is the tight one, counted per account before the body is
+    validated, so a refused name, a missed one and a found one spend it alike.
+    """
+    return await run_unit(services.lookup, payload.username)
+
+
 @authenticated.get(
-    "/users",
-    response_model=DirectoryOut,
+    "/me/discoverability",
+    response_model=DiscoverabilityOut,
     responses=errors(*FULL_DEVICE, "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
-async def user_directory():
-    return await run_unit(services.directory)
+async def my_discoverability(principal: Principal = Depends(require_full_device)):
+    return await run_unit(services.discoverability, principal.user.id)
+
+
+@authenticated.put(
+    "/me/discoverability",
+    response_model=DiscoverabilityOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "payload_too_large", "throttled"),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
+async def set_my_discoverability(
+    payload: DiscoverabilityIn, principal: Principal = Depends(require_full_device)
+):
+    """Whether `POST /users/lookup` can find this account by its name. It changes
+    nothing about any route addressed by a `user_id`."""
+    return await run_unit(
+        services.set_discoverability, principal.user.id, payload.discoverable
+    )
 
 
 @authenticated.get(

@@ -47,6 +47,20 @@ FORBIDDEN_FIELD_NAMES = frozenset(
         "roster",
         "group_members",
         "password_plain",
+        # A contact list kept by the server, in the spellings it would arrive in.
+        # ADR-0028 removed the directory and keeps the contact list on the client:
+        # who looked whom up, who added whom, and who may see whom are each the
+        # social graph at rest, and `discoverable` is one boolean about one account
+        # precisely so that it never becomes a list of the accounts allowed to see
+        # it.
+        "contacts",
+        "contact_list",
+        "friends",
+        "lookups",
+        "lookup_history",
+        "search_history",
+        "discoverable_by",
+        "visible_to",
     }
 )
 
@@ -170,15 +184,18 @@ def envelope_graph_offenders():
 
 
 def dual_user_fk_offenders():
-    """Outside `accounts`, no table may hold two references to users: the shape that
-    would encode a sender-recipient pair at rest. history/keybackup/attachment each
-    reference only their owner/uploader."""
+    """No table may hold two references to users: the shape that would encode a
+    sender-recipient pair, or a contact list, at rest. Every table references only
+    its owner.
+
+    `accounts` is not exempt. It once was, for no table that needed it, and it is
+    the app a server-side contact list would most naturally be added to — a
+    `Contact(owner, peer)` beside the user model — so the exemption was a hole
+    exactly where ADR-0028 says the graph must never be stored."""
     from accounts.models import User
 
     offenders = []
     for model in apps.get_models():
-        if model._meta.app_label == "accounts":
-            continue
         user_fks = [
             f.name
             for f in _concrete_fields(model)
@@ -218,9 +235,20 @@ class SeizureGuardTests(SimpleTestCase):
             envelope_graph_offenders(), [], "Sealed sender at rest was broken"
         )
 
-    def test_no_table_outside_accounts_references_users_twice(self):
+    def test_no_table_references_users_twice(self):
         self.assertEqual(
             dual_user_fk_offenders(), [], "A sender-recipient-shaped table appeared"
+        )
+
+    def test_the_account_row_holds_exactly_what_the_seizure_list_names(self):
+        """`backend/SECURITY.md` § "What a seizure of the disk and database yields"
+        names the user list as usernames, Argon2id hashes, activation flags, the
+        day of creation and the discoverability flag. This is that list, column for
+        column: a column added to the account table fails here until the seizure
+        list says what it yields."""
+        self.assertEqual(
+            {field.column for field in User._meta.concrete_fields},
+            SEIZED_ACCOUNT_COLUMNS,
         )
 
     def test_the_framework_exemption_list_cannot_quietly_grow(self):
@@ -265,6 +293,27 @@ class SeizureGuardTests(SimpleTestCase):
             },
             blob_names,
         )
+
+
+# The columns of `accounts_user`, each with the line of the seizure list in
+# `backend/SECURITY.md` that names it. `discoverable` is one boolean about one
+# account: whether its owner lets `POST /users/lookup` find it by name (ADR-0028).
+# It says nothing about any other account, and it is at rest rather than in Redis
+# because a store that forgets on restart would make every hidden account findable
+# again — a privacy setting that fails open.
+SEIZED_ACCOUNT_COLUMNS = frozenset(
+    {
+        "id",  # the user list
+        "username",  # the user list
+        "password",  # Argon2id hashes
+        "is_active",  # activation flags
+        "is_staff",  # activation flags: the operator's own account
+        "is_superuser",  # activation flags: the operator's own account
+        "last_login",  # written by a panel sign-in only (AR-11)
+        "created_date",  # day-granularity account creation
+        "discoverable",  # the discoverability flag (ADR-0028)
+    }
+)
 
 
 # State the threat model keeps in Redis and nowhere else (invariant 7). A column
@@ -437,6 +486,39 @@ class GuardCanaryTests(SimpleTestCase):
 
             self.assertEqual(self.audited(raw_binary_offenders, Canary), [])
             self.assertEqual(self.audited(unbucketed_blob_offenders, Canary), [])
+
+    def test_a_contact_list_column_is_named(self):
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                contacts = models.JSONField()
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(forbidden_column_offenders, Canary),
+                ["core.Canary.contacts"],
+            )
+
+    def test_a_contact_table_in_the_accounts_app_is_named(self):
+        """The case the old exemption let through: an owner and a peer, declared
+        beside the user model."""
+        with isolate_apps("accounts"):
+
+            class Contact(models.Model):
+                owner = models.ForeignKey(
+                    User, on_delete=models.CASCADE, related_name="+"
+                )
+                peer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+
+                class Meta:
+                    app_label = "accounts"
+
+            self.assertEqual(
+                self.audited(dual_user_fk_offenders, Contact),
+                ["accounts.Contact: ['owner', 'peer']"],
+            )
 
     def test_a_table_that_references_two_users_is_named(self):
         """The sender-recipient pair at rest, in the one shape that carries no

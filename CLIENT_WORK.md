@@ -29,6 +29,8 @@ authoritative and this one never restates it.
 | The linked-devices screen must stop reading `last_active_date`, which no route serves | [Required — the linked-devices screen loses the last-active value](#required--the-linked-devices-screen-loses-the-last-active-value) | [`backend/devices/API.md`](backend/devices/API.md) |
 | The gateway handles `ack` and `signal` and emits `envelope` and `signal` and nothing else; the frames that left must go from the client | [The gateway frames that left](#the-gateway-frames-that-left-and-the-one-that-changed-shape) | [`backend/realtime/API.md`](backend/realtime/API.md) |
 | The account-erasure action, so a user who wants to leave has a way to | [Required before release — the erase-account action](#required-before-release--the-erase-account-action) | [`backend/accounts/API.md`](backend/accounts/API.md) |
+| `GET /api/v1/users` is gone: find people by exact name, one lookup at a time, and keep the contact list on the client | [Required before release — find people by exact name](#required-before-release--find-people-by-exact-name) | [`backend/accounts/API.md`](backend/accounts/API.md), [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §P |
+| The "find me by username" toggle, worded so it does not promise more than it hides | [Required before release — the discoverability toggle](#required-before-release--the-discoverability-toggle) | [`backend/accounts/API.md`](backend/accounts/API.md) |
 | The web platform files, the conditional-import stubs and the web build step the removed web target left behind | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
 | Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
 
@@ -431,3 +433,54 @@ Two smaller facts belong in the same text if the screen mentions them at all:
   Nothing on a stored attachment names an account, so there is no set of them the
   call could delete.
 - The username becomes available again immediately. Someone else may register it.
+
+## The directory leaves
+
+[ADR-0028](docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)
+removes `GET /api/v1/users`, the list of every activated account, and replaces it with
+`POST /api/v1/users/lookup`, which finds one account by its exact name. An account's
+owner can hide it from that lookup. **The contact picker fails from the server merge
+until this lands**: it calls the removed route.
+
+The observable behaviour is in [`API_CHANGES.md`](API_CHANGES.md) § "The directory
+leaves: one exact name finds one account", and `backend/accounts/API.md` carries both
+sections.
+
+### Required before release — find people by exact name
+
+What the client does today, read on 2026-10-15: `DirectoryService.refresh()` fetches
+the whole list through `fetchActivatedUsers()` and hands it to `replaceDirectory`,
+which replaces the local `users` table with it, and the new-contact page searches
+that table locally.
+
+| Path | What is needed |
+|---|---|
+| `frontend/lib/features/contacts/infrastructure/dio_contact_repository.dart` | `fetchActivatedUsers()` and its `GET /api/v1/users` go. In their place, one call: `POST /api/v1/users/lookup` with `{"username": "…"}` in the body — never in the URL — answering `{user_id, username}` or `404` |
+| `DirectoryService` and `replaceDirectory` | Nothing refreshes a directory any more, and nothing may replace the local table wholesale: an add-only contact list built from lookups would be erased by the next "refresh". A contact is added when the user adds one and removed when the user removes one |
+| The new-contact page | The user types the exact name a person gave them, and the client looks it up once. The local search over contacts already added stays — it is a search of the client's own list. The string "Activated users will appear here after the directory refreshes." describes a server that no longer exists |
+| `404 not_found` | One message for every case: no account by that name **can be found**. Never "does not exist" — the account may exist and be hidden or awaiting activation, and the server deliberately does not say which |
+| `400 invalid_request` | The name cannot be a username at all: 3 to 32 lowercase letters, digits or underscores. Say so before the call if the field validates as the user types |
+| `429 throttled` | The `lookup` scope is fifty a day per account, across all its devices, and every call spends it — found, missed or refused. Show the `Retry-After` wait, which can be hours |
+| The contact list | Kept on the client. If it is synced between the user's own devices, it travels only inside end-to-end encrypted blobs the server cannot read — the key backup, or a device-to-device transfer — and never as anything the server can parse. A contact is held by its `user_id`, so the client never needs to look a name up again to reach it |
+| The answer | A claim of the server, not a verified identity. Before the first message, the contact's identity is verified exactly as `backend/CLIENT_CONTRACT.md` §C and §D require of any peer — §P says why this matters more for a lookup |
+
+### Required before release — the discoverability toggle
+
+`GET` and `PUT /api/v1/me/discoverability` read and set the account's own "find me by
+username" setting. It is on for every account, including every account that existed
+before this change.
+
+| Path | What is needed |
+|---|---|
+| Settings | A toggle, on by default, that reads its state with `GET` and sets it with `PUT {"discoverable": true\|false}` — a JSON boolean, not a string. `PUT` sets rather than flips, so a retry after a lost response is safe |
+| The toggle's wording | Below |
+
+**The wording is part of the requirement.** Off means one thing: a person who types
+this user's name into the lookup is told no account can be found. It does **not**
+hide the account from anyone who already has it — a contact, or a member of a group
+they share, holds the `user_id` and reaches the account through every route addressed
+by one — and registration still reports the name as taken to anyone who tries to
+register it. A label such as "Hide my account" or "Make me invisible" is a claim the
+system does not keep; "Let people find me by my username" is the setting as it is.
+`backend/SECURITY.md` states the same limits.
+

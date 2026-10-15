@@ -113,6 +113,7 @@ THROTTLE_VARIABLES = {
     "claim": "THROTTLE_CLAIM",
     "envelopes": "THROTTLE_ENVELOPES",
     "login": "THROTTLE_LOGIN",
+    "lookup": "THROTTLE_LOOKUP",
     "register": "THROTTLE_REGISTER",
     "relay": "THROTTLE_RELAY",
 }
@@ -251,6 +252,14 @@ class TestWhatAnOperatorGetsBySettingNothing:
         assert set(module.THROTTLE_RATES) == set(THROTTLE_VARIABLES)
         assert all(module.THROTTLE_RATES.values())
 
+    def test_the_lookup_scope_defaults_to_fifty_a_day(self, monkeypatch):
+        """The one scope sized against a dictionary rather than a client's
+        traffic: a 10 000-name list costs one account 200 days at this rate, and a
+        deployment that sets nothing gets it (ADR-0028)."""
+        module = load_base(monkeypatch)
+
+        assert module.THROTTLE_RATES["lookup"] == "50/day"
+
 
 class TestTheNumericBoundary:
     def test_the_recorded_numeric_settings_are_all_of_them(self):
@@ -304,7 +313,7 @@ class TestTheStringAndListBoundary:
     def test_each_throttle_scope_reads_its_own_variable(
         self, monkeypatch, scope, variable
     ):
-        """Eight scopes and eight variables. A scope pointed at the wrong one gives
+        """Nine scopes and nine variables. A scope pointed at the wrong one gives
         a route somebody else's limit — `register` at the `envelopes` rate is 600
         registrations a minute."""
         module = load_base(monkeypatch, **{variable: "3/hour"})

@@ -37,9 +37,30 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=False)  # the owner activates accounts
     is_staff = models.BooleanField(default=False)
     created_date = models.DateField(auto_now_add=True)
+    # Whether `POST /users/lookup` may find this account by its name (ADR-0028).
+    # The owner's choice, on by default. `db_default` as well as `default`, so the
+    # column keeps its default in the database: a row inserted by a release that
+    # does not know the column is findable, never refused.
+    discoverable = models.BooleanField(default=True, db_default=True)
 
     USERNAME_FIELD = "username"
     objects = UserManager()
+
+    class Meta:
+        indexes = [
+            # The names `POST /users/lookup` may find, and no other. An unknown name,
+            # an inactive account's and a hidden account's all miss this index
+            # alike, so the three answers the route must not tell apart cost the
+            # same index pages and no heap page — where the unique index on
+            # `username` would read the row of the two that exist before filtering
+            # it out (measured, ADR-0028). Below a few hundred rows the planner
+            # scans the table instead, which is the same work for every name too.
+            models.Index(
+                fields=["username"],
+                name="ix_user_findable_name",
+                condition=models.Q(is_active=True, discoverable=True),
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         self.username = self.username.lower()

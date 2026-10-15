@@ -197,17 +197,46 @@ def logout(user_id, device_id):
     close_device_sockets(device_id)
 
 
-def directory():
-    """Every activated account, ordered by username. This is a small private
-    server and the directory is how clients pick conversation partners."""
+def lookup(username):
+    """The one account an exact name finds, or the same `404` whatever kept it
+    hidden (ADR-0028).
+
+    An unknown name, an inactive account and an account whose owner turned
+    discoverability off are one answer, reached by one statement with one shape:
+    the filter is in the query rather than in Python, so no branch here runs for
+    one of the three and not the others. The statement reads
+    `ix_user_findable_name`, which holds only the findable names, so the three
+    miss it alike and none of them reads a row.
+
+    Sliced rather than `.first()`, which would order by the primary key and put a
+    sort into a plan that can only ever return one row.
+    """
+    found = list(
+        User.objects.filter(username=username, is_active=True, discoverable=True).values(
+            "id", "username"
+        )[:1]
+    )
+    if not found:
+        raise ApiError(404, "not_found", "No account can be found by that name.")
+    return {"user_id": str(found[0]["id"]), "username": found[0]["username"]}
+
+
+def discoverability(user_id):
+    """Whether `lookup` can find this account. One column of a row the
+    authentication requirement has already read, read on its own because that
+    read loads `id` and `is_active` alone."""
     return {
-        "users": [
-            {"user_id": str(row["id"]), "username": row["username"]}
-            for row in User.objects.filter(is_active=True)
-            .order_by("username")
-            .values("id", "username")
-        ]
+        "discoverable": User.objects.filter(pk=user_id)
+        .values_list("discoverable", flat=True)
+        .get()
     }
+
+
+def set_discoverability(user_id, discoverable):
+    """One `UPDATE` of one column, so setting the value it already holds changes
+    nothing and a repeat of the call is the call."""
+    User.objects.filter(pk=user_id).update(discoverable=discoverable)
+    return {"discoverable": discoverable}
 
 
 def peer_profile(user_id):

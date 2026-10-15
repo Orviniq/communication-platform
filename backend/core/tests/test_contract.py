@@ -1,6 +1,6 @@
 """Every answer `backend/openapi.json` declares, produced by the running surface.
 
-`core/tests/artefact.py` reads the committed document and lists the 216
+`core/tests/artefact.py` reads the committed document and lists the 256
 `(method, template, status)` triples it declares. A document may declare a status
 no code path can reach, and nothing in the drift gate would notice: the gate
 proves the document matches the *routes*, not that the surface can actually
@@ -338,9 +338,29 @@ def _erase(stage):
     )
 
 
-@sample("GET", f"{PREFIX}/users", "200")
-def _directory(stage):
-    return Call("GET", f"{PREFIX}/users", stage.auth)
+@sample("POST", f"{PREFIX}/users/lookup", "200")
+def _lookup(stage):
+    return Call(
+        "POST",
+        f"{PREFIX}/users/lookup",
+        stage.auth,
+        body={"json": {"username": stage.peer.username}},
+    )
+
+
+@sample("GET", f"{PREFIX}/me/discoverability", "200")
+def _my_discoverability(stage):
+    return Call("GET", f"{PREFIX}/me/discoverability", stage.auth)
+
+
+@sample("PUT", f"{PREFIX}/me/discoverability", "200")
+def _set_my_discoverability(stage):
+    return Call(
+        "PUT",
+        f"{PREFIX}/me/discoverability",
+        stage.auth,
+        body={"json": {"discoverable": False}},
+    )
 
 
 @sample("GET", PREFIX + "/users/{user_id}/profile", "200")
@@ -590,6 +610,13 @@ def _no_peer_profile(stage):
     return stage.http.get(f"{PREFIX}/users/{MISSING_UUID}/profile", headers=stage.auth)
 
 
+@drives("POST", f"{PREFIX}/users/lookup", "404")
+def _no_such_name(stage):
+    return stage.http.post(
+        f"{PREFIX}/users/lookup", headers=stage.auth, json={"username": "nobody"}
+    )
+
+
 # --- The writes that conflict with what is already stored ------------------------
 
 
@@ -764,7 +791,7 @@ def an_unavailable_dependency(stage, method, template):
 # next call would authenticate with. They burn their scope on a route that shares
 # it and leaves the token alone.
 def _burn_the_accounts_scope(stage):
-    return stage.http.get(f"{PREFIX}/users", headers=stage.auth)
+    return stage.http.get(f"{PREFIX}/config", headers=stage.auth)
 
 
 BURNERS = {

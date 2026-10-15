@@ -152,10 +152,18 @@ class AccountAdmin(PanelModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """Django writes the audit row for a change-form save itself; the socket
-        close is what it does not know about."""
+        close is what it does not know about.
+
+        The save names the columns the form edits rather than writing the row. The
+        stock `obj.save()` writes every column back as the panel read it, so a
+        discoverability choice the owner made between that read and this save
+        would be reverted, and a hidden account made findable again by an operator
+        who never saw the setting (ADR-0028). The panel adds no account, so there
+        is no insert for this to get wrong.
+        """
         deactivated = change and not obj.is_active and "is_active" in form.changed_data
         with transaction.atomic():
-            super().save_model(request, obj, form, change)
+            obj.save(update_fields=AccountForm.Meta.fields)
             if deactivated:
                 transaction.on_commit(lambda: _close_sockets_of([obj.pk]))
 

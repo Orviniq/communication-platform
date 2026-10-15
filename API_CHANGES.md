@@ -758,28 +758,49 @@ attachment fields under "The attachment store stops naming accounts" — and thi
 changes no request shape, no response shape, no status and no header.
 `backend/openapi.json` is byte-for-byte unchanged across it.
 
+## The directory leaves: one exact name finds one account
+
+[ADR-0028](docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)
+removes the list of every account and replaces it with a lookup of one account by
+its exact name, behind a setting its owner controls. **This is a breaking change**:
+the client's contact picker reads `GET /api/v1/users`
+(`frontend/lib/features/contacts/infrastructure/dio_contact_repository.dart`,
+read 2026-10-15), and it fails from this merge until the client update ships.
+[`CLIENT_WORK.md`](CLIENT_WORK.md) carries that update as required before release.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `GET /api/v1/users` — **removed, breaking** | `200 {"users": [{"user_id", "username"}, …]}`: every activated account, ordered by name, to any full-scope token | No such operation. `GET` on the path answers `404 not_found`, the body every unserved path answers. `DirectoryOut` and `DirectoryUserOut` leave the document | **Required before release.** Stop calling it, stop replacing the local contact table with its answer, and build the contact list one lookup at a time |
+| `POST /api/v1/users/lookup` — **new** | — | A full-scope token and `{"username": "…"}`. `200 {"user_id", "username"}` for an exact match after lowercasing; `404 {"code": "not_found", "detail": "No account can be found by that name."}` for a name nobody holds, an inactive account and a hidden one, identically; `400 invalid_request` for a name no account could hold, with the registration rule's message and no echo. No prefix, substring or fuzzy match | Ask for the exact name a person gives you. Treat every `404` the same, and never present it as "this account does not exist" |
+| The name's place in the request | — | The body, always. The operation takes no path parameter and no query parameter, and no operation of the surface takes a name in its address | Never put a username in a URL |
+| The `lookup` rate scope — **new** | — | `THROTTLE_LOOKUP`, default `50/day` per account across all its devices, a UTC-day window. Every outcome spends it, a refused body included. `429 throttled` with a `Retry-After` that can be hours; `503 unavailable` when the counter store is down | Look a name up when the person asks, keep the `user_id` it returns, and never poll, refresh or re-check a contact by name. Show the wait on a `429` |
+| `GET` and `PUT /api/v1/me/discoverability` — **new** | — | `{"discoverable": true\|false}`, on for every account including the ones that existed before this change. `PUT` takes a strict JSON boolean and sets it — `"false"` and `0` are `400`. Off, the lookup answers that name as it answers a name nobody holds. The `accounts` scope | **Required before release**: offer the toggle, with wording that says what it does not hide |
+| Routes addressed by a `user_id` | Served for any active account | Unchanged, and unaffected by the setting: profile, identity, devices, device log, prekey claim, the peer-state batch and the send all serve a hidden account to a caller who holds its id | Do not tell a user that hiding their name hides them from people who already have them |
+| `POST /api/v1/auth/register` | `409 username_taken` for any existing name | Unchanged, including for an inactive or hidden account's name | None. Say so if the toggle's wording mentions registration at all |
+
 ## What the client can build against now
 
-**The surface is frozen at `v1` from this merge.** It is **32 operations over 28
+**The surface is frozen at `v1` from this merge.** It is **34 operations over 29
 paths**, plus the `/ws` gateway, and nothing else answers:
 
 | App | Operations | What the client reaches there |
 |---|---|---|
 | [`devices`](backend/devices/API.md) | 13 | Device registration and revocation, the cross-signing identity, classical and ML-KEM prekeys, peer bundles and claims, the device-list log, and the peer-state batch |
-| [`accounts`](backend/accounts/API.md) | 9 | Register, login, renew, logout, the user directory, the encrypted profile, and account erasure |
+| [`accounts`](backend/accounts/API.md) | 11 | Register, login, renew, logout, the exact-username lookup and its discoverability setting, the encrypted profile, and account erasure |
 | [`messaging`](backend/messaging/API.md) | 3 | Fan-out send, per-device drain, ack |
 | [`attachments`](backend/attachments/API.md) | 2 | Bucketed upload and capability download |
 | [`vault`](backend/vault/API.md) | 2 | Read and write the recovery key backup |
 | [`core`](backend/core/API.md) | 2 | Health, and the published limits |
 | [`realtime`](backend/realtime/API.md) | 1 | The relay credential. The `/ws` gateway itself is a WebSocket and carries no OpenAPI operation, so `realtime/API.md` is the whole of its reference: its frames, its bucket rules and its close codes |
 
-By method that is 13 `GET`, 12 `POST`, 5 `PUT` and 2 `DELETE`. Every one of the 32
-declares `401`, `403`, `429`, `500` and `503`; 21 declare `400`, 15 `413`, 7 `404`
-and 7 `409`.
+By method that is 13 `GET`, 13 `POST`, 6 `PUT` and 2 `DELETE`. Every one of the 34
+declares `500` and `503`; 33 declare `429` (all but health), 32 `401` (all but
+health and register) and 31 `403` (all but those two and `POST /api/v1/me/devices`,
+which admits both token kinds); 23 declare `400`, 17 `413`, 8 `404` and 7 `409`.
 
-**3 of the 32 take no credential** — health, register and login. **One takes the
+**3 of the 34 take no credential** — health, register and login. **One takes the
 short-lived register-scope token** — `POST /api/v1/me/devices`, which is the route
-that mints the device a caller does not yet have. **The other 28 take a session token
+that mints the device a caller does not yet have. **The other 30 take a session token
 bound to a live device**, and there is exactly one kind of it: one token, thirty
 days, no refresh, revoked by a counter on the device row
 ([ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md)).

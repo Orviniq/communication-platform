@@ -143,7 +143,7 @@ online to transfer it. There is no server history API.
 | Path | Owns |
 |---|---|
 | `api` | The FastAPI runtime and the seam: the composed application, token issue and verification, the error envelope, the shared Redis client and the rate limiter over it, the ORM unit-of-work helper, the pure-ASGI request limits |
-| `accounts` | User model, register/login/renew/logout, user directory, encrypted profile blobs |
+| `accounts` | User model, register/login/renew/logout, the exact-username lookup and its discoverability setting, encrypted profile blobs |
 | `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, device-list log, peer bundles and claims, revocation cascade |
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
@@ -284,6 +284,7 @@ Every environment variable the code reads, with its default:
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |
 | `THROTTLE_RELAY` | `60/min` | Rate limit: relay-credential minting, per account |
+| `THROTTLE_LOOKUP` | `50/day` | Rate limit: the exact-username lookup, per account. Sized against a dictionary, not against traffic (ADR-0028) |
 | `ATTACHMENTS_ROOT` | `<repo>/media_root` | Directory for attachment bytes |
 | `ATTACH_DAILY_BYTES` | `268435456` | What one account may upload in one UTC day (256 MiB), counted in Redis; an upload past it is `413 quota_exceeded`. No lifetime total is kept, because no attachment row names an account |
 | `ATTACH_MIN_FREE_BYTES` | `2147483648` | Free space `ATTACHMENTS_ROOT` must still have for an upload to be admitted (2 GiB); below it every upload answers `503 storage_full` |

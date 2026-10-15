@@ -37,8 +37,15 @@ ALIAS = "migration_replay"
 RETIRE_DATES = "0002_retire_the_activity_dates"
 BACKFILL_THE_DAY = "0004_backfill_the_queued_day"
 DROP_THE_DATE = "0003_drop_the_retired_date"
+DISCOVERABILITY = "0004_the_discoverability_setting"
 HISTORY = {
-    "accounts": [INITIAL, RETIRE_DATES, DROP_THE_DATE],
+    "accounts": [
+        INITIAL,
+        RETIRE_DATES,
+        DROP_THE_DATE,
+        DISCOVERABILITY,
+        "0005_index_the_findable_names",
+    ],
     "attachments": [INITIAL, "0002_drop_the_uploader_link"],
     "devices": [INITIAL, RETIRE_DATES, "0003_drop_the_retired_columns"],
     "messaging": [
@@ -986,6 +993,13 @@ LOCK_STRENGTH = [
 # `attachments_attachment` and `DROP CONSTRAINT` locks both sides. The concurrent
 # index drop in front of the queue's column is `atomic = False`, so like `0005` it is
 # absent from this map and held by the test below it instead.
+#
+# `accounts.0004_the_discoverability_setting` is the second `ADD COLUMN` of the
+# history and the first on the account table: one ACCESS EXCLUSIVE on `accounts_user`
+# for a catalogue write, 0.342 ms against a 200 000-row copy with `relfilenode`
+# unchanged. Its default stays in the database (`db_default`), so unlike the queue's
+# it is not followed by a `DROP DEFAULT`. The index behind it, `0005`, is built
+# concurrently and is held by the test below with the other two.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
@@ -993,6 +1007,7 @@ BLOCKING_LOCKS = {
     },
     ("accounts", RETIRE_DATES): {"accounts_profileblob": "AccessExclusiveLock"},
     ("accounts", DROP_THE_DATE): {"accounts_profileblob": "AccessExclusiveLock"},
+    ("accounts", DISCOVERABILITY): {"accounts_user": "AccessExclusiveLock"},
     ("attachments", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("attachments", "0002_drop_the_uploader_link"): {
         "accounts_user": "AccessExclusiveLock",
@@ -1024,8 +1039,12 @@ BLOCKING_LOCKS = {
     ("vault", DROP_THE_DATE): {"vault_keybackup": "AccessExclusiveLock"},
 }
 
+# `relfilenode` rides along because it is what a rewrite moves: PostgreSQL builds the
+# rewritten table in a new file and swaps it in, so a table whose file changed inside
+# the transaction was rewritten — even an empty one, which is the only kind the replay
+# database holds.
 RELATIONS_IN_SCHEMA = """
-SELECT c.oid, c.relname, c.relkind
+SELECT c.oid, c.relname, c.relkind, c.relfilenode
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = current_schema()
 """
@@ -1081,11 +1100,14 @@ def run_and_read_the_locks(alias, statements):
 
     Returns the locks as (mode, relname, relkind) — resolved from the schema read on
     either side of the statements, so a relation the migration dropped is still
-    named — plus the relations it created and the relations it dropped.
+    named — plus the relations it created, the relations it dropped, and the tables
+    that existed before it and were rewritten by it.
     """
     with connections[alias].cursor() as cursor:
         cursor.execute(RELATIONS_IN_SCHEMA)
-        before = {oid: (name, kind) for oid, name, kind in cursor.fetchall()}
+        rows = cursor.fetchall()
+    before = {oid: (name, kind) for oid, name, kind, _file in rows}
+    files_before = {oid: file for oid, _name, kind, file in rows if kind == "r"}
     with transaction.atomic(using=alias):
         with connections[alias].cursor() as cursor:
             for statement in statements:
@@ -1093,13 +1115,20 @@ def run_and_read_the_locks(alias, statements):
             cursor.execute(LOCKS_HELD)
             held = cursor.fetchall()
             cursor.execute(RELATIONS_IN_SCHEMA)
-            after = {oid: (name, kind) for oid, name, kind in cursor.fetchall()}
+            rows = cursor.fetchall()
         transaction.set_rollback(True, using=alias)
+    after = {oid: (name, kind) for oid, name, kind, _file in rows}
+    files_after = {oid: file for oid, _name, kind, file in rows if kind == "r"}
     known = {**before, **after}
     locks = [(mode, *known[oid]) for mode, oid in held if oid in known]
     created = {name for name, _kind in (after[oid] for oid in after.keys() - before)}
     dropped = {name for name, _kind in (before[oid] for oid in before.keys() - after)}
-    return locks, created, dropped
+    rewritten = {
+        before[oid][0]
+        for oid in files_before.keys() & files_after.keys()
+        if files_before[oid] != files_after[oid]
+    }
+    return locks, created, dropped, rewritten
 
 
 def strongest(modes):
@@ -1115,9 +1144,14 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
 
     The migration's own SQL is run against a database migrated to exactly the state
     that precedes it, and `pg_locks` is read while the transaction still holds
-    everything it took. Two things are asserted: no relation that already existed
-    is locked harder than `BLOCKING_LOCKS` records, and nothing outside the set of
-    relations this migration created or dropped is held at ACCESS EXCLUSIVE.
+    everything it took. Three things are asserted: no relation that already existed
+    is locked harder than `BLOCKING_LOCKS` records, nothing outside the set of
+    relations this migration created or dropped is held at ACCESS EXCLUSIVE, and no
+    table that already existed was rewritten — its file is the one it had before the
+    statements ran. The last is what turns "a catalogue write" in `LOCK_CLASSES` from
+    a measurement somebody once took on a scratch copy into a gate on every
+    migration: a type change, a volatile default or any other rewrite moves the file
+    even on the empty tables this replay holds.
 
     What this catches in a migration somebody adds later: an `ALTER TABLE` that
     rewrites a populated table or sets a column NOT NULL without a validated
@@ -1141,7 +1175,7 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
     out = StringIO()
     call_command("sqlmigrate", app, name, database=empty_database, stdout=out)
 
-    locks, created, dropped = run_and_read_the_locks(
+    locks, created, dropped, rewritten = run_and_read_the_locks(
         empty_database, statements_of(out.getvalue())
     )
 
@@ -1162,6 +1196,30 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
     assert exclusive <= created | dropped | set(recorded), sorted(
         exclusive - created - dropped - set(recorded)
     )
+    assert rewritten == set(), sorted(rewritten)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_lock_probe_names_a_rewrite_of_a_table_that_already_exists(
+    empty_database,
+):
+    """The probe's teeth. A volatile default is the rewrite the `ADD COLUMN`
+    admission warns about, and the replay database holds no row — so this is also
+    the proof that the file moves on a rewrite with nothing to copy, which is the
+    only kind of table the probe above ever sees."""
+    call_command(
+        "migrate", "accounts", DROP_THE_DATE, database=empty_database, verbosity=0
+    )
+
+    _locks, _created, _dropped, rewritten = run_and_read_the_locks(
+        empty_database,
+        [
+            'ALTER TABLE "accounts_user" ADD COLUMN "canary" double precision '
+            "DEFAULT random() NOT NULL"
+        ],
+    )
+
+    assert rewritten == {"accounts_user"}
 
 
 @pytest.mark.django_db(transaction=True)

@@ -16,7 +16,7 @@ from api.ratelimit import parse_rate
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
-DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 LOGIN_URL = "/api/v1/auth/login"
 
 
@@ -43,6 +43,7 @@ def test_every_declared_scope_has_a_rate():
         "envelopes",
         "attachments",
         "relay",
+        "lookup",
     }
 
 
@@ -52,10 +53,10 @@ def test_the_limit_answers_429_with_a_retry_after(
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "2/min"}
     headers = bearer(active_user, device)
 
-    assert http.get(DIRECTORY_URL, headers=headers).status_code == 200
-    assert http.get(DIRECTORY_URL, headers=headers).status_code == 200
+    assert http.get(DISCOVERABILITY_URL, headers=headers).status_code == 200
+    assert http.get(DISCOVERABILITY_URL, headers=headers).status_code == 200
 
-    throttled = http.get(DIRECTORY_URL, headers=headers)
+    throttled = http.get(DISCOVERABILITY_URL, headers=headers)
 
     assert throttled.status_code == 429
     assert throttled.json()["code"] == "throttled"
@@ -79,9 +80,15 @@ def test_an_authenticated_limit_follows_the_account_across_its_devices(
     )
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "1/min"}
 
-    assert http.get(DIRECTORY_URL, headers=bearer(active_user, device)).status_code == 200
+    assert (
+        http.get(DISCOVERABILITY_URL, headers=bearer(active_user, device)).status_code
+        == 200
+    )
 
-    assert http.get(DIRECTORY_URL, headers=bearer(active_user, second)).status_code == 429
+    assert (
+        http.get(DISCOVERABILITY_URL, headers=bearer(active_user, second)).status_code
+        == 429
+    )
 
 
 def test_an_anonymous_limit_counts_the_caller_address(
@@ -101,8 +108,8 @@ def test_a_scope_counts_only_itself(
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "1/min"}
     headers = bearer(active_user, device)
 
-    assert http.get(DIRECTORY_URL, headers=headers).status_code == 200
-    assert http.get(DIRECTORY_URL, headers=headers).status_code == 429
+    assert http.get(DISCOVERABILITY_URL, headers=headers).status_code == 200
+    assert http.get(DISCOVERABILITY_URL, headers=headers).status_code == 429
 
     # A different scope, untouched by the exhausted one.
     assert http.get("/api/v1/health").status_code == 200
@@ -121,7 +128,7 @@ def test_an_unreachable_store_fails_closed(
 
     monkeypatch.setattr("api.ratelimit.get_client", lambda: Unreachable())
 
-    response = http.get(DIRECTORY_URL, headers=bearer(active_user, device))
+    response = http.get(DISCOVERABILITY_URL, headers=bearer(active_user, device))
 
     assert response.status_code == 503
     assert response.json()["code"] == "unavailable"
@@ -157,7 +164,7 @@ def test_a_store_that_dies_mid_pipeline_fails_closed(
 
     monkeypatch.setattr("api.ratelimit.get_client", Broken)
 
-    response = http.get(DIRECTORY_URL, headers=bearer(active_user, device))
+    response = http.get(DISCOVERABILITY_URL, headers=bearer(active_user, device))
 
     assert response.status_code == 503
     assert response.json()["code"] == "unavailable"
@@ -215,10 +222,12 @@ def test_the_last_request_inside_the_window_is_served_and_the_next_is_not(
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": f"{limit}/min"}
     headers = bearer(active_user, device)
 
-    served = [http.get(DIRECTORY_URL, headers=headers).status_code for _ in range(limit)]
+    served = [
+        http.get(DISCOVERABILITY_URL, headers=headers).status_code for _ in range(limit)
+    ]
 
     assert served == [200] * limit
-    assert http.get(DIRECTORY_URL, headers=headers).status_code == 429
+    assert http.get(DISCOVERABILITY_URL, headers=headers).status_code == 429
 
 
 def test_a_throttled_answer_carries_the_envelope_and_echoes_no_input(
@@ -228,9 +237,9 @@ def test_a_throttled_answer_carries_the_envelope_and_echoes_no_input(
     detail, and nothing of the request that was refused."""
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "1/min"}
     headers = bearer(active_user, device)
-    http.get(DIRECTORY_URL, headers=headers)
+    http.get(DISCOVERABILITY_URL, headers=headers)
 
-    throttled = http.get(f"{DIRECTORY_URL}?q=a-search-term", headers=headers)
+    throttled = http.get(f"{DISCOVERABILITY_URL}?q=a-search-term", headers=headers)
 
     assert throttled.status_code == 429
     assert throttled.json() == {"code": "throttled", "detail": "Request was throttled."}
@@ -246,9 +255,9 @@ def test_the_retry_after_never_exceeds_the_window_it_names(
     once."""
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "1/min"}
     headers = bearer(active_user, device)
-    http.get(DIRECTORY_URL, headers=headers)
+    http.get(DISCOVERABILITY_URL, headers=headers)
 
-    throttled = http.get(DIRECTORY_URL, headers=headers)
+    throttled = http.get(DISCOVERABILITY_URL, headers=headers)
 
     assert 0 < int(throttled.headers["retry-after"]) <= 60
 
@@ -262,7 +271,7 @@ def test_the_counter_lives_in_redis_under_a_key_that_names_the_window(
 
     settings.THROTTLE_RATES = {**settings.THROTTLE_RATES, "accounts": "5/min"}
     before = int(time.time()) // 60
-    http.get(DIRECTORY_URL, headers=bearer(active_user, device))
+    http.get(DISCOVERABILITY_URL, headers=bearer(active_user, device))
     after = int(time.time()) // 60
 
     store = redis.Redis.from_url(settings.REDIS_URL)
@@ -286,7 +295,7 @@ def test_the_key_names_the_account_and_never_the_token(
     import redis
 
     headers = bearer(active_user, device)
-    http.get(DIRECTORY_URL, headers=headers)
+    http.get(DISCOVERABILITY_URL, headers=headers)
 
     store = redis.Redis.from_url(settings.REDIS_URL)
     try:

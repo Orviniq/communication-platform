@@ -91,7 +91,14 @@ message ciphertext exists only in the delivery queue, deleted on ack and capped 
 A full seizure of this server (disk + database) reveals, in total:
 
 - the **user list** — usernames, Argon2id password hashes, activation flags,
-  day-granularity account creation (irreducible for an authenticating server);
+  day-granularity account creation (irreducible for an authenticating server), and
+  each account's **discoverability flag**: one boolean saying whether its owner lets
+  the exact-name lookup find it (ADR-0028). A seizure therefore learns which accounts
+  chose to hide. It names no other account and links nothing, and it is kept at rest
+  rather than in Redis because a store that forgets on restart would read as the
+  default — findable — after every restart, which is a privacy setting that fails
+  open. `core/tests/test_seizure_guard.py` pins the account table's columns to this
+  line;
 - per-user **device counts and public key material** — identity/prekey/ML-KEM public
   keys, cross-signing public keys and their opaque signatures, the day each device was
   added, the day each revoked device was revoked, and the device's revocation counter,
@@ -203,6 +210,47 @@ row shape, measured in
 [`docs/architecture/GROUND-TRUTH.md`](../docs/architecture/GROUND-TRUTH.md) §4. The
 WAL has no equivalent bound here: how long a segment holds an old row follows write
 volume and checkpoint activity, and this deployment sets nothing to shorten it.
+
+## Finding a contact by name
+
+The server publishes no list of its accounts. `GET /api/v1/users`, which answered every
+activated account to any session, is gone
+([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
+What replaces it is `POST /api/v1/users/lookup`: one exact name, after lowercasing, in
+the request body, answered with that account's id and name or with one `404` that is
+the same for a name nobody holds, an inactive account and an account whose owner turned
+discoverability off. Same status, same body, same headers, the same statement and the
+same index pages — measured, and pinned by `accounts/tests/test_lookup.py`. What the
+code cannot equalise — the cache, the network, the scheduler — is not claimed to be
+zero; it is bounded in use by the route's own rate scope, fifty lookups a day for each
+account, which is also what makes a dictionary walk cost one account 200 days for ten
+thousand names. Accounts are activated by the owner, so a guesser cannot buy more
+budget by registering more of them.
+
+The contact list is the client's. The server keeps none, of any shape, and the seizure
+guard refuses the columns and the two-user table one would take.
+
+**What the setting does not do**, and no client string may claim otherwise:
+
+- **Registration still answers whether a name exists.** Anonymous `POST
+  /api/v1/auth/register` answers `409 username_taken` for every existing account,
+  hidden and inactive ones included, at ten attempts an hour for each client address.
+  The setting cannot change that without leaving registration unable to say why a name
+  was refused. A probe of a free name is not free, though: it registers the account,
+  takes the name and puts it on the operator's dashboard as awaiting activation.
+- **A `user_id` reaches everything addressed by one.** Anyone who already holds an
+  account's id — a contact, a member of a group they share — reads its profile,
+  identity, devices and device log, claims its prekeys and sends to it, discoverable or
+  not. Hiding a name hides the name.
+- **Live root sees every lookup**: the name in the body once TLS ends, the account that
+  asked, and when. **No name is recorded anywhere** — no access log, no telemetry, no
+  column. What is recorded is the rate counter: in Redis memory, with persistence off,
+  `ratelimit:lookup:user:<account id>:<UTC day>` holds how many lookups that account made
+  that day, until the day's window expires — at most 24 hours. So a reader of Redis
+  learns which accounts looked someone up today and how often, and never whom. A
+  modified server can record everything, and can answer a lookup with any account it
+  likes. A lookup is a question put to the adversary; `CLIENT_CONTRACT.md` §P binds the
+  client to verify whatever it answers.
 
 ## Voice
 

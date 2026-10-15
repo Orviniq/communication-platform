@@ -60,6 +60,25 @@ class BlobIn(RequestModel):
         return self._raw
 
 
+def normalised_username(value):
+    """The name as the account table holds it, or the registration rule's refusal.
+
+    The `^[a-z0-9_]{3,32}$` rule is applied after lowercasing, because the User
+    manager and the model both normalise, so "BoB" is "bob". Registration and the
+    lookup share it, so a name one of them accepts is a name the other one can
+    hold.
+    """
+    value = value.lower()
+    try:
+        username_validator(value)
+    except DjangoValidationError as exc:
+        # PydanticCustomError rather than ValueError: pydantic prefixes a
+        # ValueError's message with "Value error, ", and the client shows the
+        # message rather than the exception class that carried it.
+        raise PydanticCustomError("username_shape", " ".join(exc.messages))
+    return value
+
+
 class RegisterIn(RequestModel):
     username: Annotated[str, Field(max_length=32)]
     password: Annotated[str, Field(max_length=256)]
@@ -67,17 +86,7 @@ class RegisterIn(RequestModel):
     @field_validator("username")
     @classmethod
     def _normalise(cls, value):
-        # The `^[a-z0-9_]{3,32}$` rule is applied after lowercasing, because the
-        # User manager and the model both normalise, so "BoB" is "bob".
-        value = value.lower()
-        try:
-            username_validator(value)
-        except DjangoValidationError as exc:
-            # PydanticCustomError rather than ValueError: pydantic prefixes a
-            # ValueError's message with "Value error, ", and the client shows the
-            # message rather than the exception class that carried it.
-            raise PydanticCustomError("username_shape", " ".join(exc.messages))
-        return value
+        return normalised_username(value)
 
     @field_validator("password")
     @classmethod
@@ -102,6 +111,33 @@ class LoginIn(RequestModel):
     # cannot carry. Lax UUID accepts a string and bytes and nothing else, so no
     # value changes shape on the way in.
     device_id: Annotated[uuid.UUID | None, Field(strict=False)] = None
+
+
+class LookupIn(RequestModel):
+    """The body of `POST /api/v1/users/lookup`: one name, and nothing else.
+
+    The name travels in the body and never in the path or a query string, because
+    a path is the part of a request that proxies, crash reports and access logs
+    write down (ADR-0028). It is lowercased and held to the registration rule
+    before it reaches a query, so a name no account can hold — a NUL byte among
+    them, which psycopg refuses outright — is `400 invalid_request` rather than a
+    `500`. That refusal tells the caller the rule `POST /auth/register` already
+    publishes and nothing about any account.
+    """
+
+    username: Annotated[str, Field(max_length=32)]
+
+    @field_validator("username")
+    @classmethod
+    def _normalise(cls, value):
+        return normalised_username(value)
+
+
+class DiscoverabilityIn(RequestModel):
+    """The body of `PUT /api/v1/me/discoverability`. Strict, so `"false"` and `0`
+    are refused rather than read as an answer the owner did not give."""
+
+    discoverable: bool
 
 
 class EraseIn(RequestModel):
@@ -159,13 +195,16 @@ class FullScopeOut(BaseModel):
 LoginOut = Annotated[RegisterScopeOut | FullScopeOut, Field(discriminator="scope")]
 
 
-class DirectoryUserOut(BaseModel):
+class LookupOut(BaseModel):
+    """The one account an exact name found, and nothing about it but the two
+    values the caller needs to address it."""
+
     user_id: uuid.UUID
     username: str
 
 
-class DirectoryOut(BaseModel):
-    users: list[DirectoryUserOut]
+class DiscoverabilityOut(BaseModel):
+    discoverable: bool
 
 
 class ProfileOut(BaseModel):

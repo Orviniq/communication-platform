@@ -444,39 +444,32 @@
         "title": "DeviceRegisteredOut",
         "type": "object"
       },
-      "DirectoryOut": {
+      "DiscoverabilityIn": {
+        "additionalProperties": false,
+        "description": "The body of `PUT /api/v1/me/discoverability`. Strict, so `\"false\"` and `0`\nare refused rather than read as an answer the owner did not give.",
         "properties": {
-          "users": {
-            "items": {
-              "$ref": "#/components/schemas/DirectoryUserOut"
-            },
-            "title": "Users",
-            "type": "array"
+          "discoverable": {
+            "title": "Discoverable",
+            "type": "boolean"
           }
         },
         "required": [
-          "users"
+          "discoverable"
         ],
-        "title": "DirectoryOut",
+        "title": "DiscoverabilityIn",
         "type": "object"
       },
-      "DirectoryUserOut": {
+      "DiscoverabilityOut": {
         "properties": {
-          "user_id": {
-            "format": "uuid",
-            "title": "User Id",
-            "type": "string"
-          },
-          "username": {
-            "title": "Username",
-            "type": "string"
+          "discoverable": {
+            "title": "Discoverable",
+            "type": "boolean"
           }
         },
         "required": [
-          "user_id",
-          "username"
+          "discoverable"
         ],
-        "title": "DirectoryUserOut",
+        "title": "DiscoverabilityOut",
         "type": "object"
       },
       "DrainOut": {
@@ -795,6 +788,42 @@
           "password"
         ],
         "title": "LoginIn",
+        "type": "object"
+      },
+      "LookupIn": {
+        "additionalProperties": false,
+        "description": "The body of `POST /api/v1/users/lookup`: one name, and nothing else.\n\nThe name travels in the body and never in the path or a query string, because\na path is the part of a request that proxies, crash reports and access logs\nwrite down (ADR-0028). It is lowercased and held to the registration rule\nbefore it reaches a query, so a name no account can hold \u2014 a NUL byte among\nthem, which psycopg refuses outright \u2014 is `400 invalid_request` rather than a\n`500`. That refusal tells the caller the rule `POST /auth/register` already\npublishes and nothing about any account.",
+        "properties": {
+          "username": {
+            "maxLength": 32,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "LookupIn",
+        "type": "object"
+      },
+      "LookupOut": {
+        "description": "The one account an exact name found, and nothing about it but the two\nvalues the caller needs to address it.",
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username"
+        ],
+        "title": "LookupOut",
         "type": "object"
       },
       "OtpkCountOut": {
@@ -3201,6 +3230,177 @@
         ]
       }
     },
+    "/api/v1/me/discoverability": {
+      "get": {
+        "operationId": "my_discoverability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "My Discoverability",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "put": {
+        "description": "Whether `POST /users/lookup` can find this account by its name. It changes\nnothing about any route addressed by a `user_id`.",
+        "operationId": "set_my_discoverability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverabilityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Set My Discoverability",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/v1/me/envelopes": {
       "get": {
         "operationId": "drain_envelopes",
@@ -4035,19 +4235,40 @@
         ]
       }
     },
-    "/api/v1/users": {
-      "get": {
-        "operationId": "user_directory",
+    "/api/v1/users/lookup": {
+      "post": {
+        "description": "Find one account by its exact name (ADR-0028).\n\nA `POST` that writes nothing: the name is in the body because a path and a\nquery string are what the layers in front of this process write down. The\n`lookup` scope is the tight one, counted per account before the body is\nvalidated, so a refused name, a missed one and a found one spend it alike.",
+        "operationId": "lookup_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DirectoryOut"
+                  "$ref": "#/components/schemas/LookupOut"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
           },
           "401": {
             "content": {
@@ -4068,6 +4289,26 @@
               }
             },
             "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
           },
           "429": {
             "content": {
@@ -4100,7 +4341,7 @@
             "description": "`unavailable`"
           }
         },
-        "summary": "User Directory",
+        "summary": "Lookup User",
         "tags": [
           "accounts"
         ]

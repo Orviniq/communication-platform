@@ -32,7 +32,8 @@ LOGIN_URL = "/api/v1/auth/login"
 RENEW_URL = "/api/v1/auth/renew"
 LOGOUT_URL = "/api/v1/auth/logout"
 ERASE_URL = "/api/v1/me"
-DIRECTORY_URL = "/api/v1/users"
+LOOKUP_URL = "/api/v1/users/lookup"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 MY_PROFILE_URL = "/api/v1/me/profile"
 
 
@@ -118,19 +119,63 @@ def test_logout_is_the_authentication_and_one_update(http, active_user, device, 
 
 
 @pytest.mark.parametrize("account_count", [1, 26])
-def test_the_directory_is_constant_query(
-    http, active_user, device, bearer, account_count
+@pytest.mark.parametrize(
+    ("name", "status"),
+    [("carol", 200), ("nobody", 404), ("pending", 404), ("hidden", 404)],
+)
+def test_a_lookup_is_one_statement_whatever_it_finds(
+    http, active_user, device, bearer, account_count, name, status
 ):
+    """The authentication read and one `SELECT`, at one account or twenty-six, for
+    the name that is found and for each of the three that must not be told apart:
+    a miss reaches no second statement and a hit builds its answer from the row
+    the first one returned."""
     for index in range(account_count - 1):
-        User.objects.create_user(
-            username=f"user{index:02d}", password=PASSWORD, is_active=True
-        )
+        User.objects.create_user(username=f"user{index:02d}", is_active=True)
+    User.objects.create_user(username="carol", is_active=True)
+    User.objects.create_user(username="pending")
+    User.objects.create_user(username="hidden", is_active=True, discoverable=False)
 
     response = counted(
-        http, "GET", DIRECTORY_URL, AUTH_QUERY + 1, headers=bearer(active_user, device)
+        http,
+        "POST",
+        LOOKUP_URL,
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+        json={"username": name},
     )
 
-    assert len(response.json()["users"]) == account_count
+    assert response.status_code == status
+
+
+def test_reading_the_setting_is_one_read(http, active_user, device, bearer):
+    response = counted(
+        http,
+        "GET",
+        DISCOVERABILITY_URL,
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json() == {"discoverable": True}
+
+
+@pytest.mark.parametrize("value", [False, True])
+def test_writing_the_setting_is_one_update_and_no_read(
+    http, active_user, device, bearer, value
+):
+    """No read before the write, so setting the value the row already holds costs
+    the same one statement as changing it."""
+    response = counted(
+        http,
+        "PUT",
+        DISCOVERABILITY_URL,
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+        json={"discoverable": value},
+    )
+
+    assert response.json() == {"discoverable": value}
 
 
 def test_reading_a_profile_is_one_lookup(http, active_user, device, bearer):

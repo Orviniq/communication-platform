@@ -26,7 +26,7 @@ from ops.audit.log_silence import capture_all_logging
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
-DIRECTORY_URL = "/api/v1/users"
+DISCOVERABILITY_URL = "/api/v1/me/discoverability"
 LOGIN_URL = "/api/v1/auth/login"
 MARKED_PATH = "/api/v1/no-such-route-b3f1c9a7"
 CALLER = "198.51.100.23"
@@ -54,10 +54,12 @@ def test_every_refusal_this_layer_writes_leaks_nothing(
     oversized = "z" * (17 * 1024)
 
     with capture_all_logging() as lines:
-        anonymous = http.get(DIRECTORY_URL)
-        forged = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {FORGED}"})
+        anonymous = http.get(DISCOVERABILITY_URL)
+        forged = http.get(
+            DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {FORGED}"}
+        )
         scoped_out = http.get(
-            DIRECTORY_URL, headers={"Authorization": f"Bearer {register}"}
+            DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {register}"}
         )
         missing = http.get(MARKED_PATH)
         wrong_method = http.delete("/api/v1/health")
@@ -65,8 +67,10 @@ def test_every_refusal_this_layer_writes_leaks_nothing(
         too_large = http.post(
             LOGIN_URL, json={"username": "alice", "password": oversized}
         )
-        http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {access}"})
-        throttled = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer {access}"})
+        http.get(DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {access}"})
+        throttled = http.get(
+            DISCOVERABILITY_URL, headers={"Authorization": f"Bearer {access}"}
+        )
 
     assert [
         anonymous.status_code,
@@ -123,7 +127,7 @@ def test_a_revoked_token_is_refused_without_naming_the_device(
     Device.objects.filter(id=device.id).update(revoked_date="2026-01-01")
 
     with capture_all_logging() as lines:
-        refused = http.get(DIRECTORY_URL, headers=headers)
+        refused = http.get(DISCOVERABILITY_URL, headers=headers)
 
     assert refused.status_code == 401
     assert scan(lines, {"device id": device.id, "account id": active_user.id}) == []
