@@ -144,8 +144,7 @@ def test_every_registered_project_app_names_itself_in_operator_words():
 
     Declared rather than derived, on every project app the panel registers a model
     from, so the next app cannot ship a run-together label by omission. This is the
-    app half of the vocabulary pass; the model half needs a migration and stays
-    deferred in `docs/admin/PANEL-RECORD.md`.
+    app half of the vocabulary pass; the test below is the model half.
     """
     project_apps = {
         model._meta.app_config
@@ -162,6 +161,29 @@ def test_every_registered_project_app_names_itself_in_operator_words():
     }
 
     assert derived == {}, derived
+
+
+def test_the_account_pages_call_the_row_an_account(client, owner, alice):
+    """The model half of the same pass, which needed a migration and waited for one
+    (`accounts.0006`). Django derives a model's display name from its class, and the
+    account class is `User`, so the panel read "Accounts › Users" under a sidebar
+    entry that says "Accounts" and titled its pages "Select user to change". Read off
+    the rendered pages rather than off `Meta`, because the page is what the operator
+    reads, and "Username" is not the word this looks for."""
+    pages = {
+        "changelist": client.get(reverse("admin:accounts_user_changelist")),
+        "change form": client.get(reverse("admin:accounts_user_change", args=[alice.pk])),
+    }
+    text = {
+        name: " ".join(strip_tags(page.content.decode()).split())
+        for name, page in pages.items()
+    }
+
+    assert {page.status_code for page in pages.values()} == {200}
+    assert "Select account to change" in text["changelist"]
+    assert "Change account" in text["change form"]
+    for name, page in text.items():
+        assert re.search(r"\busers?\b", page, re.IGNORECASE) is None, name
 
 
 def test_exactly_the_four_decided_models_are_registered():
