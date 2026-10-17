@@ -125,7 +125,7 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
       ),
       body: GroupResponsiveBody(
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.x4),
+          padding: AppInsets.belowAppBar(context, AppSpacing.x4),
           children: [
             Text(
               _details

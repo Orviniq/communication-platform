@@ -104,7 +104,7 @@ class _GroupEditViewState extends State<GroupEditView> {
       appBar: AppBar(title: Text(strings.groupEditTitle)),
       body: GroupResponsiveBody(
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.x4),
+          padding: AppInsets.belowAppBar(context, AppSpacing.x4),
           children: [
             if (!canEdit)
               GroupInlineError(message: strings.groupPermissionChanged),

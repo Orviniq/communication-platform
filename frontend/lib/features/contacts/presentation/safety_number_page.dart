@@ -131,7 +131,7 @@ class _SafetyNumberPageState extends ConsumerState<SafetyNumberPage> {
       body: _busy && fingerprint == null
           ? AppStatePanel.loading(title: strings.safetyRefreshing)
           : ListView(
-              padding: const EdgeInsets.all(AppSpacing.x6),
+              padding: AppInsets.belowAppBar(context, AppSpacing.x6),
               children: [
                 Notice(
                   key: ValueKey('safety-state-${trustState.name}'),

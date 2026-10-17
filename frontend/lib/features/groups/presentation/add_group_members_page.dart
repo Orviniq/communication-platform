@@ -53,7 +53,7 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
               ),
               body: GroupResponsiveBody(
                 child: ListView(
-                  padding: const EdgeInsets.all(AppSpacing.x4),
+                  padding: AppInsets.belowAppBar(context, AppSpacing.x4),
                   children: [
                     GroupMemberPicker(
                       contacts: eligible,

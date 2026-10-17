@@ -106,7 +106,7 @@ class _GroupInfoViewState extends State<GroupInfoView> {
     );
     final content = GroupResponsiveBody(
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.x4),
+        padding: AppInsets.belowAppBar(context, AppSpacing.x4),
         children: [
           if (state.lifecycle != GroupLifecycle.active) ...[
             const SizedBox(height: AppSpacing.x3),
