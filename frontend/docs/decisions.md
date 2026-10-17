@@ -103,6 +103,518 @@ is not silently edited out of history.
 | ADR-090 | Accepted (2026-10-14); proposed 2026-10-14 | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-091 | Accepted (2026-10-14); proposed 2026-10-14 | A group sends read receipts and no delivered receipt. An own group message shows two ticks as soon as one member other than its sender has read it, without waiting for the other members or for owed copies; a failed message keeps its failed mark and Retry. A group read receipt names the messages of one sender, and goes to the live devices of that sender, when that sender is an active member, and to the reader's other live devices; `MarkConversationVisiblyRead` sends one receipt for each sender, with up to 64 ids each, on the triggers of a direct chat. The sender sees the reader list of an own group message: each member who read it, once, with the read time, the newest first, behind "Seen by N" or "Not seen yet" in the message sheet. The read time is the `ordering_ms` of the earliest `receipt.read` from a device that names the message, kept in a new nullable column of `receipts` (schema 24). Always on, with no setting | The owner's test of groups on phones: a group message never shows two ticks, because a group sends no receipt. The owner decided on 2026-10-14 that the first reader draws the second tick, and that the sender sees who read the message and when. A receipt is an encrypted application event that the server relays, so none of this needs a server change, and the `receipts` table already holds one row for each reader device. A receipt sent to each member would cost about 7,300 copies for one message read by 49 members of a 50-member group with 3 devices each, and would tell each member who read the messages of other members; sent to the sender alone it costs about 245. Costs: the second tick says that one member read the message, not that each did; a read time is the reader's clock, corrected as a message time is. Adds one local column (schema 24); changes no wire format, protocol, dependency or backend file. |
 | ADR-092 | Accepted (2026-10-17); proposed 2026-10-17 | The whole application blocks screen capture, in every build. `MainActivity` adds `FLAG_SECURE` to its window in `onCreate`, before `super.onCreate`, so it is set before the first frame, in the development and the production build alike. Nothing clears it. `SensitiveScreenControl` stays as an API, and the platform method `setSensitiveScreen` keeps the flag on for `enabled: true` and does nothing for `enabled: false` | The owner's requirement after the field test of 2026-10-17: no screenshot and no screen recording anywhere in the app. The flag had been set only while device enrollment and the recovery secret replacement were open, so every other screen, and the recent-apps preview, could be captured. The flag blocks screenshots, screen recording, casting to a display that is not secure and the recent-apps preview of the window. It does not hide the text of a notification, it does not stop a second camera, and it does not cover a window that is not the app's own: the system pickers and the camera app. Costs: nobody can take a screenshot of the app for a bug report in any build, and the flag has not been tried on a phone yet. Changes no wire format, table, protocol, dependency, permission or backend file. |
+| ADR-093 | Proposed (2026-10-17) | A first message from a sender this account has not verified is held: not opened, not shown, not receipted. Its exact ciphertext stays in its `inbox_envelopes` row, in state 5, renamed `held`, the server copy is acknowledged, and no inspection budget is spent. Only the trust state `unverified` holds, told apart by a new inbound answer of the live-device resolver; a later regular envelope of a held session is held with it. A sender has at most 64 held envelopes and the phone 128, each for 7 days; past a limit the oldest goes to quarantine with the rest of its session. A verification returns the sender's held envelopes to inspection in mailbox order, through a port of the contacts application and a sweep in each cycle. Prekey maintenance prunes no retired signed pair a held envelope may need and postpones a rotation that would erase one. Chats shows one row for each held sender, "@username sent you N messages. Verify to read them.", which opens the safety number; the newest own direct message with no delivery receipt an hour after it was sent shows a hint | The field test of 2026-10-17: a direct message to a recipient who has not verified the sender stays at one tick and is lost. The refusal is required (`backend/CLIENT_CONTRACT.md` §C), but the initial envelope spent its budget, was quarantined and acknowledged, and the server deleted it; its regular follow-ups were quarantined at their first inspection. Costs: at most 32 MiB of held ciphertext on disk; a held session past 64 envelopes loses its start and with it the rest; a rotation can be late while an envelope is held; the row's name and count are claims. Adds four nullable columns and two partial indexes to `inbox_envelopes` (schema 25); changes no wire format, Rust core, dependency, permission or backend file. |
+
+## ADR-093 in full — hold a first message from an unverified sender (2026-10-17)
+
+**Status:** Proposed, 2026-10-17. Client sync, local-state, key-maintenance and UI decision,
+from the owner's field test of 2026-10-17. This record writes the design only. Phase 2 builds it
+in two more prompts on the branch `frontend-held-unverified-messages` (below), and it is
+accepted when the last of them lands. The owner reads the design before prompt 2 starts.
+**Changes no wire format, event kind, cryptographic construction, Rust core, dependency,
+Android permission, server route or backend file.** Prompt 2 adds four nullable columns and two
+partial indexes to the local `inbox_envelopes` table (schema 25).
+
+**Cites:** `backend/CLIENT_CONTRACT.md` §C, §F and §P; `backend/messaging/API.md`, the drain and
+the acknowledgement; ADR-021 (the local avatar); ADR-060 D2 (the inspection budget);
+`sync-engine.md`, "Incoming durable envelopes" and "Device maintenance";
+`pairwise-transport-v1.md`, "Sender-hidden initial header" and the rotation paragraph of
+"Simultaneous initiation and overlap"; `cryptographic-protocol.md`, "Direct messages and
+per-device channels"; `message-protocol.md`, "Receipts and typing"; `ui-specification.md` §6,
+§8 and §11.1.
+
+### The question
+
+User A verified user B. B did not verify A. A sends B a direct message: it stays at one tick and
+B never sees it. B's phone must refuse to open a message from a sender B has not verified, and it
+must not lose it. Where does the envelope wait, what releases it, what stops a hostile server
+from using the wait, and what do the two people see?
+
+### The facts
+
+From the code at commit `7d575ae`, the merge of PR #84. Each fact the prompt for this record gave
+was read again there; four of them were incomplete or out of date, and they are marked.
+
+- **The refusal.** `PairwiseOpaqueEnvelopeInspector._inspectInitial` probes an initial envelope
+  with `crypto.probeInitial`, then calls `resolveVerifiedLiveDevices` for the probe's sender.
+  `ContactPairwiseLiveDeviceResolverAdapter._verified` answers `SecurityFailure(policyBlocked)`
+  when the peer is not this account and its trust state is not `verified`, when it has no
+  identity, and when one of its devices is unsigned.
+- **A successful refresh ends in two states only.** `ClientAuthenticationService._refresh`
+  returns a peer whose state is `unverified` or `verified`. Every other `ContactTrustState` is a
+  failure of the refresh itself: a changed master key, a device-log fork and the global fork gate
+  are `policyBlocked`; an invalid or unsigned device is `unauthenticatedInput`; an identity that
+  cannot be read or verified is that read's failure, stored as `identityUnavailable`. A same-head
+  device-set change is `policyBlocked` too, for a bounded pending window. So the
+  `policyBlocked` of the adapter's success path means exactly "unverified".
+- **The budget.** `DurableSyncEngine` quarantines a `SecurityFailure` at once unless it is
+  `policyBlocked`, and counts `policyBlocked` against `maximumInspectionAttempts`, 8 (ADR-060
+  D2). At the eighth, the envelope is quarantined and acknowledged. The server deletes an
+  acknowledged row and never re-creates it (`CLIENT_CONTRACT.md` §F).
+- **Correction: the follow-ups are lost first.** After an initial envelope, the sender's core
+  sends every later message to that device as a regular envelope on the new session
+  (`ratchet_encrypt` writes a regular header). B holds no such session, so `_inspectRegular`
+  answers `unauthenticatedInput`, which is quarantined at its first inspection. The prompt
+  named the first message only; the design has to hold its follow-ups too.
+- **The probe is anonymous.** The sealed sender block opens with a key derived from the
+  recipient's own prekeys (`pairwise-transport-v1.md`, "Sender-hidden initial header"). Anyone
+  who holds B's public bundle, the server included, can make a block that opens and names any
+  user. Only `acceptVerifiedInitial` checks `init_signature`. The probe needs the referenced
+  private signed prekey and consumes nothing.
+- **The public header names the session.** `inspectPublicHeader` returns the kind and the
+  16-byte session id of an initial and of a regular envelope alike: a random lookup value in the
+  frame the server sees.
+- **Storage.** `inbox_envelopes.processing_state` runs from 0 to 5 under a CHECK constraint.
+  Nothing has written 5, `blockedByQueueGap`, since schema 22, whose step returned each such row
+  to 0. `sequence` is unique. `recordAcknowledgementSuccess` sets its batch to 4, advances
+  `highest_contiguous_acked_sequence` over consecutive rows in state 4, and deletes the rows in
+  state 4 at or below it; `persistDrainPage` ignores a served envelope at or below it. The table
+  holds at most 10,000 rows (`maximumInboxEntries`). `quarantine` keeps a reason code and a
+  digest, at most 256 rows; codes 1 to 4 are the engine's, 10 to 14 the projector's, 32 and up
+  the groups' and 48 and up the rooms'.
+- **The drain carries no time.** An envelope is an `id`, a `seq` and a `blob`
+  (`backend/messaging/API.md`). The acknowledgement is idempotent: an id already gone matches
+  nothing. "Ack only after the envelope's contents are durably stored client-side."
+- **Bytes.** An envelope is 1,024, 4,096, 16,384, 65,536 or 262,144 bytes long. The server keeps
+  at most `MAILBOX_MAX_BYTES`, 32 MiB by default, of undelivered bytes for one device.
+- **Trust is a blob.** `DriftContactRepository.writeTrust` stores the encoded trust record in
+  `local_preferences`, so no SQL query can read a trust state. `confirmOutOfBand` is the one path
+  that makes a peer newly verified; the safety-number page, `/contacts/:userId/safety`, calls it.
+- **Prekeys.** A rotation retires the current signed pair with a last day of the rotation day
+  plus 8 (`prepare_rotation`), and `pruneRetainedSignedPrekeys(unixDay)` erases each retired pair
+  whose last day is before `unixDay`. **Correction:** the rotation also prunes, with the day it is
+  given, before it retires the current pair, so an older day passed to the prune call alone does
+  not keep a pair through a rotation. The core keeps at most 3 retired pairs and up to 400
+  classical and 240 ML-KEM one-time private keys.
+- **Correction: maintenance never runs.** `prekeyMaintenanceServiceProvider` has no consumer in
+  `lib`, so no build calls `PrekeyMaintenanceService.maintain`: no signed prekey rotates, no
+  retired pair is erased and no one-time prekey is replenished. D17 changes the service so that
+  it keeps D6 from the moment something runs it; this record does not wire it (Not done here).
+- **Names.** Chats titles a direct conversation with the peer's `presentationName` from the
+  contact list, which is the username for a peer who is not verified, or with
+  `chatShortIdentity(userId)` for a user this phone has no row for. The server has no route from
+  a user id to a name.
+- **The timeline.** A message carries `createdMs`, a transport state read from `messages.status`
+  and a receipt state; `relayAccepted` is one tick.
+- **Correction: the register.** ADR-092 (2026-10-17) is the last record, so this one is ADR-093.
+
+### The owner's decisions (2026-10-17)
+
+From the field-test triage of 2026-10-17 and the owner's answers to it:
+
+- **D1. Hold, do not discard.** A first message whose sender the recipient has not verified is
+  held. It is not opened, not shown and not receipted.
+- **D2. Keep the ciphertext.** The exact ciphertext stays in the encrypted database. The server
+  copy is acknowledged. A held envelope spends no inspection budget.
+- **D3. Only "unverified" holds.** A changed master key, an invalid device, a device-log fork and
+  an unavailable identity keep today's behaviour.
+- **D4. Release on verification.** When the recipient verifies the sender, each held envelope of
+  that sender returns to inspection, in mailbox order.
+- **D5. Limits.** A held envelope expires after 7 days. A sender has a maximum number of held
+  envelopes, and the phone has a total maximum. Past a limit, the oldest goes to quarantine as
+  today.
+- **D6. Keys stay usable.** A held message stays openable until it expires. Its signed prekey is
+  not pruned before then. The Rust core does not change.
+- **D7. The recipient's row.** Chats shows one row for each sender with held messages:
+  "@username sent you N messages. Verify to read them." A tap opens the safety-number page of
+  that sender. The row shows no content.
+- **D8. Groups.** A held group copy counts in the same row. After the verification, it appears in
+  its group.
+- **D9. The sender's hint.** An own direct message with no delivery receipt after a delay shows a
+  hint under it: "Not delivered yet. If @username has not verified you, ask them to." No hint in
+  a group.
+- **D10. No wire change and no server change.**
+
+### D11. Storage: a held envelope stays an inbox row, in state 5
+
+- **The state.** Value 5 of `InboxProcessingState` is renamed `held`: acknowledged at the server,
+  kept for a verification, never handed to inspection. The CHECK constraint already allows it, so
+  the table is not rebuilt. A new value 6 would need the table re-created, because SQLite cannot
+  alter a CHECK constraint. A new table would copy the ciphertext out of the row that already
+  holds it, or need a second inspection pipeline for the release.
+- **The columns,** each nullable, schema 25:
+  - `held_sender_user_id` (text): the claimed sender of the envelope's session, lower case. It
+    is present on every row that is held or released; this record calls such a row
+    *held-marked*.
+  - `held_session_id` (blob): the session id from the public header, 16 bytes by a column check.
+  - `held_initial` (boolean): true for the session's initial envelope, false for a follow-up
+    (D13).
+  - `held_at` (date-time): when the envelope was first held. A re-hold keeps it.
+- **The states of a held-marked row.** 2 or 3: held, with its acknowledgement owed or in flight.
+  5: held and acknowledged. 0 or 1: released, waiting for or in its inspection, with no server
+  copy left. A row in 5 is always held-marked. A row that is not held-marked behaves exactly as
+  today.
+- **The indexes,** partial, so that each holds only the held-marked rows, at most 128:
+  - `inbox_envelopes_held_by_sender` on `(held_sender_user_id, sequence) WHERE
+    held_sender_user_id IS NOT NULL`: the Chats query, a sender's count and its oldest row, and a
+    release in mailbox order.
+  - `inbox_envelopes_held_by_session` on `(held_session_id) WHERE held_session_id IS NOT NULL`:
+    the follow-up match (D13) and the session cascade (D14).
+  - The oldest row of the phone and the earliest `held_at` read at most 128 entries of the first
+    index, so they get no index of their own.
+- **The migration.** The schema-25 step first repeats schema 22's
+  `UPDATE inbox_envelopes SET processing_state = 0 WHERE processing_state = 5`, so that no row
+  reaches the new meaning from the old one. It then adds each column only when
+  `PRAGMA table_info` does not list it, in the style of the schema-24 step, and creates both
+  indexes with `IF NOT EXISTS`. Nothing is back-filled.
+- **The readers of states 4 and 5.** The contiguity walk of `recordAcknowledgementSuccess`
+  treats 5 as acknowledged, so a held row does not keep the rows after it from being deleted;
+  the delete still removes state 4 only, so the held row stays. `inbox_depth` in the sync
+  projection and `pending_inbound` in Diagnostics count the rows in neither 4 nor 5, because a
+  held row is not work the engine can do.
+
+### D12. Which result holds an envelope, and how D3 is told apart
+
+- **A new resolver answer, for the inbound path only.** `PairwiseLiveDeviceResolverPort` gains
+  `resolveInboundSender(userId)`, which answers a sealed `InboundSenderResolution`:
+  - `VerifiedInboundSender(devices)`: what `resolveVerifiedLiveDevices` answers today, as
+    `VerifiedPairwiseLiveDevice`s.
+  - `UnverifiedInboundSender(devices)`: the refresh succeeded, the user is not this account, its
+    trust state is `unverified`, its identity is present and no device is unsigned. The devices
+    are the peer's public device records, a type the send path cannot encrypt to.
+  - Every other outcome is the failure `_verified` answers today, unchanged.
+
+  `resolveVerifiedLiveDevices` and `resolveVerifiedLiveDevicesForUsers` do not change, so every
+  send still refuses an unverified peer with `policyBlocked`.
+- **The engine classifies nothing.** The four states of D3 never reach the hold: each is a
+  failure of the refresh, and keeps its kind and its budget. `policyBlocked` keeps one meaning. A
+  new failure kind for "unverified" was rejected: a failure carries no sender and no session, so
+  the engine could not file the hold, and every consumer of resolver failures would meet a new
+  kind.
+- **A new inspection outcome.** `OpaqueEnvelopeInspector.inspect` answers a sealed
+  `OpaqueEnvelopeOutcome`. `OpaqueEnvelopeInspection` becomes its applied case with no field
+  changed, so `commitOpaqueInspection` and each test fake that answers one keep compiling. The new
+  case is `HeldEnvelopeInspection(claimedSenderUserId, sessionId, initial)`.
+- **When the inspector answers it.** For an initial envelope that is not a repair replacement,
+  after the probe, when `resolveInboundSender` answers `UnverifiedInboundSender` and the probe
+  matches one of its devices by the checks the accepting path runs today: the device id, the user
+  id, a signed device, a bundle version not in the future, the registration id and the identity
+  key. A mismatch is `unauthenticatedInput` and is quarantined at once, as for a verified sender,
+  because it could not open after a verification either. A repair replacement from an unverified
+  sender stays `policyBlocked`: a repair needs a session this account accepted, so it is not a
+  first message. Nothing after the probe runs for a held envelope: no `acceptVerifiedInitial`, no
+  one-time prekey consumed, no state written.
+- **What the engine does with it.** `DurableSyncEngine._processInbox` hands a
+  `HeldEnvelopeInspection` to a new `DurableSyncStore.recordEnvelopeHold`, which applies the
+  limits of D14 and marks the row in one transaction. No budget is spent and
+  `inspection_failures` does not move (D2).
+
+### D13. The follow-ups of a held session
+
+A regular envelope whose session this account does not hold is held when exactly one
+held-marked initial row carries its session id. The follow-up takes that row's sender and session,
+with `held_initial` false. The inspector asks through a new port, `HeldSessionLookupPort`, which
+the sync store implements. No match, or more than one, is today's `unauthenticatedInput`. Without
+this rule only the first message of a conversation would survive, and every later one would
+still be lost at its first inspection. A follow-up whose session was accepted after a release
+finds the session and opens as any regular envelope does.
+
+### D14. The limits
+
+- **Seven days.** A held-marked row expires 7 × 24 hours after its `held_at`, held or released.
+  That is the server's own `ENVELOPE_TTL_DAYS` default, so a held envelope lives on the phone as
+  long as an undelivered one lives on the server. The engine expires rows at the start of the
+  inbox half of each cycle.
+- **64 for one sender, 128 for the phone.** The count is the held-marked rows. Before it holds
+  the 65th row of one sender, or the 129th of the phone, `recordEnvelopeHold` sends the oldest
+  held-marked row of that sender, or of the phone, to quarantine (D5).
+- **A session leaves together.** When an initial row leaves the held set by an expiry, an eviction
+  or a failed re-inspection, every follow-up row of its session goes to quarantine in the same
+  transaction: none of them can open without it, and each is an envelope today's code quarantines
+  at once. The oldest row of a sender is always an initial, because a follow-up is held only
+  behind one. A follow-up whose initial has just left is quarantined, not held.
+- **How a row leaves.** A quarantine record, with reason 5 for an expiry, 6 for an eviction, and
+  1 to 4 for a failed re-inspection as today; the four columns cleared; and the state set to 4
+  when the server copy is gone (0, 1 or 5), or left at 2 or 3 while the acknowledgement is owed.
+  The row is deleted when the contiguity walk passes it, as every acknowledged row is. Deleting it
+  at once would leave a hole in the walk, and every row after it would stay.
+- **The bytes on disk.** The worst case fills the largest bucket: 128 × 262,144 bytes =
+  33,554,432 bytes = 32 MiB, which is `MAILBOX_MAX_BYTES`, the most the server keeps undelivered
+  for one device. One sender reaches at most 64 × 262,144 bytes = 16 MiB. An ordinary message fills
+  the 1,024- or 4,096-byte bucket, so 128 such rows take 128 KiB to 512 KiB. The four columns add
+  under 100 bytes to a row, and SQLCipher's pages add a few percent to each figure. 128 rows are
+  far under the inbox's 10,000.
+- **Why these numbers.** 64 holds a long first conversation from one person, and 128 lets two
+  such people wait at once. The phone never needs more room for held envelopes than the server
+  would have kept for it, and a flood the server makes shows at most 128 rows in Chats.
+
+### D15. One acknowledgement, never two
+
+A new hold sets the row to 2 with `ready_to_acknowledge`, the state of every envelope ready to
+acknowledge, and the next batch acknowledges it in the same pass as any other. The exact
+ciphertext is already in the row, which is what `backend/messaging/API.md` asks before an
+acknowledgement. `recordAcknowledgementSuccess` sets a held-marked row to 5 and every other row
+to 4. A released row has no server copy, so its commit sets 4 and clears the columns instead of
+setting 2; the quarantine of a failed re-inspection does the same; and a re-hold sets 5 again
+and keeps `held_at`. A second acknowledgement would delete nothing, and it is avoided because it
+would tell the server the moment an old envelope opened. Today an unverified initial was
+acknowledged only after eight failures and their backoff; a held one is acknowledged in the pass
+that inspected it, so the time of an acknowledgement no longer tells the server which envelope
+did not open.
+
+### D16. How a verification reaches the engine
+
+- **The trigger: a port of the contacts application.** After `confirmOutOfBand` writes the
+  verified trust record, `ClientAuthenticationService` calls a new port,
+  `PeerVerificationObserver.peerVerified(userId)`, best effort: a failure there does not fail
+  the verification. The synchronization feature implements the port with an infrastructure
+  adapter, in the way `ContactPairwiseLiveDeviceResolverAdapter` bridges the other direction, so
+  neither application layer imports the other. The adapter calls
+  `DurableSyncStore.releaseHeldEnvelopes(senderUserId, dueAt)` with a due time one second ahead.
+- **The release.** One update: the sender's rows in state 5 go to 0, with `next_attempt_at` at
+  the due time. Rows still in 2 or 3 wait until their acknowledgement lands. The supervisor's
+  existing retry wake reads the due time from `next_retry_at` and runs a cycle one second later,
+  so no new trigger is needed; one second is `minimumInspectionRetry`. Inspection hands rows out
+  lowest sequence first, so the sender's envelopes open in mailbox order and each initial before
+  its follow-ups (D4).
+- **The sweep: the engine owns the outcome.** At the start of each cycle's inbox half, after the
+  expiry, the engine reads the held senders from the store and asks a new port,
+  `HeldSenderTrustPort.verifiedAmong(userIds)`, which reads the stored trust records through
+  `ContactLocalPort` without the network. Each verified sender's rows are released with no
+  delay. The sweep covers a process that died between the trust write and the observer, a hold
+  recorded just after a verification, and a row whose acknowledgement landed after the release.
+- **The release decides nothing.** The inspection after it runs the whole peer refresh again,
+  attestation included. A peer that is no longer verified is held again (D15 keeps `held_at`),
+  and that refresh has written the trust record back to unverified, so the sweep does not release
+  it a second time.
+
+### D17. Keeping the keys
+
+A retired signed pair a held envelope can still need has its last day on or after the
+envelope's *hold day*, the UTC day of `held_at`: an envelope whose pair had passed its last day
+was outside the profile's eight-day window when it was held, and outside D6. Let H be the
+earliest hold day of a held-marked row, which the devices feature reads through a new port,
+`HeldEnvelopeRetentionPort`, from the sync store; L the day of the last rotation,
+`lastSignedPrekeyRotationUnixDay`; and T today. With no held-marked row, the service runs as it
+does today.
+
+- **The prune.** `PrekeyMaintenanceService` passes the smaller of T and H to
+  `pruneRetainedSignedPrekeys`, so it erases no pair whose last day is H or later. The check that
+  the current pair was not created in the future stays against T: against the smaller day it
+  would fail whenever an envelope held before the last rotation is waiting.
+- **The rotation.** The core's rotation prunes with T, so the service postpones a due rotation
+  while it could erase a pair a held envelope may need. The pair retired at L lasts through
+  L + 8, and every older retired pair through L + 1 at most, because rotations are at least seven
+  days apart. So a due rotation waits while H ≤ L + 1, or while T > L + 8 and H ≤ L + 8. An
+  envelope expires 7 days after it is held, so the first case holds a rotation due on day L + 7
+  until day L + 8 at the latest. The second case applies only to a rotation later than day L + 8,
+  and lasts until the envelopes held by day L + 8 have expired: until day L + 16 at most.
+  Replenishment runs while a rotation waits.
+- **Why a postponement is acceptable.** The server can already postpone a rotation for as long
+  as it likes, by refusing the prekey upload, so the postponement gives it nothing new. The
+  alternative, a rotation that takes its prune day from the caller, is a Rust core change, which
+  D6 rules out; it is recorded as the change that would remove the postponement.
+- **What this amends.** `pairwise-transport-v1.md` says that signed pairs rotate after seven days
+  and that a superseded pair is erased after day eight, and `cryptographic-protocol.md` says the
+  same. Both gain this exception when this record is accepted, and prompt 2 writes it into both.
+- **The one-time prekeys need nothing.** They are erased only when consumed, and a held envelope
+  consumes none. The core's local room, 240 ML-KEM keys against the server's 100, is spent when
+  the server hands a key out, whether its message is then held, quarantined or never sent.
+
+### D18. The Chats row
+
+- **The query.** A new `DurableSyncStore.watchHeldSenders()` reads, for each
+  `held_sender_user_id` of the rows in 2, 3 or 5, the count and the latest `held_at`, through
+  `inbox_envelopes_held_by_sender`. Released rows do not count: once the user has verified, the
+  row goes. A new `heldSendersProvider` projects the stream. The row is not a
+  `ConversationSummary`, because no conversation exists before an envelope opens.
+- **The order.** Pinned items stay first. A held row sorts among the other items by its latest
+  `held_at`, as a conversation sorts by its last activity: an envelope that arrived is new
+  activity, and an unpinned row never pushes a pinned one down.
+- **What it shows.** A name, a count and one line: "@username sent you N messages. Verify to read
+  them.", with the English and Persian plural forms. N counts held envelopes: a reaction or a
+  group change is an envelope too, and nothing can be known about an envelope before it opens; a
+  held group copy counts here (D8). The row shows no preview, no time, no unread badge and no
+  menu, because there is no conversation to pin, mute or delete. The avatar is the deterministic
+  local one (ADR-021); its icon comes through `AppIcons`.
+- **The name.** The username from the local contact list, `contactListProvider`, which holds the
+  username of each user this phone has a row for. With none, the row uses the short identity
+  Chats already shows for such a peer, without the "@": "1a2b3c4d… sent you N messages. Verify
+  to read them." No lookup: the server has no route from a user id to a name, and
+  `CLIENT_CONTRACT.md` §P forbids a lookup the user did not ask for.
+- **The tap.** `/contacts/:userId/safety` for the claimed sender. That page's out-of-band
+  confirmation is the verification, and the row offers no way around it.
+- **Search.** The search page lists no held row: there is no content to match.
+- **Accessibility.** One semantic node, with the line as its label and "Open the safety number"
+  as its hint.
+
+### D19. The sender's hint
+
+- **When.** Under the newest own message of a direct chat, when that message is
+  `relayAccepted`, has no delivery receipt, and was sent at least **one hour** ago. The Android
+  catch-up a closed app relies on runs at most every fifteen minutes, and Doze stretches the gaps,
+  so a recipient whose phone is merely asleep has had several chances to answer within an hour.
+  The hint asks rather than asserts, so a phone that is off for longer costs one line of advice
+  that does not apply.
+- **Only the newest.** The cause belongs to the peer, not to one message, so one line under the
+  newest own message says it; under every bubble it would fill the timeline. A newest message
+  with a receipt means the peer receives, and no hint shows.
+- **How the chat knows.** From fields the timeline already carries: the message's `createdMs`, its
+  transport state and its receipt state. A page clock in the style of `ChatListMuteClock`
+  rebuilds once, at the moment the newest qualifying message turns one hour old, and holds no
+  timer otherwise. The hour counts from `createdMs`, not from the relay's acceptance, which the
+  timeline does not read: a message that waited longer than an hour in the queue shows the hint
+  when it is accepted, and loses it when its receipt arrives.
+- **The name.** The peer's username, or the short identity without the "@" when this phone has
+  none.
+- **Never** in a group chat or Saved Messages, and never under a message that is queued, sending
+  or failed: those states have their own marks.
+
+### D20. Counts, never identifiers
+
+The engine's run report gains `heldEnvelopes`, and Diagnostics gains `held_inbound`, the number
+of held rows; `pending_inbound` stops counting them. No log line and no report names a claimed
+sender, a session id, an envelope id or a time.
+
+### Security analysis
+
+- **The sender is a claim until the release.** The probe's sender block opens for anyone who
+  holds this phone's public bundle, and only acceptance checks the init signature. So the hold,
+  the row's name and its count rest on claims. A forged initial fails at its new inspection: its
+  identity key and registration id must match a device of the now verified identity, and
+  `acceptVerifiedInitial` checks the init signature and the first ratchet message. A mismatch is
+  `unauthenticatedInput` and is quarantined at once; a refusal by the core spends the budget, as
+  today, and is then quarantined; D14 takes its follow-ups with it. A forged follow-up of a
+  genuine session fails its AEAD after the release and goes the same way.
+- **The pre-check is not authentication.** For an unverified peer the server serves both the
+  identity and the devices, so matching the probe against them proves nothing. It only keeps out
+  of the held set, and out of the count, envelopes that could never open.
+- **A flood meets D14.** A server can make held envelopes that name any real user: at most 64 per
+  name and 128 in all, 32 MiB on disk, for 7 days, and at most 128 rows in Chats. It can push
+  genuine held envelopes out, which is no more than it can do by deleting them, as it always
+  could.
+- **Nothing is accepted.** A held envelope opens nothing past the sender block, changes no session
+  or prekey state, applies no event, sends no receipt and shows no content or profile, so the
+  hold is not first-seen acceptance (`cryptographic-protocol.md`, `CLIENT_CONTRACT.md` §C). The
+  release is a trigger and never a trust decision: the inspection after it runs the whole
+  verification (D16).
+- **What the row reveals:** the claimed username, or a short identity, and a count. A hostile
+  server can show a row with a real person's name to draw the user to the safety-number page.
+  The out-of-band comparison there is the defence it always was, and the row never verifies
+  anybody by itself.
+- **What the server learns.** Nothing new from the hold: the acknowledgement comes in the same pass
+  as an opened envelope's, and no envelope is acknowledged twice (D15). After a release, the
+  delivery receipts tell the sender, and the envelopes they travel in tell the server, when the
+  recipient verified; that follows from D1 and D4.
+- **What the phone keeps.** For up to 7 days, the claimed sender and the session id of each held
+  envelope, inside the encrypted database, cleared with the columns. A retired signed pair lives
+  longer while a held envelope needs it, and a rotation can wait (D17): a phone compromised in
+  that time exposes one more pair, for at most the time D17 states.
+- **No logs.** D20.
+
+### Tests and mutation checks
+
+**Prompt 2: storage and the sync engine.**
+
+- `local_database_migration_test.dart`: schema 24 to 25 adds the four columns and the two
+  indexes, returns a row in state 5 to 0, keeps every other row as it was, and runs twice.
+- `local_database_index_plan_test.dart`: the held-senders query, a sender's oldest row and the
+  session match use the two partial indexes.
+- `contact_selective_pairwise_claim_adapter_test.dart`: `resolveInboundSender` answers
+  `UnverifiedInboundSender` only for a successful refresh in state `unverified`; `verified` and
+  this account answer `VerifiedInboundSender`; a changed master key, a fork, an invalid device and
+  an unavailable identity keep their failures; `resolveVerifiedLiveDevices` still answers
+  `policyBlocked` for an unverified peer.
+- `pairwise_opaque_envelope_inspector_test.dart`: an unverified initial answers
+  `HeldEnvelopeInspection` with the claimed sender and the header's session id and never calls
+  `acceptVerifiedInitial`; a device mismatch is `unauthenticatedInput`; a repair replacement
+  stays `policyBlocked`; a regular envelope with no session and one held initial is held as a
+  follow-up, and with none or two it is `unauthenticatedInput`.
+- `durable_sync_engine_test.dart`: a hold spends no budget and is acknowledged in the same pass;
+  a changed master key still spends the budget and is quarantined at the eighth failure; the
+  sweep releases a verified sender and no other; the expiry runs before the inbox pass; the
+  report counts.
+- `drift_sync_store_test.dart`: a hold goes to 2, then to 5 when acknowledged, stays, and the rows
+  after it are deleted; a release opens the sender's rows in sequence order and before later
+  envelopes; a released row's commit is not acknowledged again; the 65th row of a sender and the
+  129th of the phone evict the oldest with its session; a follow-up of an evicted initial is
+  quarantined; a row expires after 7 days with reason 5; a re-hold keeps `held_at`; the earliest
+  hold day.
+- `prekey_maintenance_service_test.dart`: the prune day is the smaller of T and H; the creation
+  check stays against T; a due rotation waits in each case of D17 and runs otherwise;
+  replenishment runs while it waits.
+- The Diagnostics tests: `pending_inbound` leaves held rows out, and `held_inbound` counts them.
+- One flow test with the real store and inspector over fakes: three messages of an unverified
+  sender are held, the verification releases them, they open in order, and a delivery receipt is
+  queued for each.
+
+| Mutation (prompt 2) | The test that must fail |
+|---|---|
+| The engine sends a `HeldEnvelopeInspection` through `_recordEnvelopeFailure` | the engine's "a hold spends no budget" |
+| The inspector holds on every `policyBlocked` | the engine's changed-master-key case |
+| The contiguity walk counts state 4 only | the store's "rows after a held row are deleted" |
+| `recordAcknowledgementSuccess` sets a held row to 4 | the store's "a held envelope survives its acknowledgement" |
+| An eviction leaves the follow-ups | the store's session cascade |
+| The commit of a released row sets 2 | the store's "no second acknowledgement" |
+| A release moves rows in 2 or 3 | the store's "an owed acknowledgement is not released" |
+| The prune uses T | the service's prune-day case |
+| The rotation is never postponed | the service's postponement cases |
+
+**Prompt 3: Chats and the hint.**
+
+- Chats: one row for each held sender, with the line in both languages and their plural forms; a
+  short identity without "@" for an unknown name; a tap opens `/contacts/:userId/safety`; the row
+  sorts by its latest hold time below the pinned items; no preview, time, badge or menu; the
+  search page lists none; a release removes the row; one semantic node; 200 % text.
+- The direct chat: the hint under the newest own message after one hour, on a fake clock, and not
+  before; not with a receipt; not for a queued, sending or failed message; not in a group or in
+  Saved Messages; once only; one rebuild at the due moment.
+
+| Mutation (prompt 3) | The test that must fail |
+|---|---|
+| The held-senders query counts released rows | "a release removes the row" |
+| The hint's delay is zero | "not before one hour" |
+| The hint shows in a group | the group case |
+| The hint shows under each qualifying message | "once only" |
+
+### Rejected
+
+- **Opening the message on first sight:** first-seen acceptance, which
+  `cryptographic-protocol.md` and `CLIENT_CONTRACT.md` §C forbid.
+- **Leaving the envelope on the server.** An unacknowledged envelope is served again on every
+  drain and inspected each time, it stops the contiguous acknowledgement, it takes room in a
+  mailbox of 32 MiB that every sender shares, and the server prunes it after 7 days anyway.
+- **Treating `policyBlocked` as transient:** the same as leaving it on the server, and it would
+  also keep a changed master key and a fork waiting forever.
+- **A new failure kind** (D12), **a new table or a new state value 6** (D11), **a hint under
+  every message or after a minute** (D19), **a name lookup** (D18), and **a Rust core change for
+  the rotation's prune** (D6, D17).
+
+### The cost
+
+- **A long held session can be lost whole.** Past 64 envelopes from one sender, the oldest goes,
+  and with it the rest of its session (D14); that sender's later messages on the session are lost
+  at once, as today, until the sender's device starts a new session.
+- **A rotation can be late** while an envelope is held: by a day when maintenance runs on time,
+  and until day L + 16 when it is already late (D17).
+- **Disk:** at most 32 MiB of ciphertext, for 7 days.
+- **The row names a claim** (Security analysis).
+- **The sender waits.** No receipt arrives before the recipient verifies, and the hint can show
+  for a peer whose phone is only off.
+- **A released group copy lands days late** in its group, in the place its own time gives it,
+  after the messages that arrived since.
+- **One more refresh:** each released initial refreshes its sender's identity and devices again;
+  a follow-up reads nothing more.
+
+### The plan of phase 2
+
+| Prompt | Work |
+|---|---|
+| `02-1` (this record) | The design, Proposed. Documents only. |
+| `02-2` | D11 to D17 and D20: the storage, the inspector, the engine, the release and the key rules, and the amendment of the two protocol documents. |
+| `02-3` | D18 and D19: the Chats row and the hint. ADR-093 Accepted; the pull request and the merge. |
+
+### Not done here
+
+- **Prekey maintenance is not wired** (The facts). D17 makes the service keep D6; running the
+  service at all is its own task, with its own tests of rotation, replenishment and the
+  device-log append on a phone.
+- **A follow-up behind a deferred initial is lost, for a verified sender too.** When an initial's
+  inspection fails for a transient cause, a later regular envelope of its session is inspected
+  first, finds no session and is quarantined at once. D13 matches held initials only; matching an
+  initial still waiting in the inbox is a separate fix.
+- **`sync-engine.md`, "Device maintenance",** describes replenishment and rotation as running.
+  They do not run (above).
 
 ## ADR-092 in full — the whole application blocks screen capture (2026-10-17)
 
