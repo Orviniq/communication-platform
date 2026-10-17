@@ -2627,24 +2627,6 @@ abstract class AppLocalizations {
   /// **'The message was not saved. Nothing was sent.'**
   String get groupSendFailed;
 
-  /// No description provided for @groupMuteAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Mute'**
-  String get groupMuteAction;
-
-  /// No description provided for @groupSearchChatAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Search in chat'**
-  String get groupSearchChatAction;
-
-  /// No description provided for @groupSharedMediaAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Shared media'**
-  String get groupSharedMediaAction;
-
   /// No description provided for @groupNoDescription.
   ///
   /// In en, this message translates to:

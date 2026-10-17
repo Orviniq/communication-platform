@@ -1006,8 +1006,8 @@ Every state above is drawn in [`design-handoff/voice-room-states.md`](design-han
 
 ### 11.2 Shared media screen
 *Not built ([ADR-089](decisions.md) D1).* No route opens it: the *Shared media and files* row
-of Contact Profile (§11) and the *Shared media* button of Group Info (§12.2) are drawn
-disabled. A received attachment is reached from its message (§8).
+of Contact Profile (§11) is drawn disabled, and Group Info (§12.2) offers no entry to it. A
+received attachment is reached from its message (§8).
 - A grid of images/files from the conversation, decrypted locally, with tap-to-open and
   jump-to-message.
 
@@ -1031,9 +1031,7 @@ Reached from Contacts (§7). Multi-step:
 **Layout (top → bottom).**
 1. **Top bar:** back; an **Edit** affordance for owner/admins → §12.3.
 2. **Header:** group photo, name, description, member count.
-3. **Quick actions:** **Mute**, **Search in chat**, **Shared media** (grid like §11.2; not
-   built, so the button is drawn disabled).
-4. **Members section:** each row — avatar, name, a **role tag** (owner/admin/member), a
+3. **Members section:** each row — avatar, name, a **role tag** (owner/admin/member), a
    verified-key indicator if verified.
    - **Tap a member** → sheet with **Message** (DM), **Verify safety number** (§11.1), and
      **owner/admin-only**: **Remove from group** (→ confirm). **[PRIVACY]** Removing a
@@ -1041,7 +1039,13 @@ Reached from Contacts (§7). Multi-step:
    - **Add members** (visible per the group's invite policy) → member picker (like §12.1
      step 1).
    - The same statement of what a group message costs as §12.1 step 2.
-5. **Leave group** (all members) → confirm.
+4. **Leave group** (all members) → confirm.
+
+Group Info has **no quick-action row**. **Mute** is set from the Chats list (§17), and
+**Search in chat** from the conversation's own app bar; **Shared media** (a grid like §11.2)
+is not built. A button that is disabled for good, or that only returns to the screen it was
+opened from, is a control that can never succeed, which the core rules forbid, so none is
+drawn until its destination exists.
 
 ### 12.3 Edit Group screen (owner/admin)
 **Purpose.** Edit group identity and settings. These are owner/admin powers.

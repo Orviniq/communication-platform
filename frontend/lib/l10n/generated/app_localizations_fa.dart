@@ -1486,15 +1486,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get groupSendFailed => 'پیام ذخیره نشد. چیزی ارسال نشد.';
 
   @override
-  String get groupMuteAction => 'بی‌صدا';
-
-  @override
-  String get groupSearchChatAction => 'جست‌وجو در گفتگو';
-
-  @override
-  String get groupSharedMediaAction => 'رسانه‌های مشترک';
-
-  @override
   String get groupNoDescription => 'بدون توضیح';
 
   @override

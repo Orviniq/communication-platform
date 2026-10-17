@@ -115,40 +115,6 @@ class _GroupInfoViewState extends State<GroupInfoView> {
           const SizedBox(height: AppSpacing.x6),
           GroupInfoSummary(state: state),
           const SizedBox(height: AppSpacing.x6),
-          Wrap(
-            spacing: AppSpacing.x2,
-            runSpacing: AppSpacing.x2,
-            children: [
-              AppButton(
-                label: strings.groupMuteAction,
-                leading: AppIcons.muted,
-                onPressed: null,
-                kind: AppButtonKind.outline,
-              ),
-              AppButton(
-                key: const ValueKey('group-info-search'),
-                label: strings.groupSearchChatAction,
-                leading: AppIcons.search,
-                // Searching happens in the conversation, over the
-                // messages it has loaded. A permanently disabled button
-                // offering it here was a control that could never
-                // succeed, which the UI specification's core rules
-                // forbid. Back to the conversation below, when there is
-                // one: a `go` to it dropped the Chats list under it.
-                onPressed: () => context.canPop()
-                    ? context.pop()
-                    : context.go('/groups/${state.groupId}'),
-                kind: AppButtonKind.outline,
-              ),
-              AppButton(
-                label: strings.groupSharedMediaAction,
-                leading: AppIcons.attach,
-                onPressed: null,
-                kind: AppButtonKind.outline,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.x6),
           Text(
             strings.groupMembersSection,
             style: context.tokens.typography.section,

@@ -842,6 +842,27 @@ void main() {
     },
   );
 
+  testWidgets('Group Info offers no Mute, Search in chat or Shared media '
+      'button', (tester) async {
+    await _pump(
+      tester,
+      GroupInfoPage(
+        groupId: _groupId,
+        injectedState: _state(),
+        currentUserId: _owner,
+        onMutate: (_) async => Result.success(_state()),
+      ),
+    );
+
+    // Each of them was a control that could not succeed: two were disabled for
+    // good and the third only went back to the screen it was opened from.
+    expect(find.byKey(const ValueKey('group-info-search')), findsNothing);
+    expect(find.widgetWithText(AppButton, 'Mute'), findsNothing);
+    expect(find.widgetWithText(AppButton, 'Search in chat'), findsNothing);
+    expect(find.widgetWithText(AppButton, 'Shared media'), findsNothing);
+    expect(find.text('Members'), findsOneWidget);
+  });
+
   testWidgets('group details say what one message costs', (tester) async {
     await _pump(
       tester,
@@ -896,27 +917,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Chats list'), findsOneWidget);
       expect(router.canPop(), isFalse);
-    });
-
-    testWidgets('Search on Group Info returns to the conversation below it', (
-      tester,
-    ) async {
-      final router = await _pumpGroupRoutes(tester, '/chats');
-      unawaited(router.push('/groups/$_groupId'));
-      await tester.pumpAndSettle();
-      unawaited(router.push('/groups/$_groupId/info'));
-      await tester.pumpAndSettle();
-
-      final search = find.byKey(const ValueKey('group-info-search'));
-      await tester.ensureVisible(search);
-      await tester.pumpAndSettle();
-      await tester.tap(search);
-      await tester.pumpAndSettle();
-      expect(find.text('Group chat $_groupId'), findsOneWidget);
-
-      expect(await tester.binding.handlePopRoute(), isTrue);
-      await tester.pumpAndSettle();
-      expect(find.text('Chats list'), findsOneWidget);
     });
   });
 }

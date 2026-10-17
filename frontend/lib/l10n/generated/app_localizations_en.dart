@@ -1496,15 +1496,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get groupSendFailed => 'The message was not saved. Nothing was sent.';
 
   @override
-  String get groupMuteAction => 'Mute';
-
-  @override
-  String get groupSearchChatAction => 'Search in chat';
-
-  @override
-  String get groupSharedMediaAction => 'Shared media';
-
-  @override
   String get groupNoDescription => 'No description';
 
   @override
