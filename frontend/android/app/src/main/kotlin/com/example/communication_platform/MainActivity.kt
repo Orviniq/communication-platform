@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.WindowManager
@@ -37,6 +38,14 @@ class MainActivity : FlutterActivity() {
     }
     private val attachments by lazy { AttachmentChannel(activity = this) }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // No screenshot, no screen recording, no casting and no recent-apps
+        // preview of this window, in every build (ADR-092). The flag is set
+        // before the first frame and nothing clears it.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        super.onCreate(savedInstanceState)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
@@ -47,12 +56,10 @@ class MainActivity : FlutterActivity() {
                 }
                 when (call.method) {
                     "setSensitiveScreen" -> {
-                        val enabled = call.argument<Boolean>("enabled") ?: true
-                        if (enabled) {
-                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                        } else {
-                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                        }
+                        // The flag is already on for the whole activity
+                        // (onCreate), so "on" keeps it and "off" leaves it.
+                        // The method stays so the Dart side keeps its API.
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         result.success(null)
                     }
                     "copySensitiveText" -> {
