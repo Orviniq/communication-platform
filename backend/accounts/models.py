@@ -3,6 +3,7 @@ import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.validators import RegexValidator
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from core.buckets import PROFILE_BUCKETS
 from core.fields import OpaqueBlobField
@@ -47,6 +48,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     class Meta:
+        # The operator's word for this row, on every page the panel renders it on:
+        # the breadcrumb, the changelist title, the change form and the audit log's
+        # content type. Without it Django derives "user" from the class name, and
+        # the panel reads "Accounts › Users" under a sidebar entry that says
+        # "Accounts".
+        verbose_name = _("account")
+        verbose_name_plural = _("accounts")
         indexes = [
             # The names `POST /users/lookup` may find, and no other. An unknown name,
             # an inactive account's and a hidden account's all miss this index

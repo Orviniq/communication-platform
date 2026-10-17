@@ -38,6 +38,7 @@ RETIRE_DATES = "0002_retire_the_activity_dates"
 BACKFILL_THE_DAY = "0004_backfill_the_queued_day"
 DROP_THE_DATE = "0003_drop_the_retired_date"
 DISCOVERABILITY = "0004_the_discoverability_setting"
+NAME_THE_ACCOUNT = "0006_name_the_account_in_operator_words"
 HISTORY = {
     "accounts": [
         INITIAL,
@@ -45,6 +46,7 @@ HISTORY = {
         DROP_THE_DATE,
         DISCOVERABILITY,
         "0005_index_the_findable_names",
+        NAME_THE_ACCOUNT,
     ],
     "attachments": [INITIAL, "0002_drop_the_uploader_link"],
     "devices": [INITIAL, RETIRE_DATES, "0003_drop_the_retired_columns"],
@@ -66,6 +68,16 @@ HISTORY = {
 # which files are allowed to be silent — the alternative is a gate that passes a
 # schema migration whose SQL failed to generate.
 DATA_MIGRATIONS = {("messaging", BACKFILL_THE_DAY)}
+
+# The migrations that change the migration state and nothing in the database: a
+# display name, an ordering, a permission label. Django records them because
+# `makemigrations --check` compares the models against that state, and `sqlmigrate`
+# prints `-- (no-op)` for every one. Like the data migrations above they are silent,
+# and they are held to more than silence rather than excused from the gates: each
+# must emit no SQL, carry only the operations in `STATE_ONLY_OPERATIONS`, and take no
+# lock at all when its (empty) SQL runs.
+STATE_ONLY_MIGRATIONS = {("accounts", NAME_THE_ACCOUNT)}
+STATE_ONLY_OPERATIONS = {"AlterModelOptions"}
 
 # The apps of this project that own a table. `core` and `realtime` declare no
 # model.
@@ -346,6 +358,11 @@ LOCK_CLASSES = {
         "writer. It is held for one batch and not for the migration, which is what "
         "`atomic = False` and the per-batch transaction buy"
     ),
+    "AlterModelOptions": (
+        "none — it changes `verbose_name`, `ordering` and the other model options in "
+        "the migration state, and `sqlmigrate` prints `-- (no-op)` for it. The "
+        "state-only gate below runs that empty SQL and reads `pg_locks` to show it"
+    ),
     "RunSQL": (
         "whatever the statement takes, which is why this entry names none: the "
         "operation is raw SQL and the operation name says nothing at all. The "
@@ -559,6 +576,13 @@ def test_the_generated_sql_is_only_the_statements_the_classification_covers(app,
         # way round: this file carries data and no schema, and a schema operation
         # that appeared in it would be one this gate never read.
         assert statements == []
+        return
+    if (app, name) in STATE_ONLY_MIGRATIONS:
+        # The same inversion for a change to the migration state: no SQL, and no
+        # operation that could ever produce some.
+        carried = {type(operation).__name__ for operation in loaded(app, name).operations}
+        assert statements == []
+        assert carried <= STATE_ONLY_OPERATIONS, sorted(carried)
         return
     assert statements
     assert ("BEGIN;" in sql) is loaded(app, name).atomic
@@ -1175,9 +1199,17 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
     out = StringIO()
     call_command("sqlmigrate", app, name, database=empty_database, stdout=out)
 
+    statements = statements_of(out.getvalue())
     locks, created, dropped, rewritten = run_and_read_the_locks(
-        empty_database, statements_of(out.getvalue())
+        empty_database, statements
     )
+
+    if (app, name) in STATE_ONLY_MIGRATIONS:
+        # Nothing to record against it, and that is the measurement: the empty SQL
+        # took no lock on any relation of the schema and changed none.
+        assert statements == []
+        assert (locks, created, dropped, rewritten) == ([], set(), set(), set())
+        return
 
     pre_existing = {
         relname: strongest([mode for mode, name_, _kind in locks if name_ == relname])
@@ -1312,7 +1344,7 @@ def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app
         if target is not None and target.group(1) not in created
     }
 
-    if (app, name) in DATA_MIGRATIONS:
+    if (app, name) in DATA_MIGRATIONS | STATE_ONLY_MIGRATIONS:
         assert statements == []
         return
     assert statements
