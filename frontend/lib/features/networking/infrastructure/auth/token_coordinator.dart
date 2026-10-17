@@ -292,7 +292,7 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   };
 
   @override
-  Future<void> logout() async {
+  Future<void> logout() => _singleFlightTeardown(() async {
     _sessionGeneration += 1;
     final tokens = await store.read();
     try {
@@ -302,17 +302,44 @@ final class TokenCoordinator implements AccessTokenCoordinator {
     } on Object {
       // Local logout and wipe are mandatory even when the server is unreachable.
     } finally {
-      await _terminate(SessionTerminationReason.logout);
+      await _wipe(SessionTerminationReason.logout);
     }
-  }
+  });
 
   @override
-  Future<void> handleRevocation() {
+  Future<void> handleRevocation() => _singleFlightTeardown(() {
     _sessionGeneration += 1;
-    return _terminate(SessionTerminationReason.revoked);
+    return _wipe(SessionTerminationReason.revoked);
+  });
+
+  /// The one teardown in flight.
+  ///
+  /// Erasing an account closes each of its sockets with `4003`, which ends in
+  /// [handleRevocation], and the erase itself then ends in [logout]. Run
+  /// together they wiped the device twice and told the application twice that
+  /// the session was over. A teardown that starts while another runs joins it:
+  /// it wipes nothing and emits nothing, and the first reason is the one the
+  /// application is told.
+  Future<void>? _teardownInFlight;
+
+  Future<void> _singleFlightTeardown(Future<void> Function() teardown) {
+    final running = _teardownInFlight;
+    if (running != null) {
+      return running;
+    }
+    final run = teardown();
+    _teardownInFlight = run;
+    return run.whenComplete(() {
+      if (identical(_teardownInFlight, run)) {
+        _teardownInFlight = null;
+      }
+    });
   }
 
-  Future<void> _terminate(SessionTerminationReason reason) async {
+  Future<void> _terminate(SessionTerminationReason reason) =>
+      _singleFlightTeardown(() => _wipe(reason));
+
+  Future<void> _wipe(SessionTerminationReason reason) async {
     if (reason != SessionTerminationReason.logout &&
         reason != SessionTerminationReason.revoked) {
       _sessionGeneration += 1;
