@@ -79,13 +79,13 @@ final class _LinkedDevicesPageState extends ConsumerState<LinkedDevicesPage> {
         AppButton(
           label: l10n.settingsCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => popAppModal(context, false),
         ),
         AppButton(
           key: const ValueKey('linked-device-remove-confirm'),
           label: l10n.linkedDevicesRemoveAction,
           kind: AppButtonKind.danger,
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () => popAppModal(context, true),
         ),
       ],
     );
@@ -302,11 +302,11 @@ final class _RenameDeviceDialogState extends State<_RenameDeviceDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => popAppModal(context),
           child: Text(l10n.settingsCancelAction),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, controller.text.trim()),
+          onPressed: () => popAppModal(context, controller.text.trim()),
           child: Text(l10n.linkedDevicesSaveAction),
         ),
       ],

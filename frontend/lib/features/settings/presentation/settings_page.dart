@@ -245,12 +245,12 @@ final class _LogOutRow extends StatelessWidget {
         AppButton(
           label: l10n.settingsCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => popAppModal(context, false),
         ),
         AppButton(
           label: l10n.settingsLogOutConfirmAction,
           kind: AppButtonKind.danger,
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () => popAppModal(context, true),
         ),
       ],
     );

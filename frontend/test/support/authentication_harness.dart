@@ -151,7 +151,12 @@ final class WidgetAuthenticationSession implements AuthenticationSessionPort {
       );
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    logouts += 1;
+  }
+
+  /// How many times the session was asked to end.
+  int logouts = 0;
 
   @override
   Future<void> forgetErasedAccount() async {
