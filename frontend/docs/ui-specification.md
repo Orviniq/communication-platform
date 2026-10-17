@@ -670,7 +670,10 @@ long-press.
   the marker at the top shows loading and offers a retry when that page fails, and a message
   arriving joins the timeline without moving the line being read. A jump — from the pinned
   banner, a reply quote or a search result — loads its target when it is older than anything
-  loaded.
+  loaded, scrolls to it, and pulses it: the bubble background takes an accent tint that fades over
+  about 1.5 s, and then nothing stays, no border and no tint. A second tap on the same quote jumps
+  and pulses again. With reduced motion the tint shows steady for about 1 s and clears. A direct
+  chat, Saved Messages and a group chat behave the same.
 - *Empty* — new-conversation placeholder.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.
@@ -1270,7 +1273,7 @@ Security notice, and About with Diagnostics behind it.
 
 **Replacement flow states.** *Explain* (what it does, what it costs, and that a recovery
 secret restores identity and never history) → *working* → *shown once* → *done*, with a
-single *failed* state. Screen capture is blocked for as long as the screen is open, and a
+single *failed* state. Screen capture is blocked in the whole app (ADR-092), and a
 copy goes through the clipboard path that expires; a build without that path says copying
 is unavailable rather than using a clipboard that never clears. **The new secret is shown
 only after the server has accepted the higher backup version.** Every failure says the
