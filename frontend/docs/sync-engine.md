@@ -151,6 +151,8 @@ makes it stop. `inbox_envelopes.inspection_failures` holds that budget, delibera
 separate from `attempt_count`, which counts every begun attempt and drives backoff and so
 rises while a device is merely offline.
 
+**Held envelopes from an unverified sender.** Specified by [ADR-093](decisions.md) (Proposed). Not built yet.
+
 Envelopes are still handed out oldest-due-first. Two guards keep that from being a
 head-of-line block: an inspection retry carries a floor of one second, because the retry
 policy draws uniformly from zero and a zero backoff on the lowest-sequence row is a pass
@@ -338,6 +340,7 @@ by its next one.
   considered complete. A peer observing the narrow intermediate state waits for an
   extending log record; it does not convert an otherwise exact monotonic rotation into
   permanent fork evidence.
+- **Signed prekeys a held envelope needs.** Specified by [ADR-093](decisions.md) (Proposed). Not built yet.
 - No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
   serves no MLS, and a group is a set of pairwise sessions
   ([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F).

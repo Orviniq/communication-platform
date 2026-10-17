@@ -422,6 +422,7 @@ rooms pinned at top. The primary hub.
   (§0.1). The icon is the only search entry: the body holds no search field.
 - **Body:** the scrollable list, and nothing above it. Order: pinned items first (including
   active voice rooms and pinned conversations), then the rest by most recent activity.
+- **A row for a sender whose messages are held until verified.** Specified by [ADR-093](decisions.md) (Proposed). Not built yet.
 - **Bottom (mobile):** the tab bar (Chats / Voice Rooms / Settings) + FAB. Both belong to
   this list: a screen it opens covers them (§0.1).
 - **Active voice-room banner** (§0.2) sits above the tab bar when applicable.
@@ -677,6 +678,7 @@ long-press.
 - *Empty* — new-conversation placeholder.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.
+- *Not delivered yet* — a hint under an own message with no delivery receipt. Specified by [ADR-093](decisions.md) (Proposed). Not built yet.
 - *Failed send* — retry affordance on the message. An attachment message is retried with its
   attachments and its caption, never with its caption alone ([ADR-089](decisions.md) D11).
 - *Uploading* — the upload tray (above) shows each attachment until its message is

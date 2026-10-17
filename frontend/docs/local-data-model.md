@@ -52,7 +52,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
 | `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](decisions.md)) |
 | `attachments` | One row per capability: the message, the encrypted descriptor, and what this device holds of the file — "not downloaded", "ready" with the cache id of its decrypted file and an expiry, or "expired". See [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files) ([ADR-089](decisions.md)) |
-| `inbox_envelopes` | Backend envelope ID/seq, processing and ack state |
+| `inbox_envelopes` | Backend envelope ID/seq, processing and ack state. Held envelopes from an unverified sender: specified by [ADR-093](decisions.md) (Proposed). Not built yet. |
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
 | `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
 | `receipts` | Per-message/device/user delivered/read projection. `read_at_ms` (schema 24) is the read time of a read row: the `ordering_ms` of the earliest `receipt.read` from that device that names the message, skipping an `ordering_ms` of 0, which is a clock the projector could not place. It is null on a delivered row, on a read row whose every read had such a clock, and on a row from before schema 24. Both projection paths write it; a reaction, an edit, a delete or a pin does not rewrite it ([ADR-091](decisions.md) D8 and D9). The reader list of a message is one entry per user with a read row, at the earliest time over that user's devices, never earlier than the message's own `ordering_ms` |
@@ -396,6 +396,8 @@ under reason codes 48 to 51.
   time until a later receipt or a rebuild rewrites the receipts of its message. The step reads
   `PRAGMA table_info` before it adds the column, as the schema-12 step does, so a database whose
   recorded version is behind its real shape upgrades as well. No other table or column changes.
+
+- **Schema version 25, the held envelopes.** Specified by [ADR-093](decisions.md) (Proposed). Not built yet.
 
 ## Retention and deletion
 
