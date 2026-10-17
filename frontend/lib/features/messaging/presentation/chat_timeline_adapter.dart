@@ -73,11 +73,20 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   /// A jump whose target was not loaded when it was asked for.
   ///
   /// The application answers a jump by widening the window, which arrives as a
-  /// later build with the same highlighted id. Without this the second build
+  /// later build with the same jump request. Without this the second build
   /// takes the "nothing changed" branch and the jump is silently dropped, which
   /// is exactly how a windowed timeline turns search and the pinned banner into
   /// taps that do nothing.
-  String? _unresolvedJump;
+  ChatJumpRequest? _unresolvedJump;
+
+  /// The jump asked for last. A scroll that finishes after a newer request
+  /// came in belongs to a reader who has already gone elsewhere, and neither
+  /// scrolls further nor pulses.
+  ChatJumpRequest? _jump;
+
+  /// The jump whose target is pulsing now, until [_pulseTimer] ends it.
+  ChatJumpRequest? _pulse;
+  Timer? _pulseTimer;
   var _anchorSnapshotScheduled = false;
   var _dependenciesInitialized = false;
 
@@ -100,7 +109,7 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     _scrollController.addListener(_onScroll);
     _scrollController.addListener(_updateDistanceFromBottom);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _jumpIfRequested(widget.model.highlightedMessageId, animate: false);
+      _jumpIfRequested(widget.model.jump, animate: false);
     });
   }
 
@@ -127,14 +136,15 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
       _loadRequestSent = false;
     }
     final pendingJump = _unresolvedJump;
-    if (widget.model.highlightedMessageId !=
-        oldWidget.model.highlightedMessageId) {
+    if (widget.model.jump != oldWidget.model.jump) {
       _dropReadingAnchor();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _jumpIfRequested(widget.model.highlightedMessageId);
+        _jumpIfRequested(widget.model.jump);
       });
     } else if (pendingJump != null &&
-        widget.model.messages.any((message) => message.id == pendingJump)) {
+        widget.model.messages.any(
+          (message) => message.id == pendingJump.messageId,
+        )) {
       _dropReadingAnchor();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _jumpIfRequested(pendingJump);
@@ -160,6 +170,7 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
 
   @override
   void dispose() {
+    _pulseTimer?.cancel();
     _scrollController
       ..removeListener(_onScroll)
       ..removeListener(_updateDistanceFromBottom)
@@ -298,15 +309,42 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     position.jumpTo(corrected);
   }
 
-  void _jumpIfRequested(String? messageId, {bool animate = true}) {
-    if (messageId == null) return;
+  void _endPulse() {
+    _pulseTimer?.cancel();
+    _pulseTimer = null;
+    if (_pulse != null) setState(() => _pulse = null);
+  }
+
+  /// Tints the target for [AppMotion.pulse], or [AppMotion.pulseReduced] when
+  /// the system asks for reduced motion, and then clears it.
+  ///
+  /// The timer is the adapter's own and [dispose] cancels it, so it cannot
+  /// outlive the timeline.
+  void _startPulse(ChatJumpRequest request) {
+    if (!mounted || _jump != request) return;
+    _pulseTimer?.cancel();
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? AppMotion.pulseReduced
+        : AppMotion.pulse;
+    setState(() => _pulse = request);
+    _pulseTimer = Timer(duration, () {
+      _pulseTimer = null;
+      if (mounted) setState(() => _pulse = null);
+    });
+  }
+
+  void _jumpIfRequested(ChatJumpRequest? request, {bool animate = true}) {
+    if (request == null || !mounted) return;
+    _jump = request;
+    _endPulse();
+    final messageId = request.messageId;
     final sourceIndex = widget.model.messages.indexWhere(
       (message) => message.id == messageId,
     );
     if (sourceIndex < 0) {
       // Outside the loaded window. The request is remembered rather than
       // dropped, and runs again when the page carrying the target arrives.
-      _unresolvedJump = messageId;
+      _unresolvedJump = request;
       return;
     }
     _unresolvedJump = null;
@@ -320,7 +358,9 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     // the drawn range changes no state at all, and the tap did nothing.
     WidgetsBinding.instance.scheduleFrame();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients || _jump != request) {
+        return;
+      }
       final position = _scrollController.position;
       final reverseIndex = widget.model.messages.length - 1 - sourceIndex;
       // The drawn range's own average row height, rather than a constant that
@@ -344,19 +384,22 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
           : Future<void>.sync(() => _scrollController.jumpTo(target));
       unawaited(
         settled.then((_) {
-          if (!mounted) return;
+          if (!mounted || _jump != request) return;
           // The registry answers this exactly as the key map did: a row that
           // is not mounted has no context either way. Asked once the scroll
           // has settled rather than while it is still running, so the target
           // has been built by the time it is looked for.
           final targetContext = _anchoredRows[messageId]?.context;
-          if (targetContext == null || !targetContext.mounted) return;
+          if (targetContext == null || !targetContext.mounted) {
+            _startPulse(request);
+            return;
+          }
           unawaited(
             Scrollable.ensureVisible(
               targetContext,
               alignment: 0.5,
               duration: reducedMotion ? Duration.zero : AppMotion.state,
-            ),
+            ).then((_) => _startPulse(request)),
           );
         }),
       );
@@ -544,12 +587,12 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
       _previousRenderedRows = _renderedRows;
       _renderedRows = {};
     }
-    final highlighted =
-        row is _MessageRow &&
-        widget.model.highlightedMessageId == row.message.id;
+    final pulse = row is _MessageRow && _pulse?.messageId == row.message.id
+        ? _pulse?.serial
+        : null;
     final key = row.key;
     final retained = _renderedRows[key] ?? _previousRenderedRows[key];
-    if (retained != null && retained.draws(row, highlighted: highlighted)) {
+    if (retained != null && retained.draws(row, pulse: pulse)) {
       _renderedRows[key] = retained;
       return retained.widget;
     }
@@ -561,23 +604,18 @@ class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
         child: SizeChangedLayoutNotifier(
           child: ChatMessageBuilder(
             message: message,
-            highlighted: highlighted,
+            pulse: pulse,
             onIntent: widget.onIntent,
-            onJumpToReply: (id) {
-              widget.onIntent(JumpToMessageIntent(id));
-              _jumpIfRequested(id);
-            },
+            // The host answers the intent with a new jump request, which
+            // scrolls and pulses; a second jump from here would run it twice.
+            onJumpToReply: (id) => widget.onIntent(JumpToMessageIntent(id)),
           ),
         ),
       ),
       _DateRow(:final date) => _DateSeparator(key: key, date: date),
       _UnreadRow() => _UnreadDivider(key: key),
     };
-    _renderedRows[key] = _RenderedRow(
-      row: row,
-      highlighted: highlighted,
-      widget: built,
-    );
+    _renderedRows[key] = _RenderedRow(row: row, pulse: pulse, widget: built);
     return built;
   }
 }
@@ -615,16 +653,16 @@ final class _TimelineRows {
 final class _RenderedRow {
   const _RenderedRow({
     required this.row,
-    required this.highlighted,
+    required this.pulse,
     required this.widget,
   });
 
   final _TimelineRow row;
-  final bool highlighted;
+  final int? pulse;
   final Widget widget;
 
-  bool draws(_TimelineRow other, {required bool highlighted}) {
-    if (this.highlighted != highlighted) return false;
+  bool draws(_TimelineRow other, {required int? pulse}) {
+    if (this.pulse != pulse) return false;
     return switch ((row, other)) {
       (_MessageRow(message: final mine), _MessageRow(message: final theirs)) =>
         identical(mine, theirs),

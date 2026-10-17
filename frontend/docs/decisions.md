@@ -102,6 +102,64 @@ is not silently edited out of history.
 | ADR-089 | Accepted (2026-10-11); proposed 2026-10-10 | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
 | ADR-090 | Accepted (2026-10-14); proposed 2026-10-14 | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-091 | Accepted (2026-10-14); proposed 2026-10-14 | A group sends read receipts and no delivered receipt. An own group message shows two ticks as soon as one member other than its sender has read it, without waiting for the other members or for owed copies; a failed message keeps its failed mark and Retry. A group read receipt names the messages of one sender, and goes to the live devices of that sender, when that sender is an active member, and to the reader's other live devices; `MarkConversationVisiblyRead` sends one receipt for each sender, with up to 64 ids each, on the triggers of a direct chat. The sender sees the reader list of an own group message: each member who read it, once, with the read time, the newest first, behind "Seen by N" or "Not seen yet" in the message sheet. The read time is the `ordering_ms` of the earliest `receipt.read` from a device that names the message, kept in a new nullable column of `receipts` (schema 24). Always on, with no setting | The owner's test of groups on phones: a group message never shows two ticks, because a group sends no receipt. The owner decided on 2026-10-14 that the first reader draws the second tick, and that the sender sees who read the message and when. A receipt is an encrypted application event that the server relays, so none of this needs a server change, and the `receipts` table already holds one row for each reader device. A receipt sent to each member would cost about 7,300 copies for one message read by 49 members of a 50-member group with 3 devices each, and would tell each member who read the messages of other members; sent to the sender alone it costs about 245. Costs: the second tick says that one member read the message, not that each did; a read time is the reader's clock, corrected as a message time is. Adds one local column (schema 24); changes no wire format, protocol, dependency or backend file. |
+| ADR-092 | Accepted (2026-10-17); proposed 2026-10-17 | The whole application blocks screen capture, in every build. `MainActivity` adds `FLAG_SECURE` to its window in `onCreate`, before `super.onCreate`, so it is set before the first frame, in the development and the production build alike. Nothing clears it. `SensitiveScreenControl` stays as an API, and the platform method `setSensitiveScreen` keeps the flag on for `enabled: true` and does nothing for `enabled: false` | The owner's requirement after the field test of 2026-10-17: no screenshot and no screen recording anywhere in the app. The flag had been set only while device enrollment and the recovery secret replacement were open, so every other screen, and the recent-apps preview, could be captured. The flag blocks screenshots, screen recording, casting to a display that is not secure and the recent-apps preview of the window. It does not hide the text of a notification, it does not stop a second camera, and it does not cover a window that is not the app's own: the system pickers and the camera app. Costs: nobody can take a screenshot of the app for a bug report in any build, and the flag has not been tried on a phone yet. Changes no wire format, table, protocol, dependency, permission or backend file. |
+
+## ADR-092 in full — the whole application blocks screen capture (2026-10-17)
+
+**Status:** Accepted, 2026-10-17; proposed 2026-10-17. Client platform decision, made on the owner's
+requirement after the field test of 2026-10-17. **Changes no wire format, table, protocol,
+dependency, Android permission or backend file.**
+
+**Cites:** `threat-model.md`, "Required controls"; `platform-android.md`; ADR-049 and ADR-057 (the first controls
+that needed a window, and the first asserting `FLAG_SECURE` for the recovery screens).
+
+### The question
+
+Until now `FLAG_SECURE` was set only while a screen that shows a secret was open. The owner
+requires that nobody can take a screenshot or record the screen anywhere in the app, in every
+build. How is that done, and what does it cost?
+
+### The decisions
+
+- **D5. The activity sets the flag before its first frame, in each build.** `MainActivity.onCreate`
+  calls `window.addFlags(FLAG_SECURE)` before `super.onCreate`. The window exists by then, and the
+  flag is on for the first frame the user can see and for the recent-apps preview of the task.
+  Nothing in the Kotlin sources clears it.
+- **D6. `SensitiveScreenControl` stays as an API and its "off" call no longer clears the flag.**
+  The device enrollment page and the recovery secret replacement page still call
+  `setEnabled(true)` when they show a secret and `setEnabled(false)` when they close, so each
+  still says, where it shows a secret, that capture must be off. On the platform side
+  `setSensitiveScreen` adds the flag, which is already on, whatever `enabled` says.
+
+### What the flag covers, and what it does not
+
+It covers screenshots, screen recording, casting to a display that is not secure, and the
+recent-apps preview of the app's window. It does not cover:
+
+- **The text of a notification.** Notification previews stay hidden by default, as the threat
+  model requires, and that is a separate control.
+- **A second camera, or a person looking at the screen.**
+- **A window that is not the app's own.** The system photo picker, the file picker and the
+  camera app are other apps' windows, and the flag does not reach them.
+- **A phone that is rooted, or an accessibility service the user has granted.**
+- **The headless engines.** A background wake-up has no window to protect.
+
+### The cost
+
+Nobody can take a screenshot of the app for a bug report, in the development build as in the
+production one. A tester describes the screen, or films it with a second camera. The owner chose
+this knowing the cost. The flag has been tested in code only: an architecture test reads
+`MainActivity.kt` and asserts that `onCreate` adds the flag before `super.onCreate` and that no
+Kotlin file clears it. A screenshot attempt on a phone has **not** been made, and the owner
+checks it.
+
+### Alternatives not taken
+
+- *The flag only on the screens that show a secret* (the state before): leaves the messages, the
+  contacts and the safety numbers capturable, which the owner does not accept.
+- *The flag in the production build only*: the owner requires every build.
+- *A setting the user can switch off*: the requirement is that capture is blocked, not that it is
+  blocked by default.
 
 ## ADR-091 in full — a group message is read when one member reads it, and its sender sees who (2026-10-14)
 

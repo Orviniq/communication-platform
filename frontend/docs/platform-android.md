@@ -20,8 +20,10 @@ WebRTC device testing; lowering it may not weaken required security controls sil
 - Disable Android Auto Backup/data extraction for databases, keys, tokens, caches, and
   attachments.
 - Use internal app storage and scoped `content://` sharing only.
-- Apply `FLAG_SECURE` to recovery-secret/key-verification surfaces and privacy-sensitive
-  app-switcher content.
+- Set `FLAG_SECURE` on the activity window in `onCreate`, before the first frame, in every
+  build, and never clear it (ADR-092). It blocks screenshots, screen recording, casting to a
+  display that is not secure and the app-switcher preview; it does not hide notification text,
+  and it does not reach the system pickers or the camera app.
 - Clear clipboard recovery data after a short interval when platform behavior permits.
 
 ### Piece-05 storage baseline

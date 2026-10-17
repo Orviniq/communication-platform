@@ -52,6 +52,12 @@ abstract final class AppMotion {
   static const Duration press = Duration(milliseconds: 120);
   static const Duration state = Duration(milliseconds: 180);
   static const Duration route = Duration(milliseconds: 240);
+
+  /// How long a jumped-to message keeps its tint, fading as it goes
+  /// (`ui-specification.md`), and how long the same tint stays, unfading, when
+  /// the system asks for reduced motion.
+  static const Duration pulse = Duration(milliseconds: 1500);
+  static const Duration pulseReduced = Duration(milliseconds: 1000);
   static const Curve enter = Curves.easeOutCubic;
   static const Curve exit = Curves.easeInCubic;
 

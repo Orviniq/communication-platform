@@ -132,7 +132,9 @@ evidence for a future Web trust boundary or its browser vectors.
 - Encrypted local Android database; a future Web client must not persist plaintext.
 - Redacted local diagnostics and hidden notification previews by default.
 - Clipboard warnings/expiry where supported for recovery secrets.
-- Screenshots blocked on Android screens that expose recovery secrets or raw keys.
+- Screen capture blocked in the whole app, in every build: no screenshot, no screen recording
+  and no recent-apps preview of its window (`FLAG_SECURE` from the first frame, ADR-092). It does
+  not hide notification text and does not stop a second camera.
 - Local wipe on logout, self-revocation, remote revocation, and unrecoverable key errors.
 - Reproducible release artifacts and independent security review.
 

@@ -203,7 +203,7 @@ anchor path is shared by every row builder.
   the screen shows is what the clipboard receives.
 - **Edit Profile:** encrypted display name/avatar and visibility wording.
 - **Security Settings:** identity-recovery guidance and replacement, verified-contact
-  review, notice. The replacement screen blocks screen capture and copies through the
+  review, notice. The whole app blocks screen capture (ADR-092), and the replacement screen copies through the
   expiring clipboard path.
 - **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
 - **Add Device/Restore:** two-phase registration, recovery-secret identity restore,

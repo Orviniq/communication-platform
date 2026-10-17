@@ -2,11 +2,18 @@ import 'package:flutter/services.dart';
 
 /// The two platform capabilities a screen showing a recovery secret needs.
 ///
-/// Both are required controls in the threat model: screenshots are blocked on
-/// Android screens that expose recovery secrets or raw keys, and a clipboard
-/// copy of one expires. Both live on the protected-storage channel, which is
-/// Context-bound and identical in every engine, except for these two calls,
-/// which the activity supplies because they need a window and a user.
+/// Both are required controls in the threat model: screen capture is blocked
+/// and a clipboard copy of a secret expires. Both live on the
+/// protected-storage channel, which is Context-bound and identical in every
+/// engine, except for these two calls, which the activity supplies because
+/// they need a window and a user.
+///
+/// Capture is blocked in the whole app, not only on these screens: the
+/// activity sets `FLAG_SECURE` before its first frame in every build and
+/// nothing clears it (ADR-092). So [setEnabled] with `true` keeps a flag that
+/// is already on, and with `false` does nothing. The method stays so that the
+/// screens that show a secret still say, at the point they show it, that
+/// capture must be off.
 ///
 /// Every failure is swallowed. A host test and a future platform without the
 /// channel simply lack the protection; the caller learns that a copy did not

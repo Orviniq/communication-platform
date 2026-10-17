@@ -58,14 +58,18 @@ const chatDoubleTapReaction = '👍';
 class ChatMessageBuilder extends StatelessWidget {
   const ChatMessageBuilder({
     required this.message,
-    required this.highlighted,
+    required this.pulse,
     required this.onIntent,
     required this.onJumpToReply,
     super.key,
   });
 
   final ChatMessageViewModel message;
-  final bool highlighted;
+
+  /// The serial of the jump that is pulsing this bubble, or null when none is.
+  /// A new serial restarts the fade, so a second jump to the same message
+  /// pulses again.
+  final int? pulse;
   final ChatIntentCallback onIntent;
   final ValueChanged<String> onJumpToReply;
 
@@ -146,23 +150,32 @@ class ChatMessageBuilder extends StatelessWidget {
               key: ValueKey('message-${message.id}'),
               duration: AppMotion.effective(context, AppMotion.state),
               curve: AppMotion.enter,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.x3,
-                vertical: AppSpacing.x2,
-              ),
               decoration: BoxDecoration(
                 color: message.outgoing ? colors.accentSoft : colors.surface,
                 border: Border.all(
-                  color: highlighted
-                      ? colors.accent
-                      : message.delivery == ChatDeliveryViewState.failed
+                  color: message.delivery == ChatDeliveryViewState.failed
                       ? colors.danger
                       : colors.border,
-                  width: highlighted ? 3 : 1,
                 ),
                 borderRadius: _bubbleRadius(message),
               ),
-              child: _content(context),
+              // The tint sits between the bubble's own fill and its content,
+              // and is always in the tree, so a pulse starting or ending
+              // never re-parents the content (an attachment tile keeps its
+              // state).
+              child: _PulseTint(
+                key: ValueKey('message-pulse-${message.id}'),
+                pulse: pulse,
+                color: colors.accent,
+                borderRadius: _bubbleRadius(message),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.x3,
+                    vertical: AppSpacing.x2,
+                  ),
+                  child: _content(context),
+                ),
+              ),
             ),
           ),
         ),
@@ -1017,6 +1030,94 @@ BorderRadius _bubbleRadius(ChatMessageViewModel message) {
           bottomLeft: grouped,
           bottomRight: regular,
         );
+}
+
+/// The accent tint a jumped-to bubble takes, and its fade.
+///
+/// A new [pulse] serial starts the fade from full tint, also when the previous
+/// one is still running. Under reduced motion the tint stays at full strength
+/// for as long as [pulse] is set and goes with it: the timeline clears the
+/// serial after [AppMotion.pulseReduced], so nothing here keeps a timer.
+class _PulseTint extends StatefulWidget {
+  const _PulseTint({
+    required this.pulse,
+    required this.color,
+    required this.borderRadius,
+    required this.child,
+    super.key,
+  });
+
+  /// The strongest the tint gets, as the opacity of [color] over the bubble.
+  static const peak = 0.3;
+
+  final int? pulse;
+  final Color color;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  @override
+  State<_PulseTint> createState() => _PulseTintState();
+}
+
+class _PulseTintState extends State<_PulseTint>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.pulse,
+  );
+
+  var _reduced = false;
+  var _started = false;
+
+  /// A fade runs only when motion is allowed: under reduced motion the tint is
+  /// steady and no ticker is left running behind it.
+  void _fade() {
+    if (!_reduced) unawaited(_controller.forward(from: 0));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduced = MediaQuery.disableAnimationsOf(context);
+    if (!_started) {
+      _started = true;
+      if (widget.pulse != null) _fade();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _PulseTint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pulse != null && widget.pulse != oldWidget.pulse) _fade();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final strength = widget.pulse == null
+            ? 0.0
+            : _reduced
+            ? 1.0
+            : 1 - AppMotion.exit.transform(_controller.value);
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: widget.color.withValues(alpha: _PulseTint.peak * strength),
+            borderRadius: widget.borderRadius,
+          ),
+          child: child,
+        );
+      },
+    );
+  }
 }
 
 String _deliveryLabel(AppLocalizations strings, ChatDeliveryViewState state) =>
