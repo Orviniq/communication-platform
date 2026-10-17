@@ -64,14 +64,18 @@ class ChatConversationView extends StatefulWidget {
 
 class _ChatConversationViewState extends State<ChatConversationView> {
   final GlobalKey<ChatComposerBuilderState> _composerKey = GlobalKey();
-  String? _highlightedMessageId;
+
+  /// The last jump a tap here asked for. Every tap makes a new request, so a
+  /// second tap on the same quote scrolls and pulses again.
+  ChatJumpRequest? _jump;
+  var _jumpSerial = 0;
 
   void _handleIntent(ChatIntent intent) {
     if (intent is ReplyToMessageIntent || intent is BeginEditMessageIntent) {
       _composerKey.currentState?.handleIntent(intent);
     }
     if (intent case JumpToMessageIntent(:final messageId)) {
-      setState(() => _highlightedMessageId = messageId);
+      setState(() => _jump = ChatJumpRequest(messageId, ++_jumpSerial));
     }
     if (intent case ForwardMessageIntent(:final message)) {
       unawaited(_showForwardPicker(message));
@@ -97,8 +101,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       pinnedMessages: widget.model.pinnedMessages,
       messages: widget.model.messages,
       errorCode: widget.model.errorCode,
-      highlightedMessageId:
-          _highlightedMessageId ?? widget.model.highlightedMessageId,
+      jump: _jump ?? widget.model.jump,
     );
     return RepaintBoundary(
       key: const ValueKey('chat-interface-golden'),

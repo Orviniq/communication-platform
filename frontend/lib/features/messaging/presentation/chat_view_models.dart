@@ -137,6 +137,29 @@ final class ChatMessageViewModel {
       caption ?? (attachments.isEmpty ? text : attachments.first.displayName);
 }
 
+/// One ask to bring a message into view and draw the reader's eye to it.
+///
+/// A tap on a reply quote, a search result or the pinned banner makes one. The
+/// [serial] is what tells two taps on the same message apart: a host hands out
+/// a new one with every tap, so the second tap on a quote is a different
+/// request from the first and the timeline scrolls and pulses again.
+@immutable
+final class ChatJumpRequest {
+  const ChatJumpRequest(this.messageId, this.serial);
+
+  final String messageId;
+  final int serial;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatJumpRequest &&
+      other.messageId == messageId &&
+      other.serial == serial;
+
+  @override
+  int get hashCode => Object.hash(messageId, serial);
+}
+
 @immutable
 final class ChatTimelineViewModel {
   ChatTimelineViewModel({
@@ -153,7 +176,7 @@ final class ChatTimelineViewModel {
     required Iterable<ChatMessageViewModel> pinnedMessages,
     required Iterable<ChatMessageViewModel> messages,
     this.errorCode,
-    this.highlightedMessageId,
+    this.jump,
   }) : pinnedMessages = List.unmodifiable(pinnedMessages),
        messages = List.unmodifiable(messages);
 
@@ -177,7 +200,10 @@ final class ChatTimelineViewModel {
   final List<ChatMessageViewModel> pinnedMessages;
   final List<ChatMessageViewModel> messages;
   final String? errorCode;
-  final String? highlightedMessageId;
+
+  /// The message the reader last asked to be taken to. The timeline scrolls to
+  /// it and pulses it each time this changes, also when only the serial does.
+  final ChatJumpRequest? jump;
 
   bool get composerEnabled => securityGate == ChatSecurityGate.ready;
 }

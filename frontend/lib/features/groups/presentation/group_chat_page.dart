@@ -403,8 +403,9 @@ class _GroupChatViewState extends State<GroupChatView> {
   }
 
   /// The message a search result or a reply quote asked for. The timeline
-  /// scrolls when this changes.
-  String? _highlightedMessageId;
+  /// scrolls and pulses when this changes, and every tap makes a new request.
+  ChatJumpRequest? _jump;
+  var _jumpSerial = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -438,7 +439,7 @@ class _GroupChatViewState extends State<GroupChatView> {
       // does not read yet (ADR-090 D4).
       pinnedMessages: const [],
       messages: viewMessages,
-      highlightedMessageId: _highlightedMessageId,
+      jump: _jump,
     );
     final readers = _readersOrNull;
     final timelineView = ChatTimelineAdapter(
@@ -555,7 +556,7 @@ class _GroupChatViewState extends State<GroupChatView> {
     } else if (intent case JumpToMessageIntent(:final messageId)) {
       // A search result or a reply quote. The window opens far enough back to
       // hold the message, and the timeline jumps once it is there.
-      setState(() => _highlightedMessageId = messageId);
+      setState(() => _jump = ChatJumpRequest(messageId, ++_jumpSerial));
       unawaited(widget.onReveal?.call(messageId));
     } else if (intent is OpenAttachmentIntent) {
       // A group chat sends no attachment in this phase, and its paperclip

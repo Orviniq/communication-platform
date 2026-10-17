@@ -275,14 +275,15 @@ class _Harness extends StatefulWidget {
 
 class _HarnessState extends State<_Harness> {
   ConversationTimelineState? _state;
-  String? _highlighted;
+  ChatJumpRequest? _jump;
+  var _jumpSerial = 0;
   StreamSubscription<ConversationTimelineState>? _subscription;
 
   List<ChatMessageViewModel> get messages => _model?.messages ?? const [];
   ChatTimelineViewModel? _model;
 
   void jumpTo(String messageId) {
-    setState(() => _highlighted = messageId);
+    setState(() => _jump = ChatJumpRequest(messageId, ++_jumpSerial));
     unawaited(widget.window.reveal(messageId));
   }
 
@@ -329,7 +330,7 @@ class _HarnessState extends State<_Harness> {
         currentUserName: 'You',
         peerName: 'Peer',
       ),
-      highlightedMessageId: _highlighted,
+      jump: _jump,
     );
     _model = model;
     return SizedBox(

@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '../support/chat_pulse.dart';
 import '../support/system_insets.dart';
 
 const _groupId =
@@ -604,37 +605,63 @@ void main() {
       expect(find.text('Delete for everyone'), findsNothing);
     });
 
-    testWidgets('a tap on a search result highlights that message', (
+    testWidgets(
+      'a tap on a search result pulses that message and then clears',
+      (tester) async {
+        await _pumpThread(tester);
+        expect(pulseStrength(tester, _questionId), 0);
+
+        await tester.tap(find.byTooltip('Search in chat'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('conversation-search-field')),
+          'question',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('conversation-search-hit-$_questionId')),
+        );
+        await tester.pump();
+
+        expect(
+          await pumpUntilPulse(tester, _questionId),
+          closeTo(chatPulsePeak, .05),
+        );
+        expect(pulseStrength(tester, _answerId), 0);
+
+        // The pulse ends, and no outline or tint stays on the message.
+        await tester.pumpAndSettle();
+        expect(pulseStrength(tester, _questionId), 0);
+        final bubble = tester.widget<AnimatedContainer>(
+          find.byKey(const ValueKey('message-$_questionId')),
+        );
+        expect(
+          ((bubble.decoration! as BoxDecoration).border! as Border).top.width,
+          1,
+        );
+      },
+    );
+
+    testWidgets('a tap on a reply quote pulses the quoted message again', (
       tester,
     ) async {
       await _pumpThread(tester);
-      double border(String messageId) =>
-          ((tester
-                              .widget<AnimatedContainer>(
-                                find.byKey(ValueKey('message-$messageId')),
-                              )
-                              .decoration!
-                          as BoxDecoration)
-                      .border!
-                  as Border)
-              .top
-              .width;
-      expect(border(_questionId), 1);
-
-      await tester.tap(find.byTooltip('Search in chat'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('conversation-search-field')),
-        'question',
+      final quote = find.descendant(
+        of: find.byKey(const ValueKey('message-$_answerId')),
+        matching: find.text('Original question'),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('conversation-search-hit-$_questionId')),
-      );
-      await tester.pumpAndSettle();
 
-      expect(border(_questionId), 3);
-      expect(border(_answerId), 1);
+      for (var tap = 0; tap < 2; tap++) {
+        await tester.tap(quote);
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        expect(
+          await pumpUntilPulse(tester, _questionId),
+          closeTo(chatPulsePeak, .05),
+          reason: 'tap ${tap + 1}',
+        );
+        await tester.pumpAndSettle();
+        expect(pulseStrength(tester, _questionId), 0);
+      }
     });
   });
 
