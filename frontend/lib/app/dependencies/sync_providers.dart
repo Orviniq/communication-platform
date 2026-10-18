@@ -49,6 +49,14 @@ final syncProjectionProvider = StreamProvider<SyncProjection>((ref) async* {
   yield* store.watchProjection();
 });
 
+/// The claimed senders with envelopes held for a verification, each with its
+/// count, from the encrypted database (ADR-093 D18). Chats draws one row for
+/// each; a release, an expiry or an eviction takes the row away.
+final heldSendersProvider = StreamProvider<List<HeldSender>>((ref) async* {
+  final store = await ref.watch(durableSyncStoreProvider.future);
+  yield* store.watchHeldSenders();
+});
+
 typedef PairwiseSyncScope = ({String userId, String deviceId});
 
 /// Whether the owner driving the engine has been asked to give delivery up.

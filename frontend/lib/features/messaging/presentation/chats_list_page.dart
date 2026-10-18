@@ -65,6 +65,9 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
     final summaries = ref.watch(conversationSummariesProvider(currentUserId));
     trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
     final contacts = ref.watch(contactListProvider(currentUserId));
+    // Senders with envelopes held for a verification (ADR-093 D18). A failed
+    // read leaves them out: the conversations are the list's own content.
+    final held = ref.watch(heldSendersProvider);
     final strings = AppLocalizations.of(context);
     final model = summaries.when(
       data: (items) => ChatListViewModel(
@@ -73,6 +76,10 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
           contacts: contacts.value ?? const <ContactProjection>[],
           now: mutedAsOf,
           strings: strings,
+        ),
+        heldSenders: chatHeldSenderItems(
+          held.value ?? const <HeldSender>[],
+          contacts: contacts.value ?? const <ContactProjection>[],
         ),
         loading: false,
         failed: false,
@@ -129,8 +136,8 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
     AppLocalizations strings,
     WidgetRef? ref,
   ) {
-    final items = model.items;
-    return switch ((model.loading, model.failed, items.isEmpty)) {
+    final entries = chatListEntries(model.items, model.heldSenders);
+    return switch ((model.loading, model.failed, entries.isEmpty)) {
       (true, _, _) => AppStatePanel.loading(title: strings.chatsLoadingTitle),
       (_, true, _) => AppStatePanel.error(
         title: strings.chatsErrorTitle,
@@ -151,10 +158,9 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
       ),
       _ => ListView.builder(
         key: const PageStorageKey('chats-list'),
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          return ChatListRow(
+        itemCount: entries.length,
+        itemBuilder: (context, index) => switch (entries[index]) {
+          ChatListConversationEntry(:final item) => ChatListRow(
             item: item,
             onTap: () => _open(item),
             onMenu: () => _showConversationMenu(
@@ -162,7 +168,13 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
               item,
               (action) => _handleConversationAction(item, action, ref),
             ),
-          );
+          ),
+          ChatListHeldSenderEntry(:final sender) => ChatHeldSenderRow(
+            key: ValueKey('chats-held-sender-${sender.userId}'),
+            sender: sender,
+            onTap: () =>
+                unawaited(context.push(chatHeldSenderLocation(sender))),
+          ),
         },
       ),
     };
