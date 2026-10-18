@@ -138,6 +138,21 @@ void main() {
       app.dispose();
     });
 
+    testWidgets('a sender with no held envelope has no row', (tester) async {
+      final app = await _pumpApp(
+        tester,
+        summaries: _summaries(),
+        contacts: [_contact(_alice, 'alice')],
+      );
+
+      app.held.add([HeldSender(userId: _alice, count: 0, latestHeldAt: _base)]);
+      await _settle(tester);
+
+      expect(find.byType(ChatHeldSenderRow), findsNothing);
+      expect(find.textContaining('Verify to read'), findsNothing);
+      app.dispose();
+    });
+
     testWidgets('one row for each sender, with its count, and the unknown '
         'sender by its short identity', (tester) async {
       final app = await _pumpApp(
