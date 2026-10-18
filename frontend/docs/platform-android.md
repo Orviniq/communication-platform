@@ -189,9 +189,9 @@ Modes:
   service, asks for nothing the user can refuse, and is never advertised as instant or
   exact-periodic. Its honest tier is *eventual*; in the *rare* and *restricted* buckets it
   is nothing at all.
-- **Background near-real-time (Layer 2, opt-in, and WITHHELD from every distributed
-  artifact since 2026-08-23 — see [sustained-delivery-validation.md](sustained-delivery-validation.md)
-  and ADR-053):** a `specialUse`
+- **Background near-real-time (Layer 2, opt-in, and offered as best effort in
+  production since 2026-10-18 — see [sustained-delivery-validation.md](sustained-delivery-validation.md),
+  ADR-053 and ADR-094):** a `specialUse`
   foreground service that keeps the process non-cached so the composed socket survives,
   declared with a truthful `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE`. It hosts its own
   isolate and adds no second delivery implementation — the engine, the store, the inspector,
@@ -199,11 +199,15 @@ Modes:
   from the same `ApplicationRuntime`. Enabling it asks for `POST_NOTIFICATIONS`, asks for the
   battery-optimization exemption through `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, and
   explains the vendor settings the app cannot check for itself. **Built 2026-08-22
-  (ADR-051)** and described in full below, but **not offered to anyone**: ADR-053 found
-  that no cell of the physical-device matrix had ever been run, and gates the capability
-  closed in the production artifact until it is, as it did in the `beta` one while that
-  flavor existed. Only the development flavour resolves it, so that the matrix can be run
-  at all.
+  (ADR-051)** and described in full below. ADR-053 found that no cell of the
+  physical-device matrix had ever been run and withheld the capability from the
+  production artifact until it was. **ADR-094 supersedes that for production only**: the
+  owner wants the capability offered and the matrix cannot be run here, so production
+  offers it as best effort, with its battery cost, its permanent notice and the
+  statement that nobody has tested it on the user's phone, and with no delivery time.
+  The risk is accepted in that ADR: on a Samsung or Xiaomi phone the process can be ended
+  without a word. The development flavour resolves it as measurement-only, and a complete
+  ledger would resolve it as evidenced.
 - **Active voice:** microphone/communication foreground service for the duration of the
   joined room with visible controls.
 
@@ -288,8 +292,9 @@ and not in the shade.
 
 `test/architecture/sustained_delivery_policy_test.dart` pins the parts of this that live in
 Kotlin and in the manifest, because no device is available to exercise them. That no
-device is available is the whole finding of ADR-053: source shape is not behaviour, and
-the capability is gated closed until behaviour has been observed. The criteria, the
+device is available is the whole finding of ADR-053: source shape is not behaviour, so
+nothing about this capability may be called measured until behaviour has been observed
+(ADR-094 offers it to users anyway, as best effort, and says so). The criteria, the
 matrix, the measurement procedure and the current results are in
 [sustained-delivery-validation.md](sustained-delivery-validation.md), and
 `tool/measure_sustained_delivery.sh` is the instrument.
@@ -375,7 +380,8 @@ release validation gate for any *claim* about timeliness. Until 2026-08-23 that 
 was enforced by nothing, which is how Layer 2 came to ship with the matrix unrun; the
 gate now lives in `lib/app/config/sustained_delivery_gate.dart` and in
 [sustained-delivery-validation.md](sustained-delivery-validation.md), and
-`test/architecture/sustained_delivery_gate_test.dart` fails if it opens without evidence.
+`test/architecture/sustained_delivery_gate_test.dart` fails if the offer moves to
+evidenced without it.
 
 This choice was verified on 2026-07-29 against the
 [`connectivity_plus` 6.0.5 release](https://pub.dev/packages/connectivity_plus/versions/6.0.5)
@@ -393,11 +399,12 @@ device-bound full session and stops it on logout, and the two composition roots 
 resolved into one, so the socket presents the same access token, refreshes through the
 same single-flight `TokenCoordinator`, and terminates its TLS chain at the same
 provisioned authority as every REST call. Layer 1 followed on 2026-08-21 under ADR-049 and
-is described above. Layer 2 followed on 2026-08-22 under ADR-051 and was
-withheld again on 2026-08-23 under ADR-053, so in every artifact a user receives
-background delivery is **eventual, and nothing else**. Layer 2 is present in the source
-and unreachable in the build; what it would give if it worked is unmeasured, which is
-precisely why it is unreachable. Layer 3 — the alert itself — was implemented
+is described above. Layer 2 followed on 2026-08-22 under ADR-051, was
+withheld on 2026-08-23 under ADR-053, and was offered again in production on 2026-10-18
+under ADR-094. In an artifact a user receives, background delivery is therefore
+**eventual** unless that user turns Layer 2 on, and then it is **best effort**: what it
+gives on their phone is unmeasured, and the build says so rather than promising a time.
+Layer 3 — the alert itself — was implemented
 separately on 2026-08-21 under ADR-048 and is described below; it depends on committed local
 state rather than on any delivery layer, so both a headless catch-up and a sustained run
 reach it with no change.
@@ -660,9 +667,9 @@ there needs the call, and the call has no mute yet.
 **Two foreground services.** ADR-046, ADR-048 and ADR-051 each asked for the interaction
 between sustained delivery's service and a call's to be decided rather than discovered. As
 built they are independent: two services, two channels, two ids and two lifetimes, and
-neither starts, stops or waits for the other. While ADR-053's gate stays closed it
-withholds sustained delivery from production, so only the call service can run there; in
-development, and in production once the gate opens, both can, each with its own entry.
+neither starts, stops or waits for the other. Since ADR-094 sustained delivery is
+offered in production as well as in development, so both can run in either, each with
+its own entry.
 Delivery ownership does not move: a call needs the activity's engine, which already
 outranks the sustained run.
 

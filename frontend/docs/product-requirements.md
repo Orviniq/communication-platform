@@ -84,9 +84,10 @@ is not called the production release.
   minimum with a network constraint; it gives *eventual* delivery, and it gives **nothing**
   in the *rare* and *restricted* standby buckets, which is where Android 13+ places an
   application after eight days without user interaction. Above it, an opt-in `specialUse`
-  foreground service is **built and withheld** (ADR-053): it would hold the connection,
-  and what that is worth has never been measured on a single phone, so it is gated out of
-  every artifact a user receives and the floor is the whole of what they get. If the
+  foreground service is **offered as best effort** (ADR-094, superseding ADR-053 for
+  production): it holds the connection, and what that is worth has never been measured on
+  a single phone, so the build says so, promises no time, and the floor is the whole of
+  what a user gets until they turn it on. If the
   matrix in [sustained-delivery-validation.md](sustained-delivery-validation.md) is run
   and passes, it becomes *near-real-time, best-effort* for a user who grants
   notifications and the battery-optimization exemption, and that exemption also lifts the

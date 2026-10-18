@@ -1,4 +1,8 @@
+import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
+import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sustained_delivery_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sustained_delivery_model.dart';
 import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -197,33 +201,62 @@ void main() {
       );
     });
 
-    testWidgets('a build withholding it offers no switch, and says why', (
-      tester,
-    ) async {
-      await _pumpPage(tester, SustainedDeliveryStatus.withheld);
+    testWidgets('a production build shows the switch on the page and in the '
+        'Settings row', (tester) async {
+      // The real controller, composed as a production build composes it: only
+      // the platform and the signed-in state are substituted, because no host
+      // test can reach either (ADR-094).
+      tester.view.physicalSize = const Size(1080, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      Future<void> pump(Widget home) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            key: UniqueKey(),
+            overrides: [
+              appEnvironmentProvider.overrideWithValue(
+                AppEnvironment.production,
+              ),
+              sustainedDeliveryPlatformProvider.overrideWithValue(
+                const _SupportedPlatform(),
+              ),
+              authenticationControllerProvider.overrideWithBuild(
+                (ref, notifier) => const AuthenticationViewState.dormant(),
+              ),
+            ],
+            child: MaterialApp(
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: home,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
 
-      expect(
-        find.textContaining('has not been measured on phones like yours'),
-        findsOneWidget,
-        reason:
-            'ADR-053: "there is nothing behind this" and "there is something '
-            'behind this and nobody has measured it" are different facts',
-      );
-      expect(
-        find.text('Not available in this build.'),
-        findsNothing,
-        reason: 'which is the other one, and it is not the true one here',
-      );
+      await pump(const Scaffold(body: SustainedDeliverySettingsEntry()));
+      expect(find.text('Receiving while closed'), findsOneWidget);
+      expect(find.textContaining('Off.'), findsOneWidget);
+      expect(find.text('Not available in this build.'), findsNothing);
+
+      await pump(const SustainedDeliveryPage());
+      expect(find.text('Turn on'), findsOneWidget);
+      expect(find.text('Not available in this build.'), findsNothing);
       for (final key in const [
         ValueKey('sustained-toggle'),
         ValueKey('sustained-vendor-settings'),
       ]) {
         expect(
           tester.widget<ButtonStyleButton>(find.byKey(key)).onPressed,
-          isNull,
-          reason: 'nothing on this screen may start anything',
+          isNotNull,
+          reason: 'a production build offers this, so the screen is live',
         );
       }
+      // It still promises no time: the cost and the limits are on the screen,
+      // and so is the statement that nobody has measured it.
+      expect(find.textContaining('permanent notice'), findsOneWidget);
+      expect(find.textContaining('has not been measured'), findsOneWidget);
+      expect(find.textContaining('within seconds'), findsNothing);
     });
 
     testWidgets('the screen is translated and laid out right to left', (
@@ -365,4 +398,32 @@ final class _FakeController extends SustainedDeliveryController {
   Future<void> openVendorSettings() async {
     vendorScreens += 1;
   }
+}
+
+/// A platform that supports the capability and is not running it, which is
+/// what a phone is before its owner has turned anything on.
+final class _SupportedPlatform implements SustainedDeliveryPlatformPort {
+  const _SupportedPlatform();
+
+  static const _state = SustainedDeliveryPlatformState(
+    supported: true,
+    running: false,
+    exempt: false,
+    alertsEnabled: true,
+  );
+
+  @override
+  Future<SustainedDeliveryPlatformState?> platformState() async => _state;
+
+  @override
+  Future<SustainedDeliveryPlatformState?> requestExemption() async => _state;
+
+  @override
+  Future<SustainedDeliveryPlatformState?> start() async => _state;
+
+  @override
+  Future<SustainedDeliveryPlatformState?> stop() async => _state;
+
+  @override
+  Future<void> openVendorSettings() async {}
 }

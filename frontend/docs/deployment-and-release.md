@@ -136,10 +136,10 @@ by contract tests and conservative client behavior, not runtime version guessing
    and it is written from that list rather than from this paragraph, so the two cannot
    drift apart the way they had by revision 4 — this step previously claimed "the same
    seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
-   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 9
-   ([ADR-076](decisions.md) rewrote the delivery point, which offered a Settings switch
-   that ADR-053's gate withholds, and the group point, which still described the deleted
-   closed-beta MLS track) that is eight points:
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 10
+   ([ADR-094](decisions.md) rewrote the delivery point, which again offers the Settings
+   switch now that production offers it as best effort, and the unbuilt-surfaces point,
+   which still called voice rooms and every file attachment unbuilt) that is eight points:
 
    1. no part of the cryptography has been independently reviewed, and one person wrote
       and tested all of it;
@@ -147,7 +147,10 @@ by contract tests and conservative client behavior, not runtime version guessing
       the phone gets round to checking — fifteen minutes apart at best, usually far less
       often, and not at all while the phone is saving battery, while Data Saver is on over
       mobile data, once the app has gone unopened for several days, or after a force-stop;
-      and that none of it is guaranteed;
+      that Settings can turn on receiving while closed, which keeps the app running in the
+      background, uses more battery, puts a permanent notice on the phone, has not been
+      tested on phones like the reader's, and can be stopped by some phones without a
+      word; and that none of it is guaranteed;
    3. a message waits on the server only until the phone collects it, after which the
       operator's retention timer deletes it unread and it never arrives, with no
       indication of which messages were lost;
@@ -159,8 +162,8 @@ by contract tests and conservative client behavior, not runtime version guessing
       group whose current state the phone loses comes back only when another member's
       app sends it, with sending in that group withheld until then
       ([ADR-075](decisions.md), [ui-specification.md](ui-specification.md) §9);
-   7. voice rooms and file attachments do nothing, and the display name and photo are not
-      published — contacts see the registered username;
+   7. group chats cannot send files, and the display name and photo are not published —
+      contacts see the registered username;
    8. the build is for evaluation among people who already trust each other, and is not
       appropriate for anyone whose safety depends on the confidentiality of their
       messages.
@@ -174,11 +177,11 @@ by contract tests and conservative client behavior, not runtime version guessing
    previously distributed artifact, re-deliver the written disclosure to **every**
    existing recipient, not only to new ones. The revision moves when and only when what
    the build promises moves, so a changed revision is exactly the case where a person who
-   already enrolled has been told something that is no longer true. The first production
-   artifact carries revision 9, and no production artifact was handed to anyone before
-   it, so no production recipient is owed a re-delivery yet; a holder of the deleted
-   `beta` flavor's application who is handed a production build receives the revision 9
-   statement under step 8.
+   already enrolled has been told something that is no longer true. Revision 10
+   ([ADR-094](decisions.md)) moved the delivery and unbuilt-surfaces points, so every
+   holder of a production build that carries revision 9 is owed the revision 10 written
+   statement; a holder of the deleted `beta` flavor's application who is handed a
+   production build receives the revision 10 statement under step 8.
 
    Since [ADR-052](decisions.md) their install also re-presents the statement once, on the
    first launch after the update, marking the points that moved — the accepted revision is
@@ -284,9 +287,11 @@ downgrade.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.
 - [ ] Sustained delivery: either every mandatory cell of the matrix in
   [sustained-delivery-validation.md](sustained-delivery-validation.md) has an admissible
-  record in `SustainedDeliveryGate.releaseAssertion`, or the capability is still withheld.
-  **Currently withheld; the gate is CLOSED and no cell has been run.** A partially
-  satisfied matrix opens nothing, and an emulator record can never satisfy a cell.
+  record in `SustainedDeliveryGate.releaseAssertion`, or the capability is offered as
+  best effort and says so ([ADR-094](decisions.md), superseding ADR-053 for production).
+  **Currently best effort; the gate is CLOSED and no cell has been run.** A partially
+  satisfied matrix opens nothing, an emulator record can never satisfy a cell, and no
+  text of the artifact may promise a delivery time.
 - [ ] No forbidden network calls or sensitive logs/artifacts detected. This now includes
   the user-initiated diagnostics export (§15.3): the report a recipient can be asked for
   is inspected on a real device with real content behind it, as well as by the

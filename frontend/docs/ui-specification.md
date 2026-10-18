@@ -350,8 +350,11 @@ section must not be softened or omitted.
    membership changes are unreviewed, each is one encrypted copy for each device of each
    member, and a group whose state this phone loses waits for another member to send it
    (§9); parts of the interface are not built; who the build is and is not for. Revision 9
-   removed the opt-in delivery tier, which ADR-053's gate withholds from production, and
-   every claim of the closed-beta MLS track that revisions 6 and 7 had carried.
+   removed the opt-in delivery tier, which ADR-053's gate then withheld from production,
+   and every claim of the closed-beta MLS track that revisions 6 and 7 had carried.
+   Revision 10 (ADR-094) offers the tier again, with its battery cost, its permanent notice
+   and the statement that it is untested, and narrows the unbuilt parts to what the code
+   still lacks: group chats cannot send files, and the profile is not published.
    **[PRIVACY]** No cryptographic identifiers, draft names, or registry state here — they
    are true and unreadable, and they would bury the facts that matter. Sections 2 and 3
    are permanent and stay true in a public release; this section describes a build handed

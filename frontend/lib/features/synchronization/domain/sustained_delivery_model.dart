@@ -78,15 +78,6 @@ enum SustainedDeliveryStatus {
   /// switch that would do nothing.
   unavailable,
 
-  /// This build carries the implementation and will not offer it, because the
-  /// evidence that it works on phones like this one does not exist (ADR-053).
-  ///
-  /// Deliberately a different state from [unavailable]. "There is nothing
-  /// behind this" and "there is something behind this and it has never been
-  /// measured" are different facts, and a user entitled to one of them is not
-  /// served by being told the other.
-  withheld,
-
   /// The user has not turned it on. Nothing runs, nothing is held, nothing is
   /// requested and nothing appears anywhere.
   off,
@@ -121,17 +112,13 @@ enum SustainedDeliveryStatus {
   bool get settled =>
       this == SustainedDeliveryStatus.off ||
       this == SustainedDeliveryStatus.holding ||
-      this == SustainedDeliveryStatus.unavailable ||
-      this == SustainedDeliveryStatus.withheld;
+      this == SustainedDeliveryStatus.unavailable;
 
   /// Whether the surface may offer a switch at all.
   ///
-  /// The two states that answer no are the two where nothing the user does on
-  /// this screen would change anything: no implementation, and an
-  /// implementation this build is not permitted to offer.
-  bool get offersSwitch =>
-      this != SustainedDeliveryStatus.unavailable &&
-      this != SustainedDeliveryStatus.withheld;
+  /// The one state that answers no is the one where nothing the user does on
+  /// this screen would change anything: there is no implementation behind it.
+  bool get offersSwitch => this != SustainedDeliveryStatus.unavailable;
 }
 
 /// Why turning sustained delivery on did not finish.
@@ -143,11 +130,6 @@ enum SustainedDeliveryStatus {
 enum SustainedDeliveryRefusal {
   /// This build has no sustained-delivery implementation.
   unavailable,
-
-  /// This build will not offer the capability, because the evidence that it
-  /// works on phones like this one has not been obtained (ADR-053). Nothing was
-  /// asked of the platform and nothing was recorded.
-  withheld,
 
   /// The user did not allow notifications. Nothing further is requested,
   /// because a connection held for messages nobody is told about is a battery

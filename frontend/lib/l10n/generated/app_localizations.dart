@@ -860,10 +860,10 @@ abstract class AppLocalizations {
   /// **'Nobody outside the project has reviewed this app\'s encryption. It is written and tested by one person, and a mistake in it would not have been caught.'**
   String get disclosureNoIndependentReview;
 
-  /// No description provided for @disclosureBestEffortDelivery.
+  /// Revision 10 (ADR-094). It offers receiving while closed again, with its battery cost, its permanent notice and the statement that it is untested and unguaranteed. Revision 9 had removed the offer while ADR-053 withheld the capability from every build that reaches a user. No sentence here may give a delivery time: nobody has measured one.
   ///
   /// In en, this message translates to:
-  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
+  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which keeps the app running in the background so a message does not have to wait for that schedule. It uses more battery and puts a permanent notice on your phone while it is on. It has not been tested on phones like yours, and some phones stop it without telling you. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
   String get disclosureBestEffortDelivery;
 
   /// Added at revision 5 (ADR-052). Every earlier revision described delivery only as slow, which an ordinary reader takes to mean eventual. The server prunes undelivered envelopes on a retention timer it does not publish to clients, so late and never are different outcomes and only one of them was disclosed.
@@ -896,10 +896,10 @@ abstract class AppLocalizations {
   /// **'Group messages use the same encryption as direct messages. The signed changes that add and remove members are built on top of it, and nobody outside the project has reviewed them. Each group message is sent as one encrypted copy for each device of each member. If this phone loses a group\'s current state, only another member\'s app can send it again, and until then you cannot send messages in that group.'**
   String get disclosurePairwiseGroups;
 
-  /// Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature.
+  /// Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature. Revision 10 (ADR-094) removed voice rooms (built since phase 6) and narrowed file attachments to groups, the only chats that still cannot send them (ADR-089).
   ///
   /// In en, this message translates to:
-  /// **'Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.'**
+  /// **'Some things you can see are not built yet: group chats cannot send files, and the display name and photo you choose are not published — other people see the username you registered with.'**
   String get disclosureUnbuiltSurfaces;
 
   /// No description provided for @disclosureIntendedUse.
@@ -2807,12 +2807,6 @@ abstract class AppLocalizations {
   /// **'Not available in this build.'**
   String get settingsSustainedUnavailable;
 
-  /// No description provided for @settingsSustainedWithheld.
-  ///
-  /// In en, this message translates to:
-  /// **'Not offered in this build. It has not been tested on phones like yours yet.'**
-  String get settingsSustainedWithheld;
-
   /// No description provided for @sustainedTitle.
   ///
   /// In en, this message translates to:
@@ -2915,12 +2909,6 @@ abstract class AppLocalizations {
   /// **'Not available in this build.'**
   String get sustainedStatusUnavailable;
 
-  /// No description provided for @sustainedStatusWithheld.
-  ///
-  /// In en, this message translates to:
-  /// **'This build will not turn this on. What it does has not been measured on phones like yours, and offering it before that would be promising something nobody has checked. Nothing is running and nothing is shown on your phone.'**
-  String get sustainedStatusWithheld;
-
   /// No description provided for @sustainedRefusedAlerts.
   ///
   /// In en, this message translates to:
@@ -2950,12 +2938,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not available in this build.'**
   String get sustainedRefusedUnavailable;
-
-  /// No description provided for @sustainedRefusedWithheld.
-  ///
-  /// In en, this message translates to:
-  /// **'Not turned on: this build does not offer it yet.'**
-  String get sustainedRefusedWithheld;
 
   /// No description provided for @settingsSignedInAs.
   ///

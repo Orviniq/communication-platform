@@ -449,7 +449,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureBestEffortDelivery =>
-      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
+      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which keeps the app running in the background so a message does not have to wait for that schedule. It uses more battery and puts a permanent notice on your phone while it is on. It has not been tested on phones like yours, and some phones stop it without telling you. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
 
   @override
   String get disclosureMessagesExpireUnread =>
@@ -474,7 +474,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureUnbuiltSurfaces =>
-      'Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.';
+      'Some things you can see are not built yet: group chats cannot send files, and the display name and photo you choose are not published — other people see the username you registered with.';
 
   @override
   String get disclosureIntendedUse =>
@@ -1610,10 +1610,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSustainedUnavailable => 'Not available in this build.';
 
   @override
-  String get settingsSustainedWithheld =>
-      'Not offered in this build. It has not been tested on phones like yours yet.';
-
-  @override
   String get sustainedTitle => 'Receiving while closed';
 
   @override
@@ -1675,10 +1671,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sustainedStatusUnavailable => 'Not available in this build.';
 
   @override
-  String get sustainedStatusWithheld =>
-      'This build will not turn this on. What it does has not been measured on phones like yours, and offering it before that would be promising something nobody has checked. Nothing is running and nothing is shown on your phone.';
-
-  @override
   String get sustainedRefusedAlerts =>
       'Not turned on: notifications are still switched off for this app.';
 
@@ -1696,10 +1688,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sustainedRefusedUnavailable => 'Not available in this build.';
-
-  @override
-  String get sustainedRefusedWithheld =>
-      'Not turned on: this build does not offer it yet.';
 
   @override
   String settingsSignedInAs(String username) {
