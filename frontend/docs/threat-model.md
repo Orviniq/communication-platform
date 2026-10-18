@@ -21,11 +21,12 @@ that a device contacted the service or eliminate traffic-analysis metadata.
   like an active one to a relay that already saw every drain. The opt-in `specialUse`
   foreground service (ADR-051) is the heavier one, in two ways.
 
-  **Since ADR-053 no artifact a user receives can arm it.** The capability is gated
-  closed until it has been measured on real phones, so everything in the two paragraphs
-  below describes an exposure nobody in this deployment can currently choose. It is kept
-  as written because the gate is a decision that can be reversed by evidence, and because
-  the exposure has to be understood before it is.
+  **Since ADR-094 a production artifact can arm it, as best effort.** ADR-053 had gated
+  the capability closed until it was measured on real phones, and ADR-094 supersedes
+  that for production: the owner wants it offered, the matrix cannot be run here, and the
+  disclosure (revision 10) states the cost and that it is untested. So everything in the
+  two paragraphs below describes an exposure a user of this deployment can now choose,
+  and the choice is theirs, off by default.
 
   On the device: while it is armed it posts a persistent notification, which is a durable
   on-device indication that this application is running, and on Android 13 and above the

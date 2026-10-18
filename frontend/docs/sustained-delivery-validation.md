@@ -2,9 +2,16 @@
 
 **Gate state: CLOSED.** No cell of the matrix below has been run. Nothing about
 this capability has been observed on any phone, on any date, by anybody. The
-capability is therefore not offered in the artifact that reaches a user, and
-`lib/app/config/sustained_delivery_gate.dart` is what makes that true rather
-than intended.
+evidence ledger in `lib/app/config/sustained_delivery_gate.dart` is empty, and
+that is what makes this statement true rather than intended.
+
+**Updated 2026-10-18 ([ADR-094](decisions.md)):** the gate no longer decides
+whether the artifact that reaches a user offers the capability. It decides what
+the offer rests on. Production offers "Receiving while closed" as **best
+effort**, on no field evidence, with its battery cost, its permanent notice and
+the plain statement that nobody has tested it on the user's phone; it promises
+no delivery time. A complete ledger would move that offer from `bestEffort` to
+`evidenced`. ADR-094 supersedes ADR-053 for production only.
 
 **Updated 2026-08-23:** one physical device — a Samsung Galaxy A56 on Android 16
 and One UI 8.5 — became available and was **probed**, not run. It establishes
@@ -12,7 +19,8 @@ that the procedure works on retail Samsung hardware, corrects a timing this
 document had only from an emulator, and found two defects in the instrument
 itself. It opens no cell and moves the gate not at all: a probe is not a run.
 
-Decided by [ADR-053](decisions.md), which amends ADR-051's distribution clause.
+Decided by [ADR-053](decisions.md), which amends ADR-051's distribution clause,
+and superseded for production by [ADR-094](decisions.md).
 This document is authoritative for the success criteria, the matrix, the
 measurement procedure and the recorded results. The gate constant is
 authoritative for what the software does about them.
@@ -671,7 +679,9 @@ this repository, and nothing this piece found, says what happens there.
 
 ## 7. The gate
 
-**State: CLOSED.** Not partially evidenced. Closed.
+**State: CLOSED.** Not partially evidenced. Closed. Since 2026-10-18
+([ADR-094](decisions.md)) a closed gate means a production build offers the
+capability as **best effort**; it no longer means the capability is withheld.
 
 ### What it is
 
@@ -687,37 +697,39 @@ fixed by the entry point, unselectable at runtime — and answers:
 
 | Build | Answer | Effect |
 |---|---|---|
-| production (the build handed to people, [ADR-076](decisions.md)) | `withheld` | not offered |
-| development | `measurementOnly` | offered, so the matrix can be run |
+| any build, ledger complete | `evidenced` | offered, on the evidence |
+| production (the build handed to people, [ADR-076](decisions.md)), ledger incomplete | `bestEffort` | offered, with its cost and the statement that it is untested ([ADR-094](decisions.md)) |
+| development, ledger incomplete | `measurementOnly` | offered, so the matrix can be run |
 
-In a withheld build, `SustainedDeliveryController` publishes
-`SustainedDeliveryStatus.withheld`, never attaches its authentication listener,
-never reconciles, and refuses `enable()` before the platform is asked anything at
-all — so no permission is requested, no system dialog is shown, no durable choice
-is written, and the service is never started. It does one positive thing: it
-**stops** a service an earlier build may have left running, because a permanent
-notification must never outlive the decision to stand behind it. It does not
-clear the user's durable choice, which is theirs and which a later evidenced
-build is entitled to honour.
+Every answer offers the capability. `SustainedDeliveryController` attaches its
+authentication listener, reconciles the platform against the user's recorded
+choice, and enables on request. Nothing starts by itself: the service runs only
+after a user turns the switch on, which asks for notifications and for the
+battery-optimization exemption first. Until ADR-094 the production answer was
+`withheld`, which refused `enable()` before the platform was asked anything and
+stopped a service an earlier build had left running. Nothing returns that answer
+now, so the value, `SustainedDeliveryStatus.withheld`,
+`SustainedDeliveryRefusal.withheld`, the stand-down and their three strings were
+deleted rather than kept as dead code.
 
-The connection policy consequently answers *no* in every distributed build, so
-`SyncLifecycleSupervisor` closes its socket on backgrounding exactly as it did
-before ADR-051.
+The connection policy answers *yes* only while the status is `holding`, so
+`SyncLifecycleSupervisor` still closes its socket on backgrounding for a user who
+has not turned the capability on.
 
-### What a withheld artifact still declares
+### What every artifact declares
 
-The manifest is shared by both flavours, so a withheld build still declares
+The manifest is shared by both flavours, so every build declares
 `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`,
 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` and the `SustainedDeliveryService` itself
 — verified with `aapt2 dump badging` on the production release artifact built on
 2026-08-23. All three permissions are normal protection level: granted at
 install with no prompt, granting no data, no network and no location. The
-service is `exported="false"`, so nothing outside the application can start it,
-and inside the application nothing will: there is no switch, no reconciliation
-and no enable path. The declaration is inert, and it is stated here rather than
-stripped, because removing it would fork the manifest per flavour and make the
-distributed artifact differ from the one the matrix is measured on — which is
-the one thing this gate must not do.
+service is `exported="false"`, so nothing outside the application can start it.
+ADR-094 changes no manifest and no Kotlin: the declaration that was inert while
+the capability was withheld is now the declaration of a capability a user can
+turn on, and it stays shared so that the distributed artifact does not differ
+from the one the matrix is measured on — which is the one thing this document
+must not allow.
 
 ### Exactly what would open it
 
@@ -742,12 +754,13 @@ by a single observation, or by a row somebody typed.
 - There is no environment define, no remote value, no runtime setter and no debug
   override; `test/architecture/sustained_delivery_gate_test.dart` fails if any
   appears.
-- The same test asserts the ledger is empty, that production is withheld, that
-  a full ledger of admissible records **does** open the gate (so
-  the mechanism is demonstrably real, not decoration), and that an emulated,
-  short, or under-repeated ledger opens nothing.
+- The same test asserts the ledger is empty, that production is `bestEffort`, that
+  a full ledger of admissible records **does** open the gate and moves the offer
+  to `evidenced` (so the mechanism is demonstrably real, not decoration), and
+  that an emulated, short, or under-repeated ledger moves nothing.
 - It applies to the artifact users receive, not to a developer build: production
-  is withheld by the same constant.
+  answers `bestEffort` from the same constant, and no text of that artifact
+  promises a delivery time.
 - It is discoverable: the constant, this document, the release checklist in
   `deployment-and-release.md`, `platform-android.md` and `docs/README.md` all
   name each other.
