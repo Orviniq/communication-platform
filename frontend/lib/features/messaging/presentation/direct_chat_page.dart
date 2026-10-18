@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
@@ -363,6 +364,12 @@ class _ProjectedConversationPageState
         errorCode: 'local_history_unavailable',
       ),
     );
+    final username = contact.value?.username;
+    final hintPeer = peerUserId == null || savedMessages
+        ? null
+        : username == null
+        ? chatShortIdentity(peerUserId)
+        : '@$username';
     // Registering visibility here rather than inside the view keeps it tied to
     // the route that actually resolved a conversation identity, and to the
     // identity it resolved. A message arriving into the conversation on screen
@@ -389,6 +396,10 @@ class _ProjectedConversationPageState
         attachmentRetentionDays: ref.watch(
           publishedLimitsProvider.select((limits) => limits.attachmentTtlDays),
         ),
+        // Named as the Chats row names a sender: the username with an `@`, or
+        // the short identity without one. Saved Messages names nobody.
+        undeliveredHintPeer: hintPeer,
+        now: ref.watch(timeSourceProvider).now,
         onIntent: (intent) => _dispatch(context, intent),
       ),
     );

@@ -478,6 +478,56 @@ void main() {
     },
   );
 
+  group('the undelivered hint (ADR-093 D19)', () {
+    const hint = 'Not delivered yet. If';
+
+    // The stored message is the same in both chats: this account's own,
+    // accepted by the relay in 2023, with no receipt. The direct chat asks the
+    // sender to look into it, and the group chat says nothing.
+    testWidgets('a direct chat shows it under the old own message', (
+      tester,
+    ) async {
+      await _seedConversation(
+        database,
+        conversationId: _directId,
+        kind: ConversationKind.direct,
+        peerUserId: _peer,
+        messages: [
+          (id: _messageId, sender: auth.userId, text: 'sent long ago'),
+        ],
+      );
+      await _pump(
+        tester,
+        database: database,
+        fanout: fanout,
+        groupSender: groupSender,
+        groups: {_groupId: _group(_groupId, 'Team')},
+        summaries: [_summary(_directId, ConversationKind.direct, peer: _peer)],
+        page: const DirectChatPage(
+          peerUserId: _peer,
+          conversationId: _directId,
+        ),
+      );
+
+      expect(find.text('sent long ago'), findsOneWidget);
+      expect(find.textContaining(hint), findsOneWidget);
+    });
+
+    testWidgets('a group chat shows none under the same old own message', (
+      tester,
+    ) async {
+      await openGroup(
+        tester,
+        messages: [
+          (id: _messageId, sender: auth.userId, text: 'sent long ago'),
+        ],
+      );
+
+      expect(find.text('sent long ago'), findsOneWidget);
+      expect(find.textContaining(hint), findsNothing);
+    });
+  });
+
   group('forward', () {
     testWidgets('from a direct chat into a group, the group use case gets '
         'the text', (tester) async {
