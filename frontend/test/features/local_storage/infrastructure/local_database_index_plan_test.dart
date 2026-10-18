@@ -1,9 +1,12 @@
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -371,6 +374,95 @@ void main() {
       }
     },
   );
+
+  test('the held envelopes are read through their two partial indexes', () async {
+    // ADR-093 D11: the Chats query, a sender's count and oldest row, the
+    // release and the follow-up match. None of them may scan the inbox, which
+    // holds up to 10,000 rows for at most 128 held ones.
+    final sync = DriftSyncStore(database);
+    final now = DateTime.utc(2026, 10, 17, 12);
+    await sync.persistDrainPage(
+      DrainPage(
+        envelopes: [
+          for (var sequence = 1; sequence <= 40; sequence += 1)
+            SyncEnvelope(
+              id: '00000000-0000-0000-0000-${sequence.toString().padLeft(12, '0')}',
+              sequence: sequence,
+              exactCiphertext: Uint8List(1024),
+            ),
+        ],
+        hasMore: false,
+        prunedThrough: 0,
+      ),
+    );
+    Future<void> holdNext(int marker, {DriftSyncStore? into}) async {
+      final envelope =
+          (await sync.beginNextEnvelopeInspection(now: now)
+                  as Success<SyncEnvelope?>)
+              .value!;
+      await (into ?? sync).recordEnvelopeHold(
+        envelopeId: envelope.id,
+        hold: HeldEnvelopeInspection(
+          claimedSenderUserId: 'sender-${marker % 2}',
+          sessionId: Uint8List.fromList(List.filled(16, marker)),
+          initial: true,
+        ),
+        now: now,
+      );
+    }
+
+    for (var marker = 1; marker <= 4; marker += 1) {
+      await holdNext(marker);
+    }
+
+    final plans = await plansOf(() async {
+      // At the phone's limit, so the hold also finds the phone's oldest row.
+      await holdNext(
+        5,
+        into: DriftSyncStore(
+          database,
+          maximumHeldPerSender: 3,
+          maximumHeldTotal: 4,
+        ),
+      );
+      await sync.watchHeldSenders().first;
+      await sync.releaseHeldEnvelopes(senderUserId: 'sender-1', dueAt: now);
+      await sync.heldInitialSender(Uint8List.fromList(List.filled(16, 3)));
+      await sync.readReleasableHeldSenders();
+      await sync.expireHeldEnvelopes(now: now);
+      await sync.readEarliestHoldTime();
+    });
+
+    var checked = 0;
+    for (final plan in plans) {
+      final upper = plan.sql.toUpperCase();
+      final where = upper.contains('WHERE')
+          ? plan.sql.substring(upper.lastIndexOf('WHERE'))
+          : '';
+      final String index;
+      if (where.contains('held_session_id')) {
+        index = 'inbox_envelopes_held_by_session';
+      } else if (where.contains('held_sender_user_id')) {
+        index = 'inbox_envelopes_held_by_sender';
+      } else {
+        continue;
+      }
+      checked += 1;
+      expect(
+        plan.details.any((detail) => detail.contains(index)),
+        isTrue,
+        reason: '${plan.sql}\n${plan.details}',
+      );
+      expect(
+        plan.details,
+        isNot(contains('SCAN inbox_envelopes')),
+        reason: plan.sql,
+      );
+    }
+    // The two counts, the follow-up check, the Chats query, the release, the
+    // lookup, the releasable senders, the expiry and the earliest hold time.
+    expect(checked, greaterThanOrEqualTo(8));
+  });
 
   test(
     'transport state for one event is a seek, not a scan of the outbox',

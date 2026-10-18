@@ -96,6 +96,140 @@ void main() {
     expect(harness.crypto.prepareCalls, 0);
     expect(harness.remote.uploads, isEmpty);
   });
+
+  // ADR-093 D17. Today, T, is day 107 throughout; H is the earliest hold day
+  // of a held envelope and L the day of the last rotation.
+  group('an envelope held for a verification', () {
+    const quiet = [
+      PrekeyCounts(classical: 100, postQuantum: 50),
+      PrekeyCounts(classical: 100, postQuantum: 50),
+    ];
+
+    test(
+      'keeps every pair whose last day is on or after its hold day',
+      () async {
+        for (final (heldDay, pruneDay) in const [
+          (null, 107),
+          (104, 104),
+          (107, 107),
+          (110, 107),
+        ]) {
+          final harness = _Harness(
+            counts: quiet,
+            lastRotationDay: 104,
+            heldDay: heldDay,
+          );
+
+          final result = await harness.service.maintain(deviceId: _deviceId);
+
+          expect(result, isA<Success<PrekeyMaintenanceReport>>());
+          expect(harness.crypto.pruneDays, [pruneDay], reason: 'H = $heldDay');
+        }
+      },
+    );
+
+    test('leaves the creation check against today', () async {
+      // The current pair is from day 105 and the envelope was held on 103,
+      // before that rotation: against H the pair would be from the future.
+      final harness = _Harness(
+        counts: quiet,
+        lastRotationDay: 105,
+        heldDay: 103,
+      );
+
+      final result = await harness.service.maintain(deviceId: _deviceId);
+
+      expect(result, isA<Success<PrekeyMaintenanceReport>>());
+      expect(harness.crypto.pruneDays, [103]);
+    });
+
+    test('postpones a due rotation that could erase a pair it needs', () async {
+      for (final (lastRotationDay, heldDay) in const [
+        // H <= L + 1: an older retired pair, kept through L + 1 at most.
+        (100, 100),
+        (100, 101),
+        // T > L + 8 and H <= L + 8: the pair the last rotation retired.
+        (98, 102),
+        (98, 106),
+      ]) {
+        final harness = _Harness(
+          counts: quiet,
+          lastRotationDay: lastRotationDay,
+          heldDay: heldDay,
+        );
+
+        final result = await harness.service.maintain(deviceId: _deviceId);
+
+        expect(result, isA<Success<PrekeyMaintenanceReport>>());
+        final report = (result as Success<PrekeyMaintenanceReport>).value;
+        expect(
+          report.rotated,
+          isFalse,
+          reason: 'L = $lastRotationDay, H = $heldDay',
+        );
+        expect(harness.crypto.prepareCalls, 0);
+        expect(harness.remote.uploads, isEmpty);
+      }
+    });
+
+    test('lets a due rotation run when no pair it erases is needed', () async {
+      for (final (lastRotationDay, heldDay) in const [
+        (100, null),
+        (100, 102),
+        (100, 107),
+        (98, 107),
+      ]) {
+        final harness = _Harness(
+          counts: quiet,
+          lastRotationDay: lastRotationDay,
+          heldDay: heldDay,
+        );
+
+        final result = await harness.service.maintain(deviceId: _deviceId);
+
+        expect(result, isA<Success<PrekeyMaintenanceReport>>());
+        expect(
+          (result as Success<PrekeyMaintenanceReport>).value.rotated,
+          isTrue,
+          reason: 'L = $lastRotationDay, H = $heldDay',
+        );
+        expect(harness.crypto.rotations, [true]);
+      }
+    });
+
+    test('replenishes while a rotation waits', () async {
+      final harness = _Harness(
+        counts: const [
+          PrekeyCounts(classical: 49, postQuantum: 24),
+          PrekeyCounts(classical: 150, postQuantum: 75),
+        ],
+        lastRotationDay: 100,
+        heldDay: 101,
+      );
+
+      final result = await harness.service.maintain(deviceId: _deviceId);
+
+      expect(result, isA<Success<PrekeyMaintenanceReport>>());
+      expect(harness.crypto.rotations, [false]);
+      expect(harness.crypto.targetClassical, 150);
+      expect(harness.crypto.targetPq, 75);
+      expect(harness.remote.uploads, hasLength(1));
+    });
+
+    test('a hold day that cannot be read stops the pass', () async {
+      final harness = _Harness(
+        counts: quiet,
+        lastRotationDay: 100,
+        heldDay: null,
+        retentionFailure: const StorageFailure(StorageFailureKind.unavailable),
+      );
+
+      final result = await harness.service.maintain(deviceId: _deviceId);
+
+      expect(result, isA<FailureResult<PrekeyMaintenanceReport>>());
+      expect(harness.crypto.pruneDays, isEmpty);
+    });
+  });
 }
 
 const _deviceId = '22222222-2222-4222-8222-222222222222';
@@ -105,6 +239,8 @@ final class _Harness {
     required List<PrekeyCounts> counts,
     required int lastRotationDay,
     int? nativeSignedPrekeyCreatedDay,
+    int? heldDay,
+    Failure? retentionFailure,
   }) {
     remote = _Remote(counts);
     crypto = _Crypto(nativeSignedPrekeyCreatedDay ?? lastRotationDay);
@@ -116,6 +252,7 @@ final class _Harness {
       store: store,
       rotationLog: rotationLog,
       clock: const _Clock(),
+      heldEnvelopes: _Retention(heldDay, retentionFailure),
     );
   }
 
@@ -157,6 +294,8 @@ final class _Crypto implements PrekeyMaintenanceCryptoPort {
   _Crypto(this.currentSignedPrekeyCreatedDay);
 
   var prepareCalls = 0;
+  final pruneDays = <int>[];
+  final rotations = <bool>[];
   int? targetClassical;
   int? targetPq;
   bool? lastRotationLogAppended;
@@ -173,6 +312,7 @@ final class _Crypto implements PrekeyMaintenanceCryptoPort {
     required int unixDay,
   }) async {
     prepareCalls += 1;
+    rotations.add(rotateSignedPrekeys);
     targetClassical = targetClassicalCount;
     targetPq = targetPqCount;
     if (rotateSignedPrekeys) {
@@ -257,15 +397,30 @@ final class _Crypto implements PrekeyMaintenanceCryptoPort {
   Future<Result<PrekeyPruneResult>> pruneRetainedSignedPrekeys({
     required Uint8List deviceState,
     required int unixDay,
-  }) async => Result.success(
-    PrekeyPruneResult(
-      nextDeviceState: deviceState,
-      stateChanged: false,
-      bundleVersion: bundleVersion,
-      currentSignedPrekeyCreatedUnixDay: currentSignedPrekeyCreatedDay,
-      erasedSignedPrekeys: const [],
-    ),
-  );
+  }) async {
+    pruneDays.add(unixDay);
+    return Result.success(
+      PrekeyPruneResult(
+        nextDeviceState: deviceState,
+        stateChanged: false,
+        bundleVersion: bundleVersion,
+        currentSignedPrekeyCreatedUnixDay: currentSignedPrekeyCreatedDay,
+        erasedSignedPrekeys: const [],
+      ),
+    );
+  }
+}
+
+/// The earliest hold day of the inbox, or the failure to read it.
+final class _Retention implements HeldEnvelopeRetentionPort {
+  const _Retention(this.heldDay, this.failure);
+
+  final int? heldDay;
+  final Failure? failure;
+
+  @override
+  Future<Result<int?>> earliestHoldUnixDay() async =>
+      failure == null ? Result.success(heldDay) : Result.failure(failure!);
 }
 
 final class _Store implements PrekeyMaintenanceStore {
