@@ -105,6 +105,130 @@ is not silently edited out of history.
 | ADR-092 | Accepted (2026-10-17); proposed 2026-10-17 | The whole application blocks screen capture, in every build. `MainActivity` adds `FLAG_SECURE` to its window in `onCreate`, before `super.onCreate`, so it is set before the first frame, in the development and the production build alike. Nothing clears it. `SensitiveScreenControl` stays as an API, and the platform method `setSensitiveScreen` keeps the flag on for `enabled: true` and does nothing for `enabled: false` | The owner's requirement after the field test of 2026-10-17: no screenshot and no screen recording anywhere in the app. The flag had been set only while device enrollment and the recovery secret replacement were open, so every other screen, and the recent-apps preview, could be captured. The flag blocks screenshots, screen recording, casting to a display that is not secure and the recent-apps preview of the window. It does not hide the text of a notification, it does not stop a second camera, and it does not cover a window that is not the app's own: the system pickers and the camera app. Costs: nobody can take a screenshot of the app for a bug report in any build, and the flag has not been tried on a phone yet. Changes no wire format, table, protocol, dependency, permission or backend file. |
 | ADR-093 | Accepted (2026-10-18); proposed 2026-10-17 | A first message from a sender this account has not verified is held: not opened, not shown, not receipted. Its exact ciphertext stays in its `inbox_envelopes` row, in state 5, renamed `held`, the server copy is acknowledged, and no inspection budget is spent. Only the trust state `unverified` holds, told apart by a new inbound answer of the live-device resolver; a later regular envelope of a held session is held with it. A sender has at most 64 held envelopes and the phone 128, each for 7 days; past a limit the oldest goes to quarantine with the rest of its session. A verification returns the sender's held envelopes to inspection in mailbox order, through a port of the contacts application and a sweep in each cycle. Prekey maintenance prunes no retired signed pair a held envelope may need and postpones a rotation that would erase one. Chats shows one row for each held sender, "@username sent you N messages. Verify to read them.", which opens the safety number; the newest own direct message with no delivery receipt an hour after it was sent shows a hint | The field test of 2026-10-17: a direct message to a recipient who has not verified the sender stays at one tick and is lost. The refusal is required (`backend/CLIENT_CONTRACT.md` §C), but the initial envelope spent its budget, was quarantined and acknowledged, and the server deleted it; its regular follow-ups were quarantined at their first inspection. Costs: at most 32 MiB of held ciphertext on disk; a held session past 64 envelopes loses its start and with it the rest; a rotation can be late while an envelope is held; the row's name and count are claims. Adds four nullable columns and two partial indexes to `inbox_envelopes` (schema 25); changes no wire format, Rust core, dependency, permission or backend file. |
 | ADR-094 | Accepted (2026-10-18); proposed 2026-10-17 | Offer receiving while closed in production as best effort. `SustainedDeliveryGate.availabilityIn` answers `bestEffort` for production while the evidence ledger is incomplete, `measurementOnly` for development and `evidenced` for a complete ledger, and every answer offers the capability. The Settings row and the page show the switch in a production build. The deployment disclosure moves to revision 10: `bestEffortDelivery` offers the switch with its battery cost and its permanent notice, says it has not been tested on the reader's phone and that some phones stop it without a word, and promises no time; `unbuiltSurfaces` names only what the code still lacks (group chats cannot send files; the display name and photo are not published). The `withheld` availability, status and refusal, the stand-down of an earlier install, and their three strings are deleted because nothing returns them. The ledger, the matrix and the admissibility rules stay. Supersedes ADR-053 for production only | The owner wants the capability offered, and the seven-cell matrix needs Samsung and Xiaomi phones on three Android bands that cannot be had here (one Samsung phone exists). ADR-053 held that "we cannot measure this" is a reason to withhold, and the risk it named is still real: on a Samsung or Xiaomi phone the process can be ended without a word, and a person who turned the switch on may believe messages will arrive when they will not. ADR-094 accepts that risk instead of removing it, and keeps it honest: the cost, the lack of any test on the reader's phone and the lack of any guarantee are stated in the disclosure and on the page, and no text gives a delivery time (`sustainedWhatItDoes` says how quickly it works "has not been measured"). It changes no Kotlin, no manifest (the service and its three permissions were already declared in the shared `main` source set), no wire format and no schema. A complete ledger of seven admissible records still moves the offer from `bestEffort` to `evidenced`. Not verified on a phone |
+| ADR-095 | Proposed (2026-10-18) | Prekey maintenance runs in the delivery cycle. `DurableSyncEngine` offers it one turn as the last step of a healthy cycle, after the phase is online, unless the cycle carried a failure or its owner was asked to stand down, so the foreground session, the deferred catch-up and the sustained run all run it, one cycle at a time (ADR-050). `ScheduledPrekeyMaintenance` decides which turns run: the first of a process, then one 6 hours after a run that worked or 5 minutes after one that failed, and a turn during a run joins it. A failure or a throw changes nothing about the cycle. An initial envelope that meets a pending plan is deferred as a transient failure instead of quarantined as a conflict. ADR-093 D17 is unchanged | `prekeyMaintenanceServiceProvider` had no consumer, so no signed prekey rotated, no retired pair was pruned and no one-time prekey was replenished, while `sync-engine.md` said all three happened. The cycle is the unit one delivery owner owns, and wiring maintenance in made a plan left pending able to quarantine a first message |
+
+## ADR-095 in full — prekey maintenance runs at the end of a healthy delivery cycle (2026-10-18)
+
+**Status:** Proposed, 2026-10-18. Client delivery and key-upkeep decision, from the correction
+ADR-093 recorded in The facts ("maintenance never runs") and left as its own task in Not done
+here. Built on the branch `frontend-prekey-maintenance-owner`.
+**Changes no wire format, event kind, cryptographic construction, Rust core, dependency,
+Android permission, manifest, Kotlin file, server route, database schema or backend file.**
+`PrekeyMaintenanceService` is not changed, so ADR-093 D17 stands exactly as written.
+
+**Cites:** ADR-050 (one delivery owner, and the cycle as its unit of exclusion); ADR-093 D6
+and D17 (keys a held envelope needs); ADR-087 (the Chats title reads the engine's phase);
+`sync-engine.md`, Device maintenance; `pairwise-transport-v1.md` (the rotation profile).
+
+### The question
+
+`PrekeyMaintenanceService.maintain` is implemented and unit-tested, and nothing calls it. Which
+owner runs it, how often, how does it share the one-delivery-owner rule, what happens to a first
+message that arrives while a maintenance plan holds the device state, and what does it do
+offline?
+
+### The facts
+
+From the code at commit `4091856`, the merge of PR #86.
+
+- **No caller.** `prekeyMaintenanceServiceProvider` and `PrekeyMaintenanceService` are named in
+  `lib` only by their own two files, and `.maintain(` appears nowhere. Two searches, one with
+  `grep -rn` and one with the editor's search, agree.
+- **The three owners share one engine.** The foreground `MessageDeliverySession`, the deferred
+  catch-up (`deferred_delivery_catch_up.dart`) and the sustained run
+  (`sustained_delivery_run.dart`) each read `durableSyncEngineProvider(scope)` and drive it.
+  `DurableSyncEngine.synchronize` is single-flight: a call during a run returns that run.
+- **The pending-plan conflict.** While a `prekey_maintenance_plans` row exists,
+  `DriftPairwiseTransportStore._applyDeviceStateTransition` refuses an initial envelope's device
+  transition, so completion cannot resurrect a one-time key the envelope consumed. It threw
+  `_PairwiseConflict`, which `commitPreparedReceive` answered with
+  `ValidationFailure(conflict)`, and the engine quarantines every `ValidationFailure` at its
+  first attempt (`_isRejectableEnvelopeFailure`). A plan lives from `persistPrepared` until
+  `complete`; when a run fails between them, it stays until a later run resumes it.
+- **Cost.** A run with nothing due is one `GET /api/v1/me/devices/{id}/prekeys/count` and a
+  native prune. A run that is due also prepares keys in the core, uploads them with one
+  `POST /api/v1/me/devices/{id}/prekeys`, appends a device-log record when it rotates, and reads
+  the counts again.
+
+### Decisions
+
+- **D1. The owner is the delivery cycle.** `DurableSyncEngine` takes a new optional port,
+  `DeviceMaintenancePort`, and `durableSyncEngineProvider` gives it one for the scope. Every
+  owner that drives the engine therefore runs maintenance: the foreground session, the deferred
+  catch-up and the sustained run. No timer, no second owner and no new entry point exist for it.
+- **D2. It is the last step of a healthy cycle.** After the phase is marked online, so the Chats
+  title does not read as updating while keys upload, and so nothing a person waits for (the
+  outbox, the inbox, acknowledgements) stands behind it. A cycle that carried a failure skips
+  it: the server has just been shown unreachable. An owner asked to stand down skips it and
+  leaves it to the foreground, which runs it at the end of its own cycle.
+- **D3. How often.** `ScheduledPrekeyMaintenance` decides which turns run: the first turn of a
+  process, then the first turn 6 hours after a run that succeeded, or 5 minutes after one that
+  failed. A due time further away than 6 hours means the clock went back, and runs at once. The
+  schedule is memory only, so each process starts due: the deferred catch-up, a process of its
+  own every 15 minutes at the platform's floor, sends one count request per run when nothing is
+  due. Rotation is day-granular and the one-time stock drains only as peers start sessions, so
+  6 hours is ample for both; the shorter wait after a failure is what bounds D4.
+- **D4. A pending plan defers a first message; it does not refuse it.** The store still refuses
+  the transition, now with `_PairwiseDeviceStateHeld` (a `_PairwiseConflict`), which a durable
+  receive answers with `CancellationFailure(lifecycleInterrupted)`. The engine treats that as
+  transient: the envelope is retried after the retry floor and spends no inspection budget. A
+  volatile open still answers a conflict, as before, and the signal is dropped either way. A plan
+  is pending during a cycle only when an earlier run failed part-way, because inside one cycle
+  maintenance runs after the inbox pass, never beside it.
+- **D5. No two runs overlap.** Inside a process, one engine per scope runs one cycle at a time,
+  and the schedule joins a run already in flight instead of starting a second, so two plans are
+  never prepared against one device state. Across the two root isolates ADR-050 applies
+  unchanged: maintenance is part of the cycle, which is what one delivery owner owns; the
+  session waits up to 5 minutes for a catch-up, whose engine is destroyed within 4.
+- **D6. A failure never stops delivery.** The engine catches whatever the port throws and does
+  not change the cycle's report. The schedule turns a throw (a service that cannot be composed)
+  into a failed run. `scheduledPrekeyMaintenanceProvider` reads the service at the first run,
+  not when the engine is built, so a service that cannot be composed costs a failed run and not
+  the delivery session, and it invalidates a failed composition so the next run composes afresh.
+- **D7. Offline, nothing runs.** The supervisor requests no cycle while the network is
+  unavailable, the catch-up stops on an offline restore, and a cycle whose drain or send failed
+  skips maintenance (D2). A plan already pending stays durable; first messages that meet it wait
+  in the inbox (D4) until a healthy cycle resumes it, at most 5 minutes after the failure plus
+  the next cycle.
+- **D8. ADR-093 D17 is untouched.** The service still prunes with the earlier of today and the
+  earliest hold day, and still postpones a rotation that could erase a pair a held envelope
+  needs; replenishment still runs while a rotation waits. The service's own tests are unchanged.
+
+### Alternatives rejected
+
+- **A timer in the delivery session or the supervisor.** It would run beside the cycle, so an
+  inbox commit could move the device state between a plan's preparation and its completion, and
+  the deferred catch-up and the sustained run would need their own copy of it.
+- **The catch-up alone.** A phone the platform rarely wakes, or one whose user keeps the app
+  open, would rotate late or never.
+- **A post-inbox step.** Post-inbox work runs in every cycle, healthy or not, before the
+  acknowledgements and the drain, and is not checked against the stand-down signal.
+- **Before the inbox pass.** A pending plan would be resumed before the inbox meets it, but every
+  cycle's first messages would wait behind a count request, and behind an upload when one is due.
+- **A durable schedule.** It needs a schema change to save one count request per process.
+- **Keep the conflict.** A plan left pending by a dropped connection would quarantine every first
+  message that arrived before it was resumed.
+
+### The risk this accepts
+
+- **A follow-up behind a deferred initial.** ADR-093 Not done here records that a regular
+  envelope inspected while its session's initial is still deferred finds no session and is
+  quarantined. D4 makes a pending plan one more way an initial is deferred. The window is a plan
+  left pending by a failed run, until a healthy cycle resumes it.
+- **A plan that cannot complete.** A device-log append refused for good leaves the plan pending,
+  so first messages wait in the inbox and maintenance retries every 5 minutes of cycles. Before
+  this record, the same plan would have quarantined them.
+
+### Not verified
+
+Nothing was run on a phone or against the server. The tests prove that a healthy cycle offers one
+turn after the inbox and the send with the phase online; that a cycle carrying a failure, or a
+displaced owner, does not; that a throw leaves the cycle successful and the next cycle runs;
+that a cycle requested during maintenance joins it; the schedule's intervals, its clock rule and
+its join; that a failed composition is composed again; and that a pending plan answers a
+transient failure and changes no state. Still to see on a phone: the first rotation upload being
+accepted, its device-log append and that a peer accepts the new bundle, the replenishment counts
+the server reports before and after, and the count request of a deferred catch-up.
 
 ## ADR-094 in full — offer receiving while closed in production as best effort (2026-10-18)
 
@@ -719,6 +843,9 @@ sender, a session id, an envelope id or a time.
 - **Prekey maintenance is not wired** (The facts). D17 makes the service keep D6; running the
   service at all is its own task, with its own tests of rotation, replenishment and the
   device-log append on a phone.
+
+  > **Wired by ADR-095 (2026-10-18).** The delivery cycle runs it; the service, and D17, are
+  > unchanged.
 - **A follow-up behind a deferred initial is lost, for a verified sender too.** When an initial's
   inspection fails for a transient cause, a later regular envelope of its session is inspected
   first, finds no session and is quarantined at once. D13 matches held initials only; matching an

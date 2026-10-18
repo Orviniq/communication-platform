@@ -8,6 +8,7 @@ import 'package:communication_platform/app/dependencies/server_config_limits.dar
 import 'package:communication_platform/app/dependencies/voice_room_providers.dart';
 import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
+import 'package:communication_platform/features/devices/infrastructure/prekey_maintenance_providers.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
 import 'package:communication_platform/features/groups/application/group_state_recovery_service.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_access_adapters.dart';
@@ -161,6 +162,17 @@ final durableSyncEngineProvider =
         standDown: ref.watch(deliveryStandDownProvider),
         heldSenderTrust: ContactHeldSenderTrust(
           await ref.watch(contactLocalProvider.future),
+        ),
+        // Every owner that drives this engine runs maintenance in its cycle:
+        // the foreground session, the deferred catch-up and the sustained run
+        // (ADR-095).
+        deviceMaintenance: PrekeyMaintenanceCycleWork(
+          ref.watch(
+            scheduledPrekeyMaintenanceProvider((
+              userId: scope.userId,
+              deviceId: scope.deviceId,
+            )),
+          ),
         ),
         sendPreparation: PairwiseSendPreparationAdapter(
           await ref.watch(

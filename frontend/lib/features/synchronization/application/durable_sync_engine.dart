@@ -127,6 +127,7 @@ final class DurableSyncEngine {
     PostInboxCommitWorkPort? postInboxCommitWork,
     SendPreparationPort? sendPreparation,
     HeldSenderTrustPort? heldSenderTrust,
+    DeviceMaintenancePort? deviceMaintenance,
     DeliveryStandDownSignal standDown = const NeverStandsDown(),
     this.retryPolicy = const SyncRetryPolicy(),
     this.limits = const SyncEngineLimits(),
@@ -139,6 +140,7 @@ final class DurableSyncEngine {
        _postInboxCommitWork = postInboxCommitWork,
        _sendPreparation = sendPreparation,
        _heldSenderTrust = heldSenderTrust,
+       _deviceMaintenance = deviceMaintenance,
        _standDown = standDown;
 
   final DurableSyncStore _store;
@@ -154,6 +156,10 @@ final class DurableSyncEngine {
   /// envelopes (ADR-093 D16). Without it nothing is swept, and only the
   /// verification itself releases a sender.
   final HeldSenderTrustPort? _heldSenderTrust;
+
+  /// This device's prekey upkeep, offered once at the end of every healthy
+  /// cycle (ADR-095). Without it no key is rotated, pruned or replenished.
+  final DeviceMaintenancePort? _deviceMaintenance;
 
   /// Read between units of work, never in the middle of one. A cycle that is
   /// asked to give way finishes the envelope, batch or transaction it is
@@ -289,7 +295,32 @@ final class DurableSyncEngine {
     if (online case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
+    await _runDeviceMaintenance();
     return Result.success(progress.report());
+  }
+
+  /// Offers this device's upkeep the end of a cycle that worked (ADR-095).
+  ///
+  /// Last, so nothing anybody is waiting for stands behind its uploads, and
+  /// after the phase is online, so the Chats title does not read as updating
+  /// while it runs. Only a healthy cycle reaches here: one that carried a
+  /// failure has just shown the server cannot be reached, and maintenance would
+  /// learn the same thing more slowly. A displaced owner leaves it to the
+  /// foreground, which runs it at the end of its own cycle. Inside the cycle,
+  /// because the cycle is what one delivery owner owns (ADR-050) and is never
+  /// two at once in one engine: no inbox commit can move the device state
+  /// while a plan holds a candidate of it, and no two plans run together.
+  Future<void> _runDeviceMaintenance() async {
+    final maintenance = _deviceMaintenance;
+    if (maintenance == null || _standDown.standDownRequested) {
+      return;
+    }
+    try {
+      await maintenance.runIfDue();
+    } on Object {
+      // Upkeep never decides whether delivery worked. The keys a peer claims
+      // last for days; the port retries on its own schedule.
+    }
   }
 
   /// Drains authoritative pages until the server says there are none left.
