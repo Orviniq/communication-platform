@@ -15784,6 +15784,55 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _heldSenderUserIdMeta = const VerificationMeta(
+    'heldSenderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> heldSenderUserId = GeneratedColumn<String>(
+    'held_sender_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _heldSessionIdMeta = const VerificationMeta(
+    'heldSessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> heldSessionId =
+      GeneratedColumn<Uint8List>(
+        'held_session_id',
+        aliasedName,
+        true,
+        check: () =>
+            heldSessionId.isNull() |
+            const CustomExpression<bool>('length("held_session_id") = 16'),
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _heldInitialMeta = const VerificationMeta(
+    'heldInitial',
+  );
+  @override
+  late final GeneratedColumn<bool> heldInitial = GeneratedColumn<bool>(
+    'held_initial',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("held_initial" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _heldAtMeta = const VerificationMeta('heldAt');
+  @override
+  late final GeneratedColumn<DateTime> heldAt = GeneratedColumn<DateTime>(
+    'held_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     envelopeId,
@@ -15796,6 +15845,10 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     attemptCount,
     inspectionFailures,
     nextAttemptAt,
+    heldSenderUserId,
+    heldSessionId,
+    heldInitial,
+    heldAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -15901,6 +15954,39 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         ),
       );
     }
+    if (data.containsKey('held_sender_user_id')) {
+      context.handle(
+        _heldSenderUserIdMeta,
+        heldSenderUserId.isAcceptableOrUnknown(
+          data['held_sender_user_id']!,
+          _heldSenderUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('held_session_id')) {
+      context.handle(
+        _heldSessionIdMeta,
+        heldSessionId.isAcceptableOrUnknown(
+          data['held_session_id']!,
+          _heldSessionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('held_initial')) {
+      context.handle(
+        _heldInitialMeta,
+        heldInitial.isAcceptableOrUnknown(
+          data['held_initial']!,
+          _heldInitialMeta,
+        ),
+      );
+    }
+    if (data.containsKey('held_at')) {
+      context.handle(
+        _heldAtMeta,
+        heldAt.isAcceptableOrUnknown(data['held_at']!, _heldAtMeta),
+      );
+    }
     return context;
   }
 
@@ -15950,6 +16036,22 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         DriftSqlType.dateTime,
         data['${effectivePrefix}next_attempt_at'],
       ),
+      heldSenderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}held_sender_user_id'],
+      ),
+      heldSessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}held_session_id'],
+      ),
+      heldInitial: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}held_initial'],
+      ),
+      heldAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}held_at'],
+      ),
     );
   }
 
@@ -15979,6 +16081,20 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
   /// forever.
   final int inspectionFailures;
   final DateTime? nextAttemptAt;
+
+  /// The claimed sender of a held or released envelope, lower case. A row
+  /// that carries it is *held-marked* (ADR-093 D11); every other row behaves
+  /// as it did before schema 25.
+  final String? heldSenderUserId;
+
+  /// The session id of the envelope's public header, 16 bytes.
+  final Uint8List? heldSessionId;
+
+  /// True for the session's initial envelope, false for a follow-up.
+  final bool? heldInitial;
+
+  /// When the envelope was first held. A re-hold keeps it.
+  final DateTime? heldAt;
   const InboxEnvelope({
     required this.envelopeId,
     required this.sequence,
@@ -15990,6 +16106,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     required this.attemptCount,
     required this.inspectionFailures,
     this.nextAttemptAt,
+    this.heldSenderUserId,
+    this.heldSessionId,
+    this.heldInitial,
+    this.heldAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -16009,6 +16129,18 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     map['inspection_failures'] = Variable<int>(inspectionFailures);
     if (!nullToAbsent || nextAttemptAt != null) {
       map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    if (!nullToAbsent || heldSenderUserId != null) {
+      map['held_sender_user_id'] = Variable<String>(heldSenderUserId);
+    }
+    if (!nullToAbsent || heldSessionId != null) {
+      map['held_session_id'] = Variable<Uint8List>(heldSessionId);
+    }
+    if (!nullToAbsent || heldInitial != null) {
+      map['held_initial'] = Variable<bool>(heldInitial);
+    }
+    if (!nullToAbsent || heldAt != null) {
+      map['held_at'] = Variable<DateTime>(heldAt);
     }
     return map;
   }
@@ -16031,6 +16163,18 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       nextAttemptAt: nextAttemptAt == null && nullToAbsent
           ? const Value.absent()
           : Value(nextAttemptAt),
+      heldSenderUserId: heldSenderUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(heldSenderUserId),
+      heldSessionId: heldSessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(heldSessionId),
+      heldInitial: heldInitial == null && nullToAbsent
+          ? const Value.absent()
+          : Value(heldInitial),
+      heldAt: heldAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(heldAt),
     );
   }
 
@@ -16052,6 +16196,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       attemptCount: serializer.fromJson<int>(json['attemptCount']),
       inspectionFailures: serializer.fromJson<int>(json['inspectionFailures']),
       nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      heldSenderUserId: serializer.fromJson<String?>(json['heldSenderUserId']),
+      heldSessionId: serializer.fromJson<Uint8List?>(json['heldSessionId']),
+      heldInitial: serializer.fromJson<bool?>(json['heldInitial']),
+      heldAt: serializer.fromJson<DateTime?>(json['heldAt']),
     );
   }
   @override
@@ -16068,6 +16216,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       'attemptCount': serializer.toJson<int>(attemptCount),
       'inspectionFailures': serializer.toJson<int>(inspectionFailures),
       'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'heldSenderUserId': serializer.toJson<String?>(heldSenderUserId),
+      'heldSessionId': serializer.toJson<Uint8List?>(heldSessionId),
+      'heldInitial': serializer.toJson<bool?>(heldInitial),
+      'heldAt': serializer.toJson<DateTime?>(heldAt),
     };
   }
 
@@ -16082,6 +16234,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     int? attemptCount,
     int? inspectionFailures,
     Value<DateTime?> nextAttemptAt = const Value.absent(),
+    Value<String?> heldSenderUserId = const Value.absent(),
+    Value<Uint8List?> heldSessionId = const Value.absent(),
+    Value<bool?> heldInitial = const Value.absent(),
+    Value<DateTime?> heldAt = const Value.absent(),
   }) => InboxEnvelope(
     envelopeId: envelopeId ?? this.envelopeId,
     sequence: sequence ?? this.sequence,
@@ -16099,6 +16255,14 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     nextAttemptAt: nextAttemptAt.present
         ? nextAttemptAt.value
         : this.nextAttemptAt,
+    heldSenderUserId: heldSenderUserId.present
+        ? heldSenderUserId.value
+        : this.heldSenderUserId,
+    heldSessionId: heldSessionId.present
+        ? heldSessionId.value
+        : this.heldSessionId,
+    heldInitial: heldInitial.present ? heldInitial.value : this.heldInitial,
+    heldAt: heldAt.present ? heldAt.value : this.heldAt,
   );
   InboxEnvelope copyWithCompanion(InboxEnvelopesCompanion data) {
     return InboxEnvelope(
@@ -16130,6 +16294,16 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       nextAttemptAt: data.nextAttemptAt.present
           ? data.nextAttemptAt.value
           : this.nextAttemptAt,
+      heldSenderUserId: data.heldSenderUserId.present
+          ? data.heldSenderUserId.value
+          : this.heldSenderUserId,
+      heldSessionId: data.heldSessionId.present
+          ? data.heldSessionId.value
+          : this.heldSessionId,
+      heldInitial: data.heldInitial.present
+          ? data.heldInitial.value
+          : this.heldInitial,
+      heldAt: data.heldAt.present ? data.heldAt.value : this.heldAt,
     );
   }
 
@@ -16145,7 +16319,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           ..write('dependencyClass: $dependencyClass, ')
           ..write('attemptCount: $attemptCount, ')
           ..write('inspectionFailures: $inspectionFailures, ')
-          ..write('nextAttemptAt: $nextAttemptAt')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('heldSenderUserId: $heldSenderUserId, ')
+          ..write('heldSessionId: $heldSessionId, ')
+          ..write('heldInitial: $heldInitial, ')
+          ..write('heldAt: $heldAt')
           ..write(')'))
         .toString();
   }
@@ -16162,6 +16340,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     attemptCount,
     inspectionFailures,
     nextAttemptAt,
+    heldSenderUserId,
+    $driftBlobEquality.hash(heldSessionId),
+    heldInitial,
+    heldAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -16179,7 +16361,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           other.dependencyClass == this.dependencyClass &&
           other.attemptCount == this.attemptCount &&
           other.inspectionFailures == this.inspectionFailures &&
-          other.nextAttemptAt == this.nextAttemptAt);
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.heldSenderUserId == this.heldSenderUserId &&
+          $driftBlobEquality.equals(other.heldSessionId, this.heldSessionId) &&
+          other.heldInitial == this.heldInitial &&
+          other.heldAt == this.heldAt);
 }
 
 class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
@@ -16193,6 +16379,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
   final Value<int> attemptCount;
   final Value<int> inspectionFailures;
   final Value<DateTime?> nextAttemptAt;
+  final Value<String?> heldSenderUserId;
+  final Value<Uint8List?> heldSessionId;
+  final Value<bool?> heldInitial;
+  final Value<DateTime?> heldAt;
   final Value<int> rowid;
   const InboxEnvelopesCompanion({
     this.envelopeId = const Value.absent(),
@@ -16205,6 +16395,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     this.attemptCount = const Value.absent(),
     this.inspectionFailures = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
+    this.heldSenderUserId = const Value.absent(),
+    this.heldSessionId = const Value.absent(),
+    this.heldInitial = const Value.absent(),
+    this.heldAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InboxEnvelopesCompanion.insert({
@@ -16218,6 +16412,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     this.attemptCount = const Value.absent(),
     this.inspectionFailures = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
+    this.heldSenderUserId = const Value.absent(),
+    this.heldSessionId = const Value.absent(),
+    this.heldInitial = const Value.absent(),
+    this.heldAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : envelopeId = Value(envelopeId),
        sequence = Value(sequence),
@@ -16234,6 +16432,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Expression<int>? attemptCount,
     Expression<int>? inspectionFailures,
     Expression<DateTime>? nextAttemptAt,
+    Expression<String>? heldSenderUserId,
+    Expression<Uint8List>? heldSessionId,
+    Expression<bool>? heldInitial,
+    Expression<DateTime>? heldAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -16248,6 +16450,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       if (attemptCount != null) 'attempt_count': attemptCount,
       if (inspectionFailures != null) 'inspection_failures': inspectionFailures,
       if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (heldSenderUserId != null) 'held_sender_user_id': heldSenderUserId,
+      if (heldSessionId != null) 'held_session_id': heldSessionId,
+      if (heldInitial != null) 'held_initial': heldInitial,
+      if (heldAt != null) 'held_at': heldAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -16263,6 +16469,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Value<int>? attemptCount,
     Value<int>? inspectionFailures,
     Value<DateTime?>? nextAttemptAt,
+    Value<String?>? heldSenderUserId,
+    Value<Uint8List?>? heldSessionId,
+    Value<bool?>? heldInitial,
+    Value<DateTime?>? heldAt,
     Value<int>? rowid,
   }) {
     return InboxEnvelopesCompanion(
@@ -16276,6 +16486,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       attemptCount: attemptCount ?? this.attemptCount,
       inspectionFailures: inspectionFailures ?? this.inspectionFailures,
       nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      heldSenderUserId: heldSenderUserId ?? this.heldSenderUserId,
+      heldSessionId: heldSessionId ?? this.heldSessionId,
+      heldInitial: heldInitial ?? this.heldInitial,
+      heldAt: heldAt ?? this.heldAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -16315,6 +16529,18 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     if (nextAttemptAt.present) {
       map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
     }
+    if (heldSenderUserId.present) {
+      map['held_sender_user_id'] = Variable<String>(heldSenderUserId.value);
+    }
+    if (heldSessionId.present) {
+      map['held_session_id'] = Variable<Uint8List>(heldSessionId.value);
+    }
+    if (heldInitial.present) {
+      map['held_initial'] = Variable<bool>(heldInitial.value);
+    }
+    if (heldAt.present) {
+      map['held_at'] = Variable<DateTime>(heldAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -16334,6 +16560,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
           ..write('attemptCount: $attemptCount, ')
           ..write('inspectionFailures: $inspectionFailures, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('heldSenderUserId: $heldSenderUserId, ')
+          ..write('heldSessionId: $heldSessionId, ')
+          ..write('heldInitial: $heldInitial, ')
+          ..write('heldAt: $heldAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -26136,6 +26366,14 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     'attachments_by_message',
     'CREATE INDEX IF NOT EXISTS attachments_by_message ON attachments (message_id)',
   );
+  late final Index inboxEnvelopesHeldBySender = Index(
+    'inbox_envelopes_held_by_sender',
+    'CREATE INDEX IF NOT EXISTS inbox_envelopes_held_by_sender ON inbox_envelopes (held_sender_user_id, sequence) WHERE held_sender_user_id IS NOT NULL',
+  );
+  late final Index inboxEnvelopesHeldBySession = Index(
+    'inbox_envelopes_held_by_session',
+    'CREATE INDEX IF NOT EXISTS inbox_envelopes_held_by_session ON inbox_envelopes (held_session_id) WHERE held_session_id IS NOT NULL',
+  );
   late final Index outboxOperationsByEvent = Index(
     'outbox_operations_by_event',
     'CREATE INDEX IF NOT EXISTS outbox_operations_by_event ON outbox_operations (event_id)',
@@ -26198,6 +26436,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     applicationEventsConversationApplyState,
     applicationEventsSenderCounter,
     attachmentsByMessage,
+    inboxEnvelopesHeldBySender,
+    inboxEnvelopesHeldBySession,
     outboxOperationsByEvent,
   ];
   @override
@@ -35915,6 +36155,10 @@ typedef $$InboxEnvelopesTableCreateCompanionBuilder =
       Value<int> attemptCount,
       Value<int> inspectionFailures,
       Value<DateTime?> nextAttemptAt,
+      Value<String?> heldSenderUserId,
+      Value<Uint8List?> heldSessionId,
+      Value<bool?> heldInitial,
+      Value<DateTime?> heldAt,
       Value<int> rowid,
     });
 typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
@@ -35929,6 +36173,10 @@ typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
       Value<int> attemptCount,
       Value<int> inspectionFailures,
       Value<DateTime?> nextAttemptAt,
+      Value<String?> heldSenderUserId,
+      Value<Uint8List?> heldSessionId,
+      Value<bool?> heldInitial,
+      Value<DateTime?> heldAt,
       Value<int> rowid,
     });
 
@@ -35988,6 +36236,26 @@ class $$InboxEnvelopesTableFilterComposer
 
   ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
     column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get heldSenderUserId => $composableBuilder(
+    column: $table.heldSenderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get heldSessionId => $composableBuilder(
+    column: $table.heldSessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get heldInitial => $composableBuilder(
+    column: $table.heldInitial,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get heldAt => $composableBuilder(
+    column: $table.heldAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -36050,6 +36318,26 @@ class $$InboxEnvelopesTableOrderingComposer
     column: $table.nextAttemptAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get heldSenderUserId => $composableBuilder(
+    column: $table.heldSenderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get heldSessionId => $composableBuilder(
+    column: $table.heldSessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get heldInitial => $composableBuilder(
+    column: $table.heldInitial,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get heldAt => $composableBuilder(
+    column: $table.heldAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InboxEnvelopesTableAnnotationComposer
@@ -36108,6 +36396,24 @@ class $$InboxEnvelopesTableAnnotationComposer
     column: $table.nextAttemptAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get heldSenderUserId => $composableBuilder(
+    column: $table.heldSenderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get heldSessionId => $composableBuilder(
+    column: $table.heldSessionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get heldInitial => $composableBuilder(
+    column: $table.heldInitial,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get heldAt =>
+      $composableBuilder(column: $table.heldAt, builder: (column) => column);
 }
 
 class $$InboxEnvelopesTableTableManager
@@ -36157,6 +36463,10 @@ class $$InboxEnvelopesTableTableManager
                 Value<int> attemptCount = const Value.absent(),
                 Value<int> inspectionFailures = const Value.absent(),
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<String?> heldSenderUserId = const Value.absent(),
+                Value<Uint8List?> heldSessionId = const Value.absent(),
+                Value<bool?> heldInitial = const Value.absent(),
+                Value<DateTime?> heldAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion(
                 envelopeId: envelopeId,
@@ -36169,6 +36479,10 @@ class $$InboxEnvelopesTableTableManager
                 attemptCount: attemptCount,
                 inspectionFailures: inspectionFailures,
                 nextAttemptAt: nextAttemptAt,
+                heldSenderUserId: heldSenderUserId,
+                heldSessionId: heldSessionId,
+                heldInitial: heldInitial,
+                heldAt: heldAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -36183,6 +36497,10 @@ class $$InboxEnvelopesTableTableManager
                 Value<int> attemptCount = const Value.absent(),
                 Value<int> inspectionFailures = const Value.absent(),
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<String?> heldSenderUserId = const Value.absent(),
+                Value<Uint8List?> heldSessionId = const Value.absent(),
+                Value<bool?> heldInitial = const Value.absent(),
+                Value<DateTime?> heldAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion.insert(
                 envelopeId: envelopeId,
@@ -36195,6 +36513,10 @@ class $$InboxEnvelopesTableTableManager
                 attemptCount: attemptCount,
                 inspectionFailures: inspectionFailures,
                 nextAttemptAt: nextAttemptAt,
+                heldSenderUserId: heldSenderUserId,
+                heldSessionId: heldSessionId,
+                heldInitial: heldInitial,
+                heldAt: heldAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

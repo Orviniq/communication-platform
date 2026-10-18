@@ -48,10 +48,45 @@ abstract interface class DurableSyncStore implements Port {
     required bool countsAgainstBudget,
   });
 
+  /// Quarantines an envelope. A released held envelope has no server copy
+  /// left, so it is not acknowledged again, and an initial takes the
+  /// follow-ups of its session with it (ADR-093 D14, D15).
   Future<Result<void>> recordEnvelopeRejection({
     required String envelopeId,
     required int reasonCode,
   });
+
+  /// Keeps an envelope unopened for a verification of its claimed sender
+  /// (ADR-093 D11 to D15).
+  ///
+  /// A new hold is acknowledged in the next batch, after the limits have made
+  /// room for it; a re-hold of a released envelope has no server copy and
+  /// keeps its first hold time. No inspection budget is spent.
+  Future<Result<void>> recordEnvelopeHold({
+    required String envelopeId,
+    required HeldEnvelopeInspection hold,
+    required DateTime now,
+  });
+
+  /// Quarantines every held envelope whose hold is older than
+  /// [HeldEnvelopePolicy.lifetime], with its session. Answers how many rows
+  /// left.
+  Future<Result<int>> expireHeldEnvelopes({required DateTime now});
+
+  /// The claimed senders that have a held envelope a release can move.
+  Future<Result<List<String>>> readReleasableHeldSenders();
+
+  /// Returns the acknowledged held envelopes of [senderUserId] to inspection,
+  /// due at [dueAt]. An envelope whose acknowledgement is still owed waits for
+  /// it. Answers how many rows moved.
+  Future<Result<int>> releaseHeldEnvelopes({
+    required String senderUserId,
+    required DateTime dueAt,
+  });
+
+  /// One entry for each claimed sender of envelopes still held, with their
+  /// count and the latest hold time. A released envelope does not count.
+  Stream<List<HeldSender>> watchHeldSenders();
 
   Future<Result<AcknowledgementBatch?>> beginAcknowledgementBatch({
     required DateTime now,
@@ -135,10 +170,23 @@ abstract interface class DurableSyncStore implements Port {
 /// Prepares one envelope's receive without mutating crypto or application
 /// state. Everything it prepares commits later, in one transaction.
 abstract interface class OpaqueEnvelopeInspector implements Port {
-  Future<Result<OpaqueEnvelopeInspection>> inspect({
+  Future<Result<OpaqueEnvelopeOutcome>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
   });
+}
+
+/// Which held initial envelope a follow-up belongs to (ADR-093 D13).
+abstract interface class HeldSessionLookupPort implements Port {
+  /// The claimed sender of the one held initial envelope whose session is
+  /// [sessionId], or null when none or more than one carries it.
+  Future<Result<String?>> heldInitialSender(Uint8List sessionId);
+}
+
+/// Which claimed senders of held envelopes this account has verified, read
+/// from the stored trust records without the network (ADR-093 D16).
+abstract interface class HeldSenderTrustPort implements Port {
+  Future<Result<Set<String>>> verifiedAmong(List<String> userIds);
 }
 
 abstract interface class StaleDeviceRefreshPort implements Port {

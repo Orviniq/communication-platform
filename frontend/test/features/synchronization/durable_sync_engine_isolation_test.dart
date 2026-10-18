@@ -329,6 +329,30 @@ final class CountingStore implements DurableSyncStore {
   Stream<SyncProjection> watchProjection() => _inner.watchProjection();
 
   @override
+  Future<Result<void>> recordEnvelopeHold({
+    required String envelopeId,
+    required HeldEnvelopeInspection hold,
+    required DateTime now,
+  }) => _inner.recordEnvelopeHold(envelopeId: envelopeId, hold: hold, now: now);
+
+  @override
+  Future<Result<int>> expireHeldEnvelopes({required DateTime now}) =>
+      _inner.expireHeldEnvelopes(now: now);
+
+  @override
+  Future<Result<List<String>>> readReleasableHeldSenders() =>
+      _inner.readReleasableHeldSenders();
+
+  @override
+  Future<Result<int>> releaseHeldEnvelopes({
+    required String senderUserId,
+    required DateTime dueAt,
+  }) => _inner.releaseHeldEnvelopes(senderUserId: senderUserId, dueAt: dueAt);
+
+  @override
+  Stream<List<HeldSender>> watchHeldSenders() => _inner.watchHeldSenders();
+
+  @override
   Future<Result<void>> queuePreparedOperation({
     required String operationId,
     required String eventId,

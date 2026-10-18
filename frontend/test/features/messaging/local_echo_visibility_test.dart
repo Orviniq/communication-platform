@@ -207,6 +207,11 @@ final class _HeldLiveDevices implements PairwiseLiveDeviceResolverPort {
     else
       _live(localUserId, localDeviceId, 2),
   ];
+
+  /// The inbound path only, which nothing in this suite drives.
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId) =>
+      throw UnimplementedError();
 }
 
 VerifiedPairwiseLiveDevice _live(String userId, String deviceId, int seed) =>

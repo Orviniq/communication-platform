@@ -45,16 +45,29 @@ final class DriftLocalStateDiagnostics implements DiagnosticsSourcePort {
       final pendingOutbound =
           (await outboundQuery.getSingle()).read(outboundTotal) ?? 0;
 
+      // A held envelope is not work the engine can do: it waits for a
+      // verification (ADR-093 D11, D20), so it is counted apart.
       final inboundTotal = countAll();
       final inboundQuery = database.selectOnly(database.inboxEnvelopes)
         ..addColumns([inboundTotal])
         ..where(
           database.inboxEnvelopes.processingState.isNotIn([
             InboxProcessingState.acknowledged.index,
+            InboxProcessingState.held.index,
           ]),
         );
       final pendingInbound =
           (await inboundQuery.getSingle()).read(inboundTotal) ?? 0;
+
+      final heldTotal = countAll();
+      final heldQuery = database.selectOnly(database.inboxEnvelopes)
+        ..addColumns([heldTotal])
+        ..where(
+          database.inboxEnvelopes.processingState.equals(
+            InboxProcessingState.held.index,
+          ),
+        );
+      final heldInbound = (await heldQuery.getSingle()).read(heldTotal) ?? 0;
 
       final quarantineTotal = countAll();
       final quarantineQuery = database.selectOnly(database.quarantineRecords)
@@ -82,6 +95,10 @@ final class DriftLocalStateDiagnostics implements DiagnosticsSourcePort {
         DiagnosticEntry(
           DiagnosticField.pendingInbound,
           DiagnosticValue.quantity(DiagnosticQuantity.of(pendingInbound)),
+        ),
+        DiagnosticEntry(
+          DiagnosticField.heldInbound,
+          DiagnosticValue.quantity(DiagnosticQuantity.of(heldInbound)),
         ),
         DiagnosticEntry(
           DiagnosticField.quarantinedInput,

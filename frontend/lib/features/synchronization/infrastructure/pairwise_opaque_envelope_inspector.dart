@@ -7,6 +7,7 @@ import 'package:communication_platform/core/application/ports/pairwise_session_c
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/device_control_model.dart';
+import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
     as native;
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
@@ -41,6 +42,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required this.clock,
     required this.groupInbound,
     required this.roomInbound,
+    required this.heldSessions,
   });
 
   final String localDeviceId;
@@ -55,8 +57,12 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   final GroupInboundCoordinator groupInbound;
   final RoomInboundCoordinator roomInbound;
 
+  /// Which held initial a regular envelope with no session belongs to
+  /// (ADR-093 D13).
+  final HeldSessionLookupPort heldSessions;
+
   @override
-  Future<Result<OpaqueEnvelopeInspection>> inspect({
+  Future<Result<OpaqueEnvelopeOutcome>> inspect({
     required String envelopeId,
     required Uint8List exactCiphertext,
   }) async {
@@ -82,11 +88,12 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
       native.PairwisePublicEnvelopeKind.initial => _inspectInitial(
         envelopeId: envelopeId,
         envelope: exactCiphertext,
+        sessionId: header.sessionId,
       ),
     };
   }
 
-  Future<Result<OpaqueEnvelopeInspection>> _inspectRegular({
+  Future<Result<OpaqueEnvelopeOutcome>> _inspectRegular({
     required String envelopeId,
     required Uint8List envelope,
     required Uint8List sessionId,
@@ -101,9 +108,11 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     final context =
         (contextResult as Success<PairwiseInboundPreparationContext>).value;
     final session = context.session;
-    if (session == null ||
-        session.disposition !=
-            PairwiseSessionDisposition.primaryBidirectional) {
+    if (session == null) {
+      return _holdFollowUp(sessionId);
+    }
+    if (session.disposition !=
+        PairwiseSessionDisposition.primaryBidirectional) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.unauthenticatedInput),
       );
@@ -214,9 +223,36 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     );
   }
 
-  Future<Result<OpaqueEnvelopeInspection>> _inspectInitial({
+  /// A regular envelope with no session here is a follow-up of a held first
+  /// message when exactly one held initial carries its session id, and is
+  /// held with it (ADR-093 D13). Otherwise it is what it always was: bytes
+  /// this device cannot open, quarantined at once.
+  Future<Result<OpaqueEnvelopeOutcome>> _holdFollowUp(
+    Uint8List sessionId,
+  ) async {
+    final senderResult = await heldSessions.heldInitialSender(sessionId);
+    if (senderResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final sender = (senderResult as Success<String?>).value;
+    if (sender == null) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+    }
+    return Result.success(
+      HeldEnvelopeInspection(
+        claimedSenderUserId: sender,
+        sessionId: sessionId,
+        initial: false,
+      ),
+    );
+  }
+
+  Future<Result<OpaqueEnvelopeOutcome>> _inspectInitial({
     required String envelopeId,
     required Uint8List envelope,
+    required Uint8List sessionId,
   }) async {
     var inboundResult = await store.readInboundContext(
       localDeviceId: localDeviceId,
@@ -240,14 +276,56 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     final senderUserId = _uuidString(probe.senderUserId);
     final senderDeviceId = _uuidString(probe.senderDeviceId);
 
-    final liveResult = await liveDevices.resolveVerifiedLiveDevices(
-      senderUserId,
-    );
-    if (liveResult case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
+    // A repair replacement needs a session this account accepted, so it is
+    // never a first message: an unverified sender's stays refused. Any other
+    // initial from an unverified sender is held (ADR-093 D12).
+    final List<VerifiedPairwiseLiveDevice> liveDevicesOfSender;
+    if (probe.isRepairReplacement) {
+      final liveResult = await liveDevices.resolveVerifiedLiveDevices(
+        senderUserId,
+      );
+      if (liveResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      liveDevicesOfSender =
+          (liveResult as Success<List<VerifiedPairwiseLiveDevice>>).value;
+    } else {
+      final resolutionResult = await liveDevices.resolveInboundSender(
+        senderUserId,
+      );
+      if (resolutionResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      switch ((resolutionResult as Success<InboundSenderResolution>).value) {
+        case VerifiedInboundSender(:final devices):
+          liveDevicesOfSender = devices;
+        case UnverifiedInboundSender(:final userId, :final devices):
+          // The checks the accepting path runs, against the server's own
+          // records: not authentication, which only a verification and
+          // `acceptVerifiedInitial` give, but enough to keep out of the held
+          // set an envelope that could never open after a verification
+          // either. Nothing past the probe runs, nothing is consumed and
+          // nothing is written.
+          final matches = devices
+              .where((device) => device.deviceId == senderDeviceId)
+              .toList(growable: false);
+          if (matches.length != 1 ||
+              userId != senderUserId ||
+              !_probeMatches(probe, matches.single)) {
+            return const Result.failure(
+              SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+            );
+          }
+          return Result.success(
+            HeldEnvelopeInspection(
+              claimedSenderUserId: senderUserId,
+              sessionId: sessionId,
+              initial: true,
+            ),
+          );
+      }
     }
-    final matches = (liveResult as Success<List<VerifiedPairwiseLiveDevice>>)
-        .value
+    final matches = liveDevicesOfSender
         .where((device) => device.deviceId == senderDeviceId)
         .toList(growable: false);
     if (matches.length != 1) {
@@ -256,13 +334,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
       );
     }
     final sender = matches.single;
-    final currentVersion = sender.device.bundleVersion;
-    if (sender.userId != senderUserId ||
-        sender.device.isUnsigned ||
-        currentVersion == null ||
-        probe.senderBundleVersion > currentVersion ||
-        probe.senderRegistrationId != sender.device.registrationId ||
-        !_same(probe.senderIdentityPublic, sender.device.identityPublic)) {
+    if (sender.userId != senderUserId || !_probeMatches(probe, sender.device)) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.unauthenticatedInput),
       );
@@ -750,6 +822,21 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
         ],
       ),
     );
+  }
+
+  /// Whether the probed sender block names [device] as it stands: signed, at
+  /// a bundle version not in the future, with its registration id and its
+  /// identity key.
+  bool _probeMatches(
+    native.PairwiseInitialSenderProjection probe,
+    PeerPublicDevice device,
+  ) {
+    final currentVersion = device.bundleVersion;
+    return !device.isUnsigned &&
+        currentVersion != null &&
+        probe.senderBundleVersion <= currentVersion &&
+        probe.senderRegistrationId == device.registrationId &&
+        _same(probe.senderIdentityPublic, device.identityPublic);
   }
 
   PairwiseSyncSessionTransition _syncTransition({

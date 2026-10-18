@@ -642,6 +642,11 @@ final class FakeLiveResolver implements PairwiseLiveDeviceResolverPort {
       for (final userId in userIds) userId: List.of(devices[userId]!),
     });
   }
+
+  /// The inbound path only, which nothing in this suite drives.
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId) =>
+      throw UnimplementedError();
 }
 
 final class FakeSelectiveClaims implements PairwiseSelectiveClaimPort {

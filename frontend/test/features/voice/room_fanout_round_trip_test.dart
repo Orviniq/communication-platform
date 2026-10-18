@@ -201,6 +201,11 @@ final class _Resolver implements PairwiseLiveDeviceResolverPort {
     for (final deviceId in network.devicesByUser[userId] ?? const <String>[])
       network.device(userId, deviceId),
   ];
+
+  /// The inbound path only, which nothing in this suite drives.
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId) =>
+      throw UnimplementedError();
 }
 
 final class _Claims implements PairwiseSelectiveClaimPort {

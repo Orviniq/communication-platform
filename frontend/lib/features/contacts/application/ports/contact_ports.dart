@@ -109,6 +109,15 @@ abstract interface class PeerAuthenticationService implements Port {
   Future<Result<SafetyFingerprint>> safetyFingerprint(String userId);
 }
 
+/// Told when this account has just verified a peer out of band, after the
+/// verified trust record is written (ADR-093 D16).
+///
+/// Best effort, and never a trust decision: whatever it starts runs the whole
+/// peer verification again before it opens anything.
+abstract interface class PeerVerificationObserver implements Port {
+  Future<void> peerVerified(String userId);
+}
+
 /// Claims consumable prekeys only for the explicitly missing/repairing sessions.
 /// The full live device list and device log are still authenticated before claim.
 abstract interface class SelectivePeerPrekeyClaimPort implements Port {

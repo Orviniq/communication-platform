@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
-import 'package:drift/drift.dart' show Variable;
+import 'package:drift/drift.dart' show OrderingTerm, Value, Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -569,6 +569,10 @@ void main() {
         'application_events_sender_counter on application_events',
         'attachments_by_message on attachments',
         'outbox_operations_by_event on outbox_operations',
+        // The held envelopes' partial indexes, which the schema-25 step adds
+        // on the way up (ADR-093 D11).
+        'inbox_envelopes_held_by_sender on inbox_envelopes',
+        'inbox_envelopes_held_by_session on inbox_envelopes',
       });
 
       // And every row is exactly the row it was.
@@ -1425,13 +1429,12 @@ void main() {
     expect(rows.single.messageId, 'message-v23');
     expect(rows.single.receiptState, 2);
     expect(rows.single.readAtMs, isNull);
-    expect(LocalDatabase.currentSchemaVersion, 24);
     expect(
       await upgraded
           .customSelect('PRAGMA user_version')
           .map((row) => row.read<int>('user_version'))
           .getSingle(),
-      24,
+      LocalDatabase.currentSchemaVersion,
     );
     await upgraded.close();
   });
@@ -1473,7 +1476,153 @@ void main() {
         .get();
     expect(columns, contains(('read_at_ms', 0)));
   });
+
+  test('version-twenty-four upgrade adds the held columns and indexes, returns '
+      'a row in state 5 to 0, and keeps every other row', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final versionTwentyFour = sqlite3.open(databaseFile.path)
+      ..execute('DROP INDEX inbox_envelopes_held_by_sender')
+      ..execute('DROP INDEX inbox_envelopes_held_by_session');
+    for (final column in _heldColumnsV25) {
+      versionTwentyFour.execute(
+        'ALTER TABLE inbox_envelopes DROP COLUMN $column',
+      );
+    }
+    // One row in each state a schema-24 device can hold.
+    for (final (sequence, state) in const [
+      (1, 0),
+      (2, 1),
+      (3, 2),
+      (4, 3),
+      (5, 4),
+      (6, 5),
+    ]) {
+      versionTwentyFour.execute(
+        'INSERT INTO inbox_envelopes (envelope_id, sequence, '
+        'envelope_ciphertext, processing_state, ready_to_acknowledge, '
+        'attempt_count, inspection_failures) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          'envelope-v24-$sequence',
+          sequence,
+          Uint8List.fromList([sequence]),
+          state,
+          state == 2 ? 1 : 0,
+          sequence,
+          sequence - 1,
+        ],
+      );
+    }
+    versionTwentyFour
+      ..execute('PRAGMA user_version = 24')
+      ..close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info(inbox_envelopes)')
+        .map((row) => (row.read<String>('name'), row.read<int>('notnull')))
+        .get();
+    for (final column in _heldColumnsV25) {
+      expect(columns, contains((column, 0)));
+    }
+    final indexes = await upgraded
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'index' "
+          "AND tbl_name = 'inbox_envelopes'",
+        )
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(
+      indexes,
+      containsAll(<String>[
+        'inbox_envelopes_held_by_sender',
+        'inbox_envelopes_held_by_session',
+      ]),
+    );
+    final rows = await (upgraded.select(
+      upgraded.inboxEnvelopes,
+    )..orderBy([(row) => OrderingTerm.asc(row.sequence)])).get();
+    expect(
+      [for (final row in rows) (row.sequence, row.processingState)],
+      // The old state 5 never reaches its new meaning: it is inspected again.
+      [(1, 0), (2, 1), (3, 2), (4, 3), (5, 4), (6, 0)],
+    );
+    for (final row in rows) {
+      expect(row.envelopeCiphertext, [row.sequence]);
+      expect(row.attemptCount, row.sequence);
+      expect(row.inspectionFailures, row.sequence - 1);
+      expect(row.readyToAcknowledge, row.sequence == 3);
+      expect(row.heldSenderUserId, isNull);
+      expect(row.heldSessionId, isNull);
+      expect(row.heldInitial, isNull);
+      expect(row.heldAt, isNull);
+    }
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      25,
+    );
+    await upgraded.close();
+  });
+
+  test('the held columns tolerate a database that already has them', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final stampedBack = sqlite3.open(databaseFile.path)
+      ..execute('PRAGMA user_version = 24');
+    stampedBack.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info(inbox_envelopes)')
+        .map((row) => row.read<String>('name'))
+        .get();
+    for (final column in _heldColumnsV25) {
+      expect(columns.where((name) => name == column), hasLength(1));
+    }
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test('a held session id is 16 bytes by the column check', () async {
+    final fresh = LocalDatabase(NativeDatabase.memory());
+    addTearDown(fresh.close);
+    Future<void> insert(int sequence, int length) => fresh
+        .into(fresh.inboxEnvelopes)
+        .insert(
+          InboxEnvelopesCompanion.insert(
+            envelopeId: 'envelope-$sequence',
+            sequence: sequence,
+            envelopeCiphertext: Uint8List(1),
+            processingState: 2,
+            heldSessionId: Value(Uint8List(length)),
+          ),
+        );
+    await insert(1, 16);
+    await expectLater(insert(2, 15), throwsA(anything));
+  });
 }
+
+/// The four columns schema 25 adds to `inbox_envelopes` (ADR-093 D11).
+const _heldColumnsV25 = [
+  'held_sender_user_id',
+  'held_session_id',
+  'held_initial',
+  'held_at',
+];
 
 /// `voice_rooms` as schema 22 created it, before schema 23 deleted it.
 const _voiceRoomsTableV22 =

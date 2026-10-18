@@ -59,6 +59,10 @@ enum DiagnosticField {
   conversationCount(DiagnosticSection.storage, 'conversations'),
   pendingOutbound(DiagnosticSection.storage, 'pending_outbound'),
   pendingInbound(DiagnosticSection.storage, 'pending_inbound'),
+
+  /// Envelopes kept, unopened, for a verification of their claimed sender
+  /// (ADR-093 D20). A bucketed count, never a sender.
+  heldInbound(DiagnosticSection.storage, 'held_inbound'),
   quarantinedInput(DiagnosticSection.storage, 'quarantined_input'),
 
   sessionState(DiagnosticSection.delivery, 'session'),
@@ -233,7 +237,7 @@ final class DiagnosticsReport {
   /// The version of the export's own layout. It moves when a field is added,
   /// removed or redefined, so somebody reading an old paste knows what they
   /// have.
-  static const formatVersion = 2;
+  static const formatVersion = 3;
 
   final List<DiagnosticEntry> entries;
 

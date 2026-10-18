@@ -12,6 +12,7 @@ final class PrekeyMaintenanceService {
     required this.store,
     required this.rotationLog,
     required this.clock,
+    this.heldEnvelopes,
   });
 
   final DevicePrekeyRemotePort remote;
@@ -19,6 +20,11 @@ final class PrekeyMaintenanceService {
   final PrekeyMaintenanceStore store;
   final RotationDeviceLogPort rotationLog;
   final TimeSource clock;
+
+  /// The earliest hold day of an envelope kept for a verification of its
+  /// sender. Without it, or with nothing held, maintenance runs on today
+  /// alone (ADR-093 D17).
+  final HeldEnvelopeRetentionPort? heldEnvelopes;
 
   Future<Result<PrekeyMaintenanceReport>> maintain({
     required String deviceId,
@@ -38,6 +44,11 @@ final class PrekeyMaintenanceService {
     }
     final counts = (countsResult as Success<PrekeyCounts>).value;
     final day = _unixDay(clock.now());
+    final heldDayResult = await _earliestHoldDay();
+    if (heldDayResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final heldDay = (heldDayResult as Success<int?>).value;
 
     var contextResult = await store.readContext(deviceId: deviceId);
     if (contextResult case FailureResult(failure: final failure)) {
@@ -45,9 +56,11 @@ final class PrekeyMaintenanceService {
     }
     var context = (contextResult as Success<PrekeyMaintenanceContext>).value;
 
+    // A held envelope stays openable until it expires (ADR-093 D6), so no
+    // retired pair whose last day is on or after its hold day is erased.
     final pruneResult = await crypto.pruneRetainedSignedPrekeys(
       deviceState: context.opaqueDeviceState,
-      unixDay: day,
+      unixDay: heldDay != null && heldDay < day ? heldDay : day,
     );
     if (pruneResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -85,7 +98,13 @@ final class PrekeyMaintenanceService {
       );
     }
 
-    final rotate = context.rotationDue(day);
+    final rotate =
+        context.rotationDue(day) &&
+        !_rotationWouldEraseHeldPair(
+          today: day,
+          lastRotationDay: context.lastSignedPrekeyRotationUnixDay,
+          heldDay: heldDay,
+        );
     if (!counts.needsReplenishment && !rotate) {
       return Result.success(
         PrekeyMaintenanceReport(
@@ -216,6 +235,39 @@ final class PrekeyMaintenanceService {
         rotated: plan.rotatesSignedPrekeys,
       ),
     );
+  }
+
+  Future<Result<int?>> _earliestHoldDay() async {
+    final port = heldEnvelopes;
+    if (port == null) {
+      return const Result.success(null);
+    }
+    return port.earliestHoldUnixDay();
+  }
+
+  /// Whether a due rotation must wait for a held envelope (ADR-093 D17).
+  ///
+  /// The core's rotation prunes with today before it retires the current pair,
+  /// and the Rust core does not change, so the wait is the only way to keep a
+  /// pair a held envelope may need. The pair retired at the last rotation
+  /// lasts through its day plus the retention; every older retired pair
+  /// through its day plus one at most, because rotations are at least
+  /// [PrekeyMaintenancePolicy.signedPrekeyRotationDays] apart. Replenishment
+  /// still runs while a rotation waits.
+  bool _rotationWouldEraseHeldPair({
+    required int today,
+    required int lastRotationDay,
+    required int? heldDay,
+  }) {
+    if (heldDay == null) {
+      return false;
+    }
+    const retention = PrekeyMaintenancePolicy.signedPrekeyRetentionThroughDay;
+    const olderRetention =
+        retention - PrekeyMaintenancePolicy.signedPrekeyRotationDays;
+    return heldDay <= lastRotationDay + olderRetention ||
+        (today > lastRotationDay + retention &&
+            heldDay <= lastRotationDay + retention);
   }
 
   bool _matchesRequest(

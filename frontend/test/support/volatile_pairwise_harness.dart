@@ -518,6 +518,11 @@ final class FakeLiveDevices implements PairwiseLiveDeviceResolverPort {
       for (final userId in userIds) userId: devices[userId] ?? const [],
     });
   }
+
+  /// The inbound path only, which nothing in this suite drives.
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId) =>
+      throw UnimplementedError();
 }
 
 final class FixedTime implements TimeSource {

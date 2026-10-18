@@ -11,6 +11,7 @@ import 'package:communication_platform/features/pairwise/infrastructure/drift_pa
 import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/held_inbox_rows.dart';
 import 'package:communication_platform/features/voice/domain/room_model.dart';
 import 'package:communication_platform/features/voice/infrastructure/drift_room_repository.dart';
 import 'package:drift/drift.dart';
@@ -19,15 +20,24 @@ import 'package:drift/drift.dart';
 const int _preparationOwed = 0;
 const int _preparationFailed = 1;
 
-final class DriftSyncStore implements DurableSyncStore {
+/// The quarantine reason of a follow-up whose initial left the held set before
+/// it could join it: the security reason today's code gives an envelope with
+/// no session.
+const int _heldFollowUpOrphanReason = 2;
+
+final class DriftSyncStore implements DurableSyncStore, HeldSessionLookupPort {
   const DriftSyncStore(
     this.database, {
     this.config = const FixedServerConfig.fallback(),
     this.maximumInboxEntries = 10000,
     this.maximumOutboxTargets = 50000,
+    this.maximumHeldPerSender = HeldEnvelopePolicy.maximumPerSender,
+    this.maximumHeldTotal = HeldEnvelopePolicy.maximumTotal,
     this.projectionWindow = const Duration(milliseconds: 250),
   }) : assert(maximumInboxEntries > 0),
        assert(maximumOutboxTargets > 0),
+       assert(maximumHeldPerSender > 0),
+       assert(maximumHeldTotal >= maximumHeldPerSender),
        assert(projectionWindow >= Duration.zero);
 
   final LocalDatabase database;
@@ -42,6 +52,12 @@ final class DriftSyncStore implements DurableSyncStore {
 
   final int maximumInboxEntries;
   final int maximumOutboxTargets;
+
+  /// The held-marked rows one claimed sender, and the whole phone, may keep
+  /// (ADR-093 D14). Fields so a test can reach a limit without writing 128
+  /// rows; the application uses [HeldEnvelopePolicy]'s values.
+  final int maximumHeldPerSender;
+  final int maximumHeldTotal;
 
   /// How long [watchProjection] holds a value before re-emitting.
   ///
@@ -65,7 +81,7 @@ SELECT
   c.connection_phase,
   c.reconnect_at,
   c.last_successful_sync_at,
-  (SELECT COUNT(*) FROM inbox_envelopes WHERE processing_state != 4) AS inbox_depth,
+  (SELECT COUNT(*) FROM inbox_envelopes WHERE processing_state NOT IN (4, 5)) AS inbox_depth,
   (SELECT COUNT(*) FROM (
     SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
     UNION
@@ -226,7 +242,7 @@ SELECT
   c.connection_phase,
   c.reconnect_at,
   c.last_successful_sync_at,
-  (SELECT COUNT(*) FROM inbox_envelopes WHERE processing_state != 4) AS inbox_depth,
+  (SELECT COUNT(*) FROM inbox_envelopes WHERE processing_state NOT IN (4, 5)) AS inbox_depth,
   (SELECT COUNT(*) FROM (
     SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
     UNION
@@ -836,14 +852,10 @@ WHERE c.singleton_id = 1
         await (database.update(
           database.inboxEnvelopes,
         )..where((row) => row.envelopeId.equals(envelopeId))).write(
-          InboxEnvelopesCompanion(
-            opaqueEventId: Value(inspection.opaqueEventId),
-            dependencyClass: Value(inspection.dependency.index),
-            processingState: Value(
-              InboxProcessingState.readyToAcknowledge.index,
-            ),
-            readyToAcknowledge: const Value(true),
-            nextAttemptAt: const Value(null),
+          committedInboxRow(
+            envelope,
+            opaqueEventId: inspection.opaqueEventId,
+            dependency: inspection.dependency,
           ),
         );
         return inserted > 0;
@@ -893,14 +905,14 @@ WHERE c.singleton_id = 1
     required String envelopeId,
     required int reasonCode,
   }) => _write(() async {
-    await database
-        .into(database.quarantineRecords)
-        .insert(
-          QuarantineRecordsCompanion.insert(
-            reasonCode: reasonCode,
-            opaqueDigest: Uint8List(0),
-          ),
-        );
+    final row = await _inboxRow(envelopeId);
+    if (row != null && isHeldMarked(row)) {
+      // A released envelope that failed its new inspection: a forged sender,
+      // a forged follow-up, a core that refused it.
+      await _retireHeldRowInsideTransaction(row, reasonCode: reasonCode);
+      return;
+    }
+    await _insertQuarantineInsideTransaction(reasonCode);
     await (database.update(
       database.inboxEnvelopes,
     )..where((row) => row.envelopeId.equals(envelopeId))).write(
@@ -910,11 +922,262 @@ WHERE c.singleton_id = 1
         nextAttemptAt: const Value(null),
       ),
     );
-    await database.customStatement(
-      'DELETE FROM quarantine WHERE id NOT IN '
-      '(SELECT id FROM quarantine ORDER BY received_at DESC, id DESC LIMIT 256)',
-    );
+    await _trimQuarantineInsideTransaction();
   });
+
+  @override
+  Future<Result<void>> recordEnvelopeHold({
+    required String envelopeId,
+    required HeldEnvelopeInspection hold,
+    required DateTime now,
+  }) async {
+    try {
+      await database.writeTransaction(() async {
+        final row = await _inboxRow(envelopeId);
+        if (row == null ||
+            row.processingState != InboxProcessingState.inspecting.index) {
+          throw const _SyncConflict();
+        }
+        if (isHeldMarked(row)) {
+          // Released, inspected and held again: the peer is not verified any
+          // more. The server copy went when the row was first held, so it is
+          // acknowledged as it stands, and its hold time stays the first one,
+          // which is what its expiry and its prekey count from.
+          await _updateInboxRow(
+            envelopeId,
+            InboxEnvelopesCompanion(
+              processingState: Value(InboxProcessingState.held.index),
+              readyToAcknowledge: const Value(false),
+              nextAttemptAt: const Value(null),
+              heldSenderUserId: Value(hold.claimedSenderUserId),
+              heldSessionId: Value(hold.sessionId),
+              heldInitial: Value(hold.initial),
+            ),
+          );
+          return;
+        }
+        if (!hold.initial && !await _hasOneHeldInitial(hold.sessionId)) {
+          await _rejectOrphanedFollowUpInsideTransaction(envelopeId);
+          return;
+        }
+        // Room first, oldest first. The oldest held-marked row of a sender is
+        // its first initial, and it leaves with every follow-up of its
+        // session, so one eviction usually makes room for more than one row.
+        while (await _heldCount(senderUserId: hold.claimedSenderUserId) >=
+            maximumHeldPerSender) {
+          final oldest = await _oldestHeldRow(
+            senderUserId: hold.claimedSenderUserId,
+          );
+          await _retireHeldRowInsideTransaction(
+            oldest!,
+            reasonCode: HeldEnvelopePolicy.evictedReason,
+          );
+        }
+        while (await _heldCount() >= maximumHeldTotal) {
+          final oldest = await _oldestHeldRow();
+          await _retireHeldRowInsideTransaction(
+            oldest!,
+            reasonCode: HeldEnvelopePolicy.evictedReason,
+          );
+        }
+        if (!hold.initial && !await _hasOneHeldInitial(hold.sessionId)) {
+          // Its initial was the row the limit just took.
+          await _rejectOrphanedFollowUpInsideTransaction(envelopeId);
+          return;
+        }
+        // Acknowledged in the next batch, beside every other envelope this
+        // pass inspected (D15). The exact ciphertext is already in this row,
+        // which is what the acknowledgement asks for first.
+        await _updateInboxRow(
+          envelopeId,
+          InboxEnvelopesCompanion(
+            processingState: Value(
+              InboxProcessingState.readyToAcknowledge.index,
+            ),
+            readyToAcknowledge: const Value(true),
+            nextAttemptAt: const Value(null),
+            heldSenderUserId: Value(hold.claimedSenderUserId),
+            heldSessionId: Value(hold.sessionId),
+            heldInitial: Value(hold.initial),
+            heldAt: Value(now),
+          ),
+        );
+      });
+      return const Result.success(null);
+    } on _SyncConflict {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.conflict),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<int>> expireHeldEnvelopes({required DateTime now}) async {
+    final cutoff = now.subtract(HeldEnvelopePolicy.lifetime);
+    try {
+      final retired = await database.writeTransaction(() async {
+        // Unordered, so the read walks the held set's partial index and not
+        // the inbox's sequence index; it is at most 128 rows, and they are
+        // put in mailbox order here.
+        final expired =
+            await (database.select(database.inboxEnvelopes)..where(
+                    (row) =>
+                        row.heldSenderUserId.isNotNull() &
+                        row.heldAt.isSmallerOrEqualValue(cutoff),
+                  ))
+                  .get()
+              ..sort((left, right) => left.sequence.compareTo(right.sequence));
+        var count = 0;
+        for (final candidate in expired) {
+          // An expired initial takes its follow-ups with it, so a row this
+          // loop has not reached yet may have left already.
+          final current = await _inboxRow(candidate.envelopeId);
+          if (current == null || !isHeldMarked(current)) {
+            continue;
+          }
+          count += await _retireHeldRowInsideTransaction(
+            current,
+            reasonCode: HeldEnvelopePolicy.expiredReason,
+          );
+        }
+        return count;
+      });
+      return Result.success(retired);
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<List<String>>> readReleasableHeldSenders() async {
+    try {
+      final sender = database.inboxEnvelopes.heldSenderUserId;
+      final query = database.selectOnly(database.inboxEnvelopes, distinct: true)
+        ..addColumns([sender])
+        ..where(
+          sender.isNotNull() &
+              database.inboxEnvelopes.processingState.equals(
+                InboxProcessingState.held.index,
+              ),
+        )
+        ..orderBy([OrderingTerm.asc(sender)]);
+      final senders = await query.map((row) => row.read(sender)!).get();
+      return Result.success(List.unmodifiable(senders));
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  /// Rows still waiting for their acknowledgement stay where they are: a
+  /// released row has no server copy, so one released before its
+  /// acknowledgement landed would be acknowledged by nothing. The engine's
+  /// sweep moves it once it has.
+  @override
+  Future<Result<int>> releaseHeldEnvelopes({
+    required String senderUserId,
+    required DateTime dueAt,
+  }) async {
+    try {
+      final moved =
+          await (database.update(database.inboxEnvelopes)..where(
+                (row) =>
+                    row.heldSenderUserId.equals(senderUserId.toLowerCase()) &
+                    row.processingState.equals(InboxProcessingState.held.index),
+              ))
+              .write(
+                InboxEnvelopesCompanion(
+                  processingState: Value(InboxProcessingState.received.index),
+                  nextAttemptAt: Value(dueAt),
+                ),
+              );
+      return Result.success(moved);
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Stream<List<HeldSender>> watchHeldSenders() {
+    final query = database.customSelect(
+      '''
+SELECT
+  held_sender_user_id,
+  COUNT(*) AS held_count,
+  MAX(held_at) AS latest_held_at
+FROM inbox_envelopes
+WHERE held_sender_user_id IS NOT NULL AND processing_state IN (2, 3, 5)
+GROUP BY held_sender_user_id
+ORDER BY held_sender_user_id
+''',
+      readsFrom: {database.inboxEnvelopes},
+    );
+    return query
+        .watch()
+        .map(
+          (rows) => List<HeldSender>.unmodifiable([
+            for (final row in rows)
+              HeldSender(
+                userId: row.read<String>('held_sender_user_id'),
+                count: row.read<int>('held_count'),
+                latestHeldAt: row.read<DateTime>('latest_held_at'),
+              ),
+          ]),
+        )
+        // Every inbox write re-runs the query; only a changed answer is news.
+        .distinct(_sameHeldSenders);
+  }
+
+  /// When the oldest held-marked row was first held, or null when there is
+  /// none: the prekey prune keeps every pair such a row may need
+  /// (ADR-093 D17).
+  Future<Result<DateTime?>> readEarliestHoldTime() async {
+    try {
+      final row = await database
+          .customSelect(
+            'SELECT MIN(held_at) AS earliest FROM inbox_envelopes '
+            'WHERE held_sender_user_id IS NOT NULL',
+            readsFrom: {database.inboxEnvelopes},
+          )
+          .getSingle();
+      return Result.success(row.readNullable<DateTime>('earliest'));
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<String?>> heldInitialSender(Uint8List sessionId) async {
+    try {
+      final rows =
+          await (database.select(database.inboxEnvelopes)
+                ..where(
+                  (row) =>
+                      row.heldSessionId.equals(sessionId) &
+                      row.heldInitial.equals(true),
+                )
+                ..limit(2))
+              .get();
+      return Result.success(
+        rows.length == 1 ? rows.single.heldSenderUserId : null,
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
 
   @override
   Future<Result<AcknowledgementBatch?>> beginAcknowledgementBatch({
@@ -994,24 +1257,45 @@ WHERE c.singleton_id = 1
     required AcknowledgementBatch batch,
     required DateTime now,
   }) => _write(() async {
-    await (database.update(
-      database.inboxEnvelopes,
-    )..where((row) => row.envelopeId.isIn(batch.envelopeIds))).write(
-      InboxEnvelopesCompanion(
-        processingState: Value(InboxProcessingState.acknowledged.index),
-        readyToAcknowledge: const Value(false),
-        nextAttemptAt: const Value(null),
-      ),
-    );
+    // A held envelope survives its acknowledgement (ADR-093 D15): it is kept,
+    // in its own state, for a verification of its sender.
+    await (database.update(database.inboxEnvelopes)..where(
+          (row) =>
+              row.envelopeId.isIn(batch.envelopeIds) &
+              row.heldSenderUserId.isNull(),
+        ))
+        .write(
+          InboxEnvelopesCompanion(
+            processingState: Value(InboxProcessingState.acknowledged.index),
+            readyToAcknowledge: const Value(false),
+            nextAttemptAt: const Value(null),
+          ),
+        );
+    await (database.update(database.inboxEnvelopes)..where(
+          (row) =>
+              row.envelopeId.isIn(batch.envelopeIds) &
+              row.heldSenderUserId.isNotNull(),
+        ))
+        .write(
+          InboxEnvelopesCompanion(
+            processingState: Value(InboxProcessingState.held.index),
+            readyToAcknowledge: const Value(false),
+            nextAttemptAt: const Value(null),
+          ),
+        );
     final checkpoint = await _checkpointInTransaction();
     var contiguous = checkpoint.highestContiguousAckedSequence;
+    // A held row is acknowledged too, so it does not keep the rows after it
+    // from being deleted. The delete below still takes state 4 only, which is
+    // what keeps the held row itself.
     final acknowledgedRows =
         await (database.select(database.inboxEnvelopes)
               ..where(
                 (row) =>
-                    row.processingState.equals(
+                    row.processingState.isIn([
                       InboxProcessingState.acknowledged.index,
-                    ) &
+                      InboxProcessingState.held.index,
+                    ]) &
                     row.sequence.isBiggerThanValue(contiguous),
               )
               ..orderBy([(row) => OrderingTerm.asc(row.sequence)]))
@@ -1545,6 +1829,149 @@ WHERE c.singleton_id = 1
     ).refreshTransportForEventInsideTransaction(batch.eventId);
   });
 
+  Future<InboxEnvelope?> _inboxRow(String envelopeId) => (database.select(
+    database.inboxEnvelopes,
+  )..where((row) => row.envelopeId.equals(envelopeId))).getSingleOrNull();
+
+  Future<void> _updateInboxRow(
+    String envelopeId,
+    InboxEnvelopesCompanion companion,
+  ) => (database.update(
+    database.inboxEnvelopes,
+  )..where((row) => row.envelopeId.equals(envelopeId))).write(companion);
+
+  /// Takes one held-marked row out of the held set into quarantine, with
+  /// every follow-up of its session when it is an initial (ADR-093 D14).
+  /// Answers how many rows left.
+  ///
+  /// None of the follow-ups can open without their initial, and each is an
+  /// envelope today's code would quarantine at once. A row whose server copy
+  /// is gone is marked acknowledged, so the contiguity walk deletes it as it
+  /// deletes every acknowledged row; deleting it here would leave a hole the
+  /// walk stops at. A row whose acknowledgement is still owed keeps it.
+  Future<int> _retireHeldRowInsideTransaction(
+    InboxEnvelope row, {
+    required int reasonCode,
+  }) async {
+    final retired = <InboxEnvelope>[row];
+    final sessionId = row.heldSessionId;
+    if (row.heldInitial == true && sessionId != null) {
+      retired.addAll(
+        await (database.select(database.inboxEnvelopes)..where(
+              (item) =>
+                  item.heldSessionId.equals(sessionId) &
+                  item.heldInitial.equals(false) &
+                  item.envelopeId.equals(row.envelopeId).not(),
+            ))
+            .get(),
+      );
+    }
+    for (final item in retired) {
+      await _insertQuarantineInsideTransaction(reasonCode);
+      await _updateInboxRow(
+        item.envelopeId,
+        heldRowAwaitsAcknowledgement(item)
+            ? const InboxEnvelopesCompanion(
+                heldSenderUserId: Value(null),
+                heldSessionId: Value(null),
+                heldInitial: Value(null),
+                heldAt: Value(null),
+              )
+            : InboxEnvelopesCompanion(
+                processingState: Value(InboxProcessingState.acknowledged.index),
+                readyToAcknowledge: const Value(false),
+                nextAttemptAt: const Value(null),
+                heldSenderUserId: const Value(null),
+                heldSessionId: const Value(null),
+                heldInitial: const Value(null),
+                heldAt: const Value(null),
+              ),
+      );
+    }
+    await _trimQuarantineInsideTransaction();
+    return retired.length;
+  }
+
+  /// A follow-up whose initial is not held: today's answer to an envelope
+  /// with no session, quarantined and acknowledged.
+  Future<void> _rejectOrphanedFollowUpInsideTransaction(
+    String envelopeId,
+  ) async {
+    await _insertQuarantineInsideTransaction(_heldFollowUpOrphanReason);
+    await _updateInboxRow(
+      envelopeId,
+      InboxEnvelopesCompanion(
+        processingState: Value(InboxProcessingState.readyToAcknowledge.index),
+        readyToAcknowledge: const Value(true),
+        nextAttemptAt: const Value(null),
+      ),
+    );
+    await _trimQuarantineInsideTransaction();
+  }
+
+  Future<bool> _hasOneHeldInitial(Uint8List sessionId) async =>
+      (await (database.select(database.inboxEnvelopes)
+                ..where(
+                  (row) =>
+                      row.heldSessionId.equals(sessionId) &
+                      row.heldInitial.equals(true),
+                )
+                ..limit(2))
+              .get())
+          .length ==
+      1;
+
+  /// The held-marked rows of one claimed sender, or of the whole phone.
+  Future<int> _heldCount({String? senderUserId}) async {
+    final count = database.inboxEnvelopes.envelopeId.count();
+    final sender = database.inboxEnvelopes.heldSenderUserId;
+    final query = database.selectOnly(database.inboxEnvelopes)
+      ..addColumns([count])
+      ..where(
+        senderUserId == null ? sender.isNotNull() : sender.equals(senderUserId),
+      );
+    return (await query.getSingle()).read(count) ?? 0;
+  }
+
+  /// The held-marked row with the lowest sequence, of one claimed sender or of
+  /// the whole phone.
+  ///
+  /// A sender's is a seek on `(held_sender_user_id, sequence)`. The phone's
+  /// reads the whole held set, at most 128 rows, unordered: ordered by
+  /// sequence, the planner walks the inbox's own sequence index instead.
+  Future<InboxEnvelope?> _oldestHeldRow({String? senderUserId}) async {
+    if (senderUserId != null) {
+      return (database.select(database.inboxEnvelopes)
+            ..where((row) => row.heldSenderUserId.equals(senderUserId))
+            ..orderBy([(row) => OrderingTerm.asc(row.sequence)])
+            ..limit(1))
+          .getSingleOrNull();
+    }
+    final held = await (database.select(
+      database.inboxEnvelopes,
+    )..where((row) => row.heldSenderUserId.isNotNull())).get();
+    if (held.isEmpty) {
+      return null;
+    }
+    return held.reduce(
+      (oldest, row) => row.sequence < oldest.sequence ? row : oldest,
+    );
+  }
+
+  Future<void> _insertQuarantineInsideTransaction(int reasonCode) => database
+      .into(database.quarantineRecords)
+      .insert(
+        QuarantineRecordsCompanion.insert(
+          reasonCode: reasonCode,
+          opaqueDigest: Uint8List(0),
+        ),
+      );
+
+  Future<void> _trimQuarantineInsideTransaction() => database.customStatement(
+    'DELETE FROM quarantine WHERE id NOT IN '
+    '(SELECT id FROM quarantine ORDER BY received_at DESC, id DESC LIMIT 256)',
+  );
+
   Future<Result<void>> _write(Future<void> Function() operation) async {
     try {
       await database.writeTransaction(operation);
@@ -1664,6 +2091,18 @@ final class _ServerInvariant implements Exception {
 }
 
 bool _bytesEqual(Uint8List left, Uint8List right) {
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _sameHeldSenders(List<HeldSender> left, List<HeldSender> right) {
   if (left.length != right.length) {
     return false;
   }

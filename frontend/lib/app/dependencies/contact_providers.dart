@@ -10,6 +10,8 @@ import 'package:communication_platform/features/contacts/infrastructure/dio_cont
 import 'package:communication_platform/features/contacts/infrastructure/drift_contact_repository.dart';
 import 'package:communication_platform/features/contacts/infrastructure/fake_profile_ports.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/held_envelope_adapters.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authenticatedRestClientProvider = Provider<DioRestClient>(
@@ -90,10 +92,22 @@ final directoryServiceProvider = FutureProvider<DirectoryService>((ref) async {
 final peerAuthenticationServiceProvider =
     FutureProvider<ClientAuthenticationService>((ref) async {
       final local = await ref.watch(contactLocalProvider.future);
+      // Read through the container when a verification happens, not watched
+      // here: a database this provider never needed is not opened for it.
+      final container = ref.container;
       return ClientAuthenticationService(
         remote: ref.watch(contactRemoteProvider),
         local: local,
         crypto: ref.watch(identityCryptoProvider),
+        // A verification returns the peer's held first messages to
+        // inspection (ADR-093 D16).
+        verificationObserver: SyncHeldEnvelopeRelease(
+          store: () async => DriftSyncStore(
+            await container.read(localDatabaseProvider.future),
+            config: container.read(serverConfigSnapshotProvider),
+          ),
+          clock: ref.watch(timeSourceProvider),
+        ),
       );
     });
 
