@@ -379,7 +379,14 @@ by its next one.
   the current pair is not from the future stays against today. Because the core's rotation
   prunes with today, a due rotation waits while H is no later than the last rotation day
   plus one, or while today is past that day plus eight and H is not; replenishment runs
-  while it waits. Maintenance itself has no caller yet (ADR-093, Not done here).
+  while it waits.
+- Maintenance runs as the last step of a healthy delivery cycle ([ADR-095](decisions.md)), in
+  whichever owner drives the engine: the foreground session, the deferred catch-up or the
+  sustained run. It runs after the phase is online, never in a cycle that carried a failure or
+  whose owner was asked to stand down, and its failure changes nothing about the cycle. The first
+  turn of a process runs, then one 6 hours after a run that worked or 5 minutes after one that
+  failed; a turn during a run joins it. A first message that meets a plan left pending by a
+  failed run is retried later without spending its budget, not quarantined.
 - No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
   serves no MLS, and a group is a set of pairwise sessions
   ([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F).
