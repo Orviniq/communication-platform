@@ -128,7 +128,7 @@ void main() {
 
   group('the Chats list', () {
     testWidgets('with no held envelope there is no row', (tester) async {
-      final app = await _pumpApp(tester, summaries: _summaries());
+      await _pumpApp(tester, summaries: _summaries());
       expect(find.text('Weekend plans'), findsOneWidget);
       expect(find.textContaining('Verify to read'), findsNothing);
       expect(
