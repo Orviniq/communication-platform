@@ -736,6 +736,27 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String chatsHeldSenderLine(int count, String sender) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$sender $count پیام برای شما فرستاده است. برای خواندن آن‌ها، او را تأیید کنید.',
+      one:
+          '$sender یک پیام برای شما فرستاده است. برای خواندن آن، او را تأیید کنید.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatsHeldSenderHint => 'شمارهٔ امنیتی را باز کنید';
+
+  @override
+  String chatUndeliveredHint(String sender) {
+    return 'هنوز تحویل نشده است. اگر $sender شما را تأیید نکرده است، از او بخواهید این کار را بکند.';
+  }
+
+  @override
   String get chatTitle => 'گفت‌وگو';
 
   @override
