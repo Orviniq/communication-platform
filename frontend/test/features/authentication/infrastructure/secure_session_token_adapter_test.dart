@@ -263,6 +263,9 @@ void main() {
           isTrue,
         );
         expect(result.value.securitySetupComplete, isFalse);
+        // A restore has no sign-in form behind it: the stored name is the only
+        // place the screens can get this account's name from.
+        expect(result.value.username, 'alice');
         expect(harness.cleanup.erased, isFalse);
         await lifecycle.close();
       },
@@ -342,6 +345,50 @@ void main() {
         expect(await adapter.hasCompletedSecureSetup(), isFalse);
       },
     );
+
+    test('an online restore carries the stored username', () async {
+      final adapter = SecureSessionTokenAdapter(harness.runtime);
+      await adapter.replace(fullTokens());
+      adapter.clearMemory();
+      final session = CoordinatedAuthenticationSession(
+        tokens: adapter,
+        coordinator: const GrantingAccessTokenCoordinator(),
+        runtime: harness.runtime,
+      );
+
+      final result = await session.restore();
+
+      final boundary = (result as Success<AccountSessionBoundary>).value;
+      expect(boundary.offline, isFalse);
+      expect(boundary.username, 'alice');
+    });
+
+    test('a sign-in carries the username it was given', () async {
+      final adapter = SecureSessionTokenAdapter(harness.runtime);
+      final session = CoordinatedAuthenticationSession(
+        tokens: adapter,
+        coordinator: const ThrowingAccessTokenCoordinator(),
+        runtime: harness.runtime,
+      );
+
+      final accepted = await session.acceptLogin(
+        username: 'alice',
+        grant: AccountSessionGrant(
+          accessToken: 'session-secret',
+          accessExpiresAt: DateTime.utc(2026, 8, 27, 12),
+          accessLifetime: const Duration(days: 30),
+          userId: userId,
+          deviceId: deviceId,
+          scope: AccountSessionScope.full,
+        ),
+        replacedKnownDevice: false,
+      );
+
+      expect(
+        (accepted as Success<AccountSessionBoundary>).value.username,
+        'alice',
+      );
+    });
 
     test('a throwing restore is reported, never left pending', () async {
       final adapter = SecureSessionTokenAdapter(harness.runtime);
@@ -456,6 +503,30 @@ final class FixedTimeSource implements TimeSource {
 
   @override
   DateTime now() => DateTime.utc(2026, 7, 28, 12);
+}
+
+final class GrantingAccessTokenCoordinator implements AccessTokenCoordinator {
+  const GrantingAccessTokenCoordinator();
+
+  @override
+  Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async =>
+      Result.success(
+        AccessToken(
+          value: 'session-secret',
+          expiresAt: DateTime.utc(2026, 7, 28, 13),
+          scope: SessionScope.full,
+        ),
+      );
+
+  @override
+  Future<Result<AccessToken>> recoverAfterUnauthorized(String rejectedToken) =>
+      accessToken();
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<void> handleRevocation() async {}
 }
 
 final class ThrowingAccessTokenCoordinator implements AccessTokenCoordinator {

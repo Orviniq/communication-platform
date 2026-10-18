@@ -62,7 +62,7 @@ class CreateGroupPage extends ConsumerWidget {
             onCreate: (metadata, selected) => resolvedUseCases.create(
               currentUserId: userId,
               currentDeviceId: currentDeviceId ?? resolvedDevice,
-              ownerDisplayName: ownerDisplayName ?? auth.username ?? userId,
+              ownerDisplayName: ownerDisplayName ?? auth.username ?? '',
               metadata: metadata,
               selectedMembers: selected,
             ),

@@ -313,7 +313,10 @@ final class AuthenticationController extends Notifier<AuthenticationViewState> {
         AccountSessionScope.full => AuthenticationRouteAccess.fullScope,
       },
       operation: AuthenticationOperation.idle,
-      username: state.username,
+      // A restored session has no form behind it: the stored session is the
+      // only place the name comes from. After a sign-in the form's name is
+      // already here, and the session holds the same one.
+      username: boundary.username ?? state.username,
       userId: boundary.userId,
     );
   }
