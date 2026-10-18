@@ -198,6 +198,15 @@ abstract interface class PostInboxCommitWorkPort implements Port {
   Future<void> run();
 }
 
+/// Upkeep of this device's own published keys, which the last step of a
+/// healthy cycle offers to run (ADR-095).
+///
+/// The port decides whether anything is due, and keeps its own failures: the
+/// engine neither waits on a result nor lets one change the cycle's report.
+abstract interface class DeviceMaintenancePort implements Port {
+  Future<void> runIfDue();
+}
+
 /// Seals one echoed send for its recipients and queues it.
 ///
 /// The engine owns when this runs and what a failure costs; it owns none of

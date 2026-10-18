@@ -704,6 +704,13 @@ final class DriftPairwiseTransportStore
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.integrityCheckFailed),
       );
+    } on _PairwiseDeviceStateHeld {
+      // Nothing about the envelope is wrong: the plan completes or is resumed
+      // at the end of a cycle, and the envelope opens on a later pass. A
+      // conflict here would quarantine a first message (ADR-095 D4).
+      return const Result.failure(
+        CancellationFailure(CancellationFailureKind.lifecycleInterrupted),
+      );
     } on _PairwiseConflict {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.conflict),
@@ -1222,7 +1229,7 @@ final class DriftPairwiseTransportStore
       // A pending plan owns a candidate native device state. Accepting an
       // initial concurrently could otherwise let completion resurrect a
       // one-time private key consumed by this envelope.
-      throw const _PairwiseConflict();
+      throw const _PairwiseDeviceStateHeld();
     }
     final updated =
         await (database.update(database.secureSecrets)..where(
@@ -1962,6 +1969,12 @@ SELECT
 
 final class _PairwiseConflict implements Exception {
   const _PairwiseConflict();
+}
+
+/// A prekey maintenance plan holds the device state. Still a conflict for a
+/// volatile open, which is dropped either way; a durable receive retries it.
+final class _PairwiseDeviceStateHeld extends _PairwiseConflict {
+  const _PairwiseDeviceStateHeld();
 }
 
 final class _PairwiseCapacity implements Exception {

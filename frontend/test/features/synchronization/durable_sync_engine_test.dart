@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -455,6 +456,163 @@ void main() {
         );
       },
     );
+  });
+
+  group('device maintenance at the end of a cycle (ADR-095)', () {
+    late RecordingMaintenance maintenance;
+    late DurableSyncEngine maintained;
+
+    setUp(() {
+      maintenance = RecordingMaintenance(store);
+      maintained = DurableSyncEngine(
+        store: store,
+        remote: remote,
+        inspector: inspector,
+        staleDeviceRefresh: staleRefresh,
+        clock: clock,
+        jitter: const ZeroJitter(),
+        standDown: owner,
+        deviceMaintenance: maintenance,
+      );
+    });
+
+    test('a healthy cycle offers it one turn, once the phase is online, '
+        'after the inbox and the outbox', () async {
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(61), sequence: 1, exactCiphertext: blob(1)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      await maintained.queuePreparedOperation(
+        operationId: 'operation-maintained',
+        eventId: 'event-maintained',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'user-1',
+            recipientDeviceId: uuid(62),
+            exactCiphertext: blob(2),
+          ),
+        ],
+      );
+      // Recorded rather than asserted inside the turn: the engine swallows
+      // whatever the turn throws, which would swallow a failed expectation.
+      int? inspectedBefore;
+      int? sentBefore;
+      maintenance.onRun = () {
+        inspectedBefore = inspector.calls;
+        sentBefore = remote.sentBatches.length;
+      };
+
+      final result = await maintained.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      expect(maintenance.runs, 1);
+      expect(maintenance.phases, [SyncConnectionPhase.online]);
+      expect(inspectedBefore, 1, reason: 'the inbox went first');
+      expect(sentBefore, 1, reason: 'so did the send');
+    });
+
+    test('a cycle that carried a failure does not run it', () async {
+      await maintained.queuePreparedOperation(
+        operationId: 'operation-unsent',
+        eventId: 'event-unsent',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'user-1',
+            recipientDeviceId: uuid(63),
+            exactCiphertext: blob(3),
+          ),
+        ],
+      );
+      remote.sendFailuresRemaining = 2;
+
+      final result = await maintained.synchronize();
+
+      expect(result, isA<FailureResult<SyncRunReport>>());
+      expect(maintenance.runs, 0);
+    });
+
+    test('a displaced owner leaves it to the foreground', () async {
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(64), sequence: 1, exactCiphertext: blob(1)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      inspector.onInspected = (calls) => owner.displaced = true;
+
+      final result = await maintained.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      expect(maintenance.runs, 0);
+    });
+
+    test('a maintenance failure does not stop delivery', () async {
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(65), sequence: 1, exactCiphertext: blob(1)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      maintenance.onRun = () => throw StateError('upload refused');
+
+      final first = await maintained.synchronize();
+
+      expect(first, isA<Success<SyncRunReport>>());
+      expect((first as Success<SyncRunReport>).value.inspectedEnvelopes, 1);
+      expect(remote.acknowledgedIds.expand((ids) => ids), [uuid(65)]);
+      final projection = await store.readProjection();
+      expect(
+        (projection as Success<SyncProjection>).value.connectionPhase,
+        SyncConnectionPhase.online,
+      );
+
+      // And the next cycle delivers, and offers maintenance its turn again.
+      remote.pages.add(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(66), sequence: 2, exactCiphertext: blob(2)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      maintenance.onRun = null;
+      final second = await maintained.synchronize();
+      expect((second as Success<SyncRunReport>).value.inspectedEnvelopes, 1);
+      expect(maintenance.runs, 2);
+    });
+
+    test('no two runs overlap: a cycle asked for during maintenance joins '
+        'the one running it', () async {
+      final release = Completer<void>();
+      maintenance.gate = release.future;
+
+      final first = maintained.synchronize();
+      await pumpEventQueue();
+      expect(maintenance.runs, 1);
+      expect(maintenance.inFlight, 1);
+
+      final second = maintained.synchronize();
+      await pumpEventQueue();
+      expect(maintenance.inFlight, 1, reason: 'never two at once');
+
+      release.complete();
+      expect(await second, isA<Success<SyncRunReport>>());
+      expect(await first, isA<Success<SyncRunReport>>());
+      expect(maintenance.runs, 1);
+      expect(maintenance.maximumInFlight, 1);
+    });
   });
 
   group('giving delivery up between units of work', () {
@@ -1265,6 +1423,36 @@ void main() {
 /// application the user has just opened, and it must do that *between* units of
 /// work: not by being killed part-way through a ratchet step, and not only
 /// after a whole drain it has no reason left to finish.
+/// Records each turn the engine offers, and what the store said at that time.
+final class RecordingMaintenance implements DeviceMaintenancePort {
+  RecordingMaintenance(this.store);
+
+  final DriftSyncStore store;
+  final List<SyncConnectionPhase> phases = [];
+  int runs = 0;
+  int inFlight = 0;
+  int maximumInFlight = 0;
+  void Function()? onRun;
+  Future<void>? gate;
+
+  @override
+  Future<void> runIfDue() async {
+    runs += 1;
+    inFlight += 1;
+    if (inFlight > maximumInFlight) {
+      maximumInFlight = inFlight;
+    }
+    try {
+      final projection = await store.readProjection();
+      phases.add((projection as Success<SyncProjection>).value.connectionPhase);
+      onRun?.call();
+      await gate;
+    } finally {
+      inFlight -= 1;
+    }
+  }
+}
+
 final class DisplaceableOwner implements DeliveryStandDownSignal {
   bool displaced = false;
 

@@ -415,6 +415,55 @@ void main() {
     },
   );
 
+  test('a pending prekey maintenance plan defers a first message instead of '
+      'refusing it (ADR-095 D4)', () async {
+    final sync = DriftSyncStore(database);
+    await inspectEnvelope(sync, 51);
+    await database
+        .into(database.prekeyMaintenancePlans)
+        .insert(
+          PrekeyMaintenancePlansCompanion.insert(
+            deviceId: uuid(900),
+            stage: 0,
+            expectedStateRevision: 1,
+            preparedUnixDay: 20744,
+            bundleVersion: 1,
+            currentSignedPrekeyCreatedUnixDay: 20744,
+            batchId: bytes(16, 3),
+            nativeUploadProjection: bytes(32, 4),
+          ),
+        );
+    final commit = receiveCommit(
+      envelopeNumber: 51,
+      stateMarker: 2,
+      replayMarker: bytes(32, 10),
+      deviceState: PairwiseDeviceStateTransition(
+        nextOpaqueState: bytes(16, 2),
+        expectedStateVersion: 1,
+        nextStateVersion: 2,
+      ),
+    );
+
+    final result = await store.commitPreparedReceive(commit);
+
+    // Transient, so the engine retries it without spending the budget; a
+    // conflict would have quarantined the sender's first message.
+    expect((result as FailureResult<bool>).failure, isA<CancellationFailure>());
+    final secret = await database.select(database.secureSecrets).getSingle();
+    expect(secret.stateRevision, 1);
+    expect(secret.wrappedCiphertextOrOpaqueHandle, bytes(8, 1));
+    expect(await database.select(database.pairwiseSessions).get(), isEmpty);
+    expect(
+      await database.select(database.pairwiseReplayMarkers).get(),
+      isEmpty,
+    );
+    expect(
+      (await database.select(database.inboxEnvelopes).getSingle())
+          .readyToAcknowledge,
+      isFalse,
+    );
+  });
+
   test(
     'replay marker rejection does not advance state or ready the envelope',
     () async {
