@@ -260,17 +260,70 @@ enum ChatDeliveryIndicator {
   waiting,
 }
 
+/// One claimed sender with envelopes held for a verification, as the Chats list
+/// shows it (ADR-093 D18).
+///
+/// Not a conversation: none exists until an envelope opens. It carries a name
+/// and a count and nothing of the held messages.
+@immutable
+final class ChatHeldSenderViewModel {
+  const ChatHeldSenderViewModel({
+    required this.userId,
+    required this.sender,
+    required this.avatarName,
+    required this.count,
+    required this.latestHeldAt,
+  });
+
+  /// The claimed sender, which the safety-number route is opened for.
+  final String userId;
+
+  /// How the row names the sender: `@username`, or the short identity without
+  /// the `@` for a user this phone has no contact row for.
+  final String sender;
+
+  /// What the deterministic local avatar is drawn from.
+  final String avatarName;
+
+  final int count;
+  final DateTime latestHeldAt;
+}
+
+/// One row of the Chats list: a conversation or a sender waiting for a
+/// verification.
+sealed class ChatListEntry {
+  const ChatListEntry();
+}
+
+final class ChatListConversationEntry extends ChatListEntry {
+  const ChatListConversationEntry(this.item);
+
+  final ChatListItemViewModel item;
+}
+
+final class ChatListHeldSenderEntry extends ChatListEntry {
+  const ChatListHeldSenderEntry(this.sender);
+
+  final ChatHeldSenderViewModel sender;
+}
+
 @immutable
 final class ChatListViewModel {
   ChatListViewModel({
     required Iterable<ChatListItemViewModel> items,
     required this.loading,
     required this.failed,
-  }) : items = List.unmodifiable(items);
+    Iterable<ChatHeldSenderViewModel> heldSenders = const [],
+  }) : items = List.unmodifiable(items),
+       heldSenders = List.unmodifiable(heldSenders);
 
   final List<ChatListItemViewModel> items;
   final bool loading;
   final bool failed;
+
+  /// The senders with held envelopes, in no particular order; the list places
+  /// them (`chatListEntries`).
+  final List<ChatHeldSenderViewModel> heldSenders;
 }
 
 typedef ChatIntentCallback = void Function(ChatIntent intent);

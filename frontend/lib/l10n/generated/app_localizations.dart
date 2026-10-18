@@ -1376,6 +1376,24 @@ abstract class AppLocalizations {
   /// **'{title}. {preview}. {unreadCount} unread messages.'**
   String chatsItemSemantics(String title, String preview, int unreadCount);
 
+  /// The Chats row of a sender whose messages wait for a verification (ADR-093 D18). {sender} is '@username', or a short identity when this phone has no name for the sender. It is the sender's claim until the safety number is compared, and the row shows nothing of the messages.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{sender} sent you 1 message. Verify to read it.} other{{sender} sent you {count} messages. Verify to read them.}}'**
+  String chatsHeldSenderLine(int count, String sender);
+
+  /// The screen-reader hint of the held-sender row: where a tap leads.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the safety number'**
+  String get chatsHeldSenderHint;
+
+  /// The line under the newest own direct message that no receipt has answered for an hour (ADR-093 D19). {sender} is '@username', or a short identity when this phone has no name for the peer. A phone that is only off costs the reader one line of advice that does not apply.
+  ///
+  /// In en, this message translates to:
+  /// **'Not delivered yet. If {sender} has not verified you, ask them to.'**
+  String chatUndeliveredHint(String sender);
+
   /// No description provided for @chatTitle.
   ///
   /// In en, this message translates to:

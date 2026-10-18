@@ -14,6 +14,15 @@ abstract interface class DevicePrekeyRemotePort implements Port {
   });
 }
 
+/// The earliest *hold day* of an envelope kept, unopened, for a verification
+/// of its sender: the UTC day it was first held (ADR-093 D17).
+///
+/// Null when nothing is held. A retired signed pair whose last day is on or
+/// after it may still be needed to open that envelope.
+abstract interface class HeldEnvelopeRetentionPort implements Port {
+  Future<Result<int?>> earliestHoldUnixDay();
+}
+
 /// High-level adapter over Rust operations 2–5. Dart never creates private keys.
 abstract interface class PrekeyMaintenanceCryptoPort implements Port {
   Future<Result<PrekeyMaintenancePlan>> prepare({

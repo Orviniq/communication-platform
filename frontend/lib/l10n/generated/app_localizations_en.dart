@@ -740,6 +740,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String chatsHeldSenderLine(int count, String sender) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$sender sent you $count messages. Verify to read them.',
+      one: '$sender sent you 1 message. Verify to read it.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatsHeldSenderHint => 'Open the safety number';
+
+  @override
+  String chatUndeliveredHint(String sender) {
+    return 'Not delivered yet. If $sender has not verified you, ask them to.';
+  }
+
+  @override
   String get chatTitle => 'Conversation';
 
   @override

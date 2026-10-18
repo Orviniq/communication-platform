@@ -151,6 +151,41 @@ makes it stop. `inbox_envelopes.inspection_failures` holds that budget, delibera
 separate from `attempt_count`, which counts every begun attempt and drives backoff and so
 rises while a device is merely offline.
 
+**Held envelopes from an unverified sender** ([ADR-093](decisions.md)). The refusal to open a
+message from a peer this account has not verified stays (`CLIENT_CONTRACT.md` §C); the loss
+does not. When the probe of an initial envelope names a sender whose refresh succeeds in the
+trust state `unverified` (`resolveInboundSender`), and the sender block matches one of that
+peer's devices as the accepting path checks it, the inspector answers a hold instead of a
+failure. A regular envelope with no session here is held behind exactly one held initial
+of its session. A held envelope spends no inspection budget: the store keeps its exact
+ciphertext in its row, it is acknowledged in the next batch, and the acknowledgement marks it
+`held` (5) rather than acknowledged, so it stays and the rows after it are still deleted. A
+changed master key, a fork, an invalid or unsigned device and an unreadable identity are
+failures of the refresh itself and keep today's path. A sender has at most 64 held envelopes
+and the phone 128; past a limit, and 7 days after a hold, the oldest initial goes to
+quarantine (reason 6, or 5 for an expiry) with every follow-up of its session.
+
+A verification releases. `confirmOutOfBand` tells a `PeerVerificationObserver`, best effort,
+which returns the sender's acknowledged held envelopes to `received`, due one second ahead.
+At the start of each cycle's inbox half the engine expires what is too old and then sweeps:
+every held sender whose stored trust record is verified is released too, which covers a
+process that died before the observer, a hold recorded after the verification, and a row
+whose acknowledgement landed after it. Inspection hands rows out lowest sequence first, so a
+sender's envelopes open in mailbox order and each initial before its follow-ups. A released
+envelope's commit marks it acknowledged without a second acknowledgement; a peer that is no
+longer verified at the inspection is held again with its first hold time. The run report
+carries `heldEnvelopes`; the projection's `inbox_depth` and Diagnostics' `pending_inbound`
+count no held row, and `held_inbound` counts them. Nothing names a sender, a session or a
+time.
+
+What the recipient and the sender see is the presentation's, not the engine's
+([ADR-093](decisions.md) D18, D19). `watchHeldSenders` streams each claimed sender with its count
+of rows in state 2, 3 or 5 and its latest hold time; Chats draws one row for each, and the row
+goes the moment a release, an expiry or an eviction empties the count. Released rows are not
+counted. The sender's chat asks nothing of the engine: it reads the own message's transport and
+receipt state, which a delivery receipt from the recipient's released envelope changes
+(`ui-specification.md` §6, §8).
+
 Envelopes are still handed out oldest-due-first. Two guards keep that from being a
 head-of-line block: an inspection retry carries a floor of one second, because the retry
 policy draws uniformly from zero and a zero backoff on the lowest-sequence row is a pass
@@ -338,6 +373,13 @@ by its next one.
   considered complete. A peer observing the narrow intermediate state waits for an
   extending log record; it does not convert an otherwise exact monotonic rotation into
   permanent fork evidence.
+- A held envelope keeps the signed prekeys it may need ([ADR-093](decisions.md) D17). With H
+  the earliest UTC day a held-marked row was first held, maintenance prunes with the earlier
+  of today and H, so no retired pair whose last day is H or later is erased; the check that
+  the current pair is not from the future stays against today. Because the core's rotation
+  prunes with today, a due rotation waits while H is no later than the last rotation day
+  plus one, or while today is past that day plus eight and H is not; replenishment runs
+  while it waits. Maintenance itself has no caller yet (ADR-093, Not done here).
 - No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
   serves no MLS, and a group is a set of pairwise sessions
   ([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F).

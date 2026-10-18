@@ -271,6 +271,11 @@ final class _Resolver implements PairwiseLiveDeviceResolverPort {
           for (final userId in userIds) userId: value,
         }),
       };
+
+  /// The inbound path only, which nothing in this suite drives.
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId) =>
+      throw UnimplementedError();
 }
 
 final class _Clock implements TimeSource {

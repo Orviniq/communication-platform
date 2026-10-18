@@ -159,7 +159,7 @@ void main() {
       ]);
       expect(const LineSplitter().convert(report.render()), [
         '[application]',
-        'report_format=2',
+        'report_format=3',
         '',
         '[delivery]',
         'queue_gap_detected=yes',
@@ -233,7 +233,7 @@ void main() {
           time: const _FixedTime(),
         ).call();
 
-        expect(report.render(), contains('report_format=2'));
+        expect(report.render(), contains('report_format=3'));
       },
     );
 

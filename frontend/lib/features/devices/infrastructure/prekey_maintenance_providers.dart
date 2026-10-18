@@ -9,6 +9,8 @@ import 'package:communication_platform/features/devices/infrastructure/drift_enr
 import 'package:communication_platform/features/devices/infrastructure/drift_prekey_maintenance_store.dart';
 import 'package:communication_platform/features/devices/infrastructure/native_prekey_maintenance_crypto.dart';
 import 'package:communication_platform/features/devices/infrastructure/verified_rotation_device_log.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/held_envelope_adapters.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 typedef PrekeyMaintenanceScope = ({String userId, String deviceId});
@@ -58,5 +60,8 @@ final prekeyMaintenanceServiceProvider =
           clock: ref.watch(timeSourceProvider),
         ),
         clock: ref.watch(timeSourceProvider),
+        // Keeps every retired signed pair a held envelope may need
+        // (ADR-093 D17).
+        heldEnvelopes: SyncHeldEnvelopeRetention(DriftSyncStore(database)),
       );
     });

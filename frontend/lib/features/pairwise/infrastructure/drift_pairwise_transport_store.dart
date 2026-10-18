@@ -9,6 +9,7 @@ import 'package:communication_platform/features/pairwise/application/ports/pairw
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/server_config/application/server_config_snapshot.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/held_inbox_rows.dart';
 import 'package:drift/drift.dart';
 
 final class DriftPairwiseTransportStore
@@ -690,14 +691,10 @@ final class DriftPairwiseTransportStore
         await (database.update(
           database.inboxEnvelopes,
         )..where((row) => row.envelopeId.equals(commit.envelopeId))).write(
-          InboxEnvelopesCompanion(
-            opaqueEventId: Value(commit.opaqueEventId),
-            dependencyClass: Value(dependency.index),
-            processingState: Value(
-              InboxProcessingState.readyToAcknowledge.index,
-            ),
-            readyToAcknowledge: const Value(true),
-            nextAttemptAt: const Value(null),
+          committedInboxRow(
+            envelope,
+            opaqueEventId: commit.opaqueEventId,
+            dependency: dependency,
           ),
         );
         return eventInserted > 0;

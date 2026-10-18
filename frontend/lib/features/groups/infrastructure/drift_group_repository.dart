@@ -520,13 +520,16 @@ final class DriftGroupRepository extends DriftRepositoryBase
         checkpoint.prunedThrough > checkpoint.highestContiguousAckedSequence
         ? checkpoint.prunedThrough
         : checkpoint.highestContiguousAckedSequence;
+    // A held envelope is acknowledged at the server too (ADR-093 D11), so it
+    // does not stop the walk; the delete below still takes state 4 only.
     final acknowledged =
         await (database.select(database.inboxEnvelopes)
               ..where(
                 (row) =>
-                    row.processingState.equals(
+                    row.processingState.isIn([
                       InboxProcessingState.acknowledged.index,
-                    ) &
+                      InboxProcessingState.held.index,
+                    ]) &
                     row.sequence.isBiggerThanValue(contiguous),
               )
               ..orderBy([(row) => OrderingTerm.asc(row.sequence)]))

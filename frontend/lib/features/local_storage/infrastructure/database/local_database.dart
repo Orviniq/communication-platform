@@ -742,6 +742,26 @@ class Attachments extends Table {
   Set<Column<Object>> get primaryKey => {attachmentId};
 }
 
+/// The held envelopes of each claimed sender, in mailbox order (ADR-093 D11).
+///
+/// Partial, so it holds only the held-marked rows, at most 128 of them, and
+/// an ordinary envelope writes nothing to it. It answers the Chats query, a
+/// sender's count and oldest row, and a release in mailbox order; the oldest
+/// row of the phone and the earliest hold time scan it whole. SQLite chooses
+/// it only for a query whose `WHERE` spells `held_sender_user_id IS NOT
+/// NULL` or binds the column, which every caller does.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS inbox_envelopes_held_by_sender '
+  'ON inbox_envelopes (held_sender_user_id, sequence) '
+  'WHERE held_sender_user_id IS NOT NULL',
+)
+/// The held envelopes of each session: the follow-up match and the session
+/// cascade (ADR-093 D13, D14).
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS inbox_envelopes_held_by_session '
+  'ON inbox_envelopes (held_session_id) '
+  'WHERE held_session_id IS NOT NULL',
+)
 class InboxEnvelopes extends Table {
   @override
   String get tableName => 'inbox_envelopes';
@@ -774,6 +794,23 @@ class InboxEnvelopes extends Table {
       .withDefault(const Constant(0))
       .check(inspectionFailures.isBiggerOrEqualValue(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+
+  /// The claimed sender of a held or released envelope, lower case. A row
+  /// that carries it is *held-marked* (ADR-093 D11); every other row behaves
+  /// as it did before schema 25.
+  TextColumn get heldSenderUserId => text().nullable()();
+
+  /// The session id of the envelope's public header, 16 bytes.
+  BlobColumn get heldSessionId => blob().nullable().check(
+    heldSessionId.isNull() |
+        const CustomExpression<bool>('length("held_session_id") = 16'),
+  )();
+
+  /// True for the session's initial envelope, false for a follow-up.
+  BoolColumn get heldInitial => boolean().nullable()();
+
+  /// When the envelope was first held. A re-hold keeps it.
+  DateTimeColumn get heldAt => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {envelopeId};
@@ -1286,7 +1323,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 24;
+  static const currentSchemaVersion = 25;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1926,8 +1963,8 @@ final class LocalDatabase extends _$LocalDatabase {
             'UPDATE conversations SET tombstoned = 1 WHERE kind = 1',
           );
           // Envelopes held back until an MLS re-admission go back to ordinary
-          // inspection: 5 is `InboxProcessingState.blockedByQueueGap` and 0 is
-          // `received`. No group payload waits on a gap any more.
+          // inspection: 5 was `InboxProcessingState.blockedByQueueGap` and 0
+          // is `received`. No group payload waits on a gap any more.
           await customStatement(
             'UPDATE inbox_envelopes SET processing_state = 0 '
             'WHERE processing_state = 5',
@@ -1985,6 +2022,35 @@ final class LocalDatabase extends _$LocalDatabase {
           if (!columns.contains(receipts.readAtMs.$name)) {
             await migrator.addColumn(receipts, receipts.readAtMs);
           }
+        }
+        if (from < 25) {
+          // Held first messages (ADR-093 D11). State 5 takes a new meaning,
+          // so the schema-22 step runs again first: no row reaches "held and
+          // acknowledged" from "blocked by a queue gap", which nothing has
+          // written since that step.
+          await customStatement(
+            'UPDATE inbox_envelopes SET processing_state = 0 '
+            'WHERE processing_state = 5',
+          );
+          // Four nullable columns, none back-filled, each checked rather than
+          // assumed in the style of the schema-24 step.
+          final columns = await customSelect(
+            'PRAGMA table_info(inbox_envelopes)',
+          ).map((row) => row.read<String>('name')).get();
+          for (final column in <GeneratedColumn<Object>>[
+            inboxEnvelopes.heldSenderUserId,
+            inboxEnvelopes.heldSessionId,
+            inboxEnvelopes.heldInitial,
+            inboxEnvelopes.heldAt,
+          ]) {
+            if (!columns.contains(column.$name)) {
+              await migrator.addColumn(inboxEnvelopes, column);
+            }
+          }
+          // `IF NOT EXISTS` is part of each declaration, so this step and
+          // `createAll` are the same statement.
+          await migrator.createIndex(inboxEnvelopesHeldBySender);
+          await migrator.createIndex(inboxEnvelopesHeldBySession);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

@@ -25,11 +25,16 @@ final class ClientAuthenticationService
     required this.remote,
     required this.local,
     required this.crypto,
+    this.verificationObserver,
   });
 
   final PeerIdentityRemotePort remote;
   final ContactLocalPort local;
   final IdentityCryptoPort crypto;
+
+  /// Told after [confirmOutOfBand] writes a verified record, so that what
+  /// waited for the verification can go on (ADR-093 D16).
+  final PeerVerificationObserver? verificationObserver;
 
   @override
   Future<Result<AuthenticatedPeer>> refreshPeer({
@@ -547,10 +552,17 @@ final class ClientAuthenticationService
       logHeadHash: peer.trust.logHeadHash,
     );
     final written = await local.writeTrust(trust);
-    return written.fold(
-      onSuccess: (_) => Result.success(trust),
-      onFailure: Result.failure,
-    );
+    if (written case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    // Best effort: the verification is the trust record, and it is written.
+    // A release that fails here is made by the next delivery cycle's sweep.
+    try {
+      await verificationObserver?.peerVerified(userId);
+    } on Object {
+      // Nothing to undo and nothing to report beyond the verification itself.
+    }
+    return Result.success(trust);
   }
 
   @override

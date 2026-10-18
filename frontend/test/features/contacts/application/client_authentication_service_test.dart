@@ -288,6 +288,57 @@ void main() {
       expect(harness.remote.claimCalls, 0);
     });
 
+    // ADR-093 D16: a verification returns the peer's held first messages to
+    // inspection, through the observer, once the verified record is written.
+    test('a confirmation tells the observer after the verified record is '
+        'written', () async {
+      late _Harness harness;
+      final observer = _Observer(
+        onVerified: (userId) async {
+          final trust = await harness.local.readTrust(userId);
+          return (trust as Success<ContactTrustRecord?>).value?.state;
+        },
+      );
+      harness = _Harness(observer: observer);
+
+      final result = await harness.service.confirmOutOfBand(
+        userId: _peerUserId,
+        exactMasterPublic: harness.remote.identity.masterPublic,
+      );
+
+      expect(result, isA<Success<ContactTrustRecord>>());
+      expect(observer.verified, [_peerUserId]);
+      expect(observer.stateWhenTold, [ContactTrustState.verified]);
+    });
+
+    test('an observer that fails does not fail the confirmation', () async {
+      final harness = _Harness(
+        observer: _Observer(
+          onVerified: (_) => throw StateError('release failed'),
+        ),
+      );
+
+      final result = await harness.service.confirmOutOfBand(
+        userId: _peerUserId,
+        exactMasterPublic: harness.remote.identity.masterPublic,
+      );
+
+      expect(result, isA<Success<ContactTrustRecord>>());
+    });
+
+    test('a refused confirmation tells the observer nothing', () async {
+      final observer = _Observer();
+      final harness = _Harness(observer: observer);
+
+      final result = await harness.service.confirmOutOfBand(
+        userId: _peerUserId,
+        exactMasterPublic: _bytes(32, 0xee),
+      );
+
+      expect(result, isA<FailureResult<ContactTrustRecord>>());
+      expect(observer.verified, isEmpty);
+    });
+
     test(
       'selective refresh claims only the explicitly requested live device',
       () async {
@@ -1000,7 +1051,7 @@ final _unsignedDeviceJson = <String, Object?>{
 };
 
 final class _Harness {
-  _Harness() {
+  _Harness({PeerVerificationObserver? observer}) {
     remote = _Remote();
     local = _Local();
     crypto = _Crypto();
@@ -1008,6 +1059,7 @@ final class _Harness {
       remote: remote,
       local: local,
       crypto: crypto,
+      verificationObserver: observer,
     );
   }
 
@@ -1015,6 +1067,24 @@ final class _Harness {
   late final _Local local;
   late final _Crypto crypto;
   late final ClientAuthenticationService service;
+}
+
+/// Records each verification it is told of, and what was stored by then.
+final class _Observer implements PeerVerificationObserver {
+  _Observer({this.onVerified});
+
+  final Future<ContactTrustState?> Function(String userId)? onVerified;
+  final verified = <String>[];
+  final stateWhenTold = <ContactTrustState?>[];
+
+  @override
+  Future<void> peerVerified(String userId) async {
+    verified.add(userId);
+    final hook = onVerified;
+    if (hook != null) {
+      stateWhenTold.add(await hook(userId));
+    }
+  }
 }
 
 final class _Remote implements PeerIdentityRemotePort {

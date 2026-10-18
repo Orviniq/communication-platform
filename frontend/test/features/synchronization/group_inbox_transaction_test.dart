@@ -8,11 +8,21 @@ import 'package:communication_platform/features/groups/domain/group_sync_payload
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
+import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'durable_sync_engine_test.dart'
+    show
+        FakeClock,
+        FakeSyncRemote,
+        RecordingStaleRefresh,
+        VerifiedSenders,
+        ZeroJitter;
 
 const _owner = '10000000-0000-4000-8000-000000000001';
 const _ownerDevice = '20000000-0000-4000-8000-000000000001';
@@ -83,6 +93,70 @@ void main() {
   });
 
   tearDown(() => database.close());
+
+  test('a held group copy appears in its group once its sender is '
+      'verified', () async {
+    // The copy arrives fresh, from an owner this member has not verified.
+    await (database.update(database.inboxEnvelopes)).write(
+      InboxEnvelopesCompanion(
+        processingState: Value(InboxProcessingState.received.index),
+      ),
+    );
+    final rename = _signed(
+      revision: 2,
+      previous: create,
+      operation: const RenameGroupOperation(GroupMetadata(name: 'Renamed')),
+    );
+    final inspector = _Answers([
+      Result.success(
+        HeldEnvelopeInspection(
+          claimedSenderUserId: _owner,
+          sessionId: Uint8List(16),
+          initial: true,
+        ),
+      ),
+      Result.success(
+        _inspection(
+          PreparedGroupInboxTransition(
+            opaqueEventId: 'group-control:${rename.event.eventId}',
+            senderUserId: _owner,
+            senderDeviceId: _ownerDevice,
+            expectedPrevious: group,
+            next: _apply(group, rename),
+            prepared: PreparedGroupTransition(controls: [rename]),
+          ),
+        ),
+      ),
+    ]);
+    final remote = FakeSyncRemote();
+    final trust = VerifiedSenders();
+    final clock = FakeClock(const _Clock().now());
+    DurableSyncEngine engine() => DurableSyncEngine(
+      store: sync,
+      remote: remote,
+      inspector: inspector,
+      staleDeviceRefresh: RecordingStaleRefresh(),
+      clock: clock,
+      jitter: const ZeroJitter(),
+      heldSenderTrust: trust,
+    );
+
+    final held = await engine().synchronize();
+    expect((held as Success<SyncRunReport>).value.heldEnvelopes, 1);
+    var stored =
+        (await groups.readStoredGroup(_groupId) as Success<GroupState?>).value!;
+    expect(stored.metadata.name, 'Atomic inbox');
+
+    trust.verified.add(_owner);
+    final opened = await engine().synchronize();
+
+    expect((opened as Success<SyncRunReport>).value.inspectedEnvelopes, 1);
+    stored =
+        (await groups.readStoredGroup(_groupId) as Success<GroupState?>).value!;
+    expect(stored.controlRevision, 2);
+    expect(stored.metadata.name, 'Renamed');
+    expect(remote.acknowledgedIds.expand((ids) => ids), [_envelope]);
+  });
 
   test('a pairwise receive and a group control commit together', () async {
     final rename = _signed(
@@ -298,6 +372,19 @@ OpaqueEnvelopeInspection _inspection(PreparedGroupInboxCommit groupCommit) =>
         ),
       ),
     );
+
+/// Answers each inspection with the next of [answers].
+final class _Answers implements OpaqueEnvelopeInspector {
+  _Answers(this.answers);
+
+  final List<Result<OpaqueEnvelopeOutcome>> answers;
+
+  @override
+  Future<Result<OpaqueEnvelopeOutcome>> inspect({
+    required String envelopeId,
+    required Uint8List exactCiphertext,
+  }) async => answers.removeAt(0);
+}
 
 final class _Clock implements TimeSource {
   const _Clock();

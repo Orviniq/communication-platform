@@ -9,6 +9,7 @@ import 'package:communication_platform/features/messaging/presentation/chat_comp
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_undelivered_hint.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -26,6 +27,8 @@ class ChatConversationView extends StatefulWidget {
     this.uploads,
     this.attachmentTransfers,
     this.attachmentRetentionDays = 30,
+    this.undeliveredHintPeer,
+    this.now = DateTime.now,
     super.key,
   });
 
@@ -50,6 +53,15 @@ class ChatConversationView extends StatefulWidget {
   /// How many days the server keeps an attachment after it was sent, which
   /// the delete dialog of an attachment message states.
   final int attachmentRetentionDays;
+
+  /// How the peer is named in the line under an own direct message that no
+  /// receipt has answered for an hour (ADR-093 D19): `@username`, or the short
+  /// identity without the `@`. Null shows no such line, as in Saved Messages.
+  /// A group chat has its own page and never draws it.
+  final String? undeliveredHintPeer;
+
+  /// The clock the line's hour is counted against.
+  final DateTime Function() now;
 
   /// Where a forward may go, resolved when the sheet opens.
   ///
@@ -223,6 +235,19 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 ),
               ),
             ),
+            if (!widget.model.savedMessages && widget.peerUserId != null)
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppContentWidths.readable,
+                  ),
+                  child: ChatUndeliveredHint(
+                    messages: widget.model.messages,
+                    peer: widget.undeliveredHintPeer,
+                    now: widget.now,
+                  ),
+                ),
+              ),
             if (widget.uploads case final uploads?)
               Center(
                 child: ConstrainedBox(

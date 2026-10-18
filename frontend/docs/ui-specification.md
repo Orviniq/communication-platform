@@ -422,6 +422,15 @@ rooms pinned at top. The primary hub.
   (§0.1). The icon is the only search entry: the body holds no search field.
 - **Body:** the scrollable list, and nothing above it. Order: pinned items first (including
   active voice rooms and pinned conversations), then the rest by most recent activity.
+- **A row for a sender whose messages are held until verified** ([ADR-093](decisions.md) D18).
+  One row for each sender with held envelopes: "@username sent you N messages. Verify to read
+  them." ("1 message. Verify to read it." for one; the short identity without the "@" when
+  this phone has no contact row for the sender). It shows no preview, time, badge or menu,
+  because no conversation exists yet. It sorts among the conversations by its latest hold
+  time, below the pinned ones. A tap opens that sender's safety number
+  (`/contacts/:userId/safety`), whose out-of-band comparison is the verification. The row goes
+  when the envelopes are released, expire or are evicted. A screen reader meets one button with
+  the line and the hint "Open the safety number". The search page (§6.5) lists no such row.
 - **Bottom (mobile):** the tab bar (Chats / Voice Rooms / Settings) + FAB. Both belong to
   this list: a screen it opens covers them (§0.1).
 - **Active voice-room banner** (§0.2) sits above the tab bar when applicable.
@@ -677,6 +686,12 @@ long-press.
 - *Empty* — new-conversation placeholder.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.
+- *Not delivered yet* — a line under the newest own direct message that the relay accepted and
+  that has no delivery receipt an hour after it was sent: "Not delivered yet. If @username has
+  not verified you, ask them to." ([ADR-093](decisions.md) D19). It is one line between the
+  timeline and the composer, and the screen holds a timer only for a qualifying message younger
+  than an hour. Never in a group chat or Saved Messages, and never under a queued, sending or
+  failed message.
 - *Failed send* — retry affordance on the message. An attachment message is retried with its
   attachments and its caption, never with its caption alone ([ADR-089](decisions.md) D11).
 - *Uploading* — the upload tray (above) shows each attachment until its message is

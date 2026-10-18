@@ -126,6 +126,7 @@ final class DurableSyncEngine {
     required JitterSource jitter,
     PostInboxCommitWorkPort? postInboxCommitWork,
     SendPreparationPort? sendPreparation,
+    HeldSenderTrustPort? heldSenderTrust,
     DeliveryStandDownSignal standDown = const NeverStandsDown(),
     this.retryPolicy = const SyncRetryPolicy(),
     this.limits = const SyncEngineLimits(),
@@ -137,6 +138,7 @@ final class DurableSyncEngine {
        _jitter = jitter,
        _postInboxCommitWork = postInboxCommitWork,
        _sendPreparation = sendPreparation,
+       _heldSenderTrust = heldSenderTrust,
        _standDown = standDown;
 
   final DurableSyncStore _store;
@@ -147,6 +149,11 @@ final class DurableSyncEngine {
   final JitterSource _jitter;
   final PostInboxCommitWorkPort? _postInboxCommitWork;
   final SendPreparationPort? _sendPreparation;
+
+  /// Which held senders are verified now, for the sweep that releases their
+  /// envelopes (ADR-093 D16). Without it nothing is swept, and only the
+  /// verification itself releases a sender.
+  final HeldSenderTrustPort? _heldSenderTrust;
 
   /// Read between units of work, never in the middle of one. A cycle that is
   /// asked to give way finishes the envelope, batch or transaction it is
@@ -215,6 +222,11 @@ final class DurableSyncEngine {
 
     final firstOutbox = await _flushOutbox(progress);
     if (firstOutbox case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+
+    final heldMaintenance = await _maintainHeldEnvelopes(progress);
+    if (heldMaintenance case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
 
@@ -577,8 +589,19 @@ final class DurableSyncEngine {
         }
         continue;
       }
-      final inspectedEnvelope =
-          (inspection as Success<OpaqueEnvelopeInspection>).value;
+      final outcome = (inspection as Success<OpaqueEnvelopeOutcome>).value;
+      if (outcome is HeldEnvelopeInspection) {
+        final recorded = await _holdEnvelope(
+          envelope: envelope,
+          hold: outcome,
+          progress: progress,
+        );
+        if (recorded case FailureResult(failure: final storageFailure)) {
+          return Result.failure(storageFailure);
+        }
+        continue;
+      }
+      final inspectedEnvelope = outcome as OpaqueEnvelopeInspection;
       final committed = await _store.commitOpaqueInspection(
         envelopeId: envelope.id,
         inspection: inspectedEnvelope,
@@ -606,6 +629,89 @@ final class DurableSyncEngine {
         progress.deferred = true;
       }
     }
+    return const Result.success(null);
+  }
+
+  /// Expires the envelopes held too long, then releases the held senders this
+  /// account has verified since (ADR-093 D14, D16).
+  ///
+  /// Once per cycle, before the first inbox pass, so a released envelope is
+  /// inspected in the same cycle. The sweep covers what the verification's own
+  /// release cannot: a process that died between the trust write and the
+  /// release, a hold recorded just after a verification, and a row whose
+  /// acknowledgement landed after the release. It decides nothing: the
+  /// inspection after it runs the whole peer refresh again.
+  ///
+  /// Returns failure only when the store itself could not be written. A trust
+  /// read that failed leaves the envelopes held for the next cycle.
+  Future<Result<void>> _maintainHeldEnvelopes(_RunProgress progress) async {
+    final now = _clock.now();
+    final expired = await _store.expireHeldEnvelopes(now: now);
+    if (expired case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    progress.quarantined += (expired as Success<int>).value;
+
+    final trust = _heldSenderTrust;
+    if (trust == null) {
+      return const Result.success(null);
+    }
+    final sendersResult = await _store.readReleasableHeldSenders();
+    if (sendersResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final senders = (sendersResult as Success<List<String>>).value;
+    if (senders.isEmpty) {
+      return const Result.success(null);
+    }
+    final verifiedResult = await trust.verifiedAmong(senders);
+    if (verifiedResult case FailureResult()) {
+      return const Result.success(null);
+    }
+    final verified = (verifiedResult as Success<Set<String>>).value;
+    for (final sender in senders) {
+      if (!verified.contains(sender)) {
+        continue;
+      }
+      final released = await _store.releaseHeldEnvelopes(
+        senderUserId: sender,
+        dueAt: now,
+      );
+      if (released case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+    }
+    return const Result.success(null);
+  }
+
+  /// Keeps one envelope for a verification of its claimed sender.
+  ///
+  /// Not a failure, and nothing the inspection budget may count (ADR-093 D2):
+  /// the bytes stay in their row, and the next acknowledgement batch tells the
+  /// server it may delete its copy. Returns failure only when the store could
+  /// not be written; a hold the store refused belongs to this envelope, as a
+  /// refused commit does.
+  Future<Result<void>> _holdEnvelope({
+    required SyncEnvelope envelope,
+    required HeldEnvelopeInspection hold,
+    required _RunProgress progress,
+  }) async {
+    final held = await _store.recordEnvelopeHold(
+      envelopeId: envelope.id,
+      hold: hold,
+      now: _clock.now(),
+    );
+    if (held case FailureResult(failure: final failure)) {
+      if (failure is StorageFailure) {
+        return Result.failure(failure);
+      }
+      return _recordEnvelopeFailure(
+        envelope: envelope,
+        failure: failure,
+        progress: progress,
+      );
+    }
+    progress.held += 1;
     return const Result.success(null);
   }
 
@@ -864,6 +970,7 @@ final class _RunProgress {
   int prepared = 0;
   int quarantined = 0;
   int failedInspections = 0;
+  int held = 0;
   bool deferred = false;
   Failure? failure;
 
@@ -880,5 +987,6 @@ final class _RunProgress {
     quarantinedEnvelopes: quarantined,
     failedInspections: failedInspections,
     preparedSends: prepared,
+    heldEnvelopes: held,
   );
 }

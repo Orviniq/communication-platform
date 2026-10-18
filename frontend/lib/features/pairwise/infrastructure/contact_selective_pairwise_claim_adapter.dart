@@ -91,6 +91,38 @@ final class ContactPairwiseLiveDeviceResolverAdapter
   ) async =>
       _verified(userId, await delegate.resolveLiveDevices(userId: userId));
 
+  /// `policyBlocked` on the success path of a refresh means exactly
+  /// "unverified": a changed master key, a fork, an invalid or unsigned device
+  /// and an unreadable identity are each a failure of the refresh itself, and
+  /// keep it here (ADR-093 D12).
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(
+    String userId,
+  ) async {
+    final result = await delegate.resolveLiveDevices(userId: userId);
+    if (result case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final peer = (result as Success<AuthenticatedPeer>).value;
+    if (userId != currentUserId &&
+        peer.trust.state == ContactTrustState.unverified &&
+        peer.trust.identity != null &&
+        !peer.devices.any((device) => device.isUnsigned)) {
+      return Result.success(
+        UnverifiedInboundSender(userId: userId, devices: peer.devices),
+      );
+    }
+    final verified = _verified(userId, result);
+    if (verified case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return Result.success(
+      VerifiedInboundSender(
+        (verified as Success<List<VerifiedPairwiseLiveDevice>>).value,
+      ),
+    );
+  }
+
   @override
   Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
   resolveVerifiedLiveDevicesForUsers(List<String> userIds) async {

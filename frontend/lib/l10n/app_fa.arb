@@ -230,6 +230,20 @@
       "unreadCount": {"type": "int"}
     }
   },
+  "chatsHeldSenderLine": "{count, plural, =1{{sender} یک پیام برای شما فرستاده است. برای خواندن آن، او را تأیید کنید.} other{{sender} {count} پیام برای شما فرستاده است. برای خواندن آن‌ها، او را تأیید کنید.}}",
+  "@chatsHeldSenderLine": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "sender": {"type": "String"}
+    }
+  },
+  "chatsHeldSenderHint": "شمارهٔ امنیتی را باز کنید",
+  "chatUndeliveredHint": "هنوز تحویل نشده است. اگر {sender} شما را تأیید نکرده است، از او بخواهید این کار را بکند.",
+  "@chatUndeliveredHint": {
+    "placeholders": {
+      "sender": {"type": "String"}
+    }
+  },
   "chatTitle": "گفت‌وگو",
   "savedMessagesTitle": "پیام‌های ذخیره‌شده",
   "savedMessagesEmptyTitle": "هنوز چیزی ذخیره نشده",

@@ -48,6 +48,221 @@ void main() {
     await database.close();
   });
 
+  group('a first message from a sender this account has not verified', () {
+    late OutcomeInspector outcomes;
+    late VerifiedSenders trust;
+
+    DurableSyncEngine heldEngine() => DurableSyncEngine(
+      store: store,
+      remote: remote,
+      inspector: outcomes,
+      staleDeviceRefresh: staleRefresh,
+      clock: clock,
+      jitter: const ZeroJitter(),
+      heldSenderTrust: trust,
+    );
+
+    setUp(() {
+      outcomes = OutcomeInspector();
+      trust = VerifiedSenders();
+    });
+
+    Future<SyncRunReport> run() async {
+      final report = await heldEngine().synchronize();
+      expect(report, isA<Success<SyncRunReport>>());
+      return (report as Success<SyncRunReport>).value;
+    }
+
+    void serve(List<int> markers) => remote.pages.add(
+      DrainPage(
+        envelopes: [
+          for (final marker in markers)
+            SyncEnvelope(
+              id: uuid(marker),
+              sequence: marker,
+              exactCiphertext: blob(marker),
+            ),
+        ],
+        hasMore: false,
+        prunedThrough: 0,
+      ),
+    );
+
+    Future<InboxEnvelope?> row(int marker) => (database.select(
+      database.inboxEnvelopes,
+    )..where((item) => item.sequence.equals(marker))).getSingleOrNull();
+
+    test(
+      'is held, spends no budget and is acknowledged in the same pass',
+      () async {
+        outcomes.hold(1, sender: heldSender);
+        serve([1]);
+
+        final report = await run();
+
+        expect(report.heldEnvelopes, 1);
+        expect(report.failedInspections, 0);
+        expect(report.quarantinedEnvelopes, 0);
+        expect(remote.acknowledgedIds.expand((ids) => ids), [uuid(1)]);
+        final held = await row(1);
+        expect(held!.processingState, InboxProcessingState.held.index);
+        expect(held.inspectionFailures, 0);
+        expect(held.heldSenderUserId, heldSender);
+        expect(
+          await database.select(database.quarantineRecords).get(),
+          isEmpty,
+        );
+
+        // And it is never inspected again while its sender is not verified.
+        clock.advance(const Duration(hours: 1));
+        await run();
+        expect(outcomes.inspected, [1]);
+        expect(remote.acknowledgedIds.expand((ids) => ids), [uuid(1)]);
+      },
+    );
+
+    test('opens in mailbox order once the sender is verified', () async {
+      outcomes
+        ..hold(1, sender: heldSender)
+        ..hold(2, sender: heldSender, initial: false)
+        ..hold(3, sender: heldSender, initial: false);
+      serve([1, 2, 3]);
+      await run();
+      expect(outcomes.inspected, [1, 2, 3]);
+
+      trust.verified.add(heldSender);
+      outcomes
+        ..open(1)
+        ..open(2)
+        ..open(3);
+      final report = await run();
+
+      expect(outcomes.inspected, [1, 2, 3, 1, 2, 3]);
+      expect(report.inspectedEnvelopes, 3);
+      // Each opened once, with no second acknowledgement of any of them.
+      expect(remote.acknowledgedIds.expand((ids) => ids), [
+        uuid(1),
+        uuid(2),
+        uuid(3),
+      ]);
+      for (final marker in [1, 2, 3]) {
+        final opened = await row(marker);
+        expect(opened?.heldSenderUserId, isNull);
+      }
+    });
+
+    test('the sweep releases a verified sender and no other', () async {
+      outcomes
+        ..hold(1, sender: heldSender)
+        ..hold(2, sender: otherHeldSender);
+      serve([1, 2]);
+      await run();
+
+      trust.verified.add(heldSender);
+      outcomes
+        ..open(1)
+        ..open(2);
+      await run();
+
+      expect(outcomes.inspected, [1, 2, 1]);
+      expect(trust.asked.last, [heldSender, otherHeldSender]);
+      expect((await row(2))!.processingState, InboxProcessingState.held.index);
+    });
+
+    test('a held envelope past its lifetime is quarantined before the inbox '
+        'pass', () async {
+      outcomes.hold(1, sender: heldSender);
+      serve([1]);
+      await run();
+
+      clock.advance(HeldEnvelopePolicy.lifetime);
+      trust.verified.add(heldSender);
+      outcomes.open(1);
+      final report = await run();
+
+      expect(outcomes.inspected, [1], reason: 'expired before the sweep');
+      expect(report.quarantinedEnvelopes, 1);
+      final reasons = await database.select(database.quarantineRecords).get();
+      expect(reasons.single.reasonCode, HeldEnvelopePolicy.expiredReason);
+    });
+
+    test(
+      'a forged claimed sender goes to quarantine at its new inspection',
+      () async {
+        outcomes.hold(1, sender: heldSender);
+        serve([1]);
+        await run();
+
+        trust.verified.add(heldSender);
+        // The verified identity does not hold the device the sender block named.
+        outcomes.fail(
+          1,
+          const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        );
+        final report = await run();
+
+        expect(report.quarantinedEnvelopes, 1);
+        final rejected = await row(1);
+        expect(
+          rejected!.processingState,
+          InboxProcessingState.acknowledged.index,
+        );
+        expect(rejected.heldSenderUserId, isNull);
+        expect(remote.acknowledgedIds.expand((ids) => ids), [uuid(1)]);
+      },
+    );
+
+    test('a changed master key or a fork still spends the budget and is '
+        'quarantined at the eighth failure', () async {
+      outcomes.fail(
+        1,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      serve([1]);
+
+      for (var attempt = 1; attempt < 8; attempt += 1) {
+        final report = await run();
+        expect(report.heldEnvelopes, 0);
+        expect(report.quarantinedEnvelopes, 0);
+        expect((await row(1))!.inspectionFailures, attempt);
+        clock.advance(const Duration(hours: 1));
+      }
+      final last = await run();
+
+      expect(last.quarantinedEnvelopes, 1);
+      expect(last.heldEnvelopes, 0);
+      expect((await row(1))?.heldSenderUserId, isNull);
+    });
+
+    test('an invalid device is quarantined at its first inspection', () async {
+      outcomes.fail(
+        1,
+        const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+      serve([1]);
+
+      final report = await run();
+
+      expect(report.quarantinedEnvelopes, 1);
+      expect(report.heldEnvelopes, 0);
+    });
+
+    test('an identity that could not be read is retried without spending the '
+        'budget', () async {
+      outcomes.fail(1, const TransportFailure(TransportFailureKind.offline));
+      serve([1]);
+
+      final report = await run();
+
+      expect(report.heldEnvelopes, 0);
+      expect(report.failedInspections, 1);
+      final waiting = await row(1);
+      expect(waiting!.inspectionFailures, 0);
+      expect(waiting.heldSenderUserId, isNull);
+      expect(remote.acknowledgedIds, isEmpty);
+    });
+  });
+
   group('sealing what the user already sent', () {
     Future<void> owe(String operationId, String eventId) => database
         .into(database.pendingSendPreparations)
@@ -1145,6 +1360,56 @@ final class FixtureInspector implements OpaqueEnvelopeInspector {
             : EnvelopeDependency.directOrLocal,
       ),
     );
+  }
+}
+
+const heldSender = '00000000-0000-0000-0000-0000000000a1';
+const otherHeldSender = '00000000-0000-0000-0000-0000000000b2';
+
+/// Answers each envelope, by its first byte, with what the test last told it.
+final class OutcomeInspector implements OpaqueEnvelopeInspector {
+  final Map<int, Result<OpaqueEnvelopeOutcome>> _answers = {};
+  final List<int> inspected = [];
+
+  void hold(int marker, {required String sender, bool initial = true}) =>
+      _answers[marker] = Result.success(
+        HeldEnvelopeInspection(
+          claimedSenderUserId: sender,
+          sessionId: Uint8List.fromList(List<int>.filled(16, 0x5e)),
+          initial: initial,
+        ),
+      );
+
+  void open(int marker) => _answers[marker] = Result.success(
+    OpaqueEnvelopeInspection(
+      opaqueEventId: 'opaque-event-$marker',
+      dependency: EnvelopeDependency.directOrLocal,
+    ),
+  );
+
+  void fail(int marker, Failure failure) =>
+      _answers[marker] = Result.failure(failure);
+
+  @override
+  Future<Result<OpaqueEnvelopeOutcome>> inspect({
+    required String envelopeId,
+    required Uint8List exactCiphertext,
+  }) async {
+    final marker = exactCiphertext.first;
+    inspected.add(marker);
+    return _answers[marker]!;
+  }
+}
+
+/// The stored trust records, as the sweep reads them.
+final class VerifiedSenders implements HeldSenderTrustPort {
+  final Set<String> verified = {};
+  final List<List<String>> asked = [];
+
+  @override
+  Future<Result<Set<String>>> verifiedAmong(List<String> userIds) async {
+    asked.add(List.of(userIds));
+    return Result.success(userIds.where(verified.contains).toSet());
   }
 }
 

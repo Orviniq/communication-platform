@@ -23,6 +23,7 @@ import 'package:communication_platform/features/synchronization/application/port
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/dio_sync_remote_port.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/held_envelope_adapters.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/history_transfer_coordinator.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/stale_device_refresh_adapter.dart';
@@ -46,6 +47,14 @@ final durableSyncStoreProvider = FutureProvider<DurableSyncStore>((ref) async {
 final syncProjectionProvider = StreamProvider<SyncProjection>((ref) async* {
   final store = await ref.watch(durableSyncStoreProvider.future);
   yield* store.watchProjection();
+});
+
+/// The claimed senders with envelopes held for a verification, each with its
+/// count, from the encrypted database (ADR-093 D18). Chats draws one row for
+/// each; a release, an expiry or an eviction takes the row away.
+final heldSendersProvider = StreamProvider<List<HeldSender>>((ref) async* {
+  final store = await ref.watch(durableSyncStoreProvider.future);
+  yield* store.watchHeldSenders();
 });
 
 typedef PairwiseSyncScope = ({String userId, String deviceId});
@@ -124,6 +133,7 @@ final durableSyncEngineProvider =
         roomInbound: await ref.watch(
           roomInboundCoordinatorProvider(groupScope).future,
         ),
+        heldSessions: store,
       );
       final gossip = await ref.watch(
         deviceLogGossipCoordinatorProvider((
@@ -149,6 +159,9 @@ final durableSyncEngineProvider =
         clock: ref.watch(timeSourceProvider),
         jitter: FullJitterSource(),
         standDown: ref.watch(deliveryStandDownProvider),
+        heldSenderTrust: ContactHeldSenderTrust(
+          await ref.watch(contactLocalProvider.future),
+        ),
         sendPreparation: PairwiseSendPreparationAdapter(
           await ref.watch(
             pairwiseFanoutCoordinatorProvider((

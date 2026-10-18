@@ -20,10 +20,30 @@ enum InboxProcessingState {
   acknowledgementSending,
   acknowledged,
 
-  /// Held back until an MLS re-admission. Nothing enters this state any more:
-  /// the value keeps its index because rows store it, and schema 22 returned
-  /// every held envelope to [received].
-  blockedByQueueGap,
+  /// Acknowledged at the server and kept, unopened, for a verification of
+  /// its claimed sender (ADR-093 D11). Never handed to inspection: a release
+  /// returns the row to [received].
+  ///
+  /// The index is the one `blockedByQueueGap` held until schema 22 returned
+  /// every such row to [received]; schema 25 repeats that step, so no row
+  /// reaches this meaning from the old one.
+  held,
+}
+
+/// How long and how many envelopes this device keeps for a verification
+/// (ADR-093 D14).
+abstract final class HeldEnvelopePolicy {
+  /// The server's own `ENVELOPE_TTL_DAYS` default: a held envelope lives on
+  /// the phone as long as an undelivered one lives on the server.
+  static const lifetime = Duration(days: 7);
+
+  static const maximumPerSender = 64;
+  static const maximumTotal = 128;
+
+  /// The quarantine reasons of a row that leaves the held set without a
+  /// failed inspection. 1 to 4 are the engine's inspection reasons.
+  static const expiredReason = 5;
+  static const evictedReason = 6;
 }
 
 enum OutboxAttemptState {
@@ -111,7 +131,13 @@ final class DrainPage {
   final int prunedThrough;
 }
 
-final class OpaqueEnvelopeInspection {
+/// What one inspection decided about an envelope.
+sealed class OpaqueEnvelopeOutcome {
+  const OpaqueEnvelopeOutcome();
+}
+
+/// The envelope opened, and this is everything its receive commits.
+final class OpaqueEnvelopeInspection extends OpaqueEnvelopeOutcome {
   const OpaqueEnvelopeInspection({
     required this.opaqueEventId,
     required this.dependency,
@@ -128,6 +154,63 @@ final class OpaqueEnvelopeInspection {
   /// A voice room's change, never set together with [groupCommit]: one
   /// payload names one group or one room.
   final RoomSyncReceiveCommit? roomCommit;
+}
+
+/// The envelope is a first message, or a follow-up of one, from a sender
+/// this account has not verified (ADR-093 D12, D13).
+///
+/// Nothing was opened past the sender block and nothing was written. The
+/// sender and the session are claims: the inspection after a release checks
+/// them in full.
+final class HeldEnvelopeInspection extends OpaqueEnvelopeOutcome {
+  HeldEnvelopeInspection({
+    required String claimedSenderUserId,
+    required Uint8List sessionId,
+    required this.initial,
+  }) : claimedSenderUserId = claimedSenderUserId.toLowerCase(),
+       sessionId = Uint8List.fromList(sessionId) {
+    if (claimedSenderUserId.isEmpty || this.sessionId.length != 16) {
+      throw const FormatException('invalid held envelope');
+    }
+  }
+
+  final String claimedSenderUserId;
+
+  /// The 16-byte session id of the envelope's public header.
+  final Uint8List sessionId;
+
+  /// True for the session's initial envelope, false for a follow-up.
+  final bool initial;
+
+  @override
+  String toString() => 'HeldEnvelopeInspection(<redacted>)';
+}
+
+/// One claimed sender of held envelopes, as the Chats row shows it
+/// (ADR-093 D18).
+final class HeldSender {
+  const HeldSender({
+    required this.userId,
+    required this.count,
+    required this.latestHeldAt,
+  });
+
+  final String userId;
+  final int count;
+  final DateTime latestHeldAt;
+
+  @override
+  bool operator ==(Object other) =>
+      other is HeldSender &&
+      other.userId == userId &&
+      other.count == count &&
+      other.latestHeldAt == latestHeldAt;
+
+  @override
+  int get hashCode => Object.hash(userId, count, latestHeldAt);
+
+  @override
+  String toString() => 'HeldSender(<redacted>)';
 }
 
 final class PreparedOutboxTarget {
@@ -296,6 +379,7 @@ final class SyncRunReport {
     this.quarantinedEnvelopes = 0,
     this.failedInspections = 0,
     this.preparedSends = 0,
+    this.heldEnvelopes = 0,
   });
 
   const SyncRunReport.alreadyRunning()
@@ -306,7 +390,8 @@ final class SyncRunReport {
       deferred = true,
       quarantinedEnvelopes = 0,
       failedInspections = 0,
-      preparedSends = 0;
+      preparedSends = 0,
+      heldEnvelopes = 0;
 
   final int drainedPages;
   final int inspectedEnvelopes;
@@ -325,6 +410,10 @@ final class SyncRunReport {
   /// How many envelopes failed inspection and were left for a later run. Also a
   /// count only, for the same reason.
   final int failedInspections;
+
+  /// How many envelopes this run held for a verification of their sender
+  /// (ADR-093 D20). A count only: never the sender, the session or a time.
+  final int heldEnvelopes;
 }
 
 final class RealtimeDisconnect {

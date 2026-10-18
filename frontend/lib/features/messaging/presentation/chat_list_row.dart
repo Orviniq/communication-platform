@@ -8,6 +8,7 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 
@@ -33,6 +34,75 @@ List<ChatListItemViewModel> chatListItems(
     peerTitle: (id) => names[id] ?? chatShortIdentity(id),
   );
 }
+
+/// The senders in [held], as the Chats list shows them (ADR-093 D18).
+///
+/// A sender is named by the username the local contact list holds for it, with
+/// an `@`, or, for a user this phone has no row for, by the short identity
+/// Chats already uses, without one. There is no lookup: the server has no route
+/// from a user id to a name, and the name is the sender's claim either way.
+List<ChatHeldSenderViewModel> chatHeldSenderItems(
+  List<HeldSender> held, {
+  required List<ContactProjection> contacts,
+}) {
+  final usernames = {
+    for (final contact in contacts) contact.userId: contact.username,
+  };
+  return [
+    for (final sender in held)
+      if (sender.count > 0) _heldSenderItem(sender, usernames[sender.userId]),
+  ];
+}
+
+ChatHeldSenderViewModel _heldSenderItem(HeldSender sender, String? username) =>
+    ChatHeldSenderViewModel(
+      userId: sender.userId,
+      sender: username == null
+          ? chatShortIdentity(sender.userId)
+          : '@$username',
+      avatarName: username ?? chatShortIdentity(sender.userId),
+      count: sender.count,
+      latestHeldAt: sender.latestHeldAt,
+    );
+
+/// The rows of the Chats list, in order.
+///
+/// Pinned conversations stay first, as they are given. A held sender sorts
+/// among the other conversations by its latest hold time, as a conversation
+/// sorts by its last activity: an envelope that arrived is new activity, and
+/// an unpinned row never pushes a pinned one down.
+List<ChatListEntry> chatListEntries(
+  List<ChatListItemViewModel> items,
+  List<ChatHeldSenderViewModel> heldSenders,
+) {
+  final pinned = items.takeWhile((item) => item.pinned).toList();
+  final rest = items.skip(pinned.length).toList();
+  final waiting = [...heldSenders]
+    ..sort((left, right) {
+      final byTime = right.latestHeldAt.compareTo(left.latestHeldAt);
+      return byTime != 0 ? byTime : left.userId.compareTo(right.userId);
+    });
+  final entries = <ChatListEntry>[
+    for (final item in pinned) ChatListConversationEntry(item),
+  ];
+  var next = 0;
+  for (final item in rest) {
+    while (next < waiting.length &&
+        waiting[next].latestHeldAt.isAfter(item.timestamp)) {
+      entries.add(ChatListHeldSenderEntry(waiting[next++]));
+    }
+    entries.add(ChatListConversationEntry(item));
+  }
+  while (next < waiting.length) {
+    entries.add(ChatListHeldSenderEntry(waiting[next++]));
+  }
+  return entries;
+}
+
+/// Where a tap on a held sender's row leads: the safety number of the claimed
+/// sender, whose out-of-band confirmation is the verification (ADR-093 D18).
+String chatHeldSenderLocation(ChatHeldSenderViewModel sender) =>
+    '/contacts/${sender.userId}/safety';
 
 /// Where a tap on [item] leads: Saved Messages, a group, or a direct
 /// conversation.
@@ -91,6 +161,64 @@ mixin ChatListMuteClock<T extends StatefulWidget> on State<T> {
         _scheduledMuteExpiry = null;
       });
     });
+  }
+}
+
+/// A sender whose messages wait for a verification, as a row of the Chats list
+/// (ADR-093 D18).
+///
+/// One line, "@username sent you N messages. Verify to read them.", and nothing
+/// of what was sent: no preview, no time, no unread badge and no menu, because
+/// there is no conversation to pin, mute or delete. A screen reader meets one
+/// button that says the line and where the tap leads.
+class ChatHeldSenderRow extends StatelessWidget {
+  const ChatHeldSenderRow({
+    required this.sender,
+    required this.onTap,
+    super.key,
+  });
+
+  final ChatHeldSenderViewModel sender;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final line = strings.chatsHeldSenderLine(
+      sender.count,
+      chatNameForSentence(context, sender.sender),
+    );
+    return Semantics(
+      button: true,
+      label: line,
+      hint: strings.chatsHeldSenderHint,
+      child: InkWell(
+        onTap: onTap,
+        child: ExcludeSemantics(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 76),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.x4,
+                vertical: AppSpacing.x2,
+              ),
+              child: Row(
+                children: [
+                  ContactAvatar(
+                    username: sender.avatarName,
+                    semanticLabel: sender.sender,
+                  ),
+                  const SizedBox(width: AppSpacing.x3),
+                  Expanded(
+                    child: Text(line, style: context.tokens.typography.body),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

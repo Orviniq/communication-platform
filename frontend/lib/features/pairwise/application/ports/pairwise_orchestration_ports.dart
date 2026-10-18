@@ -42,12 +42,50 @@ final class VerifiedPairwiseClaim {
   final ClaimedPrekeyBundle bundle;
 }
 
+/// Who the sender of an inbound first message is, as far as a successful peer
+/// refresh can say (ADR-093 D12).
+sealed class InboundSenderResolution {
+  const InboundSenderResolution();
+}
+
+/// A verified peer, or this account: what [PairwiseLiveDeviceResolverPort
+/// .resolveVerifiedLiveDevices] answers.
+final class VerifiedInboundSender extends InboundSenderResolution {
+  VerifiedInboundSender(List<VerifiedPairwiseLiveDevice> devices)
+    : devices = List.unmodifiable(devices);
+
+  final List<VerifiedPairwiseLiveDevice> devices;
+}
+
+/// A peer whose refresh succeeded in the trust state `unverified`, with an
+/// identity and no unsigned device.
+///
+/// The devices are the peer's public records, served by the server and
+/// checked against the server's own identity: a pre-check that keeps an
+/// envelope that could never open out of the held set, and never an
+/// authentication. No send path accepts this type.
+final class UnverifiedInboundSender extends InboundSenderResolution {
+  UnverifiedInboundSender({
+    required this.userId,
+    required List<PeerPublicDevice> devices,
+  }) : devices = List.unmodifiable(devices);
+
+  final String userId;
+  final List<PeerPublicDevice> devices;
+}
+
 /// Resolves the complete current live-device set without consuming prekeys.
 /// Implementations must bind own-account results to the completed local identity.
 abstract interface class PairwiseLiveDeviceResolverPort implements Port {
   Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
     String userId,
   );
+
+  /// The inbound path's question only: whether the sender of a first message
+  /// is verified, merely unverified, or neither. Every outcome but the two
+  /// [InboundSenderResolution]s is the failure [resolveVerifiedLiveDevices]
+  /// answers, unchanged, and every send keeps refusing an unverified peer.
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId);
 
   /// [resolveVerifiedLiveDevices] for every user in [userIds] at once, which
   /// is how a fan-out verifies its recipients: one read of all of them, then

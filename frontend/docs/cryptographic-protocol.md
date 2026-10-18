@@ -195,6 +195,10 @@ shown as "post-quantum keys unavailable"; it never silently creates a classical-
 session. One-time private prekeys are deleted after successful use. Signed classical and
 PQ prekeys rotate every seven days. Superseded private signed prekeys are retained for
 eight days, matching the authoritative seven-day envelope TTL plus one day, then erased.
+The exception is a first message held, unopened, for a verification of its sender: it keeps
+every retired pair it may need until it expires, 7 days after it was held, and a rotation
+that would erase one waits ([ADR-093](decisions.md) D6, D17). The held envelope is not
+accepted: nothing past the sender block opens before the verification.
 Rotating any signed bundle field atomically uploads a fresh `cross_sig` and incremented
 `bundle_version` in the same prekey request.
 
