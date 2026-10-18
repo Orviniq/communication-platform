@@ -302,7 +302,10 @@ Signed classical and PQ prekeys rotate together after seven UTC days. Rotation c
 fresh independent key pairs and signatures, increments `bundle_version` exactly by one,
 and computes a fresh device `cross_sig`; all fields are persisted before one exact PUT
 body is attempted. Ambiguous PUT retries reuse that body and its key IDs. Superseded
-private signed-prekey pairs are receive-only through the end of day eight, then erased.
+private signed-prekey pairs are receive-only through the end of day eight, then erased,
+with one exception: while an envelope is held for a verification of its sender, no pair
+whose last day is on or after the day it was held is erased, and a due rotation that could
+erase one waits ([ADR-093](decisions.md) D17).
 
 An expected rotation does not itself reset account-master verification when all of the
 following hold: user/device ID, `ik_pub`, and registration ID are unchanged; both new

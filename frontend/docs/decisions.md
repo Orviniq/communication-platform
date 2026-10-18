@@ -616,6 +616,34 @@ sender, a session id, an envelope id or a time.
 - **`sync-engine.md`, "Device maintenance",** describes replenishment and rotation as running.
   They do not run (above).
 
+### Built in prompt 2, and where it differs (2026-10-17)
+
+D11 to D17 and D20 are built as written, with the amendment of `pairwise-transport-v1.md` and
+`cryptographic-protocol.md` that D17 names. `DurableSyncStore.watchHeldSenders` exists for D18;
+the provider, the Chats row and the hint are prompt 3's. Seven details the record left open or
+did not name:
+
+- **A second contiguity walk.** `DriftGroupRepository` closes a queue gap with its own copy of
+  the walk. It treats 5 as acknowledged as well, or a held row would stop it there.
+- **The Diagnostics format.** `held_inbound` is a new field, so the report format moves from 2
+  to 3, as `DiagnosticsReport.formatVersion` requires of any field added or redefined.
+  `held_inbound` counts rows in state 5; a new hold still owed its acknowledgement counts in
+  `pending_inbound` until it lands, which is D11's "neither 4 nor 5".
+- **Two reads unordered.** The phone's oldest held row and the expiry read the held set whole,
+  at most 128 rows, and order it in Dart. Ordered by `sequence` in SQL, `EXPLAIN QUERY PLAN`
+  showed the planner walking the inbox's own sequence index, up to 10,000 rows, instead of
+  `inbox_envelopes_held_by_sender`.
+- **An orphaned follow-up's reason.** A follow-up whose initial has just left the held set is
+  quarantined with reason 2, the security reason today's code gives an envelope with no
+  session.
+- **Stored states the refresh cannot return.** `resolveInboundSender` answers "unverified" only
+  for the stored state `unverified`; any other state but `verified` answers `policyBlocked`, as
+  `resolveVerifiedLiveDevices` does.
+- **Two due times.** The verification's release is due one second ahead, the sweep's at once.
+- **A pre-existing formatter difference.** `dart format` at the pinned SDK rewrites seven test
+  files on `main` that this work does not touch, and one hunk of
+  `group_fanout_delivery_test.dart`; they are left as they are.
+
 ## ADR-092 in full — the whole application blocks screen capture (2026-10-17)
 
 **Status:** Accepted, 2026-10-17; proposed 2026-10-17. Client platform decision, made on the owner's

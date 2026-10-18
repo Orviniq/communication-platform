@@ -52,7 +52,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
 | `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](decisions.md)) |
 | `attachments` | One row per capability: the message, the encrypted descriptor, and what this device holds of the file — "not downloaded", "ready" with the cache id of its decrypted file and an expiry, or "expired". See [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files) ([ADR-089](decisions.md)) |
-| `inbox_envelopes` | Backend envelope ID/seq, processing and ack state. Held envelopes from an unverified sender: specified by [ADR-093](decisions.md) (Proposed). Not built yet. |
+| `inbox_envelopes` | Backend envelope ID/seq, processing and ack state. A first message from a sender this account has not verified, and each follow-up of its session, stays here unopened in state 5, `held`, after its acknowledgement: `held_sender_user_id` (the claimed sender, lower case), `held_session_id` (16 bytes), `held_initial` and `held_at` mark it. A row carrying the sender is *held-marked*; held or released, it leaves the held set by an opened commit, a failed re-inspection, an eviction past 64 for one sender or 128 for the phone, or an expiry 7 days after `held_at` ([ADR-093](decisions.md) D11 to D15) |
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
 | `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
 | `receipts` | Per-message/device/user delivered/read projection. `read_at_ms` (schema 24) is the read time of a read row: the `ordering_ms` of the earliest `receipt.read` from that device that names the message, skipping an `ordering_ms` of 0, which is a clock the projector could not place. It is null on a delivered row, on a read row whose every read had such a clock, and on a row from before schema 24. Both projection paths write it; a reaction, an edit, a delete or a pin does not rewrite it ([ADR-091](decisions.md) D8 and D9). The reader list of a message is one entry per user with a read row, at the earliest time over that user's devices, never earlier than the message's own `ordering_ms` |
@@ -85,6 +85,8 @@ of the conversation's length while changing neither the statement count nor the 
 | `application_events_conversation_apply_state` | `application_events (conversation_id, apply_state)` | The candidate events of one conversation, for a **projection rebuild**. Since [ADR-063](decisions.md) that is the recovery path — an event-id conflict, a sender-counter rollback, an unsupported-event collision, a fork or a repair — and not the event path, which reads `application_event_targets` instead. It stays indexed because a fork is exactly when a device can least afford to read its whole log |
 | `application_events_sender_counter` | `application_events (sender_device_id, sender_counter)` | The sender-counter uniqueness check every applied event runs. It has no conversation to narrow it: a replayed counter is a fact about a device |
 | `outbox_operations_by_event` | `outbox_operations (event_id)` | A message's transport state |
+| `inbox_envelopes_held_by_sender` | `inbox_envelopes (held_sender_user_id, sequence) WHERE held_sender_user_id IS NOT NULL` | The held senders and their counts, a sender's oldest row, a release in mailbox order, and — read whole and unordered, at most 128 entries — the phone's oldest row, the expiry and the earliest hold time. Unordered on purpose: ordered by `sequence`, the planner walks the inbox's own sequence index instead ([ADR-093](decisions.md) D11) |
+| `inbox_envelopes_held_by_session` | `inbox_envelopes (held_session_id) WHERE held_session_id IS NOT NULL` | Which held initial a follow-up belongs to, and the follow-ups that leave with their initial ([ADR-093](decisions.md) D13, D14) |
 | `messages_unread_by_conversation` | `messages (conversation_id, unread) WHERE unread` | `conversations.unread_count`, which both projection paths recompute from the message rows so that the incremental one cannot disagree with a rebuild. Partial, so it holds only unread rows; `unread` is a column as well as the predicate, which is what makes it covering — without it SQLite keeps the query's own `unread` term as a filter and visits every row to evaluate it. Like the pinned index it is only chosen for a query whose `WHERE` spells the bare term ([ADR-063](decisions.md)) |
 
 `message_reactions` and `receipts` are keyed by `(message_id, ...)`, so their implicit primary-key
@@ -397,7 +399,15 @@ under reason codes 48 to 51.
   `PRAGMA table_info` before it adds the column, as the schema-12 step does, so a database whose
   recorded version is behind its real shape upgrades as well. No other table or column changes.
 
-- **Schema version 25, the held envelopes.** Specified by [ADR-093](decisions.md) (Proposed). Not built yet.
+- Schema version 25 holds a first message from a sender this account has not verified
+  ([ADR-093](decisions.md) D11). It first repeats the schema-22 step, returning every
+  `inbox_envelopes` row in state 5 to 0, so no row reaches the new meaning of 5, `held`, from
+  the old one, `blockedByQueueGap`, which nothing has written since. It then adds the four
+  nullable columns `held_sender_user_id`, `held_session_id` (16 bytes by a column check),
+  `held_initial` and `held_at`, each only when `PRAGMA table_info` does not list it, and
+  creates `inbox_envelopes_held_by_sender` and `inbox_envelopes_held_by_session` with
+  `IF NOT EXISTS`. Nothing is back-filled, and no other table or column changes. The CHECK
+  constraint on `processing_state` already allowed 5, so the table is not rebuilt.
 
 ## Retention and deletion
 
