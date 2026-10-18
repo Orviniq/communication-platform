@@ -135,7 +135,6 @@ void main() {
         find.byWidgetPredicate((widget) => widget is ChatHeldSenderRow),
         findsNothing,
       );
-      app.dispose();
     });
 
     testWidgets('a sender with no held envelope has no row', (tester) async {
@@ -150,7 +149,6 @@ void main() {
 
       expect(find.byType(ChatHeldSenderRow), findsNothing);
       expect(find.textContaining('Verify to read'), findsNothing);
-      app.dispose();
     });
 
     testWidgets('one row for each sender, with its count, and the unknown '
@@ -186,7 +184,6 @@ void main() {
       expect(find.byType(ChatHeldSenderRow), findsNWidgets(2));
       // The conversations are still there.
       expect(find.text('Weekend plans'), findsOneWidget);
-      app.dispose();
     });
 
     testWidgets('a count that moves updates the row, and an emptied stream '
@@ -216,7 +213,6 @@ void main() {
       expect(find.byType(ChatHeldSenderRow), findsNothing);
       expect(find.textContaining('Verify to read'), findsNothing);
       expect(find.text('Weekend plans'), findsOneWidget);
-      app.dispose();
     });
 
     testWidgets('a held sender alone fills the list: the empty state does '
@@ -232,7 +228,6 @@ void main() {
       app.held.add(const []);
       await _settle(tester);
       expect(find.text('No chats yet'), findsOneWidget);
-      app.dispose();
     });
 
     testWidgets('a tap opens the safety number of the claimed sender', (
@@ -256,7 +251,6 @@ void main() {
         ).uri.path,
         '/contacts/$_alice/safety',
       );
-      app.dispose();
     });
 
     testWidgets('the row shows no preview, no time, no badge and no menu', (
@@ -296,7 +290,6 @@ void main() {
       expect(find.text('Pin'), findsNothing);
       expect(find.text('Mute'), findsNothing);
       expect(find.text('Delete'), findsNothing);
-      app.dispose();
     });
 
     testWidgets('a screen reader meets one button with the line and where it '
@@ -323,7 +316,6 @@ void main() {
         ),
       );
       semantics.dispose();
-      app.dispose();
     });
 
     for (final scale in const [1.0, 2.0]) {
@@ -345,7 +337,6 @@ void main() {
         expect(find.byType(ChatHeldSenderRow), findsNWidgets(2));
         expect(find.textContaining('پیام برای شما فرستاده است'), findsWidgets);
         expect(tester.takeException(), isNull);
-        app.dispose();
       });
     }
 
@@ -363,7 +354,6 @@ void main() {
 
       expect(find.byType(ChatHeldSenderRow), findsOneWidget);
       expect(tester.takeException(), isNull);
-      app.dispose();
     });
 
     testWidgets('the search page lists no held sender', (tester) async {
@@ -385,7 +375,6 @@ void main() {
 
       expect(find.byType(ChatHeldSenderRow), findsNothing);
       expect(find.textContaining('Verify to read'), findsNothing);
-      app.dispose();
     });
   });
 }
@@ -456,10 +445,6 @@ final class _App {
 
   final ProviderContainer container;
   final StreamController<List<HeldSender>> held;
-
-  void dispose() {
-    unawaited(held.close());
-  }
 }
 
 /// Mounts the application signed in, on the real router, over providers that
@@ -481,6 +466,7 @@ Future<_App> _pumpApp(
   final harness = AuthenticationHarness();
   addTearDown(harness.close);
   final held = StreamController<List<HeldSender>>.broadcast();
+  addTearDown(held.close);
   final container = ProviderContainer(
     overrides: [
       authenticationUseCasesProvider.overrideWithValue(harness.useCases),
