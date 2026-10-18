@@ -62,7 +62,6 @@ String settingsSustainedSummary(
   SustainedDeliveryStatus status,
 ) => switch (status) {
   SustainedDeliveryStatus.unavailable => l10n.settingsSustainedUnavailable,
-  SustainedDeliveryStatus.withheld => l10n.settingsSustainedWithheld,
   SustainedDeliveryStatus.off => l10n.settingsSustainedOff,
   SustainedDeliveryStatus.holding => l10n.settingsSustainedHolding,
   SustainedDeliveryStatus.alertsWithheld =>
@@ -78,7 +77,6 @@ String sustainedStatusText(
   SustainedDeliveryStatus status,
 ) => switch (status) {
   SustainedDeliveryStatus.unavailable => l10n.sustainedStatusUnavailable,
-  SustainedDeliveryStatus.withheld => l10n.sustainedStatusWithheld,
   SustainedDeliveryStatus.off => l10n.sustainedStatusOff,
   SustainedDeliveryStatus.holding => l10n.sustainedStatusHolding,
   SustainedDeliveryStatus.alertsWithheld => l10n.sustainedStatusAlertsWithheld,
@@ -93,7 +91,6 @@ String sustainedRefusalText(
   SustainedDeliveryRefusal refusal,
 ) => switch (refusal) {
   SustainedDeliveryRefusal.unavailable => l10n.sustainedRefusedUnavailable,
-  SustainedDeliveryRefusal.withheld => l10n.sustainedRefusedWithheld,
   SustainedDeliveryRefusal.alertsRefused => l10n.sustainedRefusedAlerts,
   SustainedDeliveryRefusal.exemptionRefused => l10n.sustainedRefusedExemption,
   SustainedDeliveryRefusal.platformRefused => l10n.sustainedRefusedPlatform,
@@ -150,10 +147,9 @@ class _SustainedDeliveryPageState extends ConsumerState<SustainedDeliveryPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final status = ref.watch(sustainedDeliveryControllerProvider);
-    // Two states offer nothing: a build with no implementation, and a build
-    // withholding one it has (ADR-053). Both leave the switch and the vendor
-    // shortcut inert, because in neither would pressing anything change what
-    // this phone does.
+    // One state offers nothing: a build with no implementation. It leaves the
+    // switch and the vendor shortcut inert, because pressing either would not
+    // change what this phone does.
     final offersSwitch = status.offersSwitch;
     final on = status != SustainedDeliveryStatus.off && offersSwitch;
     return Scaffold(

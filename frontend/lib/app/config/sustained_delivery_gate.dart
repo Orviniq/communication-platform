@@ -20,20 +20,26 @@ import 'package:flutter/foundation.dart';
 /// ADR-046 held that this layer may not be enabled in a distributed artifact
 /// before that matrix had been run. ADR-051 removed that clause on the argument
 /// that the matrix could not be run in the environment available, so keeping it
-/// would cancel the capability rather than defer it. ADR-053 restores it, on the
+/// would cancel the capability rather than defer it. ADR-053 restored it, on the
 /// ground that "we cannot measure this" is a reason to withhold a capability
-/// from users, never a reason to ship it: the cost of being wrong is a person
-/// who was told their messages would arrive and did not get them.
+/// from users, never a reason to ship it. ADR-094 supersedes ADR-053 for
+/// production only: the owner wants the capability offered, and the matrix
+/// cannot be run here, so production offers it as best effort, says in plain
+/// words that nobody has tested it on the user's phone, and promises no
+/// delivery time. The risk is accepted in that ADR: on a Samsung or Xiaomi phone
+/// the process can be ended without a word.
 ///
 /// ## What kind of gate this is
 ///
 /// There is deliberately no environment define, no remote value, no runtime
-/// setter and no debug override. Opening this gate means editing this file to
-/// add [SustainedDeliveryFieldEvidence] for every mandatory
-/// [SustainedDeliveryFleetCell], and each record has to survive
+/// setter and no debug override. What the ledger decides is whether a
+/// production build rests its offer on evidence: adding
+/// [SustainedDeliveryFieldEvidence] for every mandatory
+/// [SustainedDeliveryFleetCell] edits this file and moves the offer from
+/// best effort to evidenced. Each record has to survive
 /// [SustainedDeliveryFieldEvidence.isAdmissible] — which refuses an emulator,
 /// refuses a run shorter than the criteria require, and refuses a cell that was
-/// reasoned about rather than run. An inadmissible record does not open
+/// reasoned about rather than run. An inadmissible record does not move
 /// anything; it is simply not counted.
 ///
 /// The criteria, the matrix, the measurement procedure and the current results
@@ -98,7 +104,9 @@ final class SustainedDeliveryGate {
 
   /// What this build may do with the capability.
   ///
-  /// Production is what reaches a user, so it is withheld until the gate opens.
+  /// Production is what reaches a user. While the ledger is incomplete it
+  /// offers the capability as best effort, with the cost and the lack of any
+  /// guarantee stated (ADR-094); a complete ledger moves it to [evidenced].
   /// Development is the flavour the measurement itself runs on: it carries its
   /// own application ID, is never handed to anybody, and has to be able to run
   /// the capability or the matrix could never be run at all. That deliberately
@@ -107,36 +115,43 @@ final class SustainedDeliveryGate {
   /// has to answer and a debug build cannot.
   static SustainedDeliveryAvailability availabilityIn(
     AppEnvironment environment,
-  ) {
-    if (releaseAssertion.isOpen) {
+  ) => releaseAssertion.availabilityFor(environment);
+
+  /// [availabilityIn] over this ledger, so that a test can prove a complete
+  /// ledger moves the offer to [SustainedDeliveryAvailability.evidenced]
+  /// rather than only that the real ledger is empty.
+  @visibleForTesting
+  SustainedDeliveryAvailability availabilityFor(AppEnvironment environment) {
+    if (isOpen) {
       return SustainedDeliveryAvailability.evidenced;
     }
     return switch (environment) {
       AppEnvironment.development =>
         SustainedDeliveryAvailability.measurementOnly,
-      AppEnvironment.production => SustainedDeliveryAvailability.withheld,
+      AppEnvironment.production => SustainedDeliveryAvailability.bestEffort,
     };
   }
 }
 
-/// What a build may do with sustained delivery.
+/// What a build may do with sustained delivery. Every value offers it; they
+/// differ in what the offer rests on.
 enum SustainedDeliveryAvailability {
-  /// The matrix has been run and recorded. The capability is offered.
+  /// The matrix has been run and recorded. The capability is offered on that
+  /// evidence.
   evidenced,
+
+  /// A build that reaches a user while the matrix is incomplete. The capability
+  /// is offered with its cost, and with the statement that nothing about it is
+  /// guaranteed and that it has not been tested on the phones this build runs
+  /// on (ADR-094, which supersedes ADR-053 for production). It can fail on a
+  /// Samsung or Xiaomi phone without saying so.
+  bestEffort,
 
   /// A non-distributed development build, where the capability runs so that it
   /// can be measured. A result obtained here is a result about this build; what
   /// it does and does not say about the distributed artifact is argued in
   /// ADR-053, not assumed.
   measurementOnly,
-
-  /// The evidence is absent, so the capability is not offered. Nothing starts,
-  /// nothing is requested, nothing is displayed, and anything a previous
-  /// install left running is stopped.
-  withheld;
-
-  /// Whether this build may offer the capability to whoever is holding it.
-  bool get mayOffer => this != SustainedDeliveryAvailability.withheld;
 }
 
 /// One cell of the validation matrix.

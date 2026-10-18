@@ -60,10 +60,15 @@ enum DisclosurePoint {
   /// written handover (ADR-052).
   ///
   /// Revised at revision 9 (ADR-076): the sentence offering receiving while
-  /// closed from Settings is gone. ADR-053's gate withholds that capability
-  /// from every build that reaches a user, and the Settings row says so, so the
+  /// closed from Settings is gone. ADR-053's gate withheld that capability
+  /// from every build that reaches a user, and the Settings row said so, so the
   /// sentence promised a switch its reader could not find.
-  bestEffortDelivery(since: 9),
+  ///
+  /// Revised at revision 10 (ADR-094): the offer is back, because production
+  /// now offers the switch as best effort. The point says what it costs (more
+  /// battery, a permanent notice), that nobody has tested it on the reader's
+  /// phone, and that some phones stop it silently. It gives no delivery time.
+  bestEffortDelivery(since: 10),
 
   /// The server's mailbox is a queue, not a store: an envelope the device never
   /// drains is pruned on the operator's retention timer and is then
@@ -121,7 +126,12 @@ enum DisclosurePoint {
   /// revision 5: it named search among them, and search is built — the chat
   /// list filters on name and latest message, and a conversation's own search
   /// reads that conversation's entire local history (ADR-052).
-  unbuiltSurfaces(since: 5),
+  ///
+  /// Revised at revision 10 (ADR-094): it named voice rooms and every file
+  /// attachment, and both were out of date. Voice rooms are built (phase 6),
+  /// and attachments work in a direct chat and in Saved Messages (ADR-089), so
+  /// only a group's missing attachments remain, beside the unpublished profile.
+  unbuiltSurfaces(since: 10),
 
   /// Who this artifact is for, and who it is not for.
   intendedUse(since: 1);
@@ -178,7 +188,7 @@ final class DeploymentDisclosure {
   /// Experimental artifact's statement until ADR-075 deleted the `beta` flavor
   /// that carried it, and since ADR-076 production carries it.
   static const distributed = DeploymentDisclosure._(
-    revision: 9,
+    revision: 10,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,

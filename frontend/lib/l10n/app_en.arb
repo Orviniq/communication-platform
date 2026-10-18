@@ -179,7 +179,10 @@
     "description": "Heading of the deployment disclosure section, rendered only by a build that is handed to someone else (ADR-045)."
   },
   "disclosureNoIndependentReview": "Nobody outside the project has reviewed this app's encryption. It is written and tested by one person, and a mistake in it would not have been caught.",
-  "disclosureBestEffortDelivery": "While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule \u2014 fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.",
+  "disclosureBestEffortDelivery": "While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule \u2014 fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which keeps the app running in the background so a message does not have to wait for that schedule. It uses more battery and puts a permanent notice on your phone while it is on. It has not been tested on phones like yours, and some phones stop it without telling you. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.",
+  "@disclosureBestEffortDelivery": {
+    "description": "Revision 10 (ADR-094). It offers receiving while closed again, with its battery cost, its permanent notice and the statement that it is untested and unguaranteed. Revision 9 had removed the offer while ADR-053 withheld the capability from every build that reaches a user. No sentence here may give a delivery time: nobody has measured one."
+  },
   "disclosureMessagesExpireUnread": "A message waits on the server only until your phone collects it. After a time set by whoever runs the server, whatever is still waiting is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.",
   "@disclosureMessagesExpireUnread": {
     "description": "Added at revision 5 (ADR-052). Every earlier revision described delivery only as slow, which an ordinary reader takes to mean eventual. The server prunes undelivered envelopes on a retention timer it does not publish to clients, so late and never are different outcomes and only one of them was disclosed."
@@ -192,9 +195,9 @@
   "@disclosurePairwiseGroups": {
     "description": "Revision 9 (ADR-076). It replaces disclosureExperimentalGroups, which still described the deleted closed-beta MLS track: unfinished experimental encryption, a group an update could reset, and groups switched off on an untested processor. A group is now a set of the pairwise sessions direct messages use (ADR-075), so the point states what that design costs the reader instead."
   },
-  "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.",
+  "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: group chats cannot send files, and the display name and photo you choose are not published — other people see the username you registered with.",
   "@disclosureUnbuiltSurfaces": {
-    "description": "Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature."
+    "description": "Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature. Revision 10 (ADR-094) removed voice rooms (built since phase 6) and narrowed file attachments to groups, the only chats that still cannot send them (ADR-089)."
   },
   "disclosureIntendedUse": "This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.",
   "disclosureChangedTitle": "What this app tells you has changed",
@@ -676,7 +679,6 @@
   "settingsSustainedExemptionWithdrawn": "On, but your phone has taken back permission to run while it saves battery.",
   "settingsSustainedStopped": "On, but it is not running right now.",
   "settingsSustainedUnavailable": "Not available in this build.",
-  "settingsSustainedWithheld": "Not offered in this build. It has not been tested on phones like yours yet.",
   "sustainedTitle": "Receiving while closed",
   "sustainedWhatItDoes": "Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead, so a message can reach you without waiting for that. How quickly it does on your phone has not been measured.",
   "sustainedWhatItCosts": "It uses more battery, because the app stays connected. It puts a permanent notice on your phone saying the app is running: anyone who unlocks your phone and looks can see it, and it stays there until you turn this off. It is hidden on the lock screen.",
@@ -694,13 +696,11 @@
   "sustainedStatusExemptionWithdrawn": "Your phone has taken back permission to work while it saves battery, so this has been stopped. This can happen on its own after a phone update. Turn it on again to ask for the permission once more.",
   "sustainedStatusStopped": "Not running at the moment. Your phone may have stopped it.",
   "sustainedStatusUnavailable": "Not available in this build.",
-  "sustainedStatusWithheld": "This build will not turn this on. What it does has not been measured on phones like yours, and offering it before that would be promising something nobody has checked. Nothing is running and nothing is shown on your phone.",
   "sustainedRefusedAlerts": "Not turned on: notifications are still switched off for this app.",
   "sustainedRefusedExemption": "Not turned on: your phone did not give permission to work while it saves battery.",
   "sustainedRefusedPlatform": "Not turned on: your phone refused to let the app keep running. Some phones do this until the app is excluded from putting apps to sleep.",
   "sustainedRefusedNotRecorded": "Not turned on: the choice could not be saved on this phone, and it would not survive a restart.",
   "sustainedRefusedUnavailable": "Not available in this build.",
-  "sustainedRefusedWithheld": "Not turned on: this build does not offer it yet.",
   "settingsSignedInAs": "Signed in as {username}",
   "@settingsSignedInAs": {
     "placeholders": {

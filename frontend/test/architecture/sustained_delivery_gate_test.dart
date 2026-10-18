@@ -4,6 +4,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/sustained_delivery_gate.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
+import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sustained_delivery_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sustained_delivery_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// during unrelated work and nothing notices. Everything below is written to
 /// fail loudly at that moment.
 void main() {
-  group('the gate is closed, and closed is its default', () {
+  group('the ledger is empty, and empty is its default', () {
     test('no field evidence has been recorded for any cell', () {
       expect(
         SustainedDeliveryGate.releaseAssertion.evidence,
@@ -49,22 +50,28 @@ void main() {
       expect(SustainedDeliveryFleetCell.values, hasLength(7));
     });
 
-    test('what reaches a user is withheld; only development may measure', () {
+    test('what reaches a user is best effort; only development measures', () {
       expect(
         SustainedDeliveryGate.availabilityIn(AppEnvironment.production),
-        SustainedDeliveryAvailability.withheld,
-        reason: 'production is the build handed to the people in ADR-076',
+        SustainedDeliveryAvailability.bestEffort,
+        reason:
+            'production is the build handed to the people in ADR-076, and '
+            'ADR-094 offers it the tier on no field evidence',
       );
       expect(
         SustainedDeliveryGate.availabilityIn(AppEnvironment.development),
         SustainedDeliveryAvailability.measurementOnly,
         reason:
             'the matrix has to be runnable, including in a release AOT build, '
-            'or the gate could never be opened by anything',
+            'or the ledger could never be completed by anything',
       );
-      expect(SustainedDeliveryAvailability.withheld.mayOffer, isFalse);
-      expect(SustainedDeliveryAvailability.measurementOnly.mayOffer, isTrue);
-      expect(SustainedDeliveryAvailability.evidenced.mayOffer, isTrue);
+      // There is no value that refuses the tier any more: ADR-094 superseded
+      // ADR-053 for production, and nothing else was withholding it.
+      expect(SustainedDeliveryAvailability.values, const [
+        SustainedDeliveryAvailability.evidenced,
+        SustainedDeliveryAvailability.bestEffort,
+        SustainedDeliveryAvailability.measurementOnly,
+      ]);
     });
 
     test('there is no way to open it but source, and no way to widen it', () {
@@ -132,6 +139,19 @@ void main() {
         // statement about the evidence and not about the code.
         expect(_gateWith(full).isOpen, isTrue);
         expect(_gateWith(full).outstanding, isEmpty);
+        // And it is what moves the offer from best effort to evidenced, in
+        // production and in development alike.
+        for (final environment in AppEnvironment.values) {
+          expect(
+            _gateWith(full).availabilityFor(environment),
+            SustainedDeliveryAvailability.evidenced,
+          );
+        }
+        expect(
+          _gateWith(full.sublist(1)).availabilityFor(AppEnvironment.production),
+          SustainedDeliveryAvailability.bestEffort,
+          reason: 'one cell short is still best effort',
+        );
 
         // One cell short opens nothing at all.
         expect(_gateWith(full.sublist(1)).isOpen, isFalse);
@@ -154,6 +174,11 @@ void main() {
             'and an emulator has no manufacturer',
       );
       expect(_gateWith(emulated).outstanding, hasLength(7));
+      expect(
+        _gateWith(emulated).availabilityFor(AppEnvironment.production),
+        SustainedDeliveryAvailability.bestEffort,
+        reason: 'an emulator record counts for nothing, so nothing moves',
+      );
     });
 
     test('a run too short, too few, or once is not evidence', () {
@@ -178,6 +203,14 @@ void main() {
         ).isAdmissible,
         isFalse,
         reason: 'a single observation is not a property of a device',
+      );
+      final short = SustainedDeliveryFleetCell.values
+          .map((cell) => record(cell, holdingHours: 23))
+          .toList();
+      expect(
+        _gateWith(short).availabilityFor(AppEnvironment.production),
+        SustainedDeliveryAvailability.bestEffort,
+        reason: 'a run too short counts for nothing, so nothing moves',
       );
       // The thresholds are the ones written down before anything was measured.
       expect(SustainedDeliveryFieldEvidence.minimumHoldingHours, 24);
@@ -218,83 +251,49 @@ void main() {
     });
   });
 
-  group('what a withheld build actually does', () {
-    test('it refuses to enable without asking the platform anything', () async {
+  group('what a production build does while the ledger is incomplete', () {
+    ProviderContainer production(_RecordingPlatform platform) {
+      final container = ProviderContainer(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
+          sustainedDeliveryPlatformProvider.overrideWithValue(platform),
+          // The signed-out state, so that the controller reaches no use case.
+          authenticationControllerProvider.overrideWithBuild(
+            (ref, notifier) => const AuthenticationViewState.dormant(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('it offers the switch, and asks the platform nothing yet', () async {
       final platform = _RecordingPlatform();
-      final container = ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-          sustainedDeliveryPlatformProvider.overrideWithValue(platform),
-        ],
-      );
-      addTearDown(container.dispose);
+      final container = production(platform);
 
       expect(
-        container.read(sustainedDeliveryControllerProvider),
-        SustainedDeliveryStatus.withheld,
+        container.read(sustainedDeliveryAvailabilityProvider),
+        SustainedDeliveryAvailability.bestEffort,
       );
+      final status = container.read(sustainedDeliveryControllerProvider);
+      expect(status, SustainedDeliveryStatus.off);
+      expect(status.offersSwitch, isTrue);
 
-      final controller = container.read(
-        sustainedDeliveryControllerProvider.notifier,
-      );
-      final refusal = await controller.enable();
-
-      expect(refusal, SustainedDeliveryRefusal.withheld);
-      expect(
-        container.read(sustainedDeliveryControllerProvider),
-        SustainedDeliveryStatus.withheld,
-      );
-      expect(
-        platform.startCalls,
-        0,
-        reason: 'a withheld build never starts the service',
-      );
-      expect(
-        platform.exemptionRequests,
-        0,
-        reason:
-            'and never shows the user a system dialog for a capability it '
-            'will not then provide',
-      );
-    });
-
-    test('it stops a service an earlier build left running', () async {
-      final platform = _RecordingPlatform(running: true);
-      final container = ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-          sustainedDeliveryPlatformProvider.overrideWithValue(platform),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final controller = container.read(
-        sustainedDeliveryControllerProvider.notifier,
-      );
-      await controller.settled;
-
+      await container
+          .read(sustainedDeliveryControllerProvider.notifier)
+          .settled;
+      expect(platform.startCalls, 0, reason: 'nothing starts by itself');
+      expect(platform.exemptionRequests, 0, reason: 'nobody was asked yet');
       expect(
         platform.stopCalls,
-        greaterThan(0),
-        reason:
-            'an upgrade from a build that offered this may leave a permanent '
-            'entry displayed for a capability this build will not stand behind',
-      );
-      expect(
-        container.read(sustainedDeliveryControllerProvider),
-        SustainedDeliveryStatus.withheld,
+        0,
+        reason: 'and a build that offers the tier does not stand it down',
       );
     });
 
-    test('a withheld build never permits a backgrounded connection', () async {
-      final platform = _RecordingPlatform(running: true);
-      final container = ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-          sustainedDeliveryPlatformProvider.overrideWithValue(platform),
-        ],
-      );
-      addTearDown(container.dispose);
+    test('a build that offers it is not a build that holds a socket', () async {
+      final platform = _RecordingPlatform();
+      final container = production(platform);
 
       final controller = container.read(
         sustainedDeliveryControllerProvider.notifier,
@@ -308,24 +307,26 @@ void main() {
             .mayHoldWhileBackgrounded,
         isFalse,
         reason:
-            'the supervisor must close its socket on backgrounding exactly as '
-            'it did before ADR-051',
+            'only a user who turned it on, and a service that is running, '
+            'keep the connection open; offering the switch changes neither',
       );
     });
 
-    test('the withheld state is its own sentence in both catalogues', () {
-      // "There is nothing behind this" and "there is something behind this and
-      // nobody has measured it" are different facts, and a user is owed the
-      // one that is true.
-      expect(SustainedDeliveryStatus.withheld.offersSwitch, isFalse);
+    test('only a running service holds a connection', () {
       expect(SustainedDeliveryStatus.unavailable.offersSwitch, isFalse);
       expect(SustainedDeliveryStatus.off.offersSwitch, isTrue);
-      expect(
-        SustainedDeliveryStatus.withheld.holdsConnection,
-        isFalse,
-        reason: 'nothing is keeping this process out of the cached state',
-      );
+      for (final status in SustainedDeliveryStatus.values) {
+        expect(
+          status.holdsConnection,
+          status == SustainedDeliveryStatus.holding,
+          reason: '$status',
+        );
+      }
+    });
 
+    test('the withheld state is gone from the code and both catalogues', () {
+      // ADR-094 offers the tier in production, so nothing returns the state
+      // that refused it and nothing may be left that displays it.
       for (final catalogue in const ['app_en.arb', 'app_fa.arb']) {
         final source = File('lib/l10n/$catalogue').readAsStringSync();
         for (final key in const [
@@ -333,8 +334,25 @@ void main() {
           'sustainedStatusWithheld',
           'sustainedRefusedWithheld',
         ]) {
-          expect(source, contains('"$key"'), reason: '$key in $catalogue');
+          expect(
+            source,
+            isNot(contains('"$key"')),
+            reason: '$key in $catalogue',
+          );
         }
+      }
+      for (final path in const [
+        'lib/app/dependencies/sustained_delivery.dart',
+        'lib/features/synchronization/domain/sustained_delivery_model.dart',
+        'lib/features/synchronization/presentation/sustained_delivery_page.dart',
+      ]) {
+        expect(
+          File(
+            path,
+          ).readAsStringSync().contains(RegExp('(?<![sS])[wW]ithheld')),
+          isFalse,
+          reason: '$path still refers to a withheld tier',
+        );
       }
     });
 
@@ -404,9 +422,7 @@ SustainedDeliveryGate _gateWith(
 
 /// A platform side that records what it was asked and answers truthfully.
 final class _RecordingPlatform implements SustainedDeliveryPlatformPort {
-  _RecordingPlatform({this.running = false});
-
-  bool running;
+  bool running = false;
   int startCalls = 0;
   int stopCalls = 0;
   int exemptionRequests = 0;

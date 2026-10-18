@@ -22,15 +22,16 @@ void main() {
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOne);
     expect(find.text('What this build is'), findsOne);
 
-    // Two points have moved since revision 8 - the delivery and group points
-    // revision 9 rewrote (ADR-076) - and two badges say so. The mark is a
+    // Three points have moved since revision 8 - the delivery and group points
+    // revision 9 rewrote (ADR-076) and the delivery and unbuilt-surface points
+    // revision 10 rewrote (ADR-094) - and three badges say so. The mark is a
     // labelled badge rather than a colour, so a screen reader reaches it too.
-    expect(find.text('New or changed'), findsNWidgets(2));
+    expect(find.text('New or changed'), findsNWidgets(3));
     expect(
       find.textContaining('the same encryption as direct messages'),
       findsOne,
     );
-    // And the six that did not move carry no badge, which is what makes the
+    // And the five that did not move carry no badge, which is what makes the
     // badge mean anything.
     expect(
       find.textContaining('A message waits on the server only until'),
@@ -38,6 +39,24 @@ void main() {
     );
     expect(
       find.textContaining('Nobody outside the project has reviewed'),
+      findsOne,
+    );
+  });
+
+  testWidgets('a reader from revision 9 is shown the two points revision 10 '
+      'rewrote', (tester) async {
+    await _pump(tester, acknowledged: 9);
+
+    expect(find.byKey(const ValueKey('disclosure-change-screen')), findsOne);
+    expect(find.text('New or changed'), findsNWidgets(2));
+    expect(
+      find.textContaining('In Settings you can turn on receiving while closed'),
+      findsOne,
+    );
+    expect(find.textContaining('group chats cannot send files'), findsOne);
+    // The group point did not move at revision 10, so it carries no badge.
+    expect(
+      find.textContaining('the same encryption as direct messages'),
       findsOne,
     );
   });
@@ -73,7 +92,7 @@ void main() {
       find.text('آنچه این برنامه دربارهٔ خودش می‌گوید تغییر کرده است'),
       findsOne,
     );
-    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(2));
+    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(3));
     expect(find.textContaining('What this app tells you'), findsNothing);
   });
 

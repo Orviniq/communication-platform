@@ -85,7 +85,7 @@ void main() {
   test('the disclosure revision moves whenever the disclosure moves', () {
     // ADR-045 rejects periodic re-consent - repetition of an unchanged warning
     // measurably destroys it - and makes re-consent content-triggered instead.
-    expect(DeploymentDisclosure.distributed.revision, 9);
+    expect(DeploymentDisclosure.distributed.revision, 10);
 
     final english = _catalogue('lib/l10n/app_en.arb');
 
@@ -101,8 +101,13 @@ void main() {
       'minutes apart at best, usually far less often, and not at all while it '
       'is saving battery, while Data Saver is on and you are using mobile '
       'data, if you have not opened the app for several days, or if you have '
-      'force-stopped it. Nothing about any of this is guaranteed, so do not '
-      'rely on it for anything urgent.',
+      'force-stopped it. In Settings you can turn on receiving while closed, '
+      'which keeps the app running in the background so a message does not '
+      'have to wait for that schedule. It uses more battery and puts a '
+      'permanent notice on your phone while it is on. It has not been tested '
+      'on phones like yours, and some phones stop it without telling you. '
+      'Nothing about any of this is guaranteed, so do not rely on it for '
+      'anything urgent.',
     );
     // Two wordings for one point, and both are pinned. The second states the
     // deployment's own retention window; the first is what a reader is shown
@@ -147,9 +152,9 @@ void main() {
     );
     expect(
       english['disclosureUnbuiltSurfaces'],
-      'Some things you can see are not built yet: voice rooms and file '
-      'attachments do nothing, and the display name and photo you choose are '
-      'not published — other people see the username you registered with.',
+      'Some things you can see are not built yet: group chats cannot send '
+      'files, and the display name and photo you choose are not published — '
+      'other people see the username you registered with.',
     );
     expect(
       english['disclosureIntendedUse'],
@@ -245,12 +250,14 @@ void main() {
     }
     // Revision 4 added the opt-in tier with the three things it may not omit:
     // that the tier exists, that it costs something the user can see, and that
-    // it is still not a guarantee. Revision 9 took the offer out again, because
-    // ADR-053's gate withholds the tier from the build that carries this text,
+    // it is still not a guarantee. Revision 9 took the offer out while
+    // ADR-053's gate withheld the tier from the build that carries this text,
     // and a disclosure may not promise a switch its reader cannot find
-    // (ADR-076). So the offer follows the gate in both directions and in both
-    // languages: a build that withholds the tier may not offer it, and a build
-    // that offers it may not describe it without its cost.
+    // (ADR-076). Revision 10 puts it back, because ADR-094 offers the tier in
+    // production as best effort. So the offer follows the gate in both
+    // languages: a build that offers the tier may not describe it without its
+    // cost, and no build that carries the text may withhold it again without
+    // the text moving with it.
     final sustained = File(
       'lib/features/synchronization/presentation/sustained_delivery_page.dart',
     );
@@ -263,28 +270,45 @@ void main() {
     );
     expect(carriers, isNotEmpty);
     for (final environment in carriers) {
-      final offered = SustainedDeliveryGate.availabilityIn(
-        environment,
-      ).mayOffer;
+      // Every availability offers the tier; the text offers it too, and says
+      // that nobody has tested it while the ledger is incomplete.
+      final availability = SustainedDeliveryGate.availabilityIn(environment);
+      expect(
+        availability,
+        isNot(SustainedDeliveryAvailability.measurementOnly),
+      );
       for (final promise in const [
         'In Settings you can turn on receiving while closed',
         'uses more battery',
         'permanent notice',
       ]) {
         expect(
-          delivery.contains(promise),
-          offered,
-          reason: '$environment ${offered ? 'offers' : 'withholds'} the tier',
+          delivery,
+          contains(promise),
+          reason: '$environment offers the tier',
         );
       }
-      // "In Settings", in Persian.
+      if (availability == SustainedDeliveryAvailability.bestEffort) {
+        expect(
+          delivery,
+          contains('It has not been tested on phones like yours'),
+          reason: '$environment offers the tier on no field evidence',
+        );
+      }
+      // "In Settings", and the tier's name in Settings, in Persian.
       expect(
-        persian.contains('در تنظیمات'),
-        offered,
-        reason: '$environment: the Persian text follows the same gate',
+        persian,
+        contains('در تنظیمات'),
+        reason: '$environment: the Persian text offers it too',
       );
+      expect(persian, contains('دریافت هنگام بسته بودن'));
+      expect(persian, contains('اعلان دائمی'));
     }
     expect(delivery, contains('Nothing about any of this is guaranteed'));
+    // And no time is promised: nobody has measured one. "Seconds" in Persian.
+    expect(delivery.toLowerCase(), isNot(contains('within seconds')));
+    expect(delivery.toLowerCase(), isNot(contains('instantly')));
+    expect(persian, isNot(contains('ثانیه')));
   });
 
   test('an alert surface may not deny a delivery path the build composes', () {
@@ -365,14 +389,46 @@ void main() {
       isNot(contains('search')),
       reason: 'the artifact searches; the claim was the thing that was wrong',
     );
-    // And the two surfaces it still names must still be unbuilt.
-    expect(unbuilt, contains('voice rooms'));
-    expect(unbuilt, contains('file attachments'));
+    // Voice rooms are built since phase 6 and attachments work in a direct
+    // chat and in Saved Messages (ADR-089), so neither may be named as unbuilt.
+    // What revision 10 still names, a group's missing attachments and the
+    // unpublished profile, must still be unbuilt.
+    expect(unbuilt.toLowerCase(), isNot(contains('voice')));
+    expect(unbuilt, isNot(contains('file attachments')));
+    expect(unbuilt, contains('group chats cannot send files'));
+    expect(
+      File(
+        'lib/features/voice/presentation/voice_rooms_page.dart',
+      ).existsSync(),
+      isTrue,
+      reason: 'the voice room list is built',
+    );
+    expect(
+      File(
+        'lib/features/attachments/presentation/attachment_send_flow.dart',
+      ).readAsStringSync(),
+      contains('AttachmentSheet.choose()'),
+      reason: 'a direct chat sends files',
+    );
+    expect(
+      File(
+        'lib/features/groups/presentation/group_chat_page.dart',
+      ).readAsStringSync(),
+      contains('AttachmentSheet.notBuilt()'),
+      reason: 'a group chat still opens the not-built sheet',
+    );
     expect(
       File(
         'lib/features/attachments/presentation/attachment_sheet.dart',
       ).readAsStringSync(),
       contains('attachmentsNotBuiltNotice'),
+    );
+    expect(
+      File(
+        'lib/features/contacts/presentation/edit_profile_page.dart',
+      ).readAsStringSync(),
+      contains('profileNotBuiltNotice'),
+      reason: 'the profile is still not published',
     );
   });
 
@@ -454,20 +510,32 @@ void main() {
     const disclosure = DeploymentDisclosure.distributed;
 
     test('a current reader is asked nothing', () {
-      expect(disclosure.requiresReacknowledgement(9), isFalse);
-      expect(disclosure.changedSince(9), isEmpty);
+      expect(disclosure.requiresReacknowledgement(10), isFalse);
+      expect(disclosure.changedSince(10), isEmpty);
     });
 
-    test('a reader from revision 8 sees the delivery and group points', () {
+    test('a reader from revision 9 sees the delivery and surface points', () {
+      // Revision 10 rewrote the two points that were out of date: the
+      // delivery point offers the switch ADR-094 puts back, and the surface
+      // point named voice rooms and every attachment as unbuilt. Nothing else
+      // moved, so nothing else is re-shown - repeating an unchanged warning is
+      // what ADR-045 rejects.
+      expect(disclosure.requiresReacknowledgement(9), isTrue);
+      expect(disclosure.changedSince(9), {
+        DisclosurePoint.bestEffortDelivery,
+        DisclosurePoint.unbuiltSurfaces,
+      });
+    });
+
+    test('a reader from revision 8 also sees the group point', () {
       // Revision 9 rewrote the two points that were false for the build that
       // carries the statement: the delivery point offered a switch ADR-053
-      // withholds, and the group point described the deleted MLS track.
-      // Nothing else moved, so nothing else is re-shown - repeating an
-      // unchanged warning is what ADR-045 rejects.
+      // withheld, and the group point described the deleted MLS track.
       expect(disclosure.requiresReacknowledgement(8), isTrue);
       expect(disclosure.changedSince(8), {
         DisclosurePoint.bestEffortDelivery,
         DisclosurePoint.pairwiseGroups,
+        DisclosurePoint.unbuiltSurfaces,
       });
     });
 
@@ -482,6 +550,7 @@ void main() {
             DisclosurePoint.bestEffortDelivery,
             DisclosurePoint.messagesExpireUnread,
             DisclosurePoint.pairwiseGroups,
+            DisclosurePoint.unbuiltSurfaces,
           },
           reason: 'a reader from revision $accepted',
         );
