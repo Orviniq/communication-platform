@@ -620,7 +620,7 @@ sender, a session id, an envelope id or a time.
 
 D11 to D17 and D20 are built as written, with the amendment of `pairwise-transport-v1.md` and
 `cryptographic-protocol.md` that D17 names. `DurableSyncStore.watchHeldSenders` exists for D18;
-the provider, the Chats row and the hint are prompt 3's. Seven details the record left open or
+the provider, the Chats row and the hint are prompt 3's. Six details the record left open or
 did not name:
 
 - **A second contiguity walk.** `DriftGroupRepository` closes a queue gap with its own copy of
@@ -640,9 +640,6 @@ did not name:
   for the stored state `unverified`; any other state but `verified` answers `policyBlocked`, as
   `resolveVerifiedLiveDevices` does.
 - **Two due times.** The verification's release is due one second ahead, the sweep's at once.
-- **A pre-existing formatter difference.** `dart format` at the pinned SDK rewrites seven test
-  files on `main` that this work does not touch, and one hunk of
-  `group_fanout_delivery_test.dart`; they are left as they are.
 
 ## ADR-092 in full — the whole application blocks screen capture (2026-10-17)
 
