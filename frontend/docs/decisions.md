@@ -103,14 +103,15 @@ is not silently edited out of history.
 | ADR-090 | Accepted (2026-10-14); proposed 2026-10-14 | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-091 | Accepted (2026-10-14); proposed 2026-10-14 | A group sends read receipts and no delivered receipt. An own group message shows two ticks as soon as one member other than its sender has read it, without waiting for the other members or for owed copies; a failed message keeps its failed mark and Retry. A group read receipt names the messages of one sender, and goes to the live devices of that sender, when that sender is an active member, and to the reader's other live devices; `MarkConversationVisiblyRead` sends one receipt for each sender, with up to 64 ids each, on the triggers of a direct chat. The sender sees the reader list of an own group message: each member who read it, once, with the read time, the newest first, behind "Seen by N" or "Not seen yet" in the message sheet. The read time is the `ordering_ms` of the earliest `receipt.read` from a device that names the message, kept in a new nullable column of `receipts` (schema 24). Always on, with no setting | The owner's test of groups on phones: a group message never shows two ticks, because a group sends no receipt. The owner decided on 2026-10-14 that the first reader draws the second tick, and that the sender sees who read the message and when. A receipt is an encrypted application event that the server relays, so none of this needs a server change, and the `receipts` table already holds one row for each reader device. A receipt sent to each member would cost about 7,300 copies for one message read by 49 members of a 50-member group with 3 devices each, and would tell each member who read the messages of other members; sent to the sender alone it costs about 245. Costs: the second tick says that one member read the message, not that each did; a read time is the reader's clock, corrected as a message time is. Adds one local column (schema 24); changes no wire format, protocol, dependency or backend file. |
 | ADR-092 | Accepted (2026-10-17); proposed 2026-10-17 | The whole application blocks screen capture, in every build. `MainActivity` adds `FLAG_SECURE` to its window in `onCreate`, before `super.onCreate`, so it is set before the first frame, in the development and the production build alike. Nothing clears it. `SensitiveScreenControl` stays as an API, and the platform method `setSensitiveScreen` keeps the flag on for `enabled: true` and does nothing for `enabled: false` | The owner's requirement after the field test of 2026-10-17: no screenshot and no screen recording anywhere in the app. The flag had been set only while device enrollment and the recovery secret replacement were open, so every other screen, and the recent-apps preview, could be captured. The flag blocks screenshots, screen recording, casting to a display that is not secure and the recent-apps preview of the window. It does not hide the text of a notification, it does not stop a second camera, and it does not cover a window that is not the app's own: the system pickers and the camera app. Costs: nobody can take a screenshot of the app for a bug report in any build, and the flag has not been tried on a phone yet. Changes no wire format, table, protocol, dependency, permission or backend file. |
-| ADR-093 | Proposed (2026-10-17) | A first message from a sender this account has not verified is held: not opened, not shown, not receipted. Its exact ciphertext stays in its `inbox_envelopes` row, in state 5, renamed `held`, the server copy is acknowledged, and no inspection budget is spent. Only the trust state `unverified` holds, told apart by a new inbound answer of the live-device resolver; a later regular envelope of a held session is held with it. A sender has at most 64 held envelopes and the phone 128, each for 7 days; past a limit the oldest goes to quarantine with the rest of its session. A verification returns the sender's held envelopes to inspection in mailbox order, through a port of the contacts application and a sweep in each cycle. Prekey maintenance prunes no retired signed pair a held envelope may need and postpones a rotation that would erase one. Chats shows one row for each held sender, "@username sent you N messages. Verify to read them.", which opens the safety number; the newest own direct message with no delivery receipt an hour after it was sent shows a hint | The field test of 2026-10-17: a direct message to a recipient who has not verified the sender stays at one tick and is lost. The refusal is required (`backend/CLIENT_CONTRACT.md` §C), but the initial envelope spent its budget, was quarantined and acknowledged, and the server deleted it; its regular follow-ups were quarantined at their first inspection. Costs: at most 32 MiB of held ciphertext on disk; a held session past 64 envelopes loses its start and with it the rest; a rotation can be late while an envelope is held; the row's name and count are claims. Adds four nullable columns and two partial indexes to `inbox_envelopes` (schema 25); changes no wire format, Rust core, dependency, permission or backend file. |
+| ADR-093 | Accepted (2026-10-18); proposed 2026-10-17 | A first message from a sender this account has not verified is held: not opened, not shown, not receipted. Its exact ciphertext stays in its `inbox_envelopes` row, in state 5, renamed `held`, the server copy is acknowledged, and no inspection budget is spent. Only the trust state `unverified` holds, told apart by a new inbound answer of the live-device resolver; a later regular envelope of a held session is held with it. A sender has at most 64 held envelopes and the phone 128, each for 7 days; past a limit the oldest goes to quarantine with the rest of its session. A verification returns the sender's held envelopes to inspection in mailbox order, through a port of the contacts application and a sweep in each cycle. Prekey maintenance prunes no retired signed pair a held envelope may need and postpones a rotation that would erase one. Chats shows one row for each held sender, "@username sent you N messages. Verify to read them.", which opens the safety number; the newest own direct message with no delivery receipt an hour after it was sent shows a hint | The field test of 2026-10-17: a direct message to a recipient who has not verified the sender stays at one tick and is lost. The refusal is required (`backend/CLIENT_CONTRACT.md` §C), but the initial envelope spent its budget, was quarantined and acknowledged, and the server deleted it; its regular follow-ups were quarantined at their first inspection. Costs: at most 32 MiB of held ciphertext on disk; a held session past 64 envelopes loses its start and with it the rest; a rotation can be late while an envelope is held; the row's name and count are claims. Adds four nullable columns and two partial indexes to `inbox_envelopes` (schema 25); changes no wire format, Rust core, dependency, permission or backend file. |
 
 ## ADR-093 in full — hold a first message from an unverified sender (2026-10-17)
 
-**Status:** Proposed, 2026-10-17. Client sync, local-state, key-maintenance and UI decision,
-from the owner's field test of 2026-10-17. This record writes the design only. Phase 2 builds it
-in two more prompts on the branch `frontend-held-unverified-messages` (below), and it is
-accepted when the last of them lands. The owner reads the design before prompt 2 starts.
+**Status:** Accepted, 2026-10-18; proposed 2026-10-17. Client sync, local-state, key-maintenance
+and UI decision, from the owner's field test of 2026-10-17. The design was written first, and
+phase 2 built it in two more prompts on the branch `frontend-held-unverified-messages` (below):
+the storage and the engine, then the Chats row and the hint. The record became Accepted with the
+last of them.
 **Changes no wire format, event kind, cryptographic construction, Rust core, dependency,
 Android permission, server route or backend file.** Prompt 2 adds four nullable columns and two
 partial indexes to the local `inbox_envelopes` table (schema 25).
@@ -640,6 +641,101 @@ did not name:
   for the stored state `unverified`; any other state but `verified` answers `policyBlocked`, as
   `resolveVerifiedLiveDevices` does.
 - **Two due times.** The verification's release is due one second ahead, the sweep's at once.
+
+### Built in prompt 3, and where it differs (2026-10-18)
+
+D18 and D19 are built as written. Nine details the record left open, or settled in the build:
+
+- **The projection.** `heldSendersProvider` (`sync_providers.dart`) streams
+  `DurableSyncStore.watchHeldSenders`. `ChatsListPage` watches it with the contact list and maps
+  it through `chatHeldSenderItems`. A failed or pending read leaves the held rows out: the
+  conversations are the list's own content.
+- **The name is the username.** The row reads `ContactProjection.username` from
+  `contactListProvider`, with an `@`, and not `presentationName`: a contact this phone has
+  verified would otherwise show a display name the sender chose. A sender with no contact row is
+  named by `chatShortIdentity` without the `@`. The hint names the peer the same way, from the
+  chat's `contactProvider`.
+- **The order.** `chatListEntries` keeps the leading run of pinned conversations as the mapper
+  gives it, then merges the held senders into the rest by `latest_held_at`, newest first, with
+  the user id as the tie-break. With nothing held the rows are the conversations in the order
+  given. A sender whose count is zero has no row.
+- **The empty state.** The "No chats yet" panel shows only when there is no conversation and no
+  held sender.
+- **The hint is a line below the timeline, not a row inside it.** `ChatUndeliveredHint` sits in
+  `ChatConversationView` between the timeline and the composer, so with the timeline at its
+  newest end it is directly under the newest message. The timeline keeps one cached widget for
+  each message by the identity of its view model, and a hint inside it would have given the
+  newest own message a second view model whenever the clock moved, which it must not. Scrolled
+  up, the line stays at the bottom of the screen. It is drawn only where the page gives a peer
+  name: a group chat has its own page and Saved Messages names nobody.
+- **The clock.** The page hands the view `timeSourceProvider.now`, not a `ChatListMuteClock`.
+  The widget derives the due moment, the message's time plus one hour, on every build; it holds a
+  one-shot timer only for a qualifying message younger than that, and cancels it when the message
+  gets a receipt or the screen closes. A deleted message carries no line, which the record did
+  not say.
+- **Right-to-left.** In a right-to-left locale the name is wrapped in a left-to-right isolate
+  (`chatNameForSentence`) before it enters the sentence, so the `@` stays on the near side of the
+  name. The `.arb` texts carry a plain placeholder: the analyzer rejects a bidirectional code
+  point in the generated Dart.
+- **Plural forms.** English reads "1 message. Verify to read it." for one and "N messages. Verify
+  to read them." otherwise; Persian has the same two forms.
+- **No change to the search page.** It maps `conversationSummariesProvider` only, so it lists no
+  held row; a test pins that.
+
+### Verified by
+
+Host tests; nothing ran on a phone.
+
+- **Prompt 2** (storage and engine): the tests the record lists for it, over in-memory
+  databases, and the twelve mutation checks recorded in `implementation-checklist.md`.
+- **Prompt 3** (`chats_held_senders_test.dart`, `chat_undelivered_hint_test.dart`, and two
+  cases in `group_message_actions_test.dart`):
+  - the order of the rows, the names, the count, the tap to `/contacts/:userId/safety`, no
+    preview, time, badge or menu, one semantic button with its hint, the row leaving when the
+    stream empties, the empty state, no row in the search page, and Persian and 200 % text
+    without an overflow;
+  - the hint: not before one hour on a clock the test owns, and at the hour; under the newest
+    own message once; not with a receipt on it or on a later own message; not under a queued,
+    sending, local-only, encrypting or failed message, a deleted one or the peer's; not in Saved
+    Messages; not in a group chat that stores the same old own message a direct chat shows it
+    under; no timer pending when there is nothing to wait for, and none left after the screen
+    closes; Persian and 200 % text without an overflow.
+
+Mutation checks of prompt 3, each applied alone, the named tests run, the file restored from
+its backup, and `git status --short` empty afterwards:
+
+| Mutation | Caught by |
+|---|---|
+| M1: `chatHeldSenderItems` keeps a sender whose count is zero | `chats_held_senders_test.dart`: "a sender with no held envelope has no row", in the names and in the Chats list |
+| M2: the view draws the hint without its Saved Messages and no-peer gate | `chat_undelivered_hint_test.dart`: "Saved Messages has none" |
+| M2: the group chat page draws `ChatUndeliveredHint` | `group_message_actions_test.dart`: "a group chat shows none under the same old own message" |
+| M3: `chatUndeliveredHintDelay` is `Duration.zero` | `chat_undelivered_hint_test.dart`: "the delay is one hour", "not before one hour, and from the moment the hour is up", and the timer case |
+| Extra: a newest own message that is not accepted lets the hint fall back to an older accepted one | `chat_undelivered_hint_test.dart`: "an older message the peer has not answered is not the newest" |
+
+The record's own prompt-3 table also names a query that counts released rows and a hint under each
+qualifying message. The first is a store property that prompt 2's tests pin; the second cannot
+arise, because the hint is one line by construction and the case above covers the nearest way
+to break it.
+
+### Not verified
+
+- **A run on a phone.** The row, the hint, the tap to the safety number and the release after
+  a comparison were exercised only in widget tests and over in-memory databases. The owner checks
+  them on two phones: one sender who has verified the other, one recipient who has not.
+- **The hour on a real device.** The hint's timer ran against a clock the test owns; whether a
+  Doze-stretched catch-up keeps the line from showing too early or too late is not measured.
+- **Persian wording.** A native reader has not read the Persian lines.
+
+### Not done
+
+- **Prekey maintenance is not wired** (above, "Not done here"). It stays the owner's next task.
+- **A follow-up behind a deferred initial is lost** (above). Matching an initial still waiting in
+  the inbox is a separate fix.
+- **No name lookup.** A sender with no contact row shows its short identity; the server has no
+  route from a user id to a name, and `CLIENT_CONTRACT.md` §P forbids a lookup the user did not
+  ask for.
+- **The hint inside the timeline.** A row that scrolls with the newest own message needs the
+  timeline to build rows from more than a message's view model.
 
 ## ADR-092 in full — the whole application blocks screen capture (2026-10-17)
 

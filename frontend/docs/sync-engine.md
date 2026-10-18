@@ -178,6 +178,14 @@ carries `heldEnvelopes`; the projection's `inbox_depth` and Diagnostics' `pendin
 count no held row, and `held_inbound` counts them. Nothing names a sender, a session or a
 time.
 
+What the recipient and the sender see is the presentation's, not the engine's
+([ADR-093](decisions.md) D18, D19). `watchHeldSenders` streams each claimed sender with its count
+of rows in state 2, 3 or 5 and its latest hold time; Chats draws one row for each, and the row
+goes the moment a release, an expiry or an eviction empties the count. Released rows are not
+counted. The sender's chat asks nothing of the engine: it reads the own message's transport and
+receipt state, which a delivery receipt from the recipient's released envelope changes
+(`ui-specification.md` §6, §8).
+
 Envelopes are still handed out oldest-due-first. Two guards keep that from being a
 head-of-line block: an inspection retry carries a floor of one second, because the retry
 policy draws uniformly from zero and a zero backoff on the lowest-sequence row is a pass
