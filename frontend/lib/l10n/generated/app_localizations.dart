@@ -2663,6 +2663,12 @@ abstract class AppLocalizations {
   /// **'Verified identity'**
   String get groupVerifiedMember;
 
+  /// No description provided for @groupUnknownMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown member'**
+  String get groupUnknownMember;
+
   /// No description provided for @groupConfirmRemoveTitle.
   ///
   /// In en, this message translates to:

@@ -8,6 +8,7 @@ import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
+import 'package:communication_platform/features/groups/domain/group_member_names.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/create_group_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
@@ -1038,6 +1039,15 @@ Future<GoRouter> _pumpGroupRoutes(
   return router;
 }
 
+/// What this phone calls the three members of the roster.
+GroupMemberNames _names() => GroupMemberNames({
+  _owner: const GroupMemberName(name: 'Owner', verified: true),
+  _admin: const GroupMemberName(name: 'Admin', verified: true),
+  _member: const GroupMemberName(name: 'Member', verified: false),
+});
+
+/// The roster as a control event decodes it on a receiving phone: user ids and
+/// roles, and no name.
 GroupState _state({GroupLifecycle lifecycle = GroupLifecycle.active}) =>
     GroupState(
       groupId: _groupId,
@@ -1050,19 +1060,19 @@ GroupState _state({GroupLifecycle lifecycle = GroupLifecycle.active}) =>
       members: [
         GroupMember(
           userId: _owner,
-          displayName: 'Owner',
+          displayName: '',
           role: GroupRole.owner,
           verified: true,
         ),
         GroupMember(
           userId: _admin,
-          displayName: 'Admin',
+          displayName: '',
           role: GroupRole.admin,
           verified: true,
         ),
         GroupMember(
           userId: _member,
-          displayName: 'Member',
+          displayName: '',
           role: GroupRole.member,
           membership: lifecycle == GroupLifecycle.removed
               ? GroupMembershipState.removed
@@ -1118,6 +1128,7 @@ Future<void> _pumpThread(
   GroupChatPage(
     groupId: _groupId,
     injectedState: _state(),
+    injectedMemberNames: _names(),
     injectedMessages: [
       _message(_questionId, sender: _admin, text: 'Original question', at: 100),
       _message(

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:communication_platform/app/dependencies/group_member_name_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
@@ -10,13 +11,14 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
+import 'package:communication_platform/features/groups/domain/group_member_names.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
 import 'package:communication_platform/features/groups/presentation/group_components.dart';
+import 'package:communication_platform/features/groups/presentation/group_member_labels.dart';
 import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_message_readers.dart';
@@ -41,11 +43,16 @@ class GroupChatPage extends ConsumerWidget {
     this.onRetry,
     this.onReaction,
     this.watchReaders,
+    this.injectedMemberNames,
     super.key,
   });
 
   final String groupId;
   final GroupState? injectedState;
+
+  /// The names an injected page shows, as the contacts store would hand them
+  /// to the routed page. Null: this phone names nobody.
+  final GroupMemberNames? injectedMemberNames;
 
   /// The messages an injected page shows, as local storage would hand them to
   /// the routed page: the same rows go through the same projection.
@@ -63,6 +70,7 @@ class GroupChatPage extends ConsumerWidget {
     if (injectedState != null && injectedMessages != null && onSend != null) {
       return GroupChatView(
         state: injectedState!,
+        memberNames: injectedMemberNames ?? const GroupMemberNames.empty(),
         timeline: ConversationTimelineState(
           page: ConversationMessagePage(
             messages: injectedMessages!,
@@ -111,6 +119,10 @@ class _GroupChatSession extends ConsumerStatefulWidget {
 
 class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
   VisibleConversationReadMarker? _readMarker;
+
+  /// The last names the contacts store answered with. Null until the first
+  /// answer.
+  GroupMemberNames? _memberNames;
 
   /// The group's own conversation, read as a direct chat reads its own
   /// (ADR-090 D1): the conversation id of a group is the group id.
@@ -231,6 +243,23 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
       error: (_, _) => groupErrorPage(context),
       data: (state) {
         if (state == null) return groupErrorPage(context);
+        final names = ref.watch(
+          groupMemberNamesProvider(
+            GroupMemberNamesRequest(
+              state.members.map((member) => member.userId),
+            ),
+          ),
+        );
+        // The roster changing makes a new request, and the answer to it takes
+        // a moment: the names of the last answer stay until it comes, so the
+        // composer is not replaced by a spinner while someone is added.
+        final answered = names.value;
+        if (answered != null) _memberNames = answered;
+        // A failed read names nobody: every member is "Unknown member",
+        // which is true, and the chat stays usable.
+        if (names.hasError) _memberNames ??= const GroupMemberNames.empty();
+        final memberNames = _memberNames;
+        if (memberNames == null) return groupLoadingPage(context);
         return messages.when(
           loading: () => groupLoadingPage(context),
           error: (_, _) => groupErrorPage(context),
@@ -242,6 +271,7 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
               error: (_, _) => groupErrorPage(context),
               data: (resolved) => GroupChatView(
                 state: state,
+                memberNames: memberNames,
                 timeline: timeline,
                 currentUserId: userId,
                 initialDraft: draft,
@@ -315,6 +345,7 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
 class GroupChatView extends StatefulWidget {
   const GroupChatView({
     required this.state,
+    required this.memberNames,
     required this.timeline,
     required this.currentUserId,
     required this.onSend,
@@ -333,6 +364,10 @@ class GroupChatView extends StatefulWidget {
   });
 
   final GroupState state;
+
+  /// What this phone calls each member. The group holds user ids and roles
+  /// only.
+  final GroupMemberNames memberNames;
   final ConversationTimelineState timeline;
   final String currentUserId;
   final SendGroupMessageCallback onSend;
@@ -399,7 +434,18 @@ class _GroupChatViewState extends State<GroupChatView> {
       source: (messageId) =>
           widget.watchReaders?.call(messageId) ?? const Stream.empty(),
       memberOf: (userId) => widget.state.member(userId),
+      nameOf: (userId) => widget.memberNames.labelOf(userId, _strings),
     );
+  }
+
+  /// For the reader list, which words a name when an answer arrives and has
+  /// no context of its own.
+  late AppLocalizations _strings;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _strings = AppLocalizations.of(context);
   }
 
   /// The message a search result or a reply quote asked for. The timeline
@@ -412,15 +458,11 @@ class _GroupChatViewState extends State<GroupChatView> {
     final strings = AppLocalizations.of(context);
     final state = widget.state;
     final gate = _chatGate(state.lifecycle);
-    final names = {
-      for (final member in state.members) member.userId: member.displayName,
-    };
     final viewMessages = _projection.mapGroup(
       widget.timeline.page.messages,
       currentUserId: widget.currentUserId,
       currentUserName: strings.chatYouAuthor,
-      memberName: (userId) =>
-          names[userId.toLowerCase()] ?? chatShortIdentity(userId),
+      memberName: (userId) => widget.memberNames.labelOf(userId, strings),
     );
     final timeline = ChatTimelineViewModel(
       state: viewMessages.isEmpty
@@ -644,15 +686,19 @@ class _GroupChatViewState extends State<GroupChatView> {
   }
 }
 
-/// The readers of a group's messages, named as the group names its members.
-///
-/// A member the group does not name, or names with an empty string, shows the
-/// short id the timeline gives an unknown author.
+/// The readers of a group's messages, named as the timeline names the authors.
 final class _GroupMessageReaders implements ChatMessageReaders {
-  const _GroupMessageReaders({required this.source, required this.memberOf});
+  const _GroupMessageReaders({
+    required this.source,
+    required this.memberOf,
+    required this.nameOf,
+  });
 
   final WatchGroupMessageReadersCallback source;
   final GroupMember? Function(String userId) memberOf;
+
+  /// What this phone calls a member: never blank, never the user id.
+  final String Function(String userId) nameOf;
 
   @override
   Stream<List<ChatMessageReader>> watch(String messageId) =>
@@ -661,7 +707,7 @@ final class _GroupMessageReaders implements ChatMessageReaders {
           for (final reader in readers)
             ChatMessageReader(
               userId: reader.userId,
-              name: _nameOf(reader.userId),
+              name: nameOf(reader.userId),
               // The seed Group Info gives the same member.
               avatarSeed: groupAvatarSeed(
                 memberOf(reader.userId)?.userId ?? reader.userId,
@@ -676,11 +722,6 @@ final class _GroupMessageReaders implements ChatMessageReaders {
             ),
         ],
       );
-
-  String _nameOf(String userId) {
-    final name = memberOf(userId)?.displayName;
-    return name == null || name.isEmpty ? chatShortIdentity(userId) : name;
-  }
 }
 
 /// What the 56 px slot of a 48 px bar button leaves on each side of it.

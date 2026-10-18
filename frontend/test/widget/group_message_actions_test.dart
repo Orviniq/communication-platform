@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/group_member_name_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
@@ -18,6 +19,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
+import 'package:communication_platform/features/groups/domain/group_member_names.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
@@ -871,13 +873,13 @@ GroupState _group(
   members: [
     GroupMember(
       userId: _member,
-      displayName: 'Member',
+      displayName: '',
       role: GroupRole.owner,
       verified: true,
     ),
     GroupMember(
       userId: auth.userId,
-      displayName: 'Reader',
+      displayName: '',
       role: GroupRole.member,
       verified: true,
       membership: member
@@ -886,7 +888,7 @@ GroupState _group(
     ),
     GroupMember(
       userId: _otherMember,
-      displayName: 'Other',
+      displayName: '',
       role: GroupRole.member,
       verified: true,
     ),
@@ -955,6 +957,17 @@ Future<ProviderContainer> _pump(
       ),
       groupProvider.overrideWith(
         (ref, groupId) => Stream.value(groups[groupId]),
+      ),
+      // What the contacts store would answer for the three members. The
+      // roster below carries ids and roles, as a decoded control event does.
+      groupMemberNamesProvider.overrideWith(
+        (ref, request) => Stream.value(
+          GroupMemberNames({
+            _member: const GroupMemberName(name: 'Member', verified: true),
+            auth.userId: const GroupMemberName(name: 'Reader', verified: true),
+            _otherMember: const GroupMemberName(name: 'Other', verified: true),
+          }),
+        ),
       ),
       groupUseCasesProvider.overrideWith(
         (ref) => GroupUseCases(

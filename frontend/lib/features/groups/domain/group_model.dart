@@ -80,9 +80,12 @@ final class GroupMetadata {
 ///
 /// [userId], [role] and [membership] are the roster every member agrees on,
 /// because each is derived from signed control events. [displayName] and
-/// [verified] are this device's own presentation of the member: neither is
-/// signed, neither leaves the device, and another member's device may hold
-/// different values for both.
+/// [verified] are what this device stored for the member when it created the
+/// group or added the member: neither is signed, neither leaves the device, and
+/// a device that learned the member from a control event holds neither. No
+/// screen reads them. A screen names a member from the contacts store when it
+/// is shown (`GroupMemberNames`), so a rename or a verification reaches every
+/// group at once.
 final class GroupMember {
   GroupMember({
     required String userId,

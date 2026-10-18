@@ -488,6 +488,7 @@
   "groupNoDescription": "بدون توضیح",
   "groupMembersSection": "اعضا",
   "groupVerifiedMember": "هویت تأییدشده",
+  "groupUnknownMember": "عضو ناشناس",
   "groupConfirmRemoveTitle": "عضو حذف شود؟",
   "groupConfirmRemoveBody": "این عضو دیگر پیام‌های تازهٔ گروه را دریافت نمی‌کند. محتوایی که پیش‌تر دریافت کرده پاک نمی‌شود.",
   "groupConfirmLeaveTitle": "گروه ترک شود؟",

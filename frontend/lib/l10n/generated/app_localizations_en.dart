@@ -1524,6 +1524,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get groupVerifiedMember => 'Verified identity';
 
   @override
+  String get groupUnknownMember => 'Unknown member';
+
+  @override
   String get groupConfirmRemoveTitle => 'Remove member?';
 
   @override

@@ -643,6 +643,7 @@
   "groupNoDescription": "No description",
   "groupMembersSection": "Members",
   "groupVerifiedMember": "Verified identity",
+  "groupUnknownMember": "Unknown member",
   "groupConfirmRemoveTitle": "Remove member?",
   "groupConfirmRemoveBody": "This member stops receiving new messages from the group. Content they already received cannot be erased.",
   "groupConfirmLeaveTitle": "Leave group?",

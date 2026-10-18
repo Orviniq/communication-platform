@@ -1516,6 +1516,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get groupVerifiedMember => 'هویت تأییدشده';
 
   @override
+  String get groupUnknownMember => 'عضو ناشناس';
+
+  @override
   String get groupConfirmRemoveTitle => 'عضو حذف شود؟';
 
   @override

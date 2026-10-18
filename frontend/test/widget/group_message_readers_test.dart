@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
+import 'package:communication_platform/features/groups/domain/group_member_names.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -21,7 +21,8 @@ const _owner = '00000000-0000-0000-0000-000000000001';
 const _admin = '00000000-0000-0000-0000-000000000002';
 const _member = '00000000-0000-0000-0000-000000000003';
 
-/// Reads a message and is not in the group's roster: shown by a short id.
+/// Reads a message and is not in the group's roster: this phone names nobody
+/// it does not know, so the list says "Unknown member".
 const _stranger = '00000000-0000-0000-0000-0000000000ff';
 
 const _ownId = '66666666666666666666666666666666';
@@ -43,7 +44,7 @@ void main() {
     TextScaler textScaler = TextScaler.noScaling,
     Size size = const Size(430, 900),
     bool ownDeleted = false,
-    GroupState? state,
+    GroupMemberNames? names,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -63,7 +64,8 @@ void main() {
         ),
         home: GroupChatPage(
           groupId: _groupId,
-          injectedState: state ?? _state(),
+          injectedState: _state(),
+          injectedMemberNames: names ?? _names(),
           injectedMessages: [
             _message(_incomingId, sender: _admin, text: 'From Admin', at: 100),
             _message(
@@ -305,8 +307,8 @@ void main() {
       expect(yesterdayText, contains(','));
     });
 
-    testWidgets('an unknown time says so, and a member the group does not '
-        'name shows a short id', (tester) async {
+    testWidgets('an unknown time says so, and a member this phone cannot name '
+        'shows "Unknown member"', (tester) async {
       readers.set(_ownId, [
         const MessageReader(userId: _stranger, readAtMs: null),
       ]);
@@ -315,7 +317,7 @@ void main() {
       await openList(tester);
 
       expect(entryTexts(tester, _stranger), [
-        chatShortIdentity(_stranger),
+        strings.groupUnknownMember,
         strings.chatReadTimeUnknown,
       ]);
       expect(find.text('Time unknown'), findsOneWidget);
@@ -386,7 +388,7 @@ void main() {
         locale: const Locale('fa'),
         textScaler: const TextScaler.linear(2),
         size: const Size(360, 800),
-        state: _state(adminName: longName),
+        names: _names(adminName: longName),
       );
 
       await openSheet(tester, _ownId);
@@ -443,7 +445,7 @@ void main() {
 
       final known = strings.chatReaderSemantics('Member', timeOf(tester, now));
       final unknown = strings.chatReaderSemantics(
-        chatShortIdentity(_stranger),
+        strings.groupUnknownMember,
         strings.chatReadTimeUnknown,
       );
       expect(tester.getSemantics(entry(_member)).label, known);
@@ -554,7 +556,16 @@ ChatTimelineViewModel _directTimeline() => ChatTimelineViewModel(
   ],
 );
 
-GroupState _state({String adminName = 'Admin'}) => GroupState(
+/// What this phone calls the three members of the roster.
+GroupMemberNames _names({String adminName = 'Admin'}) => GroupMemberNames({
+  _owner: const GroupMemberName(name: 'Owner', verified: true),
+  _admin: GroupMemberName(name: adminName, verified: true),
+  _member: const GroupMemberName(name: 'Member', verified: true),
+});
+
+/// The roster as a control event decodes it on a receiving phone: user ids and
+/// roles, and no name.
+GroupState _state() => GroupState(
   groupId: _groupId,
   metadata: const GroupMetadata(name: 'Private Team', description: ''),
   invitationPolicy: GroupInvitationPolicy.ownerAndAdmins,
@@ -562,19 +573,19 @@ GroupState _state({String adminName = 'Admin'}) => GroupState(
   members: [
     GroupMember(
       userId: _owner,
-      displayName: 'Owner',
+      displayName: '',
       role: GroupRole.owner,
       verified: true,
     ),
     GroupMember(
       userId: _admin,
-      displayName: adminName,
+      displayName: '',
       role: GroupRole.admin,
       verified: true,
     ),
     GroupMember(
       userId: _member,
-      displayName: 'Member',
+      displayName: '',
       role: GroupRole.member,
       verified: true,
     ),
