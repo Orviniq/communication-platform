@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/held_inbound_harness.dart';
 import '../../support/local_send_harness.dart';
+import '../../support/volatile_pairwise_harness.dart';
 
 const _envelopeId = '00000000-0000-4000-8000-0000000000e1';
 
@@ -143,6 +145,34 @@ void main() {
       isA<OpaqueEnvelopeInspection>(),
     );
     expect(harness.crypto.accepted, 1);
+  });
+
+  test('a volatile channel\'s payload in a durable envelope is never applied, '
+      'even one a decoder would read as an event (ADR-098 D1)', () async {
+    harness.senders.verified = true;
+    for (final magic in ['CPPSV001', 'CPVSV001']) {
+      final payload = Uint8List.fromList([...magic.codeUnits, 1, 3, 0xa0]);
+      // The worst case: a decoder that took it for the peer's message.
+      harness.protocol.events[protocolBytesToHex(payload)] =
+          harness.protocol.events[protocolBytesToHex(harness.message(1))]!;
+
+      final result = await inspect(
+        FakeRatchetCrypto.initialEnvelope(
+          sessionId: HeldInboundHarness.session,
+          senderUserId: peerUserId,
+          senderDeviceId: peerDeviceId,
+          senderIdentityPublic: HeldInboundHarness.peerIdentity,
+          recipientDeviceId: localDeviceId,
+          inner: payload,
+        ),
+      );
+
+      expect(
+        failureOf(result),
+        const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        reason: magic,
+      );
+    }
   });
 
   test('a regular envelope with no session is held behind one held initial, '
