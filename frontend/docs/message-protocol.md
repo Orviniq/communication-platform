@@ -155,12 +155,16 @@ only after the conversation is visibly read and user privacy settings allow it.
 Typing is an encrypted volatile signal containing conversation ID, boolean state, and a
 short expiry. It is never queued.
 
+Specified by ADR-098 (Proposed). Not built yet.
+
 **There is no presence.** The gateway holds none and offers no subscription frame
 (server ADR-0022), so no screen claims that a peer is online: nothing the client can
 observe supports the claim, and the chat header's old presence line was structurally
 false for exactly that reason. The one place a device's liveness is reported is a voice
 call, where it is observed rather than asserted — a participant is present because a
 connection to them is open.
+
+Specified by ADR-098 (Proposed). Not built yet.
 
 ## Blocking
 

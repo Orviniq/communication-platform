@@ -564,6 +564,7 @@ experience.
      bar nor the rail shows on it.
    - Center: contact avatar + name + a presence/last-seen line (**[PRIVACY]** encrypted,
      volatile signal; may lag).
+     - Specified by ADR-098 (Proposed). Not built yet.
    - Tapping name/avatar → **Contact Profile** (§11).
    - Right: overflow (**⋮**) → **Search in chat**, **Mute** (§17), **Verify safety number**
      (§11.1), **Clear history** (→ confirm, honest wording), **Block/Unblock**.
@@ -785,6 +786,7 @@ history; up to ~50 members; roles **owner → admins → members**.
 1. **Top bar:**
    - Header: the group avatar, the group name and the member count (decrypted locally), each
      name and count on one line, cut with an ellipsis when it does not fit.
+     - Typing names and "N online": Specified by ADR-098 (Proposed). Not built yet.
    - The whole bar between the back button and **Search** is one target for the header, as high
      as the bar: a tap anywhere on it → **Group Info** (§12.2). To a screen reader it is one
      button that reads the name and the count once and names Group Info as its result.
@@ -1275,6 +1277,7 @@ Security notice, and About with Diagnostics behind it.
    in this build. **Off is the default and a complete state**: nothing runs, nothing is
    requested, nothing appears anywhere, and the row says so. This surface is reached only
    from Settings and is never suggested, prompted or advertised elsewhere.
+5c. **Show my online status** — Specified by ADR-098 (Proposed). Not built yet.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).
