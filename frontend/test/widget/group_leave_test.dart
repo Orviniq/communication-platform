@@ -146,6 +146,10 @@ Future<void> _pump(
             repository: repository,
             sender: _UnusedSender(),
           ),
+          setPin: SetGroupPin(
+            repository: repository,
+            sender: _UnusedSender(),
+          ),
         ),
       ),
     ],

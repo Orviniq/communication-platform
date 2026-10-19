@@ -1054,6 +1054,10 @@ Future<ProviderContainer> _pump(
             repository: groupRepository,
             sender: groupSender,
           ),
+          setPin: SetGroupPin(
+            repository: groupRepository,
+            sender: groupSender,
+          ),
         ),
       ),
     ],
@@ -1194,6 +1198,8 @@ final class _GroupSender implements GroupMessageSenderPort {
     required String? emoji,
   }) async => const Result.success(null);
 
+  final List<({String messageId, bool pinned})> pins = [];
+
   @override
   Future<Result<void>> deleteForEveryone({
     required String currentUserId,
@@ -1201,6 +1207,18 @@ final class _GroupSender implements GroupMessageSenderPort {
     required String groupId,
     required String messageId,
   }) async => const Result.success(null);
+
+  @override
+  Future<Result<void>> setPin({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required bool pinned,
+  }) async {
+    pins.add((messageId: messageId, pinned: pinned));
+    return const Result.success(null);
+  }
 }
 
 final class _GroupRepository implements GroupRepositoryPort {

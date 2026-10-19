@@ -8,6 +8,7 @@ import 'package:communication_platform/features/groups/application/group_use_cas
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/domain/group_sync_payload.dart';
+import 'package:communication_platform/features/groups/infrastructure/group_pairwise_adapters.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _local = '10000000-0000-4000-8000-000000000001';
@@ -654,6 +655,129 @@ void main() {
       expect(sender.reacted, isEmpty);
     });
   });
+
+  group('pinning a message (ADR-096 D6)', () {
+    SetGroupPin pin(_Sender sender) =>
+        SetGroupPin(repository: repository, sender: sender);
+
+    Future<Result<void>> pinAs(
+      _Sender sender,
+      String groupId,
+      String userId, {
+      bool pinned = true,
+    }) => pin(sender)(
+      groupId: groupId,
+      senderUserId: userId,
+      senderDeviceId: _localDevice,
+      messageId: 'ab' * 16,
+      pinned: pinned,
+    );
+
+    test('goes to the group from the owner and from an admin', () async {
+      final group = await create([_alice, _bob]);
+      await mutate(
+        group,
+        ChangeGroupRoleOperation(targetUserId: _alice, role: GroupRole.admin),
+      );
+      final sender = _Sender();
+
+      expect(await pinAs(sender, group.groupId, _local), isA<Success<void>>());
+      expect(
+        await pinAs(sender, group.groupId, _alice, pinned: false),
+        isA<Success<void>>(),
+      );
+
+      expect(sender.pins, [
+        (group.groupId, 'ab' * 16, true),
+        (group.groupId, 'ab' * 16, false),
+      ]);
+    });
+
+    test('is refused for a member', () async {
+      final group = await create([_alice, _bob]);
+      final sender = _Sender();
+
+      final result = await pinAs(sender, group.groupId, _bob);
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.pins, isEmpty);
+    });
+
+    test('is refused in a group this account has left, and while the roster '
+        'may be stale', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      for (final lifecycle in [
+        GroupLifecycle.left,
+        GroupLifecycle.stateRecoveryRequired,
+      ]) {
+        repository.overlay = lifecycle;
+        expect(
+          await pinAs(sender, group.groupId, _local),
+          isA<FailureResult<void>>(),
+          reason: '$lifecycle',
+        );
+      }
+      expect(sender.pins, isEmpty);
+    });
+  });
+
+  group("the roster's answers to the conversation send path "
+      '(ADR-096 D5, D6)', () {
+    test('follow the roles of an active roster', () async {
+      final group = await create([_alice, _bob]);
+      await mutate(
+        group,
+        ChangeGroupRoleOperation(targetUserId: _alice, role: GroupRole.admin),
+      );
+      final moderation = GroupRosterMessageModeration(repository);
+      Future<bool> deletes(String actor, String author) async =>
+          (await moderation.mayDeleteMessageOf(
+                    groupId: group.groupId,
+                    actorUserId: actor,
+                    authorUserId: author,
+                  )
+                  as Success<bool>)
+              .value;
+      Future<bool> pins(String actor) async =>
+          (await moderation.mayPin(groupId: group.groupId, actorUserId: actor)
+                  as Success<bool>)
+              .value;
+
+      expect(await deletes(_local, _alice), isTrue);
+      expect(await deletes(_alice, _bob), isTrue);
+      expect(await deletes(_alice, _local), isFalse);
+      expect(await deletes(_bob, _alice), isFalse);
+      expect(
+        [await pins(_local), await pins(_alice), await pins(_bob)],
+        [true, true, false],
+      );
+    });
+
+    test('say no for a group this device does not know, or one whose roster '
+        'may be stale', () async {
+      final group = await create([_alice]);
+      final moderation = GroupRosterMessageModeration(repository);
+
+      expect(
+        await moderation.mayPin(groupId: 'ee' * 32, actorUserId: _local),
+        isA<Success<bool>>().having((result) => result.value, 'value', isFalse),
+      );
+      repository.overlay = GroupLifecycle.stateRecoveryRequired;
+      expect(
+        await moderation.mayDeleteMessageOf(
+          groupId: group.groupId,
+          actorUserId: _local,
+          authorUserId: _alice,
+        ),
+        isA<Success<bool>>().having((result) => result.value, 'value', isFalse),
+      );
+    });
+  });
 }
 
 typedef _Commit = ({
@@ -829,6 +953,20 @@ final class _Sender implements GroupMessageSenderPort {
     required String messageId,
   }) async {
     deleted.add((groupId, messageId));
+    return const Result.success(null);
+  }
+
+  final pins = <(String, String, bool)>[];
+
+  @override
+  Future<Result<void>> setPin({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required bool pinned,
+  }) async {
+    pins.add((groupId, messageId, pinned));
     return const Result.success(null);
   }
 }

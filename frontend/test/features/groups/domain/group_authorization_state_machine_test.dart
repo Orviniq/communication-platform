@@ -99,6 +99,101 @@ void main() {
       expect(GroupAuthorization.canLeave(state, _owner), isFalse);
       expect(GroupAuthorization.canLeave(state, _member), isTrue);
     });
+
+    test('who deletes whose message for everyone, and who pins '
+        '(ADR-096 D4 to D6)', () {
+      const adminTwo = '00000000-0000-0000-0000-000000000005';
+      final state = _state(
+        members: [
+          ..._members(),
+          GroupMember(
+            userId: adminTwo,
+            displayName: 'Admin two',
+            role: GroupRole.admin,
+          ),
+        ],
+      );
+      bool deletes(String actor, String author) =>
+          GroupAuthorization.canDeleteMessageOf(
+            state,
+            actorUserId: actor,
+            authorUserId: author,
+          );
+
+      // Each one's own; the owner anyone's; an admin a member's only.
+      for (final actor in [_owner, _admin, _member]) {
+        expect(deletes(actor, actor), isTrue, reason: actor);
+      }
+      expect(deletes(_owner, _admin), isTrue);
+      expect(deletes(_owner, _member), isTrue);
+      expect(deletes(_admin, _member), isTrue);
+      expect(deletes(_admin, _owner), isFalse);
+      expect(deletes(_admin, adminTwo), isFalse);
+      expect(deletes(_member, _admin), isFalse);
+      expect(deletes(_member, _owner), isFalse);
+
+      expect(
+        [
+          for (final actor in [_owner, _admin, _member])
+            GroupAuthorization.allows(
+              state,
+              actor,
+              GroupPermission.pinMessages,
+            ),
+        ],
+        [true, true, false],
+      );
+    });
+
+    test('a member who cannot send deletes and pins nothing, while the roles '
+        'as recorded still decide a fold (ADR-096 D5 to D7)', () {
+      final left = _state(
+        members: [
+          for (final item in _members())
+            item.userId == _admin
+                ? item.copyWith(membership: GroupMembershipState.left)
+                : item,
+        ],
+      );
+      expect(
+        GroupAuthorization.canDeleteMessageOf(
+          left,
+          actorUserId: _admin,
+          authorUserId: _member,
+        ),
+        isFalse,
+      );
+      expect(
+        GroupAuthorization.recordedRoleMayDelete(
+          left,
+          actorUserId: _admin,
+          authorUserId: _member,
+        ),
+        isTrue,
+      );
+      expect(GroupAuthorization.recordedRoleMayPin(left, _admin), isTrue);
+      expect(GroupAuthorization.recordedRoleMayPin(left, _member), isFalse);
+
+      final recovering = _state(
+        lifecycle: GroupLifecycle.stateRecoveryRequired,
+      );
+      expect(
+        GroupAuthorization.canDeleteMessageOf(
+          recovering,
+          actorUserId: _owner,
+          authorUserId: _member,
+        ),
+        isFalse,
+      );
+      expect(
+        GroupAuthorization.recordedRoleMayDelete(
+          _state(),
+          actorUserId: '00000000-0000-0000-0000-000000000099',
+          authorUserId: _member,
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('control state machine', () {

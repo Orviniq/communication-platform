@@ -174,6 +174,7 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
       repository: repository,
       sender: sender,
     ),
+    setPin: SetGroupPin(repository: repository, sender: sender),
   );
 });
 

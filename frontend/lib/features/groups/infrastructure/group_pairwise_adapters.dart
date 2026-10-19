@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
+import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
+import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_session_repair_service.dart';
 
@@ -94,6 +96,71 @@ final class ConversationGroupMessageSender implements GroupMessageSenderPort {
     conversationId: groupId,
     messageId: messageId,
   );
+
+  @override
+  Future<Result<void>> setPin({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required bool pinned,
+  }) => conversations.setPin(
+    currentUserId: currentUserId,
+    currentDeviceId: currentDeviceId,
+    conversationId: groupId,
+    messageId: messageId,
+    pinned: pinned,
+  );
+}
+
+/// Answers the conversation send path from the group's roster, as this
+/// device holds it (ADR-096 D5, D6).
+///
+/// The roster is read with the lifecycle a pending state request lays over
+/// it, so a member who may hold a stale roster sends no delete of another
+/// member's message and no pin until the group's state is confirmed.
+final class GroupRosterMessageModeration implements GroupMessageModerationPort {
+  const GroupRosterMessageModeration(this.groups);
+
+  final GroupRepositoryPort groups;
+
+  @override
+  Future<Result<bool>> mayDeleteMessageOf({
+    required String groupId,
+    required String actorUserId,
+    required String authorUserId,
+  }) => _withGroup(
+    groupId,
+    (group) => GroupAuthorization.canDeleteMessageOf(
+      group,
+      actorUserId: actorUserId,
+      authorUserId: authorUserId,
+    ),
+  );
+
+  @override
+  Future<Result<bool>> mayPin({
+    required String groupId,
+    required String actorUserId,
+  }) => _withGroup(
+    groupId,
+    (group) => GroupAuthorization.allows(
+      group,
+      actorUserId,
+      GroupPermission.pinMessages,
+    ),
+  );
+
+  Future<Result<bool>> _withGroup(
+    String groupId,
+    bool Function(GroupState group) decide,
+  ) async {
+    final result = await groups.readGroup(groupId);
+    return result.fold(
+      onSuccess: (group) => Result.success(group != null && decide(group)),
+      onFailure: Result.failure,
+    );
+  }
 }
 
 final class PairwiseGroupSessionRepairAdapter

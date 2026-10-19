@@ -507,8 +507,19 @@ void main() {
     },
   );
 
-  group('into a group conversation (ADR-090 D3, ADR-096 D4)', () {
+  group('into a group conversation (ADR-090 D3, ADR-096 D4 to D6)', () {
     const policyBlocked = SecurityFailure(SecurityFailureKind.policyBlocked);
+    late _Moderation moderation;
+
+    /// The send path with the roster's answers of [moderation].
+    SendConversationEvents moderated() => SendConversationEvents(
+      repository: repository,
+      protocol: protocol,
+      fanout: fanout,
+      clock: const _Clock(),
+      attachments: sweep,
+      groupModeration: moderation,
+    );
 
     setUp(() {
       repository.conversation = const ConversationSummary(
@@ -522,6 +533,9 @@ void main() {
         draft: null,
         pinnedMessageIds: {},
       );
+      // An own message, and one another member wrote.
+      repository.senders = {_messageOne: currentUser, _messageTwo: peerUser};
+      moderation = _Moderation();
     });
 
     test('a reaction commits one event of the kind reactionSet', () async {
@@ -607,30 +621,160 @@ void main() {
       expect(sweep.sweeps, 1);
     });
 
-    test('a delete for everyone of another member\'s message is refused '
-        'and commits nothing (ADR-096 D4)', () async {
-      repository.originalSender = false;
+    test(
+      'a delete for everyone of another member\'s message is refused '
+      'when the roles do not allow it, or no roster answers (ADR-096 D5)',
+      () async {
+        for (final events in [sender, moderated()]) {
+          expect(
+            await events.deleteForEveryone(
+              currentUserId: currentUser,
+              currentDeviceId: currentDevice,
+              conversationId: _directConversationHex,
+              messageId: _messageTwo,
+            ),
+            isA<FailureResult<void>>().having(
+              (result) => result.failure,
+              'failure',
+              policyBlocked,
+            ),
+          );
+        }
+        // The roster was asked about the author of the message.
+        expect(moderation.deleteAsks, [
+          (_directConversationHex, currentUser, peerUser),
+        ]);
+        expect(fanout.events, isEmpty);
+        expect(sweep.sweeps, 0);
+      },
+    );
+
+    test('a delete for everyone of another member\'s message goes out when '
+        'the roles allow it (ADR-096 D5)', () async {
+      moderation.delete = const Result.success(true);
 
       expect(
-        await sender.deleteForEveryone(
+        await moderated().deleteForEveryone(
           currentUserId: currentUser,
           currentDeviceId: currentDevice,
           conversationId: _directConversationHex,
-          messageId: _messageOne,
+          messageId: _messageTwo,
+        ),
+        isA<Success<void>>(),
+      );
+
+      final committed = fanout.events.single;
+      expect(
+        committed.event.kindValue,
+        ApplicationEventKind.messageDelete.wireValue,
+      );
+      expect(
+        protocolBytesToHex(
+          (committed.event.body as MessageDeleteBody).targetMessageId,
+        ),
+        _messageTwo,
+      );
+      expect(sweep.sweeps, 1);
+    });
+
+    test('a roster that cannot be read refuses with its own failure', () async {
+      const unavailable = StorageFailure(StorageFailureKind.unavailable);
+      moderation
+        ..delete = const Result.failure(unavailable)
+        ..pin = const Result.failure(unavailable);
+
+      expect(
+        await moderated().deleteForEveryone(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageTwo,
         ),
         isA<FailureResult<void>>().having(
           (result) => result.failure,
           'failure',
-          policyBlocked,
+          unavailable,
+        ),
+      );
+      expect(
+        await moderated().setPin(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageTwo,
+          pinned: true,
+        ),
+        isA<FailureResult<void>>().having(
+          (result) => result.failure,
+          'failure',
+          unavailable,
         ),
       );
       expect(fanout.events, isEmpty);
-      expect(sweep.sweeps, 0);
     });
 
-    test('an edit and a pin are each refused and commit nothing', () async {
+    test('a delete of a message the group does not hold is refused', () async {
+      moderation.delete = const Result.success(true);
+
       expect(
-        await sender.editMessage(
+        await moderated().deleteForEveryone(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: '12121212121212121212121212121212',
+        ),
+        isA<FailureResult<void>>(),
+      );
+      expect(moderation.deleteAsks, isEmpty);
+      expect(fanout.events, isEmpty);
+    });
+
+    test('a pin is refused unless the roles let this user pin, and goes '
+        'out when they do (ADR-096 D6)', () async {
+      for (final events in [sender, moderated()]) {
+        expect(
+          await events.setPin(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            conversationId: _directConversationHex,
+            messageId: _messageTwo,
+            pinned: true,
+          ),
+          isA<FailureResult<void>>().having(
+            (result) => result.failure,
+            'failure',
+            policyBlocked,
+          ),
+        );
+      }
+      expect(fanout.events, isEmpty);
+
+      moderation.pin = const Result.success(true);
+      expect(
+        await moderated().setPin(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageTwo,
+          pinned: false,
+        ),
+        isA<Success<void>>(),
+      );
+      final committed = fanout.events.single;
+      expect(committed.event.kindValue, ApplicationEventKind.pinSet.wireValue);
+      expect((committed.event.body as PinSetBody).pinned, isFalse);
+      expect(moderation.pinAsks, [
+        (_directConversationHex, currentUser),
+        (_directConversationHex, currentUser),
+      ]);
+    });
+
+    test('an edit is refused and commits nothing (ADR-096 D8)', () async {
+      moderation.delete = const Result.success(true);
+      moderation.pin = const Result.success(true);
+
+      expect(
+        await moderated().editMessage(
           currentUserId: currentUser,
           currentDeviceId: currentDevice,
           conversationId: _directConversationHex,
@@ -643,23 +787,31 @@ void main() {
           policyBlocked,
         ),
       );
-      expect(
-        await sender.setPin(
-          currentUserId: currentUser,
-          currentDeviceId: currentDevice,
-          conversationId: _directConversationHex,
-          messageId: _messageOne,
-          pinned: true,
-        ),
-        isA<FailureResult<void>>().having(
-          (result) => result.failure,
-          'failure',
-          policyBlocked,
-        ),
-      );
       expect(fanout.events, isEmpty);
       expect(sweep.sweeps, 0);
     });
+
+    test(
+      'the group sender port carries a pin into the group conversation',
+      () async {
+        moderation.pin = const Result.success(true);
+
+        expect(
+          await ConversationGroupMessageSender(moderated()).setPin(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            groupId: _directConversationHex,
+            messageId: _messageTwo,
+            pinned: true,
+          ),
+          isA<Success<void>>(),
+        );
+        expect(
+          fanout.events.single.event.kindValue,
+          ApplicationEventKind.pinSet.wireValue,
+        );
+      },
+    );
 
     test('a reply goes out with its reference and its quote', () async {
       expect(
@@ -1164,6 +1316,33 @@ final class _Fanout implements ApplicationFanoutPort {
   Future<Result<bool>> retryFailedSend(String operationId) async {
     rearmed.add(operationId);
     return Result.success(hasFailedSend);
+  }
+}
+
+/// The roster's answers, and who asked.
+final class _Moderation implements GroupMessageModerationPort {
+  Result<bool> delete = const Result.success(false);
+  Result<bool> pin = const Result.success(false);
+  final deleteAsks = <(String, String, String)>[];
+  final pinAsks = <(String, String)>[];
+
+  @override
+  Future<Result<bool>> mayDeleteMessageOf({
+    required String groupId,
+    required String actorUserId,
+    required String authorUserId,
+  }) async {
+    deleteAsks.add((groupId, actorUserId, authorUserId));
+    return delete;
+  }
+
+  @override
+  Future<Result<bool>> mayPin({
+    required String groupId,
+    required String actorUserId,
+  }) async {
+    pinAsks.add((groupId, actorUserId));
+    return pin;
   }
 }
 

@@ -362,13 +362,15 @@ final class SetGroupReaction {
   }
 }
 
-/// Deletes one of this user's own group messages for every member
-/// (ADR-096 D4).
+/// Deletes a group message for every member: one of this user's own
+/// (ADR-096 D4), or another member's that the roster's roles let this user
+/// delete (D5).
 ///
 /// A delete is an event of the group's conversation, held to the rule a
 /// reaction is held to: a member this group no longer lets send, or a group
-/// this device has left, is sent nothing. The message must be this user's
-/// own; the conversation send path checks that before anything is written.
+/// this device has left, is sent nothing. Whose message it is, and what the
+/// roles allow, the conversation send path checks before anything is
+/// written.
 final class DeleteGroupMessageForEveryone {
   const DeleteGroupMessageForEveryone({
     required this.repository,
@@ -393,6 +395,47 @@ final class DeleteGroupMessageForEveryone {
       currentDeviceId: senderDeviceId.toLowerCase(),
       groupId: (allowed as Success<GroupState>).value.groupId,
       messageId: messageId,
+    );
+  }
+}
+
+/// Pins or unpins a group message for every member (ADR-096 D6).
+///
+/// Only the owner and the admins of a group this device is active in pin;
+/// anyone else is sent nothing.
+final class SetGroupPin {
+  const SetGroupPin({required this.repository, required this.sender});
+
+  final GroupRepositoryPort repository;
+  final GroupMessageSenderPort sender;
+
+  Future<Result<void>> call({
+    required String groupId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required String messageId,
+    required bool pinned,
+  }) async {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final group = (allowed as Success<GroupState>).value;
+    if (!GroupAuthorization.allows(
+      group,
+      senderUserId,
+      GroupPermission.pinMessages,
+    )) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+    }
+    return sender.setPin(
+      currentUserId: senderUserId.toLowerCase(),
+      currentDeviceId: senderDeviceId.toLowerCase(),
+      groupId: group.groupId,
+      messageId: messageId,
+      pinned: pinned,
     );
   }
 }
@@ -425,6 +468,7 @@ final class GroupUseCases {
     required this.retryMessage,
     required this.setReaction,
     required this.deleteForEveryone,
+    required this.setPin,
   });
 
   final CreateGroup create;
@@ -433,6 +477,7 @@ final class GroupUseCases {
   final RetryGroupMessage retryMessage;
   final SetGroupReaction setReaction;
   final DeleteGroupMessageForEveryone deleteForEveryone;
+  final SetGroupPin setPin;
 }
 
 /// Who a locally signed control event is owed to, and in which payloads.

@@ -148,12 +148,22 @@ abstract interface class GroupMessageSenderPort implements Port {
     required String? emoji,
   });
 
-  /// Deletes this user's own [messageId] for every member (ADR-096 D4).
+  /// Deletes [messageId] for every member: this user's own (ADR-096 D4), or
+  /// another member's where the roster's roles allow it (D5).
   Future<Result<void>> deleteForEveryone({
     required String currentUserId,
     required String currentDeviceId,
     required String groupId,
     required String messageId,
+  });
+
+  /// Pins or unpins [messageId] for every member (ADR-096 D6).
+  Future<Result<void>> setPin({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required bool pinned,
   });
 }
 

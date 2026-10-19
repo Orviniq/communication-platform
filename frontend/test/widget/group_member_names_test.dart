@@ -440,6 +440,7 @@ final class _Repository implements GroupRepositoryPort {
         repository: this,
         sender: _Sender(),
       ),
+      setPin: SetGroupPin(repository: this, sender: _Sender()),
     );
   }
 

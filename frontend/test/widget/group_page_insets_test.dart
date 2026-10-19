@@ -159,6 +159,10 @@ void main() {
               repository: repository,
               sender: _UnusedSender(),
             ),
+            setPin: SetGroupPin(
+              repository: repository,
+              sender: _UnusedSender(),
+            ),
           ),
         ),
       ],
