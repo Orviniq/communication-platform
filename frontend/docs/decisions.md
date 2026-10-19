@@ -106,12 +106,13 @@ is not silently edited out of history.
 | ADR-093 | Accepted (2026-10-18); proposed 2026-10-17 | A first message from a sender this account has not verified is held: not opened, not shown, not receipted. Its exact ciphertext stays in its `inbox_envelopes` row, in state 5, renamed `held`, the server copy is acknowledged, and no inspection budget is spent. Only the trust state `unverified` holds, told apart by a new inbound answer of the live-device resolver; a later regular envelope of a held session is held with it. A sender has at most 64 held envelopes and the phone 128, each for 7 days; past a limit the oldest goes to quarantine with the rest of its session. A verification returns the sender's held envelopes to inspection in mailbox order, through a port of the contacts application and a sweep in each cycle. Prekey maintenance prunes no retired signed pair a held envelope may need and postpones a rotation that would erase one. Chats shows one row for each held sender, "@username sent you N messages. Verify to read them.", which opens the safety number; the newest own direct message with no delivery receipt an hour after it was sent shows a hint | The field test of 2026-10-17: a direct message to a recipient who has not verified the sender stays at one tick and is lost. The refusal is required (`backend/CLIENT_CONTRACT.md` §C), but the initial envelope spent its budget, was quarantined and acknowledged, and the server deleted it; its regular follow-ups were quarantined at their first inspection. Costs: at most 32 MiB of held ciphertext on disk; a held session past 64 envelopes loses its start and with it the rest; a rotation can be late while an envelope is held; the row's name and count are claims. Adds four nullable columns and two partial indexes to `inbox_envelopes` (schema 25); changes no wire format, Rust core, dependency, permission or backend file. |
 | ADR-094 | Accepted (2026-10-18); proposed 2026-10-17 | Offer receiving while closed in production as best effort. `SustainedDeliveryGate.availabilityIn` answers `bestEffort` for production while the evidence ledger is incomplete, `measurementOnly` for development and `evidenced` for a complete ledger, and every answer offers the capability. The Settings row and the page show the switch in a production build. The deployment disclosure moves to revision 10: `bestEffortDelivery` offers the switch with its battery cost and its permanent notice, says it has not been tested on the reader's phone and that some phones stop it without a word, and promises no time; `unbuiltSurfaces` names only what the code still lacks (group chats cannot send files; the display name and photo are not published). The `withheld` availability, status and refusal, the stand-down of an earlier install, and their three strings are deleted because nothing returns them. The ledger, the matrix and the admissibility rules stay. Supersedes ADR-053 for production only | The owner wants the capability offered, and the seven-cell matrix needs Samsung and Xiaomi phones on three Android bands that cannot be had here (one Samsung phone exists). ADR-053 held that "we cannot measure this" is a reason to withhold, and the risk it named is still real: on a Samsung or Xiaomi phone the process can be ended without a word, and a person who turned the switch on may believe messages will arrive when they will not. ADR-094 accepts that risk instead of removing it, and keeps it honest: the cost, the lack of any test on the reader's phone and the lack of any guarantee are stated in the disclosure and on the page, and no text gives a delivery time (`sustainedWhatItDoes` says how quickly it works "has not been measured"). It changes no Kotlin, no manifest (the service and its three permissions were already declared in the shared `main` source set), no wire format and no schema. A complete ledger of seven admissible records still moves the offer from `bestEffort` to `evidenced`. Not verified on a phone |
 | ADR-095 | Proposed (2026-10-18) | Prekey maintenance runs in the delivery cycle. `DurableSyncEngine` offers it one turn as the last step of a healthy cycle, after the phase is online, unless the cycle carried a failure or its owner was asked to stand down, so the foreground session, the deferred catch-up and the sustained run all run it, one cycle at a time (ADR-050). `ScheduledPrekeyMaintenance` decides which turns run: the first of a process, then one 6 hours after a run that worked or 5 minutes after one that failed, and a turn during a run joins it. A failure or a throw changes nothing about the cycle. An initial envelope that meets a pending plan is deferred as a transient failure instead of quarantined as a conflict. ADR-093 D17 is unchanged | `prekeyMaintenanceServiceProvider` had no consumer, so no signed prekey rotated, no retired pair was pruned and no one-time prekey was replenished, while `sync-engine.md` said all three happened. The cycle is the unit one delivery owner owns, and wiring maintenance in made a plan left pending able to quarantine a first message |
-| ADR-096 | Proposed (2026-10-19) | Leaving a group, or being removed from it, deletes it from this phone in the transaction of the state change: the conversation row is tombstoned, its messages, draft, receipts and attachment rows are deleted, and its facts move to a new apply state, retired, that is never folded and still catches a replay. The signed state row stays; a re-add clears the tombstone and the group comes back with no old history. After Leave the app returns to Chats. Each member deletes an own group message for everyone under the rule of a group send. The owner deletes any message and an admin a member's; the owner and the admins pin; the roles of the current signed roster decide, and a role change re-folds the group. Edit stays off. Supersedes ADR-090 D4 for Pin and Delete for everyone | The field test of 2026-10-17: a left group stayed in Chats as a read-only copy, and no group message could be deleted for everyone or pinned. The server holds no group, no roster and no role (`backend/CLIENT_CONTRACT.md` §F), so each phone enforces the rule from the signed roster. Costs: leaving cannot be undone on the phone, and a demotion undoes the demoted admin's deletes and pins. Changes no wire format, schema, dependency or backend file |
+| ADR-096 | Accepted (2026-10-19); proposed 2026-10-19 | Leaving a group, or being removed from it, deletes it from this phone in the transaction of the state change: the conversation row is tombstoned, its messages, draft, receipts and attachment rows are deleted, and its facts move to a new apply state, retired, that is never folded and still catches a replay. The signed state row stays; a re-add clears the tombstone and the group comes back with no old history. After Leave the app returns to Chats. Each member deletes an own group message for everyone under the rule of a group send. The owner deletes any message and an admin a member's; the owner and the admins pin; the roles of the current signed roster decide, and a role change re-folds the group. Edit stays off. Supersedes ADR-090 D4 for Pin and Delete for everyone | The field test of 2026-10-17: a left group stayed in Chats as a read-only copy, and no group message could be deleted for everyone or pinned. The server holds no group, no roster and no role (`backend/CLIENT_CONTRACT.md` §F), so each phone enforces the rule from the signed roster. Costs: leaving cannot be undone on the phone, and a demotion undoes the demoted admin's deletes and pins. Changes no wire format, schema, dependency or backend file |
 
 ## ADR-096 in full — leaving deletes the group from the phone, and roles decide who changes a message (2026-10-19)
 
-**Status:** Proposed, 2026-10-19. Client local-state and group-authorization decision, from the
-field-test triage of 2026-10-17 and the owner's answers to it. Built on the branch
+**Status:** Accepted (2026-10-19); proposed 2026-10-19. Client local-state and
+group-authorization decision, from the field-test triage of 2026-10-17 and the owner's answers
+to it. Built on the branch
 `frontend-group-membership-moderation` in three prompts: prompt 1 names the members (no part of
 this record), prompt 2 builds D1 to D4, and prompt 3 builds D5 to D7 and accepts it.
 **Changes no wire format, event kind, cryptographic construction, Rust core, dependency, Android
@@ -311,17 +312,78 @@ clears `tombstoned`, so nothing lists it. Recorded by a test and not changed her
   keeping the tombstone, the send path refusing an own delete, and the chat page ignoring a
   removal.
 
+### As built, prompt 3 (D5 to D7)
+
+- **The rule.** `GroupAuthorization.recordedRoleMayDelete` and `recordedRoleMayPin`
+  (`group_model.dart`) are the fold's rule, on the roles as recorded whatever the membership.
+  `canDeleteMessageOf` is the send's: an own message under `sendMessages` (D4), another
+  member's only for an active owner or admin (`removeMembers`) under the recorded rule. The
+  author's role is read from the roster whatever the author's membership, so the owner may
+  delete the message of a member who left; `canRemove` itself still needs an active target.
+- **The projector.** `DriftApplicationEventProjector._groupRoster` reads the `group_states`
+  row once for each fold, the incremental one and the rebuild, inside the fold's transaction,
+  through `DriftGroupRepository.decodeStoredState`, the decoder made public. A row that is
+  missing or does not decode counts no delete by someone else and no pin.
+- **Checked again.** `commitTransitionInsideTransaction` rebuilds the group's conversation
+  after it writes the new state when a user of the previous roster has another role, or is
+  gone from it; an addition alone does not, because a new member has written nothing. A
+  transition that ends left or removed retires the history instead. The rebuild needs the
+  local user, which the repository did not know: `PreparedGroupTransition` now carries
+  `localUserId`, from the inbound coordinator and from the local mutation.
+- **The send.** `SendConversationEvents` takes a `GroupMessageModerationPort`
+  (`conversation_ports.dart`), which `GroupRosterMessageModeration`
+  (`group_pairwise_adapters.dart`) answers from `readGroup`, so a group waiting for its state
+  allows nothing. `deleteForEveryone` in a group reads the author with `readMessageSenders`;
+  an own message goes as before, another member's only on the port's yes. `setPin` in a group
+  asks the port first, and `_sendMutation` now lets a pin into a group. No port, or a no, is
+  `policyBlocked`; a roster that cannot be read returns its own failure. `SetGroupPin` joins
+  `GroupUseCases` and requires `pinMessages`.
+- **The sheet.** `GroupMessageModeration` (`chat_view_model_mapper.dart`) carries Pin and the
+  authors whose messages the user may delete; the group page derives it from the roster with
+  `canDeleteMessageOf` and `allows(pinMessages)`, and `ChatMessageProjection` drops what it
+  memoized when it changes.
+- **The banner.** The group page maps `page.pinned` through its own projection and shows
+  `ChatPinnedBanner`, which moved with the pinned list out of `chat_conversation_view.dart`
+  into `chat_pinned_banner.dart`. A tap jumps to the first pinned message; the list offers
+  Unpin only on a row whose `canPin` is true, which is every row of a direct chat.
+
+### Verified by, prompt 3
+
+- `test/features/groups/infrastructure/drift_group_repository_test.dart`, over an in-memory
+  database and a signed roster: the owner deletes an admin's message; an admin deletes a
+  member's; an admin's delete of the owner's message and of another admin's is ignored and
+  kept as a candidate; a member's pin is ignored and an admin's shows in the pinned list; a
+  delete that arrives before the promotion that allows it applies after it; a demotion undoes
+  the demoted admin's delete and pin; an admin who leaves keeps the delete.
+- `test/features/groups/domain/group_authorization_state_machine_test.dart`: who deletes whose
+  message and who pins, a left admin and a waiting group.
+- `test/features/messaging/conversation_use_cases_test.dart`: another member's delete is
+  refused with no port and on a no, and goes out on a yes; a pin likewise; an unreadable roster
+  returns its failure; an edit stays refused. `group_use_cases_test.dart`: `SetGroupPin` from
+  the owner and an admin, refused for a member, a left group and a waiting one; the roster
+  adapter's answers.
+- `chat_view_model_mapper_test.dart`, `test/widget/group_pages_test.dart` and the routed
+  `test/widget/group_message_actions_test.dart`: the sheet's actions for a member, an admin and
+  the owner; Pin and Unpin reach the pin path; a refused pin says so; the banner shows to a
+  member, jumps, and its list offers a member no Unpin.
+- Four mutation checks, each caught: an admin allowed to delete the owner's message (the
+  repository and domain tests), a member's pin accepted (the repository test), no re-fold on a
+  role change (the promotion and demotion tests), and Pin offered to a member (the mapper,
+  page and routed tests).
+
 ### Not verified
 
 No run on a phone, and no run against the live server: Leave on one device and the removal on
-the account's other devices, and a re-add.
+the account's other devices, and a re-add; and, with three accounts (an owner, an admin and a
+member), each delete and pin of D5 and D6 on each member's phone, the banner, and a promotion
+and a demotion that change what a stored delete shows.
 
 ### Not done
 
-- D5 to D7 (prompt 3): others' messages, pins, the pinned banner and the projector's roles.
 - `groupRemovedState` and `groupLeftState` still say the copy stays readable. No routed page shows
   them now, because the page returns to Chats; only an injected page does.
 - A received removal sweeps the cache only at the next process start (D3).
+- No system line says who deleted or pinned a message.
 
 ## ADR-095 in full — prekey maintenance runs at the end of a healthy delivery cycle (2026-10-18)
 
