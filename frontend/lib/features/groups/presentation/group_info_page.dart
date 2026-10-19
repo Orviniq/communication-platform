@@ -59,6 +59,9 @@ class GroupInfoPage extends ConsumerWidget {
       error: (_, _) => groupErrorPage(context),
       data: (group) {
         if (group == null) return groupErrorPage(context);
+        // Left, or removed, on this device or another of this account's: the
+        // group and its history are gone from this phone (ADR-096 D3).
+        if (groupGoneFromThisPhone(group)) return groupGonePage(context);
         final names = ref.watch(
           groupMemberNamesProvider(
             GroupMemberNamesRequest(
@@ -83,6 +86,7 @@ class GroupInfoPage extends ConsumerWidget {
                   actorDeviceId: deviceId,
                   operation: operation,
                 ),
+                onLeft: () => context.go('/chats'),
               );
               return names.when(
                 loading: () => groupLoadingPage(context),
@@ -105,6 +109,7 @@ class GroupInfoView extends StatefulWidget {
     required this.memberNames,
     required this.currentUserId,
     required this.onMutate,
+    this.onLeft,
     this.embedded = false,
     super.key,
   });
@@ -116,6 +121,10 @@ class GroupInfoView extends StatefulWidget {
   final GroupMemberNames memberNames;
   final String currentUserId;
   final MutateGroupCallback onMutate;
+
+  /// Called once a Leave this page asked for has committed: the group is
+  /// then gone from this phone, and the page returns to Chats (ADR-096 D3).
+  final VoidCallback? onLeft;
   final bool embedded;
 
   @override
@@ -371,6 +380,12 @@ class _GroupInfoViewState extends State<GroupInfoView> {
     });
     final result = await widget.onMutate(operation);
     if (!mounted) return;
+    if (result is Success<GroupState> &&
+        operation is RemoveGroupMemberOperation &&
+        operation.targetUserId == widget.currentUserId.toLowerCase()) {
+      widget.onLeft?.call();
+      return;
+    }
     setState(() {
       _busy = false;
       _failed = result is FailureResult<GroupState>;

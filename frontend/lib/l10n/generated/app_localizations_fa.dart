@@ -1530,7 +1530,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get groupConfirmLeaveBody =>
-      'دیگر پیام‌های تازهٔ این گروه را دریافت نمی‌کنید. محتوای ذخیره‌شده روی این دستگاه خواندنی می‌ماند.';
+      'گروه و تاریخچهٔ آن از این گوشی حذف می‌شود و دیگر پیام‌های آن را دریافت نمی‌کنید. اعضای دیگر نسخهٔ خود را نگه می‌دارند.';
 
   @override
   String get groupOwnerMustTransfer => 'پیش از ترک گروه، مالکیت را منتقل کنید.';

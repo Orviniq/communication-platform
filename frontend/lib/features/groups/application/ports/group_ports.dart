@@ -157,6 +157,14 @@ abstract interface class GroupMessageSenderPort implements Port {
   });
 }
 
+/// Deletes the decrypted files a removed group's deleted history left without
+/// a row (ADR-096 D3, ADR-089 D10). A group holds no attachment row today
+/// (ADR-089 D1); the sweep keeps that true for a file nothing names.
+abstract interface class GroupRemovalSweepPort implements Port {
+  /// Never fails: a file it could not delete waits for the next sweep.
+  Future<void> sweepAfterGroupRemoval();
+}
+
 /// Starts the authenticated repair of this device's pairwise sessions with one
 /// user's devices.
 abstract interface class GroupSessionRepairPort implements Port {

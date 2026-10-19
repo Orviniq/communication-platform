@@ -647,7 +647,7 @@
   "groupConfirmRemoveTitle": "Remove member?",
   "groupConfirmRemoveBody": "This member stops receiving new messages from the group. Content they already received cannot be erased.",
   "groupConfirmLeaveTitle": "Leave group?",
-  "groupConfirmLeaveBody": "You will stop receiving new messages from this group. Content already stored on this device remains readable.",
+  "groupConfirmLeaveBody": "The group and its history will be deleted from this phone, and you will stop receiving its messages. The other members keep their copies.",
   "groupOwnerMustTransfer": "Transfer ownership before leaving this group.",
   "groupActionFailed": "That group change could not be committed. The previous group state is unchanged.",
   "groupMemberPickerEmpty": "No eligible contacts found",

@@ -451,6 +451,40 @@ void main() {
     });
   });
 
+  test('a Leave that commits sweeps the attachment cache, and another change '
+      'does not (ADR-096 D3)', () async {
+    final sweep = _RemovalSweep();
+    MutateGroup sweeping() => MutateGroup(
+      repository: repository,
+      crypto: crypto,
+      identity: identity,
+      clock: const _Clock(),
+      removalSweep: sweep,
+    );
+    final group = await create([_alice]);
+    // An owner leaves only a group it is alone in.
+    final alone =
+        (await sweeping()(
+                  groupId: group.groupId,
+                  actorUserId: _local,
+                  actorDeviceId: _localDevice,
+                  operation: RemoveGroupMemberOperation(_alice),
+                )
+                as Success<GroupState>)
+            .value;
+    expect(sweep.sweeps, 0);
+
+    final left = await sweeping()(
+      groupId: alone.groupId,
+      actorUserId: _local,
+      actorDeviceId: _localDevice,
+      operation: RemoveGroupMemberOperation(_local),
+    );
+
+    expect((left as Success<GroupState>).value.lifecycle, GroupLifecycle.left);
+    expect(sweep.sweeps, 1);
+  });
+
   group('deleting an own message for everyone (ADR-096 D4)', () {
     DeleteGroupMessageForEveryone delete(_Sender sender) =>
         DeleteGroupMessageForEveryone(repository: repository, sender: sender);
@@ -797,6 +831,13 @@ final class _Sender implements GroupMessageSenderPort {
     deleted.add((groupId, messageId));
     return const Result.success(null);
   }
+}
+
+final class _RemovalSweep implements GroupRemovalSweepPort {
+  var sweeps = 0;
+
+  @override
+  Future<void> sweepAfterGroupRemoval() async => sweeps += 1;
 }
 
 final class _Clock implements TimeSource {

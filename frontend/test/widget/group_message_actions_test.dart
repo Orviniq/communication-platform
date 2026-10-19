@@ -43,6 +43,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import '../support/application_event_harness.dart';
 import '../support/attachment_descriptor_fixture.dart';
@@ -114,6 +115,60 @@ void main() {
       page: const GroupChatPage(groupId: _groupId),
     );
   }
+
+  testWidgets('an open group chat returns to Chats when this account is no '
+      'longer in the group (ADR-096 D3)', (tester) async {
+    await _seedConversation(
+      database,
+      conversationId: _groupId,
+      kind: ConversationKind.group,
+      messages: const [],
+    );
+    final router = GoRouter(
+      initialLocation: '/chats',
+      routes: [
+        GoRoute(
+          path: '/chats',
+          builder: (context, state) =>
+              const Scaffold(body: Center(child: Text('The Chats list'))),
+        ),
+        GoRoute(
+          path: '/groups/:groupId',
+          builder: (context, state) =>
+              GroupChatPage(groupId: state.pathParameters['groupId']!),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await _pump(
+      tester,
+      database: database,
+      fanout: fanout,
+      groupSender: groupSender,
+      groups: {
+        _groupId: _group(
+          _groupId,
+          'Team',
+          member: false,
+          lifecycle: GroupLifecycle.removed,
+        ),
+      },
+      summaries: const [],
+      page: MaterialApp.router(
+        theme: AppTheme.light(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        routerConfig: router,
+      ),
+    );
+
+    unawaited(router.push('/groups/$_groupId'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('The Chats list'), findsOneWidget);
+    expect(find.byKey(const ValueKey('group-chat-screen')), findsNothing);
+  });
 
   group('a group chat', () {
     testWidgets('Copy writes the message text to the clipboard', (

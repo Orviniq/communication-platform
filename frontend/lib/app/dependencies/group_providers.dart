@@ -1,3 +1,4 @@
+import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
@@ -15,6 +16,7 @@ import 'package:communication_platform/features/groups/infrastructure/group_pair
 import 'package:communication_platform/features/groups/infrastructure/native_group_control_crypto.dart';
 import 'package:communication_platform/features/groups/infrastructure/pairwise_group_live_device_adapter.dart';
 import 'package:communication_platform/features/groups/infrastructure/pairwise_group_outbound_envelope_adapter.dart';
+import 'package:communication_platform/features/messaging/application/ports/attachment_sweep_port.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_session_repair_service.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
@@ -163,6 +165,7 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
       crypto: crypto,
       identity: identity,
       clock: clock,
+      removalSweep: _AttachmentRemovalSweep(ref.watch(attachmentSweepProvider)),
     ),
     sendMessage: SendGroupMessage(repository: repository, sender: sender),
     retryMessage: RetryGroupMessage(repository: repository, sender: sender),
@@ -173,6 +176,17 @@ final groupUseCasesProvider = FutureProvider<GroupUseCases>((ref) async {
     ),
   );
 });
+
+/// The attachment cache's sweep, run after a Leave deleted a group's history
+/// from this phone (ADR-096 D3).
+final class _AttachmentRemovalSweep implements GroupRemovalSweepPort {
+  const _AttachmentRemovalSweep(this._sweep);
+
+  final AttachmentSweepPort _sweep;
+
+  @override
+  Future<void> sweepAfterGroupRemoval() => _sweep.sweepAfterDeletion();
+}
 
 final groupProvider = StreamProvider.autoDispose.family<GroupState?, String>((
   ref,

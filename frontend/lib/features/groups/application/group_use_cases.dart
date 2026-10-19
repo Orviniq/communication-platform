@@ -120,6 +120,7 @@ final class MutateGroup {
     required this.identity,
     required this.clock,
     this.stateMachine = const GroupControlStateMachine(),
+    this.removalSweep,
   });
 
   final GroupRepositoryPort repository;
@@ -127,6 +128,10 @@ final class MutateGroup {
   final GroupIdentityPort identity;
   final TimeSource clock;
   final GroupControlStateMachine stateMachine;
+
+  /// Asked once a change that took this account out of the group commits:
+  /// the commit deleted the group's history from this phone (ADR-096 D1).
+  final GroupRemovalSweepPort? removalSweep;
 
   Future<Result<GroupState>> call({
     required String groupId,
@@ -179,7 +184,7 @@ final class MutateGroup {
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
     }
-    return _signApplyAndCommit(
+    final committed = await _signApplyAndCommit(
       repository: repository,
       crypto: crypto,
       stateMachine: stateMachine,
@@ -187,6 +192,12 @@ final class MutateGroup {
       event: event,
       localUserId: actorUserId,
     );
+    if (committed case Success(:final value)
+        when value.lifecycle == GroupLifecycle.left ||
+            value.lifecycle == GroupLifecycle.removed) {
+      await removalSweep?.sweepAfterGroupRemoval();
+    }
+    return committed;
   }
 
   bool _authorized(

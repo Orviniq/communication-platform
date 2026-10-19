@@ -246,6 +246,9 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
       error: (_, _) => groupErrorPage(context),
       data: (state) {
         if (state == null) return groupErrorPage(context);
+        // Left, or removed, on this device or another of this account's: the
+        // group and its history are gone from this phone (ADR-096 D3).
+        if (groupGoneFromThisPhone(state)) return groupGonePage(context);
         final names = ref.watch(
           groupMemberNamesProvider(
             GroupMemberNamesRequest(
