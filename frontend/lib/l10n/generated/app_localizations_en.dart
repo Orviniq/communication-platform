@@ -473,6 +473,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Group messages use the same encryption as direct messages. The signed changes that add and remove members are built on top of it, and nobody outside the project has reviewed them. Each group message is sent as one encrypted copy for each device of each member. If this phone loses a group\'s current state, only another member\'s app can send it again, and until then you cannot send messages in that group.';
 
   @override
+  String get disclosureOnlineStatus =>
+      'While this app is open on your screen, verified contacts you share a chat with can see that you are online and when you are typing, and they learn when you open your chat with them or a group you share. After you leave the app, they see when they last saw you online. The server cannot read any of this, but it can see that your phone sends short signals to theirs while a chat is open. You can turn this off for this phone in Settings, under Show my online status. While it is off, you do not see anyone else\'s either.';
+
+  @override
   String get disclosureUnbuiltSurfaces =>
       'Some things you can see are not built yet: group chats cannot send files, and the display name and photo you choose are not published — other people see the username you registered with.';
 
@@ -1012,7 +1016,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatPinnedMessagesTitle => 'Pinned messages';
 
   @override
-  String get chatTypingStatus => 'typing… encrypted signal may lag';
+  String get chatTypingStatus => 'typing…';
+
+  @override
+  String get chatPeerOnline => 'online';
+
+  @override
+  String chatPeerLastSeenToday(String time) {
+    return 'last seen today at $time';
+  }
+
+  @override
+  String chatPeerLastSeenYesterday(String time) {
+    return 'last seen yesterday at $time';
+  }
+
+  @override
+  String chatPeerLastSeenOn(String date) {
+    return 'last seen $date';
+  }
 
   @override
   String get chatSearchAction => 'Search in chat';
@@ -1420,6 +1442,21 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String groupOnlineCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count online',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String groupMemberCountOnline(String members, String online) {
+    return '$members · $online';
+  }
+
+  @override
   String groupTypingOne(String name) {
     return '$name is typing…';
   }
@@ -1635,6 +1672,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSustainedUnavailable => 'Not available in this build.';
+
+  @override
+  String get settingsOnlineStatusTitle => 'Show my online status';
+
+  @override
+  String get settingsOnlineStatusSummary =>
+      'Off on this phone: nobody sees when you are online or typing, and you do not see anyone\'s.';
+
+  @override
+  String get settingsOnlineStatusSaveFailed =>
+      'This choice could not be saved on this phone.';
 
   @override
   String get sustainedTitle => 'Receiving while closed';
