@@ -8,6 +8,7 @@ import 'package:communication_platform/features/messaging/presentation/chat_atta
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_pinned_banner.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline_adapter.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_undelivered_hint.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
@@ -205,7 +206,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         body: Column(
           children: [
             if (widget.model.pinnedMessages.isNotEmpty)
-              _PinnedBanner(
+              ChatPinnedBanner(
                 count: widget.model.pinnedMessages.length,
                 onJump: () => _handleIntent(
                   JumpToMessageIntent(widget.model.pinnedMessages.first.id),
@@ -285,54 +286,11 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     onJumpToMessage: (id) => _handleIntent(JumpToMessageIntent(id)),
   );
 
-  Future<void> _showPinnedMessages() async {
-    final strings = AppLocalizations.of(context);
-    final pinned = widget.model.pinnedMessages;
-    await showAppSheet<void>(
-      context: context,
-      semanticLabel: strings.chatPinnedMessagesTitle,
-      childScrolls: true,
-      child: SizedBox(
-        height: mathMin(MediaQuery.sizeOf(context).height * .65, 520),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              strings.chatPinnedMessagesTitle,
-              style: context.tokens.typography.section,
-            ),
-            const SizedBox(height: AppSpacing.x3),
-            Expanded(
-              child: ListView.builder(
-                itemCount: pinned.length,
-                itemBuilder: (context, index) {
-                  final message = pinned[index];
-                  return ListTile(
-                    leading: const AppIcon(AppIcons.pin),
-                    title: Text(
-                      message.text ?? strings.chatDeletedMessage,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: TextButton(
-                      onPressed: () => _handleIntent(
-                        SetPinIntent(messageId: message.id, pinned: false),
-                      ),
-                      child: Text(strings.chatUnpinAction),
-                    ),
-                    onTap: () {
-                      popAppModal(context);
-                      _handleIntent(JumpToMessageIntent(message.id));
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Future<void> _showPinnedMessages() => showChatPinnedMessages(
+    context: context,
+    pinned: widget.model.pinnedMessages,
+    onIntent: _handleIntent,
+  );
 
   Future<void> _showForwardPicker(ChatMessageViewModel message) =>
       showChatForwardPicker(
@@ -421,58 +379,3 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     );
   }
 }
-
-class _PinnedBanner extends StatelessWidget {
-  const _PinnedBanner({
-    required this.count,
-    required this.onJump,
-    required this.onExpand,
-  });
-
-  final int count;
-  final VoidCallback onJump;
-  final VoidCallback onExpand;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppLocalizations.of(context);
-    final label = strings.chatPinnedBanner(count);
-    return Semantics(
-      container: true,
-      button: true,
-      label: label,
-      child: Material(
-        color: context.tokens.colors.accentSoft,
-        child: InkWell(
-          onTap: onJump,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.x3,
-              vertical: AppSpacing.x2,
-            ),
-            child: Row(
-              children: [
-                AppIcon(AppIcons.pin, color: context.tokens.colors.accent),
-                const SizedBox(width: AppSpacing.x2),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: context.tokens.typography.compact.copyWith(
-                      color: context.tokens.colors.accent,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: onExpand,
-                  child: Text(strings.chatPinnedExpandAction),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-double mathMin(double left, double right) => left < right ? left : right;

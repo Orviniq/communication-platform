@@ -48,6 +48,7 @@ import 'package:go_router/go_router.dart';
 import '../support/application_event_harness.dart';
 import '../support/attachment_descriptor_fixture.dart';
 import '../support/authentication_harness.dart' as auth;
+import '../support/chat_pulse.dart';
 
 const _deviceId = '00000000-0000-0000-0000-000000000011';
 const _peer = '00000000-0000-0000-0000-000000000002';
@@ -217,6 +218,71 @@ void main() {
       expect((await _row(database, _secondMessageId)).deletedForMe, isTrue);
       expect((await _row(database, _messageId)).deletedForMe, isFalse);
       expect(find.text(strings.chatActionFailedMessage), findsNothing);
+    });
+
+    testWidgets('an admin pins a member\'s message and may delete it for '
+        'everyone, and not the owner\'s (ADR-096 D5, D6)', (tester) async {
+      await openGroup(
+        tester,
+        messages: const [
+          (id: _messageId, sender: _member, text: 'from the owner'),
+          (id: _secondMessageId, sender: _otherMember, text: 'from a member'),
+        ],
+        state: _group(_groupId, 'Team', role: GroupRole.admin),
+      );
+
+      await _openActions(tester, 'from a member');
+      await tester.tap(find.text(strings.chatPinAction));
+      await tester.pumpAndSettle();
+      expect(groupSender.pins, [(messageId: _secondMessageId, pinned: true)]);
+      expect(find.text(strings.chatActionFailedMessage), findsNothing);
+
+      await _openActions(tester, 'from a member');
+      await tester.tap(find.text(strings.chatDeleteAction));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.chatDeleteForEveryoneAction), findsOneWidget);
+      await tester.tap(find.text(strings.chatCancelAction));
+      await tester.pumpAndSettle();
+
+      await _openActions(tester, 'from the owner');
+      expect(find.text(strings.chatPinAction), findsOneWidget);
+      await tester.tap(find.text(strings.chatDeleteAction));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.chatDeleteForEveryoneAction), findsNothing);
+    });
+
+    testWidgets('a member is offered no Pin and no Unpin '
+        '(ADR-096 D6)', (tester) async {
+      await openGroup(tester);
+
+      await _openActions(tester, 'hello team');
+      expect(find.text(strings.chatPinAction), findsNothing);
+      expect(find.text(strings.chatUnpinAction), findsNothing);
+    });
+
+    testWidgets('a pinned message of the group shows the banner, and a tap '
+        'jumps to it (ADR-096 D6)', (tester) async {
+      await openGroup(tester);
+      await (database.update(database.messages)
+            ..where((row) => row.messageId.equals(_messageId)))
+          .write(const MessagesCompanion(pinned: Value(true)));
+      await tester.pumpAndSettle();
+
+      final banner = find.text(strings.chatPinnedBanner(1));
+      expect(banner, findsOneWidget);
+      await tester.tap(banner);
+      await tester.pump();
+      expect(
+        await pumpUntilPulse(tester, _messageId),
+        closeTo(chatPulsePeak, .05),
+      );
+      await tester.pumpAndSettle();
+
+      // A member sees the list, and no Unpin in it.
+      await tester.tap(find.text(strings.chatPinnedExpandAction));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.chatPinnedMessagesTitle), findsWidgets);
+      expect(find.text(strings.chatUnpinAction), findsNothing);
     });
 
     testWidgets('a draft is kept, and a reopened group shows it in the '
@@ -920,6 +986,7 @@ GroupState _group(
   String name, {
   bool member = true,
   GroupLifecycle lifecycle = GroupLifecycle.active,
+  GroupRole role = GroupRole.member,
 }) => GroupState(
   groupId: groupId,
   metadata: GroupMetadata(name: name, description: ''),
@@ -935,7 +1002,7 @@ GroupState _group(
     GroupMember(
       userId: auth.userId,
       displayName: '',
-      role: GroupRole.member,
+      role: role,
       verified: true,
       membership: member
           ? GroupMembershipState.active
@@ -1054,10 +1121,7 @@ Future<ProviderContainer> _pump(
             repository: groupRepository,
             sender: groupSender,
           ),
-          setPin: SetGroupPin(
-            repository: groupRepository,
-            sender: groupSender,
-          ),
+          setPin: SetGroupPin(repository: groupRepository, sender: groupSender),
         ),
       ),
     ],

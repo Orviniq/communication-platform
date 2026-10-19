@@ -169,6 +169,61 @@ void main() {
       expect(direct.last.canPin, isTrue);
     });
 
+    test("offers Delete for everyone on the messages of the authors the "
+        'roles name, and Pin where they allow it (ADR-096 D5, D6)', () {
+      final source = [
+        _message('own', sender: _me, at: 1),
+        _message('alice', sender: _alice, at: 2),
+        _message('bob', sender: _bob, at: 3),
+        _message('gone', sender: _alice, at: 4, deletedForEveryone: true),
+      ];
+
+      final views = ChatMessageProjection().mapGroup(
+        source,
+        currentUserId: _me,
+        currentUserName: 'You',
+        memberName: memberName,
+        moderation: const GroupMessageModeration(
+          pin: true,
+          deletableAuthors: {_alice},
+        ),
+      );
+
+      expect(
+        [for (final view in views) view.canDeleteForEveryone],
+        [true, true, false, false],
+      );
+      expect(views.map((view) => view.canPin), everyElement(isTrue));
+      expect(views.map((view) => view.canEdit), everyElement(isFalse));
+    });
+
+    test('a change of role re-derives every message', () {
+      final projection = ChatMessageProjection();
+      final source = [_message('alice', sender: _alice, at: 1)];
+      List<ChatMessageViewModel> map(GroupMessageModeration moderation) =>
+          projection.mapGroup(
+            source,
+            currentUserId: _me,
+            currentUserName: 'You',
+            memberName: memberName,
+            moderation: moderation,
+          );
+
+      final member = map(const GroupMessageModeration()).single;
+      final same = map(const GroupMessageModeration()).single;
+      final admin = map(
+        const GroupMessageModeration(pin: true, deletableAuthors: {_alice}),
+      ).single;
+
+      // The same roles derive nothing again; other roles derive it anew.
+      expect(identical(same, member), isTrue);
+      expect(identical(admin, member), isFalse);
+      expect(member.canPin, isFalse);
+      expect(member.canDeleteForEveryone, isFalse);
+      expect(admin.canPin, isTrue);
+      expect(admin.canDeleteForEveryone, isTrue);
+    });
+
     test('an unchanged message keeps its view model instance', () {
       final projection = ChatMessageProjection();
       List<ConversationMessage> page() => [
@@ -226,6 +281,7 @@ ConversationMessage _message(
   required int at,
   String? replyTo,
   MessageTransportState? transport,
+  bool deletedForEveryone = false,
 }) => ConversationMessage(
   messageId: id,
   conversationId: _group,
@@ -240,7 +296,7 @@ ConversationMessage _message(
   timestampState: MessageTimestampState.plausible,
   revision: 0,
   edited: false,
-  deletedForEveryone: false,
+  deletedForEveryone: deletedForEveryone,
   deletedForMe: false,
   pinned: false,
   unread: false,

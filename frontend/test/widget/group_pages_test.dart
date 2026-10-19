@@ -580,14 +580,15 @@ void main() {
       expect(star(_questionId), findsNothing);
     });
 
-    testWidgets('the message sheet offers no Pin and no Edit, even on an own '
-        'message', (tester) async {
-      await _pumpThread(tester);
+    testWidgets("a member's message sheet offers no Pin and no Edit, even "
+        'on an own message (ADR-096 D6, D8)', (tester) async {
+      await _pumpThread(tester, viewer: _member);
 
-      await _openActions(tester, _ownId);
+      await _openActions(tester, _answerId);
 
       expect(find.text('Reply'), findsOneWidget);
-      expect(find.text('Star on this device'), findsOneWidget);
+      // The member starred it on this phone.
+      expect(find.text('Remove star'), findsOneWidget);
       expect(find.text('Pin'), findsNothing);
       expect(find.text('Unpin'), findsNothing);
       expect(find.text('Edit'), findsNothing);
@@ -614,16 +615,128 @@ void main() {
       expect(deleted, [_ownId]);
     });
 
-    testWidgets('the delete dialog of another member\'s message offers no '
-        'Delete for everyone', (tester) async {
-      await _pumpThread(tester);
+    testWidgets("a member's delete dialog of another member's message offers "
+        'no Delete for everyone', (tester) async {
+      await _pumpThread(tester, viewer: _member);
 
-      await _openActions(tester, _answerId);
+      await _openActions(tester, _questionId);
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
       expect(find.text('Delete for me'), findsOneWidget);
       expect(find.text('Delete for everyone'), findsNothing);
+    });
+
+    testWidgets("the owner's sheet offers Pin, and Delete for everyone on an "
+        "admin's message, which sends the delete (ADR-096 D5, D6)", (
+      tester,
+    ) async {
+      final deleted = <String>[];
+      await _pumpThread(
+        tester,
+        onDeleteForEveryone: (messageId) async {
+          deleted.add(messageId);
+          return const Result.success(null);
+        },
+      );
+
+      await _openActions(tester, _questionId);
+      expect(find.text('Pin'), findsOneWidget);
+      expect(find.text('Edit'), findsNothing);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete for everyone'));
+      await tester.pumpAndSettle();
+
+      expect(deleted, [_questionId]);
+    });
+
+    testWidgets("an admin's sheet offers Delete for everyone on a member's "
+        "message and not on the owner's (ADR-096 D5)", (tester) async {
+      await _pumpThread(tester, viewer: _admin);
+
+      await _openActions(tester, _answerId);
+      expect(find.text('Pin'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete for everyone'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      await _openActions(tester, _ownId);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete for me'), findsOneWidget);
+      expect(find.text('Delete for everyone'), findsNothing);
+    });
+
+    testWidgets('Pin and Unpin from the sheet reach the pin path '
+        '(ADR-096 D6)', (tester) async {
+      final pins = <(String, bool)>[];
+      await _pumpThread(
+        tester,
+        viewer: _admin,
+        pinned: {_ownId},
+        onSetPin: (messageId, pinned) async {
+          pins.add((messageId, pinned));
+          return const Result.success(null);
+        },
+      );
+
+      await _openActions(tester, _answerId);
+      await tester.tap(find.text('Pin'));
+      await tester.pumpAndSettle();
+      await _openActions(tester, _ownId);
+      await tester.tap(find.text('Unpin'));
+      await tester.pumpAndSettle();
+
+      expect(pins, [(_answerId, true), (_ownId, false)]);
+    });
+
+    testWidgets('a refused pin says the action could not be completed', (
+      tester,
+    ) async {
+      await _pumpThread(
+        tester,
+        onSetPin: (_, _) async => const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        ),
+      );
+
+      await _openActions(tester, _answerId);
+      await tester.tap(find.text('Pin'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          "That action could not be completed. No security guarantee was weakened.",
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a group shows its pinned banner to every member, and a tap '
+        'on it jumps to the message (ADR-096 D6)', (tester) async {
+      await _pumpThread(tester, viewer: _member, pinned: {_questionId});
+
+      expect(find.text('1 pinned messages'), findsOneWidget);
+      expect(pulseStrength(tester, _questionId), 0);
+      await tester.tap(find.text('1 pinned messages'));
+      await tester.pump();
+
+      expect(
+        await pumpUntilPulse(tester, _questionId),
+        closeTo(chatPulsePeak, .05),
+      );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a group with no pinned message shows no banner', (
+      tester,
+    ) async {
+      await _pumpThread(tester);
+
+      expect(find.textContaining('pinned messages'), findsNothing);
     });
 
     testWidgets(
@@ -1144,6 +1257,9 @@ Future<void> _pumpThread(
   SendGroupMessageCallback? onSend,
   SetGroupReactionCallback? onReaction,
   DeleteGroupMessageForEveryoneCallback? onDeleteForEveryone,
+  SetGroupPinCallback? onSetPin,
+  String viewer = _owner,
+  Set<String> pinned = const {},
 }) => _pump(
   tester,
   GroupChatPage(
@@ -1151,7 +1267,13 @@ Future<void> _pumpThread(
     injectedState: _state(),
     injectedMemberNames: _names(),
     injectedMessages: [
-      _message(_questionId, sender: _admin, text: 'Original question', at: 100),
+      _message(
+        _questionId,
+        sender: _admin,
+        text: 'Original question',
+        at: 100,
+        pinned: pinned.contains(_questionId),
+      ),
       _message(
         _answerId,
         sender: _member,
@@ -1159,6 +1281,7 @@ Future<void> _pumpThread(
         at: 200,
         replyTo: _questionId,
         edited: true,
+        pinned: pinned.contains(_answerId),
         starred: true,
         reactions: const [
           MessageReaction(reactingUserId: _owner, emoji: '\u{1F44D}'),
@@ -1171,15 +1294,17 @@ Future<void> _pumpThread(
         text: 'Mine',
         at: 300,
         transport: MessageTransportState.relayAccepted,
+        pinned: pinned.contains(_ownId),
       ),
     ],
-    currentUserId: _owner,
+    currentUserId: viewer,
     onSend:
         onSend ??
         (_, {replyToMessageId, quoteFallback}) async =>
             const Result.success(null),
     onReaction: onReaction,
     onDeleteForEveryone: onDeleteForEveryone,
+    onSetPin: onSetPin,
   ),
 );
 
@@ -1202,6 +1327,7 @@ ConversationMessage _message(
   String? replyTo,
   bool edited = false,
   bool starred = false,
+  bool pinned = false,
   List<MessageReaction> reactions = const [],
 }) => ConversationMessage(
   messageId: messageId,
@@ -1219,7 +1345,7 @@ ConversationMessage _message(
   edited: edited,
   deletedForEveryone: false,
   deletedForMe: false,
-  pinned: false,
+  pinned: pinned,
   starred: starred,
   unread: false,
   transportState: transport,
