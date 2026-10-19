@@ -507,7 +507,7 @@ void main() {
     },
   );
 
-  group('into a group conversation (ADR-090 D3, D4)', () {
+  group('into a group conversation (ADR-090 D3, ADR-096 D4)', () {
     const policyBlocked = SecurityFailure(SecurityFailureKind.policyBlocked);
 
     setUp(() {
@@ -582,15 +582,41 @@ void main() {
       },
     );
 
-    test('an edit, a delete for everyone and a pin are each refused and '
-        'commit nothing', () async {
+    test('a delete for everyone of an own message commits one messageDelete '
+        'and sweeps the cache (ADR-096 D4)', () async {
       expect(
-        await sender.editMessage(
+        await sender.deleteForEveryone(
           currentUserId: currentUser,
           currentDeviceId: currentDevice,
           conversationId: _directConversationHex,
           messageId: _messageOne,
-          replacementText: 'changed',
+        ),
+        isA<Success<void>>(),
+      );
+
+      final committed = fanout.events.single;
+      expect(
+        committed.event.kindValue,
+        ApplicationEventKind.messageDelete.wireValue,
+      );
+      expect(committed.conversationKind, ConversationKind.group.index);
+      expect(committed.peerUserId, isNull);
+      final body = committed.event.body as MessageDeleteBody;
+      expect(protocolBytesToHex(body.targetMessageId), _messageOne);
+      expect(committed.event.references, [body.targetMessageId]);
+      expect(sweep.sweeps, 1);
+    });
+
+    test('a delete for everyone of another member\'s message is refused '
+        'and commits nothing (ADR-096 D4)', () async {
+      repository.originalSender = false;
+
+      expect(
+        await sender.deleteForEveryone(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageOne,
         ),
         isA<FailureResult<void>>().having(
           (result) => result.failure,
@@ -598,12 +624,18 @@ void main() {
           policyBlocked,
         ),
       );
+      expect(fanout.events, isEmpty);
+      expect(sweep.sweeps, 0);
+    });
+
+    test('an edit and a pin are each refused and commit nothing', () async {
       expect(
-        await sender.deleteForEveryone(
+        await sender.editMessage(
           currentUserId: currentUser,
           currentDeviceId: currentDevice,
           conversationId: _directConversationHex,
           messageId: _messageOne,
+          replacementText: 'changed',
         ),
         isA<FailureResult<void>>().having(
           (result) => result.failure,

@@ -142,7 +142,8 @@ void main() {
       expect(view.delivery, ChatDeliveryViewState.accepted);
     });
 
-    test('offers no Edit, Delete for everyone or Pin in a group', () {
+    test('offers Delete for everyone on an own message only, and no Edit or '
+        'Pin, in a group (ADR-096 D4, D8)', () {
       final source = [
         _message('own', sender: _me, at: 1),
         _message('theirs', sender: _alice, at: 2),
@@ -157,9 +158,10 @@ void main() {
 
       for (final view in group) {
         expect(view.canEdit, isFalse, reason: view.id);
-        expect(view.canDeleteForEveryone, isFalse, reason: view.id);
         expect(view.canPin, isFalse, reason: view.id);
       }
+      expect(group.first.canDeleteForEveryone, isTrue);
+      expect(group.last.canDeleteForEveryone, isFalse);
       // Where a direct chat offered them, it still does.
       expect(direct.first.canEdit, isTrue);
       expect(direct.first.canDeleteForEveryone, isTrue);

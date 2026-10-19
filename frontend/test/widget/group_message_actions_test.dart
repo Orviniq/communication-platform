@@ -995,6 +995,10 @@ Future<ProviderContainer> _pump(
             repository: groupRepository,
             sender: groupSender,
           ),
+          deleteForEveryone: DeleteGroupMessageForEveryone(
+            repository: groupRepository,
+            sender: groupSender,
+          ),
         ),
       ),
     ],
@@ -1133,6 +1137,14 @@ final class _GroupSender implements GroupMessageSenderPort {
     required String groupId,
     required String messageId,
     required String? emoji,
+  }) async => const Result.success(null);
+
+  @override
+  Future<Result<void>> deleteForEveryone({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
   }) async => const Result.success(null);
 }
 

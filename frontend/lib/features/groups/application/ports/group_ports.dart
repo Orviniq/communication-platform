@@ -147,6 +147,14 @@ abstract interface class GroupMessageSenderPort implements Port {
     required String messageId,
     required String? emoji,
   });
+
+  /// Deletes this user's own [messageId] for every member (ADR-096 D4).
+  Future<Result<void>> deleteForEveryone({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+  });
 }
 
 /// Starts the authenticated repair of this device's pairwise sessions with one

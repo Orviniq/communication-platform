@@ -351,6 +351,41 @@ final class SetGroupReaction {
   }
 }
 
+/// Deletes one of this user's own group messages for every member
+/// (ADR-096 D4).
+///
+/// A delete is an event of the group's conversation, held to the rule a
+/// reaction is held to: a member this group no longer lets send, or a group
+/// this device has left, is sent nothing. The message must be this user's
+/// own; the conversation send path checks that before anything is written.
+final class DeleteGroupMessageForEveryone {
+  const DeleteGroupMessageForEveryone({
+    required this.repository,
+    required this.sender,
+  });
+
+  final GroupRepositoryPort repository;
+  final GroupMessageSenderPort sender;
+
+  Future<Result<void>> call({
+    required String groupId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required String messageId,
+  }) async {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return sender.deleteForEveryone(
+      currentUserId: senderUserId.toLowerCase(),
+      currentDeviceId: senderDeviceId.toLowerCase(),
+      groupId: (allowed as Success<GroupState>).value.groupId,
+      messageId: messageId,
+    );
+  }
+}
+
 /// The group, once [userId] is known to be allowed to send into it.
 Future<Result<GroupState>> _requireSender(
   GroupRepositoryPort repository,
@@ -378,6 +413,7 @@ final class GroupUseCases {
     required this.sendMessage,
     required this.retryMessage,
     required this.setReaction,
+    required this.deleteForEveryone,
   });
 
   final CreateGroup create;
@@ -385,6 +421,7 @@ final class GroupUseCases {
   final SendGroupMessage sendMessage;
   final RetryGroupMessage retryMessage;
   final SetGroupReaction setReaction;
+  final DeleteGroupMessageForEveryone deleteForEveryone;
 }
 
 /// Who a locally signed control event is owed to, and in which payloads.

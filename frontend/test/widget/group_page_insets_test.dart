@@ -155,6 +155,10 @@ void main() {
               repository: repository,
               sender: _UnusedSender(),
             ),
+            deleteForEveryone: DeleteGroupMessageForEveryone(
+              repository: repository,
+              sender: _UnusedSender(),
+            ),
           ),
         ),
       ],

@@ -91,9 +91,9 @@ abstract final class ChatViewModelMapper {
   /// message it replies to have now.
   ///
   /// [group] applies the rules of a group (ADR-090): a message shows as sent
-  /// only once none of its copies is owed, and the actions that need the
-  /// member roles of the signed roster — Edit, Delete for everyone and Pin —
-  /// are not offered.
+  /// only once none of its copies is owed, Edit is not offered (ADR-096 D8),
+  /// and Pin waits for the member roles of the signed roster. Delete for
+  /// everyone is offered on an own message, as in a direct chat (ADR-096 D4).
   static ChatMessageViewModel _message(
     ConversationMessage message, {
     required ConversationMessage? previous,
@@ -148,7 +148,8 @@ abstract final class ChatViewModelMapper {
       unread: !outgoing && message.unread,
       timestampSkewed: message.timestampState == MessageTimestampState.skewed,
       canEdit: !group && outgoing && !message.deletedForEveryone,
-      canDeleteForEveryone: !group && outgoing && !message.deletedForEveryone,
+      // A group member deletes an own message for everyone (ADR-096 D4).
+      canDeleteForEveryone: outgoing && !message.deletedForEveryone,
       canPin: !group,
       replyToMessageId: message.replyToMessageId,
       replyAuthor: replyAuthor,

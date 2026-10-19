@@ -436,6 +436,10 @@ final class _Repository implements GroupRepositoryPort {
       sendMessage: SendGroupMessage(repository: this, sender: _Sender()),
       retryMessage: RetryGroupMessage(repository: this, sender: _Sender()),
       setReaction: SetGroupReaction(repository: this, sender: _Sender()),
+      deleteForEveryone: DeleteGroupMessageForEveryone(
+        repository: this,
+        sender: _Sender(),
+      ),
     );
   }
 

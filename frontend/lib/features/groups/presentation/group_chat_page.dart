@@ -42,6 +42,7 @@ class GroupChatPage extends ConsumerWidget {
     this.onSend,
     this.onRetry,
     this.onReaction,
+    this.onDeleteForEveryone,
     this.watchReaders,
     this.injectedMemberNames,
     super.key,
@@ -61,6 +62,7 @@ class GroupChatPage extends ConsumerWidget {
   final SendGroupMessageCallback? onSend;
   final RetryGroupMessageCallback? onRetry;
   final SetGroupReactionCallback? onReaction;
+  final DeleteGroupMessageForEveryoneCallback? onDeleteForEveryone;
 
   /// What an injected page reads of who read a message. Null: no reader row.
   final WatchGroupMessageReadersCallback? watchReaders;
@@ -84,6 +86,7 @@ class GroupChatPage extends ConsumerWidget {
         onSend: onSend!,
         onRetry: onRetry,
         onReaction: onReaction,
+        onDeleteForEveryone: onDeleteForEveryone,
         watchReaders: watchReaders,
       );
     }
@@ -301,6 +304,12 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
                   messageId: messageId,
                   emoji: emoji,
                 ),
+                onDeleteForEveryone: (messageId) => resolved.deleteForEveryone(
+                  groupId: groupId,
+                  senderUserId: userId,
+                  senderDeviceId: deviceId,
+                  messageId: messageId,
+                ),
                 onSaveDraft: (text) async => (await _localState()).saveDraft(
                   conversationId: groupId,
                   text: text,
@@ -351,6 +360,7 @@ class GroupChatView extends StatefulWidget {
     required this.onSend,
     this.onRetry,
     this.onReaction,
+    this.onDeleteForEveryone,
     this.initialDraft,
     this.onSaveDraft,
     this.onStar,
@@ -379,6 +389,10 @@ class GroupChatView extends StatefulWidget {
   /// Null where the view has no reaction path: a reaction is then reported as
   /// failed, never as made.
   final SetGroupReactionCallback? onReaction;
+
+  /// Null where the view has no delete path: a delete for everyone is then
+  /// reported as failed, never as made.
+  final DeleteGroupMessageForEveryoneCallback? onDeleteForEveryone;
 
   /// The draft the composer was left with, read once when the group opens.
   final String? initialDraft;
@@ -586,6 +600,8 @@ class _GroupChatViewState extends State<GroupChatView> {
       unawaited(_local(widget.onStar?.call(messageId, starred)));
     } else if (intent case DeleteForMeIntent(:final messageId)) {
       unawaited(_local(widget.onDeleteForMe?.call(messageId)));
+    } else if (intent case DeleteForEveryoneIntent(:final messageId)) {
+      unawaited(_local(widget.onDeleteForEveryone?.call(messageId)));
     } else if (intent case SaveDraftIntent(:final text)) {
       // Also sent as the composer leaves the tree, so nothing here may touch
       // this view's state. A draft that cannot be written says nothing, as in

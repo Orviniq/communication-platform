@@ -593,12 +593,32 @@ void main() {
       expect(find.text('Edit'), findsNothing);
     });
 
-    testWidgets('the delete dialog offers no Delete for everyone', (
-      tester,
-    ) async {
-      await _pumpThread(tester);
+    testWidgets('the delete dialog of an own message offers Delete for '
+        'everyone, which sends the delete (ADR-096 D4)', (tester) async {
+      final deleted = <String>[];
+      await _pumpThread(
+        tester,
+        onDeleteForEveryone: (messageId) async {
+          deleted.add(messageId);
+          return const Result.success(null);
+        },
+      );
 
       await _openActions(tester, _ownId);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete for me'), findsOneWidget);
+      await tester.tap(find.text('Delete for everyone'));
+      await tester.pumpAndSettle();
+
+      expect(deleted, [_ownId]);
+    });
+
+    testWidgets('the delete dialog of another member\'s message offers no '
+        'Delete for everyone', (tester) async {
+      await _pumpThread(tester);
+
+      await _openActions(tester, _answerId);
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
@@ -1123,6 +1143,7 @@ Future<void> _pumpThread(
   WidgetTester tester, {
   SendGroupMessageCallback? onSend,
   SetGroupReactionCallback? onReaction,
+  DeleteGroupMessageForEveryoneCallback? onDeleteForEveryone,
 }) => _pump(
   tester,
   GroupChatPage(
@@ -1158,6 +1179,7 @@ Future<void> _pumpThread(
         (_, {replyToMessageId, quoteFallback}) async =>
             const Result.success(null),
     onReaction: onReaction,
+    onDeleteForEveryone: onDeleteForEveryone,
   ),
 );
 

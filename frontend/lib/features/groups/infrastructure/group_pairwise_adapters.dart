@@ -81,6 +81,19 @@ final class ConversationGroupMessageSender implements GroupMessageSenderPort {
     messageId: messageId,
     emoji: emoji,
   );
+
+  @override
+  Future<Result<void>> deleteForEveryone({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+  }) => conversations.deleteForEveryone(
+    currentUserId: currentUserId,
+    currentDeviceId: currentDeviceId,
+    conversationId: groupId,
+    messageId: messageId,
+  );
 }
 
 final class PairwiseGroupSessionRepairAdapter

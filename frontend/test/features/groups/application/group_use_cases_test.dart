@@ -451,6 +451,64 @@ void main() {
     });
   });
 
+  group('deleting an own message for everyone (ADR-096 D4)', () {
+    DeleteGroupMessageForEveryone delete(_Sender sender) =>
+        DeleteGroupMessageForEveryone(repository: repository, sender: sender);
+
+    test('goes to the group from an active member', () async {
+      final group = await create([_alice]);
+      final sender = _Sender();
+
+      final result = await delete(sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+      );
+
+      expect(result, isA<Success<void>>());
+      expect(sender.deleted, [(group.groupId, 'ab' * 16)]);
+    });
+
+    test('is refused for a member the group has removed', () async {
+      final group = await create([_alice, _bob]);
+      await mutate(group, RemoveGroupMemberOperation(_alice));
+      final sender = _Sender();
+
+      final result = await delete(sender)(
+        groupId: group.groupId,
+        senderUserId: _alice,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+      );
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.deleted, isEmpty);
+    });
+
+    test('is refused in a group this account has left', () async {
+      final group = await create([_alice]);
+      repository.overlay = GroupLifecycle.left;
+      final sender = _Sender();
+
+      final result = await delete(sender)(
+        groupId: group.groupId,
+        senderUserId: _local,
+        senderDeviceId: _localDevice,
+        messageId: 'ab' * 16,
+      );
+
+      expect(
+        (result as FailureResult<void>).failure,
+        const SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+      expect(sender.deleted, isEmpty);
+    });
+  });
+
   group('reacting to a message', () {
     SetGroupReaction reaction(_Sender sender) =>
         SetGroupReaction(repository: repository, sender: sender);
@@ -724,6 +782,19 @@ final class _Sender implements GroupMessageSenderPort {
     required String? emoji,
   }) async {
     reacted.add((groupId, messageId, emoji));
+    return const Result.success(null);
+  }
+
+  final deleted = <(String, String)>[];
+
+  @override
+  Future<Result<void>> deleteForEveryone({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+  }) async {
+    deleted.add((groupId, messageId));
     return const Result.success(null);
   }
 }
