@@ -198,7 +198,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Not built yet'), findsOneWidget);
-    expect(find.text('Photo or image'), findsNothing);
+    expect(find.text('Photo or video'), findsNothing);
   });
 
   testWidgets('wide group chat exposes a bounded information panel', (

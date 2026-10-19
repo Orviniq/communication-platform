@@ -451,11 +451,12 @@
   "chatYouAuthor": "You",
   "attachmentChoosePrompt": "Choose encrypted media or a file.",
   "attachmentsNotBuiltNotice": "Group chats cannot send files yet. Files can be sent in direct chats and in Saved Messages.",
-  "attachmentPhotoOption": "Photo or image",
+  "attachmentPhotoOption": "Photo or video",
   "attachmentFileOption": "File",
   "attachmentCameraOption": "Camera",
   "attachmentImageLabel": "Encrypted image",
   "attachmentFileLabel": "Encrypted attachment",
+  "attachmentVideoLabel": "Encrypted video",
   "attachmentPickBusy": "A picker is already open. Finish with it first.",
   "attachmentPickTooLarge": "This file is too large to send. The largest file is {size}.",
   "@attachmentPickTooLarge": {

@@ -286,6 +286,159 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets('a video draws the video tile in each state, and Open is the '
+        'existing Open (ADR-097 V5)', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final video = testAttachmentDescriptor(
+        capability: testCapability(1),
+        displayName: 'clip.mp4',
+        mimeType: 'video/mp4',
+        plaintextSize: 70000,
+      );
+      final cases =
+          <
+            ({
+              AttachmentTransferState persisted,
+              AttachmentDownloadJob? job,
+              String state,
+              Type? intent,
+            })
+          >[
+            (
+              persisted: AttachmentTransferState.queued,
+              job: null,
+              state: 'Not downloaded',
+              intent: DownloadAttachmentIntent,
+            ),
+            (
+              persisted: AttachmentTransferState.queued,
+              job: _job(video, AttachmentDownloadState.waiting),
+              state: 'Waiting to download',
+              intent: CancelAttachmentDownloadIntent,
+            ),
+            (
+              persisted: AttachmentTransferState.queued,
+              job: _job(
+                video,
+                AttachmentDownloadState.downloading,
+                progress: .42,
+              ),
+              state: 'Downloading, 42%',
+              intent: CancelAttachmentDownloadIntent,
+            ),
+            (
+              persisted: AttachmentTransferState.queued,
+              job: _job(video, AttachmentDownloadState.verifying, progress: .5),
+              state: 'Verifying, 50%',
+              intent: CancelAttachmentDownloadIntent,
+            ),
+            (
+              persisted: AttachmentTransferState.ready,
+              job: null,
+              state: 'Downloaded and verified',
+              intent: OpenAttachmentIntent,
+            ),
+            (
+              persisted: AttachmentTransferState.expired,
+              job: null,
+              state: 'Expired: the server no longer keeps this file',
+              intent: null,
+            ),
+            (
+              persisted: AttachmentTransferState.queued,
+              job: _job(video, AttachmentDownloadState.damaged),
+              state:
+                  'Damaged: this file did not pass the check, and nothing '
+                  'was kept',
+              intent: null,
+            ),
+            (
+              persisted: AttachmentTransferState.queued,
+              job: _job(video, AttachmentDownloadState.failed),
+              state: 'The download failed',
+              intent: RetryAttachmentDownloadIntent,
+            ),
+          ];
+      for (final example in cases) {
+        transfers = _Transfers()..jobs[video.capabilityId] = example.job;
+        intents = [];
+        await show(tester, [
+          _attachmentMessage(
+            1,
+            attachments: [video],
+            states: [example.persisted],
+          ),
+        ]);
+
+        expect(
+          tester.getSemantics(tile(_id(1))).label,
+          'Encrypted video: clip.mp4, 68 KB, ${example.state}',
+          reason: example.state,
+        );
+        expect(
+          find.descendant(
+            of: tile(_id(1)),
+            matching: find.byKey(const ValueKey('app-icon-video-ltr')),
+          ),
+          findsOneWidget,
+          reason: example.state,
+        );
+        expect(
+          find.descendant(
+            of: tile(_id(1)),
+            matching: find.byKey(const ValueKey('app-icon-file-ltr')),
+          ),
+          findsNothing,
+          reason: example.state,
+        );
+        expect(find.byType(Image), findsNothing, reason: example.state);
+        await tapTile(tester, tile(_id(1)));
+        expect(
+          intents.firstOrNull?.runtimeType,
+          example.intent,
+          reason: example.state,
+        );
+      }
+      semantics.dispose();
+    });
+
+    testWidgets('a file that is not a video, and a picture, keep their own '
+        'icons', (tester) async {
+      final pdf = testAttachmentDescriptor(
+        capability: testCapability(1),
+        displayName: 'minutes.pdf',
+        mimeType: 'application/pdf',
+      );
+      // A video type the allowlist does not hold travels as a file of an
+      // unknown type, and draws the file icon.
+      final other = testAttachmentDescriptor(
+        capability: testCapability(2),
+        displayName: 'clip.mkv',
+        mimeType: 'video/x-matroska',
+      );
+      await show(tester, [
+        _attachmentMessage(
+          1,
+          attachments: [
+            pdf,
+            other,
+            _picture(capability: testCapability(3)),
+          ],
+        ),
+      ]);
+      Finder icon(String name, int index) => find.descendant(
+        of: tile(_id(1), index),
+        matching: find.byKey(ValueKey('app-icon-$name-ltr')),
+      );
+      expect(icon('file', 0), findsOneWidget);
+      expect(icon('file', 1), findsOneWidget);
+      expect(icon('photo', 2), findsWidgets);
+      expect(icon('video', 0), findsNothing);
+      expect(icon('video', 1), findsNothing);
+      expect(isChatVideoAttachment(pdf), isFalse);
+      expect(isChatVideoAttachment(other), isFalse);
+    });
+
     testWidgets('draws one tile for each attachment, and the caption below '
         'them', (tester) async {
       final first = testAttachmentDescriptor(

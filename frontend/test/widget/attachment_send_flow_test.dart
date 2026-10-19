@@ -143,7 +143,7 @@ void main() {
       await launch(tester);
 
       for (final (label, kind) in [
-        ('Photo or image', AttachmentPickKind.photo),
+        ('Photo or video', AttachmentPickKind.photo),
         ('File', AttachmentPickKind.file),
         ('Camera', AttachmentPickKind.camera),
       ]) {
@@ -391,7 +391,7 @@ void main() {
         ),
       );
       await launch(tester, pixelRatio: 2);
-      await choose(tester, 'Photo or image');
+      await choose(tester, 'Photo or video');
 
       final image = tester.widget<Image>(
         find.byKey(const ValueKey('attachment-preview-image')),
@@ -422,7 +422,7 @@ void main() {
         ),
       );
       await launch(tester, size: const Size(800, 1000), pixelRatio: 3);
-      await choose(tester, 'Photo or image');
+      await choose(tester, 'Photo or video');
 
       final image = tester.widget<Image>(
         find.byKey(const ValueKey('attachment-preview-image')),

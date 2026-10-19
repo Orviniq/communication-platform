@@ -80,6 +80,69 @@ void main() {
       );
     });
 
+    test('offers pictures and videos in the photo picker, and keeps the type '
+        'lists of both sides equal (ADR-097)', () {
+      // The system photo picker with no type offers both. The older path
+      // names both kinds in the content picker.
+      final intent = RegExp(
+        r'private fun photoIntent\(\).*?\r?\n    \}\r?\n',
+        dotAll: true,
+      ).firstMatch(attachmentChannel)!.group(0)!;
+      expect(intent, contains('Intent(MediaStore.ACTION_PICK_IMAGES)'));
+      expect(
+        intent,
+        contains('EXTRA_MIME_TYPES, arrayOf("image/*", "video/*")'),
+      );
+
+      Set<String> strings(String text) => {
+        for (final match in RegExp(r'"([^"]+)"').allMatches(text))
+          match.group(1)!,
+      };
+      Set<String> dartList(String path, String name) {
+        final source = _code(File(path).readAsStringSync());
+        final body = RegExp(
+          'const $name = \\{(.*?)\\};',
+          dotAll: true,
+        ).firstMatch(source)!.group(1)!;
+        return {
+          for (final match in RegExp(r"'([^']+)'").allMatches(body))
+            match.group(1)!,
+        };
+      }
+
+      final videos = strings(
+        RegExp(
+          r'VIDEO_TYPES = setOf\((.*?)\)',
+        ).firstMatch(attachmentChannel)!.group(1)!,
+      );
+      expect(videos, {
+        'video/mp4',
+        'video/webm',
+        'video/3gpp',
+        'video/quicktime',
+      });
+      final kotlin = {
+        ...strings(
+          RegExp(
+            r'val safe = setOf\((.*?)\)',
+            dotAll: true,
+          ).firstMatch(attachmentChannel)!.group(1)!,
+        ),
+        ...videos,
+      };
+      final adapter = dartList(
+        'lib/features/attachments/domain/attachment_model.dart',
+        'safeInline',
+      );
+      final descriptor = dartList(
+        'lib/core/protocol/attachment_crypto_model.dart',
+        'allowlist',
+      );
+      expect(adapter, isNotEmpty);
+      expect(adapter, kotlin, reason: 'safeMimeType and safeShareMime');
+      expect(descriptor, kotlin, reason: 'the descriptor and safeShareMime');
+    });
+
     test('hands the capture URI to the camera with its grant', () {
       expect(attachmentChannel, contains('MediaStore.EXTRA_OUTPUT'));
       expect(attachmentChannel, contains('ClipData.newRawUri'));
@@ -191,6 +254,16 @@ void main() {
 
 /// The Kotlin source without its comments, so an assertion reads what the
 /// code does rather than what a comment says about it.
-String _code(String source) => source
-    .replaceAll(RegExp(r'/\*.*?\*/', dotAll: true), '')
-    .replaceAll(RegExp(r'//[^\n]*'), '');
+///
+/// A string literal is kept whole: `"image/*"` holds a `/*` that opens no
+/// comment.
+String _code(String source) => source.replaceAllMapped(
+  RegExp(
+    r'''"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|/\*.*?\*/|//[^\n]*''',
+    dotAll: true,
+  ),
+  (match) {
+    final text = match.group(0)!;
+    return text.startsWith('/') ? '' : text;
+  },
+);

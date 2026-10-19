@@ -319,6 +319,45 @@ void main() {
       expect(picked.height, isNull);
     });
 
+    test('of a video from the photo picker is a file with its type', () async {
+      reply = (_) => imageAnswer(
+        path: '$root/outgoing/$id/clip.mp4',
+        name: 'clip.mp4',
+        mime: 'video/mp4',
+        kind: 'file',
+        width: null,
+        height: null,
+      );
+      final result = await pick();
+      final picked = (result as Success<PickedAttachment>).value;
+      expect(picked.mediaKind, AttachmentMediaKind.file);
+      expect(picked.mimeType, 'video/mp4');
+      expect(picked.displayName, 'clip.mp4');
+      expect(picked.width, isNull);
+    });
+
+    test('is refused as a video from any pick but a photo pick, or of a type '
+        'the list does not hold', () async {
+      reply = (_) => imageAnswer(
+        path: '$root/outgoing/$id/clip.mp4',
+        name: 'clip.mp4',
+        mime: 'video/mp4',
+        kind: 'file',
+        width: null,
+        height: null,
+      );
+      expect(failureOf(await pick(kind: AttachmentPickKind.camera)), malformed);
+      reply = (_) => imageAnswer(
+        path: '$root/outgoing/$id/clip.mkv',
+        name: 'clip.mkv',
+        mime: 'video/x-matroska',
+        kind: 'file',
+        width: null,
+        height: null,
+      );
+      expect(failureOf(await pick()), malformed);
+    });
+
     test('passes its name and its type through the safe forms', () async {
       reply = (_) => imageAnswer(
         name: '../../holiday\u0000 \t photo.html',

@@ -575,7 +575,9 @@ experience.
      **tile** for each attachment the message carries, then the **caption** below them. The
      caption is the message's text, so an edit changes it; its direction follows its first
      strong character. A message deleted for everyone or for me shows no tile.
-   - **Tile:** the kind's icon, the name (at most two lines), the size in the locale's unit,
+   - **Tile:** the kind's icon (a picture, a video or a file; a `file` with a video type draws
+     the video icon and is announced as "Encrypted video", with no thumbnail and no inline
+     playback, [ADR-097](decisions.md) V5), the name (at most two lines), the size in the locale's unit,
      and the state, at most 260 logical px wide and never lower than the minimum touch
      target. The states and what a tap on the tile does:
 
@@ -709,8 +711,8 @@ long-press.
 *As built 2026-10-10 and 2026-10-11 ([ADR-089](decisions.md) D1, D5, D6, D7).* The sheet has
 three modes:
 
-- **Choose** — a DM and Saved Messages: **Photo or image**, **File** and **Camera**, then
-  Cancel.
+- **Choose** — a DM and Saved Messages: **Photo or video**, **File** and **Camera**, then
+  Cancel. Photo or video offers pictures and videos ([ADR-097](decisions.md) V2).
 - **Not built** — a group chat (§9): "Group chats cannot send files yet. Files can be sent in
   direct chats and in Saved Messages.", the *Not built yet* badge, and Cancel.
 - **Details** — a ready attachment, from a tap on its tile (§8): see *Details* below.

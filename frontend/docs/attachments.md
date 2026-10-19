@@ -69,7 +69,33 @@ ADR-089 holds the reasons, the rejected alternatives and the Android sources.
     as its Chats list preview.
 
 Not in this phase: group chats, the Shared media screens, thumbnails, automatic download, a
-durable upload queue and video.
+durable upload queue and video (video follows in *Phase 2: video*).
+
+## Phase 2: video (ADR-097)
+
+*Accepted 2026-10-19; built in one prompt on `frontend-dm-video`.* A direct chat and Saved
+Messages send a video. A group chat still sends no attachment (ADR-089 D1). The wire format does
+not change.
+
+1. **Picker.** The Photo option, **Photo or video**, starts `MediaStore.ACTION_PICK_IMAGES` with
+   no type where the device has the photo picker, which offers pictures and videos; elsewhere
+   `Intent.ACTION_GET_CONTENT` with `*/*` and `EXTRA_MIME_TYPES` of `image/*` and `video/*`.
+2. **Copy.** `copyAndProcess` re-encodes only a picture that is not a GIF. A video of an allowed
+   type is copied as its exact bytes under its own name, counted against the same byte limit,
+   and answered as a `file`.
+3. **Types.** `video/mp4`, `video/webm`, `video/3gpp` and `video/quicktime` are on the three
+   type lists, which stay equal: `safeMimeType`, the allowlist of the descriptor and
+   `safeShareMime`. A video of another type from the photo picker is refused as a picture that
+   cannot be read; from the File option it travels as `application/octet-stream`.
+4. **Media kind.** A video is `file`, with its real type and no dimensions.
+5. **Tile.** A `file` with a video type draws the video icon and says "Encrypted video"; the
+   states and taps are those of any attachment. Open hands the file to the system player. No
+   in-app player, thumbnail or inline playback.
+6. **Limits.** The 64 MiB bucket limit (about 63.98 MiB of video), the 256 MiB daily allowance,
+   one upload at a time, uploads lost with the process, and the server's 120 seconds for an
+   upload. A video over the limit is refused with the sentence that names the largest size.
+
+Not verified on a phone (ADR-097).
 
 ## Send pipeline
 

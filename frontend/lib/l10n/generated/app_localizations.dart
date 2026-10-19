@@ -1877,7 +1877,7 @@ abstract class AppLocalizations {
   /// No description provided for @attachmentPhotoOption.
   ///
   /// In en, this message translates to:
-  /// **'Photo or image'**
+  /// **'Photo or video'**
   String get attachmentPhotoOption;
 
   /// No description provided for @attachmentFileOption.
@@ -1903,6 +1903,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Encrypted attachment'**
   String get attachmentFileLabel;
+
+  /// No description provided for @attachmentVideoLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted video'**
+  String get attachmentVideoLabel;
 
   /// No description provided for @attachmentPickBusy.
   ///

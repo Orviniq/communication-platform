@@ -235,6 +235,10 @@ String _safeMime(String value) {
     'audio/wav',
     'text/plain',
     'application/pdf',
+    'video/mp4',
+    'video/webm',
+    'video/3gpp',
+    'video/quicktime',
   };
   return allowlist.contains(normalized)
       ? normalized
