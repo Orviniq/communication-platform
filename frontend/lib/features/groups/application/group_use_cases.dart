@@ -563,7 +563,11 @@ Future<Result<GroupState>> _signApplyAndCommit({
   final committed = await repository.commitTransition(
     expectedPrevious: current,
     next: applied.state,
-    prepared: PreparedGroupTransition(controls: [sealed], outbound: outbound),
+    prepared: PreparedGroupTransition(
+      controls: [sealed],
+      localUserId: localUserId,
+      outbound: outbound,
+    ),
   );
   return committed.fold(
     onSuccess: (_) => Result.success(applied.state),

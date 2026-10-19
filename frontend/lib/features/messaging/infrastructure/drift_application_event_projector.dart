@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/stored_attachment_descriptor.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -288,6 +290,7 @@ final class DriftApplicationEventProjector {
     required _EventFact fact,
     required String currentUserId,
   }) async {
+    final roster = await _groupRoster(conversation);
     for (final messageId in _affectedMessageIds(fact)) {
       final facts = await _factsForMessage(
         conversation.conversationId,
@@ -306,6 +309,7 @@ final class DriftApplicationEventProjector {
         facts: facts,
         currentUserId: currentUserId,
         applied: fact,
+        roster: roster,
       );
     }
     await _refreshConversationAggregates(conversation.conversationId);
@@ -327,6 +331,7 @@ final class DriftApplicationEventProjector {
     required List<_EventFact> facts,
     required String currentUserId,
     required _EventFact applied,
+    required GroupState? roster,
   }) async {
     final creates = facts
         .where(
@@ -363,6 +368,7 @@ final class DriftApplicationEventProjector {
       facts: facts,
       currentUserId: currentUserId.toLowerCase(),
       localState: localState,
+      roster: roster,
     );
     // A child table is rewritten only by an event that could have changed it.
     // Reactions and receipts are each derived from one kind of fact, so an
@@ -824,8 +830,9 @@ final class DriftApplicationEventProjector {
   /// unsupported-event collision — each of which retires a fact the projection
   /// already contains, so what the projection should say is no longer a
   /// function of the event in hand — and it is public so that a fork, a repair,
-  /// or a future change to conversation-level authorisation has a door to it
-  /// rather than a reason to reinvent it.
+  /// or a change to conversation-level authorisation has a door to it rather
+  /// than a reason to reinvent it. A group's role change is one: the group
+  /// repository re-folds through here (ADR-096 D7).
   Future<void> rebuildConversationInsideTransaction(
     String conversationId, {
     required String currentUserId,
@@ -937,6 +944,7 @@ final class DriftApplicationEventProjector {
       (createsByMessage[messageId] ??= []).add(fact);
     }
 
+    final roster = await _groupRoster(conversation);
     final projectedMessageIds = <String>{};
     for (final entry in createsByMessage.entries) {
       if (entry.value.length != 1) {
@@ -958,6 +966,7 @@ final class DriftApplicationEventProjector {
         facts: facts,
         currentUserId: currentUserId.toLowerCase(),
         localState: localState[entry.key],
+        roster: roster,
       );
       await _writeMessage(projected, localState: localState[entry.key]);
       projectedMessageIds.add(projected.messageId);
@@ -985,6 +994,7 @@ final class DriftApplicationEventProjector {
     required List<_EventFact> facts,
     required String currentUserId,
     required _LocalMessageState? localState,
+    required GroupState? roster,
   }) async {
     final messageId = create.body['message_id']! as String;
     final senderUserId = create.row.senderUserId;
@@ -1009,7 +1019,12 @@ final class DriftApplicationEventProjector {
           fact.row.kind == ApplicationEventKind.messageDelete.wireValue &&
           _referencesAreValid(fact) &&
           (fact.row.senderUserId == senderUserId ||
-              _authorizedGroupModerator(conversation, fact.row.senderUserId)),
+              _authorizedGroupModerator(
+                conversation,
+                roster,
+                actorUserId: fact.row.senderUserId,
+                authorUserId: senderUserId,
+              )),
     );
     final deletedForEveryone = deletes.isNotEmpty;
 
@@ -1021,6 +1036,7 @@ final class DriftApplicationEventProjector {
                   _referencesAreValid(fact) &&
                   _authorizedPin(
                     conversation,
+                    roster,
                     fact.row.senderUserId,
                     currentUserId,
                   ),
@@ -1534,22 +1550,59 @@ final class DriftApplicationEventProjector {
 
   bool _authorizedPin(
     Conversation conversation,
+    GroupState? roster,
     String userId,
     String currentUserId,
   ) {
     if (conversation.kind != ConversationKind.group.index) {
       return _isConversationParticipant(conversation, userId, currentUserId);
     }
-    return _authorizedGroupModerator(conversation, userId);
+    // The owner and the admins pin, as the current roster records their
+    // roles (ADR-096 D6, D7). A group with no readable roster pins nothing.
+    return roster != null &&
+        GroupAuthorization.recordedRoleMayPin(roster, userId);
   }
 
-  bool _authorizedGroupModerator(Conversation conversation, String userId) {
-    if (conversation.kind != ConversationKind.group.index) {
-      return false;
+  /// A delete of [authorUserId]'s message by someone else: the owner's of any
+  /// message, an admin's of a member's, as the current roster records their
+  /// roles (ADR-096 D5, D7). Never in a conversation that is not a group.
+  bool _authorizedGroupModerator(
+    Conversation conversation,
+    GroupState? roster, {
+    required String actorUserId,
+    required String authorUserId,
+  }) =>
+      conversation.kind == ConversationKind.group.index &&
+      roster != null &&
+      GroupAuthorization.recordedRoleMayDelete(
+        roster,
+        actorUserId: actorUserId,
+        authorUserId: authorUserId,
+      );
+
+  /// The roster of a group conversation, from its `group_states` row, read
+  /// once for each fold and inside the fold's transaction. The row is this
+  /// device's projection of the signed transcript, so each member holding the
+  /// same transcript decides the same way.
+  ///
+  /// Null for a conversation that is not a group, a group with no stored
+  /// state, and a row that does not decode: then no delete by someone else
+  /// and no pin counts, which a later fold corrects once the row is readable.
+  Future<GroupState?> _groupRoster(Conversation conversation) async {
+    if (conversation.kind != ConversationKind.group.index) return null;
+    final row =
+        await (database.select(database.groupStates)..where(
+              (item) => item.groupId.equals(conversation.conversationId),
+            ))
+            .getSingleOrNull();
+    if (row == null) return null;
+    try {
+      return DriftGroupRepository.decodeStoredState(
+        row.controlProjectionCiphertext,
+      );
+    } on FormatException {
+      return null;
     }
-    // A group's roles live in its signed control state, which this projector
-    // does not read, so no moderator-only mutation is guessed here.
-    return false;
   }
 
   Future<void> _quarantine(int reason, Uint8List digest) async {

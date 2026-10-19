@@ -294,6 +294,16 @@ final class DriftGroupRepository extends DriftRepositoryBase
       // transaction that records it, on each device of the user. The signed
       // state above stays (ADR-096 D1, D2).
       await _removeConversation(next.groupId);
+    } else if (_rolesChanged(expectedPrevious, next)) {
+      // The projector decides deletes and pins by the roles of this roster,
+      // so a delete stored before the promotion that allows it takes effect
+      // here, and a demoted admin's stop counting (ADR-096 D7).
+      await DriftApplicationEventProjector(
+        database,
+      ).rebuildConversationInsideTransaction(
+        next.groupId,
+        currentUserId: prepared.localUserId,
+      );
     }
     for (final control in prepared.controls) {
       final event = control.event;
@@ -330,6 +340,23 @@ final class DriftGroupRepository extends DriftRepositoryBase
   static bool _outsideGroup(GroupState? state) =>
       state?.lifecycle == GroupLifecycle.left ||
       state?.lifecycle == GroupLifecycle.removed;
+
+  /// Whether a user the previous roster recorded has another role now, or is
+  /// gone from it. A member added now has written nothing yet, so an addition
+  /// alone changes nothing a fold reads.
+  static bool _rolesChanged(GroupState? previous, GroupState next) {
+    if (previous == null) return false;
+    for (final member in previous.members) {
+      if (next.member(member.userId)?.role != member.role) return true;
+    }
+    return false;
+  }
+
+  /// The roster a stored `group_states` row holds, for a reader inside the
+  /// same transaction: the projector reads the roles it folds deletes and
+  /// pins by (ADR-096 D5 to D7). Throws [FormatException] for a row that does
+  /// not decode.
+  static GroupState decodeStoredState(Uint8List bytes) => _decodeState(bytes);
 
   /// Takes the group out of Chats and deletes its history, reusing the
   /// tombstone of Delete chat. The group's facts are retired, not deleted, so

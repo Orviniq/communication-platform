@@ -350,6 +350,54 @@ abstract final class GroupAuthorization {
     return actor.role == GroupRole.owner || target.role == GroupRole.member;
   }
 
+  /// Whether the roles this roster records let [actorUserId] delete for
+  /// everyone a message [authorUserId] wrote (ADR-096 D5).
+  ///
+  /// The rule of [canRemove], applied to the author of the message: the owner
+  /// deletes any message, and an admin a member's. The roles count as
+  /// recorded, whatever the membership, because a message fact is admitted
+  /// only from an active member: an admin who later leaves keeps the deletes
+  /// made while a member. The projector folds by this rule; a send is held to
+  /// [canDeleteMessageOf].
+  static bool recordedRoleMayDelete(
+    GroupState state, {
+    required String actorUserId,
+    required String authorUserId,
+  }) {
+    final actor = state.member(actorUserId);
+    if (actor == null) return false;
+    if (actor.role == GroupRole.owner) return true;
+    return actor.role == GroupRole.admin &&
+        state.member(authorUserId)?.role == GroupRole.member;
+  }
+
+  /// Whether the roles this roster records let [actorUserId] pin and unpin
+  /// (ADR-096 D6), whatever the membership, as [recordedRoleMayDelete].
+  static bool recordedRoleMayPin(GroupState state, String actorUserId) {
+    final role = state.member(actorUserId)?.role;
+    return role == GroupRole.owner || role == GroupRole.admin;
+  }
+
+  /// Whether [actorUserId] may send a delete for everyone of a message
+  /// [authorUserId] wrote: an own message on the rule of a send (ADR-096 D4),
+  /// another member's only for an active owner or admin under
+  /// [recordedRoleMayDelete] (D5).
+  static bool canDeleteMessageOf(
+    GroupState state, {
+    required String actorUserId,
+    required String authorUserId,
+  }) {
+    if (actorUserId.toLowerCase() == authorUserId.toLowerCase()) {
+      return allows(state, actorUserId, GroupPermission.sendMessages);
+    }
+    return allows(state, actorUserId, GroupPermission.removeMembers) &&
+        recordedRoleMayDelete(
+          state,
+          actorUserId: actorUserId,
+          authorUserId: authorUserId,
+        );
+  }
+
   /// Promotes or demotes a member. Handing the group to another owner is
   /// [canTransferOwnership], because it changes two roles at once.
   static bool canChangeRole(
@@ -1003,6 +1051,7 @@ final class GroupStateRequest {
 final class PreparedGroupTransition {
   PreparedGroupTransition({
     required Iterable<SignedGroupControlEvent> controls,
+    required this.localUserId,
     Iterable<GroupOutboundWork> outbound = const [],
     this.completesStateRequest = false,
   }) : controls = List.unmodifiable(controls),
@@ -1026,6 +1075,10 @@ final class PreparedGroupTransition {
 
   final List<SignedGroupControlEvent> controls;
   final List<GroupOutboundWork> outbound;
+
+  /// The user this device acts for. A role change re-folds the group's
+  /// messages as this user sees them (ADR-096 D7).
+  final String localUserId;
 
   /// Whether committing this answers an outstanding state request for the
   /// group, so the request is retired in the same transaction.
