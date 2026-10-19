@@ -204,7 +204,14 @@ final class MethodChannelAttachmentPlatform implements AttachmentPlatformPort {
     if (!_isOutgoingCopy(path, outgoing) || size < 0 || size > maxBytes) {
       return null;
     }
-    final expected = kind == AttachmentPickKind.file
+    final safeMime = safeMimeType(mime);
+    // The photo picker offers videos too (ADR-097 V2). One is the exact
+    // bytes, a `file` with a video type, and only a photo pick may answer so.
+    final video =
+        kind == AttachmentPickKind.photo &&
+        mediaKind == AttachmentMediaKind.file.name &&
+        safeMime.startsWith('video/');
+    final expected = kind == AttachmentPickKind.file || video
         ? AttachmentMediaKind.file
         : AttachmentMediaKind.image;
     if (mediaKind != expected.name) {
@@ -217,7 +224,6 @@ final class MethodChannelAttachmentPlatform implements AttachmentPlatformPort {
         (h != null && !_isDimension(h))) {
       return null;
     }
-    final safeMime = safeMimeType(mime);
     if (expected == AttachmentMediaKind.image &&
         (w == null || !safeMime.startsWith('image/'))) {
       return null;

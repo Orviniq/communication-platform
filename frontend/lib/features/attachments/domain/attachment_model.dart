@@ -118,6 +118,10 @@ String safeMimeType(String value) {
     'audio/wav',
     'text/plain',
     'application/pdf',
+    'video/mp4',
+    'video/webm',
+    'video/3gpp',
+    'video/quicktime',
   };
   return safeInline.contains(normalized)
       ? normalized

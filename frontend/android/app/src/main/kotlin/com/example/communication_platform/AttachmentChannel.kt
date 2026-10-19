@@ -46,9 +46,10 @@ import kotlin.math.roundToInt
  *
  * A picked file is copied into `secure_attachment_cache/outgoing/<id>/` on one
  * worker thread, counted against the byte limit Dart gives, and answered by
- * path; a photo is re-encoded there first. Open, Save and Share take only a
- * regular file under `secure_attachment_cache/plain/`, which is where verified
- * decrypted files live, so nothing else in the private cache can leave it.
+ * path; a photo is re-encoded there first, a video and a GIF are not. Open,
+ * Save and Share take only a regular file under
+ * `secure_attachment_cache/plain/`, which is where verified decrypted files
+ * live, so nothing else in the private cache can leave it.
  *
  * Nothing here logs. A URI, a name, a path, a type or a size never reaches
  * logcat.
@@ -71,6 +72,10 @@ class AttachmentChannel(private val activity: Activity) {
         private const val PHOTO_SOURCE_NAME = "source.bin"
         private const val DEFAULT_NAME = "attachment"
         private const val OCTET_STREAM = "application/octet-stream"
+
+        // The videos that go as they are (ADR-097 V4). Any other video type a
+        // photo pick returns is read as a picture, and refused as one.
+        private val VIDEO_TYPES = setOf("video/mp4", "video/webm", "video/3gpp", "video/quicktime")
 
         private const val MAX_NAME_LENGTH = 128
 
@@ -229,7 +234,8 @@ class AttachmentChannel(private val activity: Activity) {
     // The system photo picker where the device has it: API 33 and later, and
     // API 30 to 32 once the R extension reaches version 2, which is where
     // `ACTION_PICK_IMAGES` is "also in R Extensions 2". Elsewhere the generic
-    // content picker, narrowed to pictures.
+    // content picker, narrowed to pictures and videos (ADR-097). The photo
+    // picker with no type offers both; a video is sent as its exact bytes.
     private fun photoIntent(): Intent {
         val photoPicker = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ||
             (
@@ -237,10 +243,11 @@ class AttachmentChannel(private val activity: Activity) {
                     SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2
                 )
         return if (photoPicker) {
-            Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*")
+            Intent(MediaStore.ACTION_PICK_IMAGES)
         } else {
             Intent(Intent.ACTION_GET_CONTENT)
-                .setType("image/*")
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
                 .addCategory(Intent.CATEGORY_OPENABLE)
         }
     }
@@ -348,14 +355,15 @@ class AttachmentChannel(private val activity: Activity) {
             val type = resolver.getType(uri)?.trim()?.lowercase()
             val made = newOutgoingDirectory().also { directory = it }
             val name = safeName(displayName)
-            val reencode = request.kind == PickKind.PHOTO && type != "image/gif"
+            val video = type != null && type in VIDEO_TYPES
+            val reencode = request.kind == PickKind.PHOTO && type != "image/gif" && !video
             val copy = File(made, if (reencode) PHOTO_SOURCE_NAME else name)
             val input = resolver.openInputStream(uri) ?: throw Refusal(UNREADABLE)
             input.use { source ->
                 FileOutputStream(copy).use { sink -> copyBounded(source, sink, request.maxBytes) }
             }
             val value = when {
-                request.kind == PickKind.FILE -> fileAnswer(copy, name, type)
+                request.kind == PickKind.FILE || video -> fileAnswer(copy, name, type)
                 !reencode -> gifAnswer(copy, name)
                 else -> reencodedAnswer(made, copy, jpegName(displayName), request.maxBytes)
             }
@@ -800,7 +808,7 @@ class AttachmentChannel(private val activity: Activity) {
         val safe = setOf(
             "image/jpeg", "image/png", "image/webp", "image/gif",
             "audio/mpeg", "audio/ogg", "audio/wav", "text/plain", "application/pdf",
-        )
+        ) + VIDEO_TYPES
         return if (normalized in safe) normalized else OCTET_STREAM
     }
 }
