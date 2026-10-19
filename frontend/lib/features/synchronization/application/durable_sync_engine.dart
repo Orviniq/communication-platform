@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
@@ -125,6 +126,7 @@ final class DurableSyncEngine {
     required TimeSource clock,
     required JitterSource jitter,
     PostInboxCommitWorkPort? postInboxCommitWork,
+    CommittedEnvelopeSenderPort? committedSenders,
     SendPreparationPort? sendPreparation,
     HeldSenderTrustPort? heldSenderTrust,
     DeviceMaintenancePort? deviceMaintenance,
@@ -138,6 +140,7 @@ final class DurableSyncEngine {
        _clock = clock,
        _jitter = jitter,
        _postInboxCommitWork = postInboxCommitWork,
+       _committedSenders = committedSenders,
        _sendPreparation = sendPreparation,
        _heldSenderTrust = heldSenderTrust,
        _deviceMaintenance = deviceMaintenance,
@@ -150,6 +153,10 @@ final class DurableSyncEngine {
   final TimeSource _clock;
   final JitterSource _jitter;
   final PostInboxCommitWorkPort? _postInboxCommitWork;
+
+  /// Told the authenticated sender device of each envelope this pass
+  /// commits (ADR-098 D8).
+  final CommittedEnvelopeSenderPort? _committedSenders;
   final SendPreparationPort? _sendPreparation;
 
   /// Which held senders are verified now, for the sweep that releases their
@@ -568,6 +575,25 @@ final class DurableSyncEngine {
     }
   }
 
+  /// Tells [_committedSenders] the device a committed envelope came from, as
+  /// its session authenticated it. Best effort: the envelope is committed
+  /// either way.
+  Future<void> _reportCommittedSender(PairwiseSyncReceiveCommit? commit) async {
+    final senders = _committedSenders;
+    if (senders == null || commit == null) {
+      return;
+    }
+    try {
+      await senders.committedFrom(
+        userId: commit.senderUserId,
+        deviceId: commit.senderDeviceId,
+      );
+    } on Object {
+      // The probe ledger is bookkeeping for presence; it never holds up the
+      // inbox.
+    }
+  }
+
   Future<Result<void>> _processInbox(_RunProgress progress) async {
     // A mailbox gap holds no envelope back. A group payload is a signed event
     // that is checked on its own, and a group that may have lost one asks a
@@ -656,6 +682,7 @@ final class DurableSyncEngine {
         continue;
       }
       progress.inspected += 1;
+      await _reportCommittedSender(inspectedEnvelope.pairwiseCommit);
       if (index + 1 == limits.maximumInspectionsPerRun) {
         progress.deferred = true;
       }

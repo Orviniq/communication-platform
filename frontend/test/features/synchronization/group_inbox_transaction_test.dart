@@ -324,6 +324,105 @@ void main() {
       expect(work.payload, answer);
     },
   );
+
+  test('the inbox pass reports the device of each envelope it commits, and '
+      'of none it holds (ADR-098 D8)', () async {
+    await (database.update(database.inboxEnvelopes)).write(
+      InboxEnvelopesCompanion(
+        processingState: Value(InboxProcessingState.received.index),
+      ),
+    );
+    final rename = _signed(
+      revision: 2,
+      previous: create,
+      operation: const RenameGroupOperation(GroupMetadata(name: 'Renamed')),
+    );
+    final inspector = _Answers([
+      Result.success(
+        HeldEnvelopeInspection(
+          claimedSenderUserId: _owner,
+          sessionId: Uint8List(16),
+          initial: true,
+        ),
+      ),
+      Result.success(
+        _inspection(
+          PreparedGroupInboxTransition(
+            opaqueEventId: 'group-control:${rename.event.eventId}',
+            senderUserId: _owner,
+            senderDeviceId: _ownerDevice,
+            expectedPrevious: group,
+            next: _apply(group, rename),
+            prepared: PreparedGroupTransition(
+              controls: [rename],
+              localUserId: _member,
+            ),
+          ),
+        ),
+      ),
+    ]);
+    final trust = VerifiedSenders();
+    final heard = _HeardSenders();
+    DurableSyncEngine engine() => DurableSyncEngine(
+      store: sync,
+      remote: FakeSyncRemote(),
+      inspector: inspector,
+      staleDeviceRefresh: RecordingStaleRefresh(),
+      clock: FakeClock(const _Clock().now()),
+      jitter: const ZeroJitter(),
+      heldSenderTrust: trust,
+      committedSenders: heard,
+    );
+
+    await engine().synchronize();
+    expect(heard.devices, isEmpty, reason: 'a held envelope opened nothing');
+
+    trust.verified.add(_owner);
+    await engine().synchronize();
+    expect(heard.devices, [(_owner, _ownerDevice)]);
+  });
+
+  test('a report that fails holds up nothing', () async {
+    final rename = _signed(
+      revision: 2,
+      previous: create,
+      operation: const RenameGroupOperation(GroupMetadata(name: 'Renamed')),
+    );
+    await (database.update(database.inboxEnvelopes)).write(
+      InboxEnvelopesCompanion(
+        processingState: Value(InboxProcessingState.received.index),
+      ),
+    );
+    final remote = FakeSyncRemote();
+    final report = await DurableSyncEngine(
+      store: sync,
+      remote: remote,
+      inspector: _Answers([
+        Result.success(
+          _inspection(
+            PreparedGroupInboxTransition(
+              opaqueEventId: 'group-control:${rename.event.eventId}',
+              senderUserId: _owner,
+              senderDeviceId: _ownerDevice,
+              expectedPrevious: group,
+              next: _apply(group, rename),
+              prepared: PreparedGroupTransition(
+                controls: [rename],
+                localUserId: _member,
+              ),
+            ),
+          ),
+        ),
+      ]),
+      staleDeviceRefresh: RecordingStaleRefresh(),
+      clock: FakeClock(const _Clock().now()),
+      jitter: const ZeroJitter(),
+      committedSenders: _HeardSenders(fails: true),
+    ).synchronize();
+
+    expect((report as Success<SyncRunReport>).value.inspectedEnvelopes, 1);
+    expect(remote.acknowledgedIds.expand((ids) => ids), [_envelope]);
+  });
 }
 
 SignedGroupControlEvent _signed({
@@ -403,4 +502,23 @@ final class _Clock implements TimeSource {
 
   @override
   DateTime now() => DateTime.utc(2026, 9, 13, 12);
+}
+
+/// Every sender device the inbox pass reports.
+final class _HeardSenders implements CommittedEnvelopeSenderPort {
+  _HeardSenders({this.fails = false});
+
+  final bool fails;
+  final devices = <(String, String)>[];
+
+  @override
+  Future<void> committedFrom({
+    required String userId,
+    required String deviceId,
+  }) async {
+    if (fails) {
+      throw StateError('the ledger is unavailable');
+    }
+    devices.add((userId, deviceId));
+  }
 }

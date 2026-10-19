@@ -198,6 +198,24 @@ abstract interface class PostInboxCommitWorkPort implements Port {
   Future<void> run();
 }
 
+/// Told the device each envelope the inbox pass commits came from, as its
+/// pairwise session authenticated it (ADR-098 D8): a durable envelope is a
+/// frame heard from that device, which lifts the silence rule of the probe
+/// ledger. Best effort; it never holds up the pass.
+abstract interface class CommittedEnvelopeSenderPort implements Port {
+  Future<void> committedFrom({
+    required String userId,
+    required String deviceId,
+  });
+}
+
+/// What must leave before the realtime socket is closed for the background
+/// (ADR-098 D5): a frame sealed and then never sent advances a chain whose
+/// message never leaves. The supervisor waits for it, for a bounded time.
+abstract interface class SocketFarewellPort implements Port {
+  Future<void> beforeSocketCloses();
+}
+
 /// Upkeep of this device's own published keys, which the last step of a
 /// healthy cycle offers to run (ADR-095).
 ///
