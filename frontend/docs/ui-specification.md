@@ -786,7 +786,10 @@ history; up to ~50 members; roles **owner → admins → members**.
 1. **Top bar:**
    - Header: the group avatar, the group name and the member count (decrypted locally), each
      name and count on one line, cut with an ellipsis when it does not fit.
-     - Typing names and "N online": Specified by ADR-098 (Proposed). Not built yet.
+     - Typing names: while members type, the count gives way to "Alice is typing…", "Alice and
+       Bob are typing…" or "Alice and 2 others are typing…", each by the name on their messages
+       (ADR-098 D3). Built; not run on a phone.
+     - "N online": Specified by ADR-098 (Proposed). Not built yet.
    - The whole bar between the back button and **Search** is one target for the header, as high
      as the bar: a tap anywhere on it → **Group Info** (§12.2). To a screen reader it is one
      button that reads the name and the count once and names Group Info as its result.

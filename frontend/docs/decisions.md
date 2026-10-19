@@ -569,12 +569,43 @@ request and merges it.
 - Mutations: count this account in N; leave the revision at 10; make the switch row write nothing;
   show "online" from a frame older than 40 s.
 
+### Built by prompt 2 (2026-10-19)
+
+D1, D2's codec for every kind, the watch, the answer and the leases, D3, D6 behind a port with a
+memory ledger, D7 and the group typing line, on host tests only. Where the build reads this record:
+
+- **Where the router lives.** `SignalRouter`, its ports and the moved `SignalFramePacer` are in
+  `lib/core/application/`, and `DeterministicCbor` in `lib/core/protocol/`, not in
+  `lib/features/signals/`: `architecture_boundary_test.dart` lets a feature's domain and
+  application layers import only `core` and the feature itself, and voice and presence both need
+  them. The presence codec, the channel and their adapters are in `lib/features/signals/`.
+- **Voice.** `VoiceSignalTransport` takes the router as an optional argument; built without one,
+  it reads the socket through a router of its own that routes `CPVSV001` alone, which is how every
+  voice test runs, unchanged. The application's router is composed with the delivery session, so a
+  voice frame is now opened and committed while no call screen is composed too; before, nothing
+  read the socket then.
+- **The durable path** refuses a `CPPSV001` and a `CPVSV001` before any decoder sees it.
+- **A message ends a typing line** when it appears on the open chat screen, which reports the
+  sender device of each new message from another account; the projector is not changed.
+- **Leaving the foreground** sends a pending stop only when the pace allows it at that moment. A
+  stop held back by the pace is dropped, because the socket closes now and a frame sealed after it
+  would be a drop; the receiver's 15-second expiry ends it, and D5's `gone` does in prompt 3.
+- **A device that sent `gone`** gets no frame, probes included, until a frame from it is
+  committed again.
+- **The group targets** of a watch take the devices heard from most recently in this process, ties
+  by device id, until prompt 3 stores the last seen.
+- **The switch (D9) and the online state (D4)** are prompt 3's: until then every phone answers,
+  watches and types as if the switch were on, and shows no online line.
+- **Account blocking** has no client state (`contact.block_set` is not built), so "blocked" here is
+  an identity this phone has blocked, which the verified-peer read already refuses.
+
 ### Not verified
 
-Nothing here is built or run; the numbers are arithmetic on the code at `62d02fe`. On two phones
-whose users have verified each other, the owner checks: the online line, the last seen after the
-other app leaves the screen, typing in a direct chat and in a group, a phone put in airplane mode
-with a chat open, and the switch turned off on one phone.
+Nothing here has run on a phone: prompt 2's part is verified by host tests, and the numbers are
+arithmetic on the code at `62d02fe`. On two phones whose users have verified each other, the owner
+checks: the online line, the last seen after the other app leaves the screen, typing in a direct
+chat and in a group, a phone put in airplane mode with a chat open, and the switch turned off on one
+phone.
 
 ## ADR-097 in full — a direct chat sends a video, as a file with a video type (2026-10-19)
 

@@ -155,7 +155,8 @@ only after the conversation is visibly read and user privacy settings allow it.
 Typing is an encrypted volatile signal containing conversation ID, boolean state, and a
 short expiry. It is never queued.
 
-Specified by ADR-098 (Proposed). Not built yet.
+Specified by ADR-098 (Proposed). Typing is built as a `CPPSV001` payload, read by the one signal
+router (ADR-098 D1 to D3), on host tests only; the switch and the online status are not built yet.
 
 **There is no presence.** The gateway holds none and offers no subscription frame
 (server ADR-0022), so no screen claims that a peer is online: nothing the client can
