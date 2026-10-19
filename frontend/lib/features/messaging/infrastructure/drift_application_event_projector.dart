@@ -52,6 +52,11 @@ final class DriftApplicationEventProjector {
   static const int _stateCounterConflict = 2;
   static const int _stateConversationRejected = 3;
 
+  /// A fact of a conversation this phone deleted with its history
+  /// (ADR-096 D2). It is never folded again, and it still answers a replay
+  /// as a duplicate and a reused sender counter as a collision.
+  static const int _stateRetired = 4;
+
   static const int _quarantineEventIdConflict = 10;
   static const int _quarantineCounterRollback = 11;
   static const int _quarantineConversationPolicy = 12;
@@ -825,6 +830,49 @@ final class DriftApplicationEventProjector {
     String conversationId, {
     required String currentUserId,
   }) => _rebuildConversation(conversationId, currentUserId: currentUserId);
+
+  /// Deletes every message of [conversationId] from this phone, with its
+  /// reactions, receipts, attachment rows and owed delivered receipts, and
+  /// retires the facts they were folded from (ADR-096 D1, D2).
+  ///
+  /// The facts are kept rather than deleted. A retired fact is never folded,
+  /// so no rebuild, and no late reaction or receipt naming an old message,
+  /// brings the history back; and it is still in the log, so a replay of it
+  /// is a duplicate and a reuse of its sender counter is a collision. Running
+  /// it twice changes nothing.
+  Future<void> retireConversationHistoryInsideTransaction(
+    String conversationId,
+  ) async {
+    await (database.update(database.storedApplicationEvents)..where(
+          (row) =>
+              row.conversationId.equals(conversationId) &
+              row.applyState.equals(_stateCandidate),
+        ))
+        .write(
+          const StoredApplicationEventsCompanion(
+            applyState: Value(_stateRetired),
+          ),
+        );
+    final messageIds = database.selectOnly(database.messages)
+      ..addColumns([database.messages.messageId])
+      ..where(database.messages.conversationId.equals(conversationId));
+    await (database.delete(
+      database.messageReactions,
+    )..where((row) => row.messageId.isInQuery(messageIds))).go();
+    await (database.delete(
+      database.receipts,
+    )..where((row) => row.messageId.isInQuery(messageIds))).go();
+    await (database.delete(
+      database.attachments,
+    )..where((row) => row.messageId.isInQuery(messageIds))).go();
+    await (database.delete(
+      database.pendingApplicationReceipts,
+    )..where((row) => row.conversationId.equals(conversationId))).go();
+    await (database.delete(
+      database.messages,
+    )..where((row) => row.conversationId.equals(conversationId))).go();
+    await _refreshConversationAggregates(conversationId);
+  }
 
   Future<void> _rebuildConversation(
     String conversationId, {

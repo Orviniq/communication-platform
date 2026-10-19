@@ -12,6 +12,7 @@ import 'package:communication_platform/features/local_storage/infrastructure/dat
 import 'package:communication_platform/features/local_storage/infrastructure/database/stored_attachment_descriptor.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/infrastructure/conversation_tombstone.dart';
 import 'package:drift/drift.dart';
 
 final class DriftConversationDomainRepository extends DriftRepositoryBase
@@ -776,38 +777,25 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
   });
 
   @override
-  Future<Result<void>> deleteConversationForMe(
-    String conversationId,
-  ) => runWrite(() async {
-    final updated =
+  Future<Result<void>> deleteConversationForMe(String conversationId) =>
+      runWrite(() async {
+        // Every message is deleted for me below, so none keeps an attachment
+        // row, as `deleteForMe` does for one (ADR-089 D10).
+        if (!await tombstoneConversationInsideTransaction(
+          database,
+          conversationId,
+        )) {
+          throw const _MissingConversation();
+        }
         await (database.update(
-          database.conversations,
+          database.messages,
         )..where((row) => row.conversationId.equals(conversationId))).write(
-          const ConversationsCompanion(
-            tombstoned: Value(true),
-            unreadCount: Value(0),
-            draftCiphertext: Value(null),
+          const MessagesCompanion(
+            deletedForMe: Value(true),
+            unread: Value(false),
           ),
         );
-    if (updated != 1) {
-      throw const _MissingConversation();
-    }
-    await (database.update(
-      database.messages,
-    )..where((row) => row.conversationId.equals(conversationId))).write(
-      const MessagesCompanion(deletedForMe: Value(true), unread: Value(false)),
-    );
-    // Every message is now deleted for me, so none keeps an attachment
-    // row, as `deleteForMe` does for one (ADR-089 D10).
-    await (database.delete(database.attachments)..where(
-          (row) => row.messageId.isInQuery(
-            database.selectOnly(database.messages)
-              ..addColumns([database.messages.messageId])
-              ..where(database.messages.conversationId.equals(conversationId)),
-          ),
-        ))
-        .go();
-  });
+      });
 
   @override
   Future<Result<List<String>>> markConversationRead(String conversationId) =>
