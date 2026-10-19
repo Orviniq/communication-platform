@@ -11,12 +11,10 @@ final class MemoryVolatileConversationState
 
   static const Duration maximumTypingLifetime = Duration(seconds: 15);
   static const int maximumTypingEntries = 256;
-  static const int maximumPresenceDevices = 500;
 
   /// What expiry is measured against.
   final TimeSource clock;
   final Map<String, TypingProjection> _typing = {};
-  final Map<String, Set<String>> _presence = {};
   final StreamController<void> _changes = StreamController.broadcast();
   Timer? _expiryTimer;
 
@@ -24,12 +22,6 @@ final class MemoryVolatileConversationState
   Stream<List<TypingProjection>> watchTyping(String conversationId) async* {
     yield _typingFor(conversationId, _now());
     yield* _changes.stream.map((_) => _typingFor(conversationId, _now()));
-  }
-
-  @override
-  Stream<PresenceProjection> watchPresence(String userId) async* {
-    yield _presenceFor(userId);
-    yield* _changes.stream.map((_) => _presenceFor(userId));
   }
 
   @override
@@ -68,36 +60,8 @@ final class MemoryVolatileConversationState
   }
 
   @override
-  void applyPresence({
-    required String userId,
-    required String deviceId,
-    required bool socketOnline,
-  }) {
-    final user = userId.toLowerCase();
-    final device = deviceId.toLowerCase();
-    final online = _presence.putIfAbsent(user, () => <String>{});
-    if (socketOnline) {
-      final total = _presence.values.fold<int>(
-        0,
-        (sum, devices) => sum + devices.length,
-      );
-      if (total >= maximumPresenceDevices && !online.contains(device)) {
-        return;
-      }
-      online.add(device);
-    } else {
-      online.remove(device);
-      if (online.isEmpty) {
-        _presence.remove(user);
-      }
-    }
-    _emit();
-  }
-
-  @override
   void clearDisconnected() {
     _typing.clear();
-    _presence.clear();
     _expiryTimer?.cancel();
     _expiryTimer = null;
     _emit();
@@ -120,11 +84,6 @@ final class MemoryVolatileConversationState
           });
     return List.unmodifiable(values);
   }
-
-  PresenceProjection _presenceFor(String userId) => PresenceProjection(
-    userId: userId.toLowerCase(),
-    onlineDeviceCount: _presence[userId.toLowerCase()]?.length ?? 0,
-  );
 
   void _removeExpired(DateTime now) {
     _typing.removeWhere((_, value) => !value.expiresAt.isAfter(now));
