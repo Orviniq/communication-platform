@@ -25929,6 +25929,518 @@ class LocalPreferencesCompanion extends UpdateCompanion<LocalPreference> {
   }
 }
 
+class $PresenceDevicesTable extends PresenceDevices
+    with TableInfo<$PresenceDevicesTable, StoredPresenceDevice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PresenceDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
+    'peerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> peerUserId = GeneratedColumn<String>(
+    'peer_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _peerDeviceIdMeta = const VerificationMeta(
+    'peerDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> peerDeviceId = GeneratedColumn<String>(
+    'peer_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _probesSinceHeardMeta = const VerificationMeta(
+    'probesSinceHeard',
+  );
+  @override
+  late final GeneratedColumn<int> probesSinceHeard = GeneratedColumn<int>(
+    'probes_since_heard',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(probesSinceHeard).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tokensMeta = const VerificationMeta('tokens');
+  @override
+  late final GeneratedColumn<int> tokens = GeneratedColumn<int>(
+    'tokens',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(tokens).isBetweenValues(0, 4),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tokensAtMsMeta = const VerificationMeta(
+    'tokensAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> tokensAtMs = GeneratedColumn<int>(
+    'tokens_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastProbeMsMeta = const VerificationMeta(
+    'lastProbeMs',
+  );
+  @override
+  late final GeneratedColumn<int> lastProbeMs = GeneratedColumn<int>(
+    'last_probe_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSeenMsMeta = const VerificationMeta(
+    'lastSeenMs',
+  );
+  @override
+  late final GeneratedColumn<int> lastSeenMs = GeneratedColumn<int>(
+    'last_seen_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    peerUserId,
+    peerDeviceId,
+    probesSinceHeard,
+    tokens,
+    tokensAtMs,
+    lastProbeMs,
+    lastSeenMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'presence_devices';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredPresenceDevice> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('peer_user_id')) {
+      context.handle(
+        _peerUserIdMeta,
+        peerUserId.isAcceptableOrUnknown(
+          data['peer_user_id']!,
+          _peerUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_peerUserIdMeta);
+    }
+    if (data.containsKey('peer_device_id')) {
+      context.handle(
+        _peerDeviceIdMeta,
+        peerDeviceId.isAcceptableOrUnknown(
+          data['peer_device_id']!,
+          _peerDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_peerDeviceIdMeta);
+    }
+    if (data.containsKey('probes_since_heard')) {
+      context.handle(
+        _probesSinceHeardMeta,
+        probesSinceHeard.isAcceptableOrUnknown(
+          data['probes_since_heard']!,
+          _probesSinceHeardMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_probesSinceHeardMeta);
+    }
+    if (data.containsKey('tokens')) {
+      context.handle(
+        _tokensMeta,
+        tokens.isAcceptableOrUnknown(data['tokens']!, _tokensMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tokensMeta);
+    }
+    if (data.containsKey('tokens_at_ms')) {
+      context.handle(
+        _tokensAtMsMeta,
+        tokensAtMs.isAcceptableOrUnknown(
+          data['tokens_at_ms']!,
+          _tokensAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_tokensAtMsMeta);
+    }
+    if (data.containsKey('last_probe_ms')) {
+      context.handle(
+        _lastProbeMsMeta,
+        lastProbeMs.isAcceptableOrUnknown(
+          data['last_probe_ms']!,
+          _lastProbeMsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_seen_ms')) {
+      context.handle(
+        _lastSeenMsMeta,
+        lastSeenMs.isAcceptableOrUnknown(
+          data['last_seen_ms']!,
+          _lastSeenMsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {peerDeviceId};
+  @override
+  StoredPresenceDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredPresenceDevice(
+      peerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_user_id'],
+      )!,
+      peerDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_device_id'],
+      )!,
+      probesSinceHeard: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}probes_since_heard'],
+      )!,
+      tokens: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tokens'],
+      )!,
+      tokensAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tokens_at_ms'],
+      )!,
+      lastProbeMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_probe_ms'],
+      ),
+      lastSeenMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_seen_ms'],
+      ),
+    );
+  }
+
+  @override
+  $PresenceDevicesTable createAlias(String alias) {
+    return $PresenceDevicesTable(attachedDatabase, alias);
+  }
+}
+
+class StoredPresenceDevice extends DataClass
+    implements Insertable<StoredPresenceDevice> {
+  final String peerUserId;
+  final String peerDeviceId;
+
+  /// Probes sent since the last frame committed from the device (P1).
+  final int probesSinceHeard;
+
+  /// The probe bucket of P2, as of [tokensAtMs].
+  final int tokens;
+  final int tokensAtMs;
+
+  /// When the last probe went; null when none has.
+  final int? lastProbeMs;
+
+  /// This phone's clock at the latest presence frame it accepted from the
+  /// device; null when it has seen none, or forgot it when status was turned
+  /// off.
+  final int? lastSeenMs;
+  const StoredPresenceDevice({
+    required this.peerUserId,
+    required this.peerDeviceId,
+    required this.probesSinceHeard,
+    required this.tokens,
+    required this.tokensAtMs,
+    this.lastProbeMs,
+    this.lastSeenMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['peer_user_id'] = Variable<String>(peerUserId);
+    map['peer_device_id'] = Variable<String>(peerDeviceId);
+    map['probes_since_heard'] = Variable<int>(probesSinceHeard);
+    map['tokens'] = Variable<int>(tokens);
+    map['tokens_at_ms'] = Variable<int>(tokensAtMs);
+    if (!nullToAbsent || lastProbeMs != null) {
+      map['last_probe_ms'] = Variable<int>(lastProbeMs);
+    }
+    if (!nullToAbsent || lastSeenMs != null) {
+      map['last_seen_ms'] = Variable<int>(lastSeenMs);
+    }
+    return map;
+  }
+
+  PresenceDevicesCompanion toCompanion(bool nullToAbsent) {
+    return PresenceDevicesCompanion(
+      peerUserId: Value(peerUserId),
+      peerDeviceId: Value(peerDeviceId),
+      probesSinceHeard: Value(probesSinceHeard),
+      tokens: Value(tokens),
+      tokensAtMs: Value(tokensAtMs),
+      lastProbeMs: lastProbeMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastProbeMs),
+      lastSeenMs: lastSeenMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSeenMs),
+    );
+  }
+
+  factory StoredPresenceDevice.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredPresenceDevice(
+      peerUserId: serializer.fromJson<String>(json['peerUserId']),
+      peerDeviceId: serializer.fromJson<String>(json['peerDeviceId']),
+      probesSinceHeard: serializer.fromJson<int>(json['probesSinceHeard']),
+      tokens: serializer.fromJson<int>(json['tokens']),
+      tokensAtMs: serializer.fromJson<int>(json['tokensAtMs']),
+      lastProbeMs: serializer.fromJson<int?>(json['lastProbeMs']),
+      lastSeenMs: serializer.fromJson<int?>(json['lastSeenMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'peerUserId': serializer.toJson<String>(peerUserId),
+      'peerDeviceId': serializer.toJson<String>(peerDeviceId),
+      'probesSinceHeard': serializer.toJson<int>(probesSinceHeard),
+      'tokens': serializer.toJson<int>(tokens),
+      'tokensAtMs': serializer.toJson<int>(tokensAtMs),
+      'lastProbeMs': serializer.toJson<int?>(lastProbeMs),
+      'lastSeenMs': serializer.toJson<int?>(lastSeenMs),
+    };
+  }
+
+  StoredPresenceDevice copyWith({
+    String? peerUserId,
+    String? peerDeviceId,
+    int? probesSinceHeard,
+    int? tokens,
+    int? tokensAtMs,
+    Value<int?> lastProbeMs = const Value.absent(),
+    Value<int?> lastSeenMs = const Value.absent(),
+  }) => StoredPresenceDevice(
+    peerUserId: peerUserId ?? this.peerUserId,
+    peerDeviceId: peerDeviceId ?? this.peerDeviceId,
+    probesSinceHeard: probesSinceHeard ?? this.probesSinceHeard,
+    tokens: tokens ?? this.tokens,
+    tokensAtMs: tokensAtMs ?? this.tokensAtMs,
+    lastProbeMs: lastProbeMs.present ? lastProbeMs.value : this.lastProbeMs,
+    lastSeenMs: lastSeenMs.present ? lastSeenMs.value : this.lastSeenMs,
+  );
+  StoredPresenceDevice copyWithCompanion(PresenceDevicesCompanion data) {
+    return StoredPresenceDevice(
+      peerUserId: data.peerUserId.present
+          ? data.peerUserId.value
+          : this.peerUserId,
+      peerDeviceId: data.peerDeviceId.present
+          ? data.peerDeviceId.value
+          : this.peerDeviceId,
+      probesSinceHeard: data.probesSinceHeard.present
+          ? data.probesSinceHeard.value
+          : this.probesSinceHeard,
+      tokens: data.tokens.present ? data.tokens.value : this.tokens,
+      tokensAtMs: data.tokensAtMs.present
+          ? data.tokensAtMs.value
+          : this.tokensAtMs,
+      lastProbeMs: data.lastProbeMs.present
+          ? data.lastProbeMs.value
+          : this.lastProbeMs,
+      lastSeenMs: data.lastSeenMs.present
+          ? data.lastSeenMs.value
+          : this.lastSeenMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredPresenceDevice(')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('peerDeviceId: $peerDeviceId, ')
+          ..write('probesSinceHeard: $probesSinceHeard, ')
+          ..write('tokens: $tokens, ')
+          ..write('tokensAtMs: $tokensAtMs, ')
+          ..write('lastProbeMs: $lastProbeMs, ')
+          ..write('lastSeenMs: $lastSeenMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    peerUserId,
+    peerDeviceId,
+    probesSinceHeard,
+    tokens,
+    tokensAtMs,
+    lastProbeMs,
+    lastSeenMs,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredPresenceDevice &&
+          other.peerUserId == this.peerUserId &&
+          other.peerDeviceId == this.peerDeviceId &&
+          other.probesSinceHeard == this.probesSinceHeard &&
+          other.tokens == this.tokens &&
+          other.tokensAtMs == this.tokensAtMs &&
+          other.lastProbeMs == this.lastProbeMs &&
+          other.lastSeenMs == this.lastSeenMs);
+}
+
+class PresenceDevicesCompanion extends UpdateCompanion<StoredPresenceDevice> {
+  final Value<String> peerUserId;
+  final Value<String> peerDeviceId;
+  final Value<int> probesSinceHeard;
+  final Value<int> tokens;
+  final Value<int> tokensAtMs;
+  final Value<int?> lastProbeMs;
+  final Value<int?> lastSeenMs;
+  final Value<int> rowid;
+  const PresenceDevicesCompanion({
+    this.peerUserId = const Value.absent(),
+    this.peerDeviceId = const Value.absent(),
+    this.probesSinceHeard = const Value.absent(),
+    this.tokens = const Value.absent(),
+    this.tokensAtMs = const Value.absent(),
+    this.lastProbeMs = const Value.absent(),
+    this.lastSeenMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PresenceDevicesCompanion.insert({
+    required String peerUserId,
+    required String peerDeviceId,
+    required int probesSinceHeard,
+    required int tokens,
+    required int tokensAtMs,
+    this.lastProbeMs = const Value.absent(),
+    this.lastSeenMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : peerUserId = Value(peerUserId),
+       peerDeviceId = Value(peerDeviceId),
+       probesSinceHeard = Value(probesSinceHeard),
+       tokens = Value(tokens),
+       tokensAtMs = Value(tokensAtMs);
+  static Insertable<StoredPresenceDevice> custom({
+    Expression<String>? peerUserId,
+    Expression<String>? peerDeviceId,
+    Expression<int>? probesSinceHeard,
+    Expression<int>? tokens,
+    Expression<int>? tokensAtMs,
+    Expression<int>? lastProbeMs,
+    Expression<int>? lastSeenMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (peerUserId != null) 'peer_user_id': peerUserId,
+      if (peerDeviceId != null) 'peer_device_id': peerDeviceId,
+      if (probesSinceHeard != null) 'probes_since_heard': probesSinceHeard,
+      if (tokens != null) 'tokens': tokens,
+      if (tokensAtMs != null) 'tokens_at_ms': tokensAtMs,
+      if (lastProbeMs != null) 'last_probe_ms': lastProbeMs,
+      if (lastSeenMs != null) 'last_seen_ms': lastSeenMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PresenceDevicesCompanion copyWith({
+    Value<String>? peerUserId,
+    Value<String>? peerDeviceId,
+    Value<int>? probesSinceHeard,
+    Value<int>? tokens,
+    Value<int>? tokensAtMs,
+    Value<int?>? lastProbeMs,
+    Value<int?>? lastSeenMs,
+    Value<int>? rowid,
+  }) {
+    return PresenceDevicesCompanion(
+      peerUserId: peerUserId ?? this.peerUserId,
+      peerDeviceId: peerDeviceId ?? this.peerDeviceId,
+      probesSinceHeard: probesSinceHeard ?? this.probesSinceHeard,
+      tokens: tokens ?? this.tokens,
+      tokensAtMs: tokensAtMs ?? this.tokensAtMs,
+      lastProbeMs: lastProbeMs ?? this.lastProbeMs,
+      lastSeenMs: lastSeenMs ?? this.lastSeenMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (peerUserId.present) {
+      map['peer_user_id'] = Variable<String>(peerUserId.value);
+    }
+    if (peerDeviceId.present) {
+      map['peer_device_id'] = Variable<String>(peerDeviceId.value);
+    }
+    if (probesSinceHeard.present) {
+      map['probes_since_heard'] = Variable<int>(probesSinceHeard.value);
+    }
+    if (tokens.present) {
+      map['tokens'] = Variable<int>(tokens.value);
+    }
+    if (tokensAtMs.present) {
+      map['tokens_at_ms'] = Variable<int>(tokensAtMs.value);
+    }
+    if (lastProbeMs.present) {
+      map['last_probe_ms'] = Variable<int>(lastProbeMs.value);
+    }
+    if (lastSeenMs.present) {
+      map['last_seen_ms'] = Variable<int>(lastSeenMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PresenceDevicesCompanion(')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('peerDeviceId: $peerDeviceId, ')
+          ..write('probesSinceHeard: $probesSinceHeard, ')
+          ..write('tokens: $tokens, ')
+          ..write('tokensAtMs: $tokensAtMs, ')
+          ..write('lastProbeMs: $lastProbeMs, ')
+          ..write('lastSeenMs: $lastSeenMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $QuarantineRecordsTable extends QuarantineRecords
     with TableInfo<$QuarantineRecordsTable, QuarantineRecord> {
   @override
@@ -26340,6 +26852,9 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $LocalPreferencesTable localPreferences = $LocalPreferencesTable(
     this,
   );
+  late final $PresenceDevicesTable presenceDevices = $PresenceDevicesTable(
+    this,
+  );
   late final $QuarantineRecordsTable quarantineRecords =
       $QuarantineRecordsTable(this);
   late final Index messagesConversationOrdering = Index(
@@ -26429,6 +26944,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     historyTransferBatches,
     syncCheckpoints,
     localPreferences,
+    presenceDevices,
     quarantineRecords,
     messagesConversationOrdering,
     messagesPinnedByConversation,
@@ -42085,6 +42601,266 @@ typedef $$LocalPreferencesTableProcessedTableManager =
       LocalPreference,
       PrefetchHooks Function()
     >;
+typedef $$PresenceDevicesTableCreateCompanionBuilder =
+    PresenceDevicesCompanion Function({
+      required String peerUserId,
+      required String peerDeviceId,
+      required int probesSinceHeard,
+      required int tokens,
+      required int tokensAtMs,
+      Value<int?> lastProbeMs,
+      Value<int?> lastSeenMs,
+      Value<int> rowid,
+    });
+typedef $$PresenceDevicesTableUpdateCompanionBuilder =
+    PresenceDevicesCompanion Function({
+      Value<String> peerUserId,
+      Value<String> peerDeviceId,
+      Value<int> probesSinceHeard,
+      Value<int> tokens,
+      Value<int> tokensAtMs,
+      Value<int?> lastProbeMs,
+      Value<int?> lastSeenMs,
+      Value<int> rowid,
+    });
+
+class $$PresenceDevicesTableFilterComposer
+    extends Composer<_$LocalDatabase, $PresenceDevicesTable> {
+  $$PresenceDevicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerDeviceId => $composableBuilder(
+    column: $table.peerDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get probesSinceHeard => $composableBuilder(
+    column: $table.probesSinceHeard,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tokens => $composableBuilder(
+    column: $table.tokens,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tokensAtMs => $composableBuilder(
+    column: $table.tokensAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastProbeMs => $composableBuilder(
+    column: $table.lastProbeMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSeenMs => $composableBuilder(
+    column: $table.lastSeenMs,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PresenceDevicesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PresenceDevicesTable> {
+  $$PresenceDevicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get peerDeviceId => $composableBuilder(
+    column: $table.peerDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get probesSinceHeard => $composableBuilder(
+    column: $table.probesSinceHeard,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tokens => $composableBuilder(
+    column: $table.tokens,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tokensAtMs => $composableBuilder(
+    column: $table.tokensAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastProbeMs => $composableBuilder(
+    column: $table.lastProbeMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSeenMs => $composableBuilder(
+    column: $table.lastSeenMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PresenceDevicesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PresenceDevicesTable> {
+  $$PresenceDevicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get peerDeviceId => $composableBuilder(
+    column: $table.peerDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get probesSinceHeard => $composableBuilder(
+    column: $table.probesSinceHeard,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get tokens =>
+      $composableBuilder(column: $table.tokens, builder: (column) => column);
+
+  GeneratedColumn<int> get tokensAtMs => $composableBuilder(
+    column: $table.tokensAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastProbeMs => $composableBuilder(
+    column: $table.lastProbeMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSeenMs => $composableBuilder(
+    column: $table.lastSeenMs,
+    builder: (column) => column,
+  );
+}
+
+class $$PresenceDevicesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PresenceDevicesTable,
+          StoredPresenceDevice,
+          $$PresenceDevicesTableFilterComposer,
+          $$PresenceDevicesTableOrderingComposer,
+          $$PresenceDevicesTableAnnotationComposer,
+          $$PresenceDevicesTableCreateCompanionBuilder,
+          $$PresenceDevicesTableUpdateCompanionBuilder,
+          (
+            StoredPresenceDevice,
+            BaseReferences<
+              _$LocalDatabase,
+              $PresenceDevicesTable,
+              StoredPresenceDevice
+            >,
+          ),
+          StoredPresenceDevice,
+          PrefetchHooks Function()
+        > {
+  $$PresenceDevicesTableTableManager(
+    _$LocalDatabase db,
+    $PresenceDevicesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PresenceDevicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PresenceDevicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PresenceDevicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> peerUserId = const Value.absent(),
+                Value<String> peerDeviceId = const Value.absent(),
+                Value<int> probesSinceHeard = const Value.absent(),
+                Value<int> tokens = const Value.absent(),
+                Value<int> tokensAtMs = const Value.absent(),
+                Value<int?> lastProbeMs = const Value.absent(),
+                Value<int?> lastSeenMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PresenceDevicesCompanion(
+                peerUserId: peerUserId,
+                peerDeviceId: peerDeviceId,
+                probesSinceHeard: probesSinceHeard,
+                tokens: tokens,
+                tokensAtMs: tokensAtMs,
+                lastProbeMs: lastProbeMs,
+                lastSeenMs: lastSeenMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String peerUserId,
+                required String peerDeviceId,
+                required int probesSinceHeard,
+                required int tokens,
+                required int tokensAtMs,
+                Value<int?> lastProbeMs = const Value.absent(),
+                Value<int?> lastSeenMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PresenceDevicesCompanion.insert(
+                peerUserId: peerUserId,
+                peerDeviceId: peerDeviceId,
+                probesSinceHeard: probesSinceHeard,
+                tokens: tokens,
+                tokensAtMs: tokensAtMs,
+                lastProbeMs: lastProbeMs,
+                lastSeenMs: lastSeenMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PresenceDevicesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PresenceDevicesTable,
+      StoredPresenceDevice,
+      $$PresenceDevicesTableFilterComposer,
+      $$PresenceDevicesTableOrderingComposer,
+      $$PresenceDevicesTableAnnotationComposer,
+      $$PresenceDevicesTableCreateCompanionBuilder,
+      $$PresenceDevicesTableUpdateCompanionBuilder,
+      (
+        StoredPresenceDevice,
+        BaseReferences<
+          _$LocalDatabase,
+          $PresenceDevicesTable,
+          StoredPresenceDevice
+        >,
+      ),
+      StoredPresenceDevice,
+      PrefetchHooks Function()
+    >;
 typedef $$QuarantineRecordsTableCreateCompanionBuilder =
     QuarantineRecordsCompanion Function({
       Value<int> id,
@@ -42420,6 +43196,8 @@ class $LocalDatabaseManager {
       $$SyncCheckpointsTableTableManager(_db, _db.syncCheckpoints);
   $$LocalPreferencesTableTableManager get localPreferences =>
       $$LocalPreferencesTableTableManager(_db, _db.localPreferences);
+  $$PresenceDevicesTableTableManager get presenceDevices =>
+      $$PresenceDevicesTableTableManager(_db, _db.presenceDevices);
   $$QuarantineRecordsTableTableManager get quarantineRecords =>
       $$QuarantineRecordsTableTableManager(_db, _db.quarantineRecords);
 }

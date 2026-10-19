@@ -69,6 +69,7 @@ void main() {
       'history_transfer_batches',
       'sync_checkpoint',
       'local_preferences',
+      'presence_devices',
       'quarantine',
     });
     expect(database.schemaVersion, LocalDatabase.currentSchemaVersion);

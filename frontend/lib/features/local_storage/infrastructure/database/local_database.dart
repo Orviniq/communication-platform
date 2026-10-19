@@ -1249,6 +1249,38 @@ class LocalPreferences extends Table {
   Set<Column<Object>> get primaryKey => {preferenceKey};
 }
 
+/// What presence keeps about one peer device (ADR-098 D6, D8): the probe
+/// ledger that bounds the frames sent to a device that may be away, and when
+/// this phone last saw the device online. Never synced, and no row of it is
+/// ever sent anywhere.
+@DataClassName('StoredPresenceDevice')
+class PresenceDevices extends Table {
+  @override
+  String get tableName => 'presence_devices';
+
+  TextColumn get peerUserId => text()();
+  TextColumn get peerDeviceId => text()();
+
+  /// Probes sent since the last frame committed from the device (P1).
+  IntColumn get probesSinceHeard =>
+      integer().check(probesSinceHeard.isBiggerOrEqualValue(0))();
+
+  /// The probe bucket of P2, as of [tokensAtMs].
+  IntColumn get tokens => integer().check(tokens.isBetweenValues(0, 4))();
+  IntColumn get tokensAtMs => integer()();
+
+  /// When the last probe went; null when none has.
+  IntColumn get lastProbeMs => integer().nullable()();
+
+  /// This phone's clock at the latest presence frame it accepted from the
+  /// device; null when it has seen none, or forgot it when status was turned
+  /// off.
+  IntColumn get lastSeenMs => integer().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {peerDeviceId};
+}
+
 class QuarantineRecords extends Table {
   @override
   String get tableName => 'quarantine';
@@ -1316,6 +1348,7 @@ class StorageMigrationHooks {
     HistoryTransferBatches,
     SyncCheckpoints,
     LocalPreferences,
+    PresenceDevices,
     QuarantineRecords,
   ],
 )
@@ -1323,7 +1356,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 25;
+  static const currentSchemaVersion = 26;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -2051,6 +2084,13 @@ final class LocalDatabase extends _$LocalDatabase {
           // `createAll` are the same statement.
           await migrator.createIndex(inboxEnvelopesHeldBySender);
           await migrator.createIndex(inboxEnvelopesHeldBySession);
+        }
+        if (from < 26) {
+          // The probe ledger and the last seen of each peer device (ADR-098
+          // D8), empty: nothing before this step kept either. `IF NOT EXISTS`
+          // is part of the statement, so a database stamped back from this
+          // version keeps the rows it has.
+          await migrator.createTable(presenceDevices);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

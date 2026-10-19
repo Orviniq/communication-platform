@@ -1565,7 +1565,7 @@ void main() {
           .customSelect('PRAGMA user_version')
           .map((row) => row.read<int>('user_version'))
           .getSingle(),
-      25,
+      LocalDatabase.currentSchemaVersion,
     );
     await upgraded.close();
   });
@@ -1613,6 +1613,116 @@ void main() {
         );
     await insert(1, 16);
     await expectLater(insert(2, 15), throwsA(anything));
+  });
+
+  test('version-twenty-five upgrade adds the presence table, empty, and '
+      'keeps every other row', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final versionTwentyFive = sqlite3.open(databaseFile.path)
+      ..execute('DROP TABLE presence_devices')
+      ..execute(
+        'INSERT INTO local_preferences (preference_key, value_ciphertext, '
+        'value_version) VALUES (?, ?, ?)',
+        <Object?>[
+          'appearance.v25',
+          Uint8List.fromList(const [7]),
+          1,
+        ],
+      )
+      ..execute('PRAGMA user_version = 25');
+    versionTwentyFive.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info(presence_devices)')
+        .map(
+          (row) => (
+            row.read<String>('name'),
+            row.read<int>('notnull'),
+            row.read<int>('pk'),
+          ),
+        )
+        .get();
+    expect(columns, <(String, int, int)>[
+      ('peer_user_id', 1, 0),
+      ('peer_device_id', 1, 1),
+      ('probes_since_heard', 1, 0),
+      ('tokens', 1, 0),
+      ('tokens_at_ms', 1, 0),
+      ('last_probe_ms', 0, 0),
+      ('last_seen_ms', 0, 0),
+    ]);
+    expect(await upgraded.select(upgraded.presenceDevices).get(), isEmpty);
+    final preferences = await upgraded.select(upgraded.localPreferences).get();
+    expect(preferences.single.preferenceKey, 'appearance.v25');
+    expect(preferences.single.valueCiphertext, [7]);
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test('the presence table keeps its rows through a database stamped back '
+      'to 25', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current
+        .into(current.presenceDevices)
+        .insert(
+          PresenceDevicesCompanion.insert(
+            peerUserId: _userV19,
+            peerDeviceId: _deviceV19,
+            probesSinceHeard: 2,
+            tokens: 1,
+            tokensAtMs: 1000,
+            lastSeenMs: const Value(2000),
+          ),
+        );
+    await current.close();
+
+    final stampedBack = sqlite3.open(databaseFile.path)
+      ..execute('PRAGMA user_version = 25');
+    stampedBack.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+    final row = await upgraded.select(upgraded.presenceDevices).getSingle();
+    expect(row.probesSinceHeard, 2);
+    expect(row.lastSeenMs, 2000);
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test('a presence row holds at most four tokens and never a negative '
+      'probe count', () async {
+    final fresh = LocalDatabase(NativeDatabase.memory());
+    addTearDown(fresh.close);
+    Future<void> insert(String device, {int probes = 0, int tokens = 4}) =>
+        fresh
+            .into(fresh.presenceDevices)
+            .insert(
+              PresenceDevicesCompanion.insert(
+                peerUserId: _userV19,
+                peerDeviceId: device,
+                probesSinceHeard: probes,
+                tokens: tokens,
+                tokensAtMs: 0,
+              ),
+            );
+    await insert('device-a');
+    await expectLater(insert('device-b', tokens: 5), throwsA(anything));
+    await expectLater(insert('device-c', probes: -1), throwsA(anything));
   });
 }
 
