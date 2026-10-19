@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/application/signal_frame_pacer.dart';
+import 'package:communication_platform/core/application/signal_router.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/voice/application/ports/voice_signalling_ports.dart';
-import 'package:communication_platform/features/voice/application/signal_frame_pacer.dart';
 import 'package:communication_platform/features/voice/domain/voice_signal_codec.dart';
 import 'package:communication_platform/features/voice/domain/voice_signal_model.dart';
 
@@ -23,17 +23,15 @@ import 'package:communication_platform/features/voice/domain/voice_signal_model.
 /// join seals at most [volatileBudgetPerPeer] frames to one device, because
 /// every frame the relay drops costs that device pair a dead skipped key.
 ///
-/// **In.** The socket reader never decrypts. A frame goes onto a queue of
-/// [inboundQueueCapacity], and past it the oldest is dropped, as the relay
-/// would have dropped it; one worker opens them in order. A frame is opened
-/// under its session exactly as a durable envelope is, and committed only when
-/// its payload is `CPVSV001`, so the ciphertext of anything else is left for
-/// the channel it belongs to. A message whose header names a sender other than
-/// the device the session authenticated is dropped.
+/// **In.** Every inbound frame is read by the one [SignalRouter] (ADR-098
+/// D1), which opens it once under its session, commits it when its payload is
+/// `CPVSV001`, and hands it here. A message whose header names a sender other
+/// than the device the session authenticated is dropped.
 ///
-/// Opening and sealing take turns, so that they never race each other's
-/// compare-and-set on one session. A commit that loses to the durable path
-/// is tried once more from the fresh state.
+/// Sealing takes its turn from the router, so that an open never races a
+/// seal's compare-and-set on one session. A transport built without a router
+/// reads the socket through one of its own that routes `CPVSV001` alone,
+/// which is the same queue, the same order and the same commit rule.
 ///
 /// Nothing here holds a room, a participant or a retry, and nothing is
 /// logged: the call decides who to send what to, and when to try again.
@@ -47,15 +45,24 @@ final class VoiceSignalTransport implements VoiceSignallingPort {
     required this.buckets,
     required this.clock,
     required VoiceSignalTimerPort timer,
-  }) : _pacer = SignalFramePacer(clock: clock, timer: timer);
+    SignalRouter? router,
+  }) : _pacer = SignalFramePacer(clock: clock, timer: timer),
+       _ownsRouter = router == null,
+       _router =
+           router ??
+           SignalRouter(
+             socket: socket,
+             opener: opener,
+             buckets: buckets,
+             channels: const {SignalChannel.voice},
+           );
 
   /// Sealed frames one join sends one device (`voice-signalling-v1.md`,
   /// "Volatile seal and open").
   static const volatileBudgetPerPeer = 32;
 
-  /// Inbound frames held for the worker. The server holds 256 undelivered
-  /// frames for a socket before it closes it, so a reader never needs more.
-  static const inboundQueueCapacity = 256;
+  /// Inbound frames held for the router's worker.
+  static const inboundQueueCapacity = SignalRouter.inboundQueueCapacity;
 
   /// Joins whose budget is remembered. A device is in one call at a time, so
   /// this only bounds a caller that never forgets a join.
@@ -69,31 +76,37 @@ final class VoiceSignalTransport implements VoiceSignallingPort {
   final VoiceSignalBucketsPort buckets;
   final TimeSource clock;
   final SignalFramePacer _pacer;
+  final SignalRouter _router;
+
+  /// Whether [_router] is this transport's own, started and disposed with it.
+  final bool _ownsRouter;
 
   final _inbound = StreamController<InboundVoiceSignal>.broadcast();
-  final _queue = ListQueue<String>();
   final _budgets = <String, Map<String, int>>{};
-  StreamSubscription<String>? _subscription;
-  Future<void> _turn = Future<void>.value();
-  var _draining = false;
+  StreamSubscription<RoutedSignal>? _subscription;
   var _closed = false;
 
   @override
   Stream<InboundVoiceSignal> get inbound => _inbound.stream;
 
-  /// Starts taking frames off the socket.
+  /// Starts taking the router's voice frames, and starts a router of its own.
   void start() {
     if (_closed) {
       return;
     }
-    _subscription ??= socket.inboundBlobs.listen(_enqueue);
+    _subscription ??= _router.channel(SignalChannel.voice).listen(_receive);
+    if (_ownsRouter) {
+      _router.start();
+    }
   }
 
   Future<void> dispose() async {
     _closed = true;
-    _queue.clear();
     await _subscription?.cancel();
     _subscription = null;
+    if (_ownsRouter) {
+      await _router.dispose();
+    }
     await _inbound.close();
   }
 
@@ -143,7 +156,7 @@ final class VoiceSignalTransport implements VoiceSignallingPort {
     }
     final payload = (encoded as Success<Uint8List>).value;
 
-    final prepared = await _exclusively(
+    final prepared = await _router.exclusively(
       () => _sealAndQueue(
         payload: payload,
         joinKey: protocolBytesToHex(joinId),
@@ -242,108 +255,43 @@ final class VoiceSignalTransport implements VoiceSignallingPort {
     ];
   }
 
-  void _enqueue(String blob) {
+  void _receive(RoutedSignal signal) {
     if (_closed) {
       return;
     }
-    if (_queue.length >= inboundQueueCapacity) {
-      _queue.removeFirst();
-    }
-    _queue.addLast(blob);
-    if (!_draining) {
-      _draining = true;
-      unawaited(_drain());
-    }
-  }
-
-  Future<void> _drain() async {
-    try {
-      while (_queue.isNotEmpty && !_closed) {
-        final blob = _queue.removeFirst();
-        final received = await _exclusively(() => _receive(blob));
-        if (received != null && !_closed) {
-          _inbound.add(received);
-        }
-      }
-    } finally {
-      _draining = false;
-    }
-  }
-
-  Future<InboundVoiceSignal?> _receive(String blob) async {
-    final frame = _decodeBlob(blob);
-    if (frame == null) {
-      return null;
-    }
-    for (var attempt = 0; attempt < 2; attempt += 1) {
-      final openedResult = await opener.open(frame);
-      if (openedResult case FailureResult()) {
-        return null;
-      }
-      final opening = (openedResult as Success<VoiceSignalOpening>).value;
-      final decoding = VoiceSignalCodec.decode(opening.payload);
-      if (decoding is NotVoiceSignal) {
-        // Not the call's. Left unopened, so a durable envelope the relay
-        // replayed as a signal still opens where it belongs.
-        return null;
-      }
-      final committed = await opening.commit();
-      if (committed case FailureResult(failure: final failure)) {
-        if (_isConflictFailure(failure)) {
-          continue;
-        }
-        return null;
-      }
-      return switch (decoding) {
-        DecodedVoiceSignal(:final message) =>
-          _isFromSender(message.header, opening)
-              ? ReceivedVoiceSignal(
-                  senderUserId: opening.senderUserId,
-                  senderDeviceId: opening.senderDeviceId,
-                  message: message,
-                )
-              : null,
-        UnsupportedVoiceSignalVersion(:final version) => UnsupportedVoiceSignal(
-          senderUserId: opening.senderUserId,
-          senderDeviceId: opening.senderDeviceId,
-          version: version,
-        ),
-        UnknownVoiceSignalKind() || MalformedVoiceSignal() => null,
-        NotVoiceSignal() => null,
-      };
-    }
-    return null;
-  }
-
-  /// The frame, when [blob] is standard base64 of exactly one published
-  /// signal bucket. The gateway already dropped anything else; this holds
-  /// the same rule at the one place a frame is opened.
-  Uint8List? _decodeBlob(String blob) {
-    final published = buckets.signalBuckets;
-    if (blob.isEmpty ||
-        blob.length % 4 != 0 ||
-        !published.any((bucket) => blob.length == (bucket + 2) ~/ 3 * 4) ||
-        !_standardBase64.hasMatch(blob)) {
-      return null;
-    }
-    try {
-      final frame = base64.decode(blob);
-      return published.contains(frame.length) ? frame : null;
-    } on FormatException {
-      return null;
+    final received = switch (VoiceSignalCodec.decode(signal.payload)) {
+      DecodedVoiceSignal(:final message) =>
+        _isFromSender(message.header, signal)
+            ? ReceivedVoiceSignal(
+                senderUserId: signal.senderUserId,
+                senderDeviceId: signal.senderDeviceId,
+                message: message,
+              )
+            : null,
+      UnsupportedVoiceSignalVersion(:final version) => UnsupportedVoiceSignal(
+        senderUserId: signal.senderUserId,
+        senderDeviceId: signal.senderDeviceId,
+        version: version,
+      ),
+      UnknownVoiceSignalKind() ||
+      MalformedVoiceSignal() ||
+      NotVoiceSignal() => null,
+    };
+    if (received != null) {
+      _inbound.add(received);
     }
   }
 
   /// The sender a header names must be the device the session authenticated.
-  bool _isFromSender(VoiceSignalHeader header, VoiceSignalOpening opening) {
+  bool _isFromSender(VoiceSignalHeader header, RoutedSignal signal) {
     try {
       return _same(
             header.senderUserId,
-            protocolUuidBytes(opening.senderUserId),
+            protocolUuidBytes(signal.senderUserId),
           ) &&
           _same(
             header.senderDeviceId,
-            protocolUuidBytes(opening.senderDeviceId),
+            protocolUuidBytes(signal.senderDeviceId),
           );
     } on FormatException {
       return false;
@@ -371,12 +319,6 @@ final class VoiceSignalTransport implements VoiceSignallingPort {
       _budgets.remove(_budgets.keys.first);
     }
     return budget;
-  }
-
-  Future<T> _exclusively<T>(Future<T> Function() action) {
-    final result = _turn.then((_) => action());
-    _turn = result.then<void>((_) {}, onError: (Object _) {});
-    return result;
   }
 
   static String _deviceKey(VoiceSignalTarget target) =>
@@ -421,10 +363,6 @@ bool _same(List<int> left, List<int> right) {
   }
   return difference == 0;
 }
-
-final RegExp _standardBase64 = RegExp(
-  r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
-);
 
 final RegExp _uuid = RegExp(
   r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',

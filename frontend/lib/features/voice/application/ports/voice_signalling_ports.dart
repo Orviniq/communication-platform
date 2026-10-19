@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/port.dart';
+import 'package:communication_platform/core/application/ports/signal_ports.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/voice/domain/voice_signal_model.dart';
 
@@ -140,18 +141,9 @@ abstract interface class VoiceSignallingPort implements Port {
   void forgetJoin(Uint8List joinId);
 }
 
-/// The `/ws` socket, as far as signalling needs it.
-abstract interface class VoiceSignalSocketPort implements Port {
-  /// The blob of every `signal` frame the socket delivered, as it arrived.
-  Stream<String> get inboundBlobs;
-
-  /// Sends one `signal` frame. A failure means the socket did not take it,
-  /// and nothing was sent.
-  Future<Result<void>> sendSignal({
-    required String toDeviceId,
-    required String blob,
-  });
-}
+/// The `/ws` socket, as far as signalling needs it: the one every volatile
+/// channel shares.
+abstract interface class VoiceSignalSocketPort implements SignalSocketPort {}
 
 /// What sealing came to for one target.
 sealed class VoiceSealOutcome {
@@ -190,28 +182,16 @@ abstract interface class VoiceSignalSealPort implements Port {
 }
 
 /// Opens one frame under its pairwise session, writing nothing.
-abstract interface class VoiceSignalOpenPort implements Port {
+abstract interface class VoiceSignalOpenPort implements SignalOpenPort {
+  @override
   Future<Result<VoiceSignalOpening>> open(Uint8List frame);
 }
 
 /// A frame opened and not yet committed.
-abstract interface class VoiceSignalOpening {
-  /// The device the pairwise session authenticated.
-  String get senderUserId;
-  String get senderDeviceId;
-
-  Uint8List get payload;
-
-  /// Writes what opening the frame advanced.
-  Future<Result<void>> commit();
-}
+abstract interface class VoiceSignalOpening implements SignalOpening {}
 
 /// The deployment's published `signal_buckets`, read when asked.
-abstract interface class VoiceSignalBucketsPort implements Port {
-  Set<int> get signalBuckets;
-}
+abstract interface class VoiceSignalBucketsPort implements SignalBucketsPort {}
 
 /// Waits, so that a test can move time instead of spending it.
-abstract interface class VoiceSignalTimerPort implements Port {
-  Future<void> wait(Duration duration);
-}
+abstract interface class VoiceSignalTimerPort implements SignalTimerPort {}

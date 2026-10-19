@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/deterministic_cbor.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
-import 'package:communication_platform/features/voice/domain/deterministic_cbor.dart';
 import 'package:communication_platform/features/voice/domain/voice_signal_model.dart';
 
 /// What decoding one opened payload found.
