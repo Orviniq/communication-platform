@@ -10,6 +10,9 @@ import 'package:communication_platform/features/messaging/infrastructure/memory_
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/application/presence_channel.dart';
+import 'package:communication_platform/features/signals/application/presence_share_setting.dart';
+import 'package:communication_platform/features/signals/application/presence_status_book.dart';
+import 'package:communication_platform/features/signals/domain/peer_status_model.dart';
 import 'package:communication_platform/features/signals/infrastructure/presence_adapters.dart';
 import 'package:communication_platform/features/voice/infrastructure/pairwise_voice_signal_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -203,6 +206,85 @@ void main() {
       reason: 'nothing was sealed to Mallory',
     );
   });
+
+  test('two phones exchange the online status: an open chat sees its peer '
+      'online, and its last seen once the peer leaves', () async {
+    final alicePhone = phoneFor(
+      alice,
+      conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+      peers: {
+        bobUser: [bobDevice],
+      },
+    );
+    final bobPhone = phoneFor(
+      bob,
+      conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+      peers: {
+        aliceUser: [aliceDevice],
+      },
+    );
+
+    // Bob opens the chat: his watch reaches Alice, whose answer reaches him.
+    bobPhone.visibility.show(direct);
+    await _settleAll(phones);
+    expect(
+      await bobPhone.status.watchUser(aliceUser).first,
+      const PeerStatusOnline(),
+    );
+    expect(
+      await alicePhone.status.watchUser(bobUser).first,
+      const PeerStatusOnline(),
+      reason: 'a watch is a presence frame too',
+    );
+
+    // Alice leaves the app: her goodbye reaches Bob before her socket closes.
+    clock.advance(const Duration(seconds: 3));
+    await alicePhone.channel.farewell();
+    await _settleAll(phones);
+    expect(
+      await bobPhone.status.watchUser(aliceUser).first,
+      PeerStatusLastSeen(clock.now()),
+    );
+    expect(relay.carried.map((frame) => frame.length), everyElement(1024));
+  });
+
+  test('a phone with status off answers nothing and sees nothing, and its '
+      'sessions still move with every frame', () async {
+    final alicePhone = phoneFor(
+      alice,
+      conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+      peers: {
+        bobUser: [bobDevice],
+      },
+    );
+    final bobPhone = phoneFor(
+      bob,
+      conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+      peers: {
+        aliceUser: [aliceDevice],
+      },
+    );
+    await alicePhone.sharing.set(sharing: false);
+    await _settleAll(phones);
+
+    bobPhone.visibility.show(direct);
+    await _settleAll(phones);
+
+    expect(relay.carriedTo, [aliceDevice], reason: "Bob's watch, unanswered");
+    expect(
+      await bobPhone.status.watchUser(aliceUser).first,
+      const PeerStatusNone(),
+    );
+    expect(
+      await alicePhone.status.watchUser(bobUser).first,
+      const PeerStatusNone(),
+    );
+    expect(
+      (await alice.sessionWith(bobDevice))!.stateVersion,
+      2,
+      reason: 'the watch was opened and committed all the same',
+    );
+  });
 }
 
 Future<void> _settleAll(List<_Phone> phones) async {
@@ -212,6 +294,7 @@ Future<void> _settleAll(List<_Phone> phones) async {
     }
     for (final phone in phones) {
       await phone.channel.idle;
+      await phone.status.idle;
     }
   }
 }
@@ -235,18 +318,31 @@ final class _Phone {
       buckets: const FixedSignalBuckets(),
       conversations: conversations,
       peers: peers,
-      ledger: MemoryPresenceLedger(),
+      ledger: ledger,
       typingSink: VolatileStateTypingSink(state),
       visibility: visibility,
       activity: activity.events,
+      status: status = PresenceStatusBook(
+        store: ledger,
+        sharing: sharing,
+        conversations: conversations,
+        clock: clock,
+        timers: timers,
+      ),
+      sharing: sharing,
       clock: clock,
-      timers: ManualPresenceTimers(clock),
+      timers: timers,
       pacerTimer: FakeSignalTimer(clock),
     )..start();
   }
 
   final SignalRouter router;
   final FakeSignalClock clock;
+  late final timers = ManualPresenceTimers(clock);
+  final ledger = MemoryPresenceLedger();
+  final shareStore = MemoryPresenceSharePreference();
+  late final sharing = PresenceShareSetting(shareStore);
+  late final PresenceStatusBook status;
   final visibility = FakePresenceVisibility();
   final activity = ChatActivityHub();
   late final state = MemoryVolatileConversationState(clock: clock);
@@ -254,6 +350,8 @@ final class _Phone {
 
   Future<void> close() async {
     await channel.stop();
+    await status.dispose();
+    await sharing.dispose();
     await router.dispose();
     await visibility.close();
     await activity.dispose();

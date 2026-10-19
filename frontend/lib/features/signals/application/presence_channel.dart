@@ -13,12 +13,15 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/application/presence_probe_ledger.dart';
+import 'package:communication_platform/features/signals/application/presence_share_setting.dart';
+import 'package:communication_platform/features/signals/application/presence_status_book.dart';
 import 'package:communication_platform/features/signals/domain/presence_signal_codec.dart';
 import 'package:communication_platform/features/signals/domain/presence_signal_model.dart';
 
-/// Typing over `CPPSV001` (ADR-098 D2 to D7): the watch of the chat on
-/// screen, the answer and the lease it earns, typing sent to the devices that
-/// hold a lease, and typing received and shown.
+/// Typing and the online status over `CPPSV001` (ADR-098 D2 to D9): the
+/// watch of the chat on screen, the answer and the lease it earns, typing
+/// sent to the devices that hold a lease, typing received and shown, who is
+/// online, and the goodbye.
 ///
 /// **Who hears what.** A phone in the foreground watches the conversation it
 /// shows: it sends a `watch` to the peer's devices, or in a group of at most
@@ -40,7 +43,17 @@ import 'package:communication_platform/features/signals/domain/presence_signal_m
 /// only when its header names the device the session authenticated, only in
 /// order within one sender instance, and only for a conversation this phone
 /// holds with that sender, from an account this user has verified. Anything
-/// else is dropped without an answer.
+/// else is dropped without an answer. Each accepted frame makes its sender
+/// online in [status] (D4).
+///
+/// **Leaving.** On leaving the foreground, and in [farewell] before the
+/// socket closes, it sends `gone` to every device with a live lease in either
+/// direction (D5).
+///
+/// **The switch** (D9). While [sharing] is off it sends nothing, answers
+/// nothing and shows nothing; the router still commits every frame, and this
+/// discards it. Turning it off sends one `gone` to the live leases of that
+/// moment, and nothing after.
 ///
 /// Nothing is logged.
 final class PresenceChannel {
@@ -57,6 +70,8 @@ final class PresenceChannel {
     required this.typingSink,
     required this.visibility,
     required this.activity,
+    required this.status,
+    required this.sharing,
     required this.clock,
     required this.timers,
     required SignalTimerPort pacerTimer,
@@ -115,6 +130,8 @@ final class PresenceChannel {
   final PresenceTypingSinkPort typingSink;
   final PresenceVisibilityPort visibility;
   final Stream<ChatActivity> activity;
+  final PresenceStatusBook status;
+  final PresenceShareSetting sharing;
   final TimeSource clock;
   final PresenceTimerPort timers;
 
@@ -129,6 +146,10 @@ final class PresenceChannel {
   final _inFlight = <Future<void>>{};
   var _running = false;
   var _foreground = false;
+
+  /// "Show my online status", as this channel last applied it. Off until the
+  /// stored choice is read, so nothing leaves before it is known.
+  var _sharing = false;
 
   /// When a frame from each device was last committed, on any channel.
   final _heardAt = <String, DateTime>{};
@@ -174,8 +195,31 @@ final class PresenceChannel {
             .listen((signal) => _serially(() => _receive(signal))),
       )
       ..add(visibility.changes.listen((_) => _serially(_followVisibility)))
-      ..add(activity.listen((event) => _serially(() => _onActivity(event))));
-    _serially(_followVisibility);
+      ..add(activity.listen((event) => _serially(() => _onActivity(event))))
+      ..add(
+        sharing.changes.listen(
+          (on) => _serially(() => _onSharingChanged(on: on)),
+        ),
+      );
+    _serially(() async {
+      _sharing = await sharing.read();
+      await _followVisibility();
+    });
+  }
+
+  /// Says goodbye before the socket closes (D5): the pending typing stops
+  /// and `gone` to every device with a live lease in either direction, then
+  /// nothing more until the app is in the foreground again. Completes once
+  /// those frames have gone to the socket.
+  Future<void> farewell() async {
+    _serially(() async {
+      if (_foreground) {
+        await _leaveForeground();
+        _foreground = false;
+        _closeWatch();
+      }
+    });
+    await idle;
   }
 
   /// Stops everything, forgets every lease and every watch, and ends every
@@ -228,6 +272,11 @@ final class PresenceChannel {
   }
 
   Future<void> _receive(RoutedSignal signal) async {
+    // Off, a frame was committed by the router, which spares its sender a
+    // dead key, and is discarded here unread (D9).
+    if (!_sharing) {
+      return;
+    }
     final decoding = PresenceSignalCodec.decode(signal.payload);
     // An unknown version, an unknown kind and a malformed body were committed
     // by the router and are ignored here.
@@ -256,9 +305,13 @@ final class PresenceChannel {
     switch (message.body) {
       case PresenceWatch(:final conversationId, :final leaseMs):
         final conversation = protocolBytesToHex(conversationId);
+        if (!await _accepts(conversation, sender)) {
+          return;
+        }
+        await status.heard(sender);
         // In the background a device answers nothing: online means the app
         // is on screen (D4).
-        if (!_foreground || !await _accepts(conversation, sender)) {
+        if (!_foreground) {
           return;
         }
         final lease = Duration(milliseconds: leaseMs);
@@ -278,6 +331,7 @@ final class PresenceChannel {
         if (!await _accepts(conversation, sender)) {
           return;
         }
+        await status.heard(sender);
         final watch = _watch;
         if (watch != null && watch.conversationId == conversation) {
           watch.answeredAt[sender.key] = now;
@@ -288,14 +342,15 @@ final class PresenceChannel {
         if (!await _accepts(conversation, sender)) {
           return;
         }
+        await status.heard(sender);
         _showTyping(
           conversation,
           sender,
           active ? Duration(milliseconds: ttlMs!) : null,
           now,
         );
-      case PresenceGone():
-        if (!_holdsLeaseOrWatches(sender.key)) {
+      case PresenceGone(:final reason):
+        if (!_holdsLeaseOrWatches(sender.key) && !status.isOnline(sender.key)) {
           return;
         }
         _gone.add(sender.key);
@@ -304,6 +359,10 @@ final class PresenceChannel {
           watchers.remove(sender.key);
         }
         _hideTypingOf(sender.key, now);
+        await status.gone(
+          sender,
+          forget: reason == PresenceGoneReason.statusTurnedOff,
+        );
     }
   }
 
@@ -386,9 +445,12 @@ final class PresenceChannel {
 
   Future<void> _followVisibility() async {
     final foreground = visibility.isForeground;
-    final shown = foreground ? visibility.visibleConversationId : null;
+    // Off, nothing is watched (D9).
+    final shown = foreground && _sharing
+        ? visibility.visibleConversationId
+        : null;
     if (_foreground && !foreground) {
-      _leaveForeground();
+      await _leaveForeground();
     }
     _foreground = foreground;
     final watched = _watch?.conversationId;
@@ -415,11 +477,15 @@ final class PresenceChannel {
     }
   }
 
-  /// Leaving the foreground stops typing at once. A stop the pace holds
-  /// back is not sent: the socket closes now, and a frame sealed after it
-  /// closed would be a drop; the receiver's own expiry ends it instead.
-  void _leaveForeground() {
+  /// Leaving the foreground stops typing at once and says `gone` to every
+  /// device with a live lease in either direction (D5), which ends the
+  /// typing it shows too. A stop the pace holds back is not sent: the socket
+  /// closes now, and a frame sealed after it closed would be a drop; the
+  /// `gone` ends it instead. Every lease ends here, since a device in the
+  /// background answers nothing.
+  Future<void> _leaveForeground() async {
     final now = clock.now();
+    final stops = <String>[];
     for (final MapEntry(key: conversation, value: typing)
         in _typingOut.entries) {
       typing
@@ -429,11 +495,76 @@ final class PresenceChannel {
         continue;
       }
       if (typing.paceAllows(now)) {
-        _serially(() => _sendTyping(conversation, active: false));
+        stops.add(conversation);
       } else {
         typing.sent = false;
       }
     }
+    for (final conversation in stops) {
+      await _sendTyping(conversation, active: false);
+    }
+    final farewell = _liveLeaseHolders(now);
+    if (_sharing && farewell.isNotEmpty) {
+      await _send(
+        const PresenceGone(PresenceGoneReason.leftForeground),
+        live: farewell,
+      );
+    }
+    _leases.clear();
+    _clearShownTyping();
+  }
+
+  /// Every device with a live lease in either direction: the devices holding
+  /// an unexpired lease on a conversation of this phone, and the devices of
+  /// the watch on screen that answered within [liveWindow] (D5).
+  List<PresenceDevice> _liveLeaseHolders(DateTime now) {
+    final holders = <String, PresenceDevice>{};
+    for (final watchers in _leases.values) {
+      for (final lease in watchers.values) {
+        if (lease.expiresAt.isAfter(now)) {
+          holders[lease.device.key] = lease.device;
+        }
+      }
+    }
+    final watch = _watch;
+    if (watch != null) {
+      for (final target in watch.targets) {
+        final answered = watch.answeredAt[target.key];
+        if (answered != null && now.difference(answered) < liveWindow) {
+          holders[target.key] = target;
+        }
+      }
+    }
+    holders.removeWhere((key, _) => _gone.contains(key));
+    return holders.values.toList();
+  }
+
+  /// Applies "Show my online status" (D9). Off: one `gone` to the live leases
+  /// of this moment, then no watch, no lease, no typing either way. On again:
+  /// the chat on screen is watched anew.
+  Future<void> _onSharingChanged({required bool on}) async {
+    if (on == _sharing) {
+      return;
+    }
+    if (on) {
+      _sharing = true;
+      await _followVisibility();
+      return;
+    }
+    final farewell = _liveLeaseHolders(clock.now());
+    _sharing = false;
+    for (final typing in _typingOut.values) {
+      typing.cancelTimers();
+    }
+    _typingOut.clear();
+    if (farewell.isNotEmpty) {
+      await _send(
+        const PresenceGone(PresenceGoneReason.statusTurnedOff),
+        live: farewell,
+      );
+    }
+    _closeWatch();
+    _leases.clear();
     _clearShownTyping();
   }
 
@@ -446,7 +577,7 @@ final class PresenceChannel {
   /// target heard from in the last [liveWindow], and a probe to each other
   /// target its ledger allows.
   Future<void> _watchRound(_Watch watch) async {
-    if (!identical(_watch, watch) || !_foreground) {
+    if (!identical(_watch, watch) || !_foreground || !_sharing) {
       return;
     }
     final targets = await _watchTargets(watch.conversationId);
@@ -504,13 +635,27 @@ final class PresenceChannel {
       return const [];
     }
     final verified = await peers.verifiedDevices(users);
+    final lastSeen = perUser < maximumPeerDevices
+        ? await status.lastSeenByDevice(users)
+        : const <String, int>{};
+    int byNewestSeen(String left, String right) {
+      final leftSeen = _newestSeen(left, lastSeen);
+      final rightSeen = _newestSeen(right, lastSeen);
+      if (leftSeen != rightSeen) {
+        if (leftSeen == null) return 1;
+        if (rightSeen == null) return -1;
+        return rightSeen.compareTo(leftSeen);
+      }
+      return left.compareTo(right);
+    }
+
     final targets = <PresenceDevice>[];
     for (final user in users.toList()..sort()) {
       final devices = [
         for (final device in verified[user] ?? const <String>[])
           if (device.toLowerCase() != currentDeviceId.toLowerCase())
             device.toLowerCase(),
-      ]..sort(_byNewestHeard);
+      ]..sort(byNewestSeen);
       for (final device in devices.take(perUser)) {
         targets.add(PresenceDevice(userId: user, deviceId: device));
       }
@@ -518,15 +663,15 @@ final class PresenceChannel {
     return targets;
   }
 
-  int _byNewestHeard(String left, String right) {
-    final leftHeard = _heardAt[left];
-    final rightHeard = _heardAt[right];
-    if (leftHeard != rightHeard) {
-      if (leftHeard == null) return 1;
-      if (rightHeard == null) return -1;
-      return rightHeard.compareTo(leftHeard);
+  /// The newest of when [device] was last heard in this process and its
+  /// stored last seen (D8), in milliseconds.
+  int? _newestSeen(String device, Map<String, int> lastSeen) {
+    final heard = _heardAt[device]?.millisecondsSinceEpoch;
+    final seen = lastSeen[device];
+    if (heard == null || seen == null) {
+      return heard ?? seen;
     }
-    return left.compareTo(right);
+    return max(heard, seen);
   }
 
   bool _isLive(String key, DateTime now) {
@@ -540,7 +685,9 @@ final class PresenceChannel {
   Future<void> _onActivity(ChatActivity event) async {
     switch (event) {
       case ChatTextEdited(:final conversationId, :final hasText):
-        if (!_foreground) {
+        // Off, typing goes nowhere: it would tell its receiver that this
+        // phone is online (D9).
+        if (!_foreground || !_sharing) {
           return;
         }
         final typing = _typingOut[conversationId] ??= _TypingOut();

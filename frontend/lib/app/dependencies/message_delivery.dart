@@ -168,6 +168,8 @@ final class MessageDeliverySession {
           clock: ref.read(timeSourceProvider),
           jitter: FullJitterSource(),
           delay: platform.delay,
+          // Presence says goodbye before the socket closes (ADR-098 D5).
+          farewell: presence == null ? null : _PresenceFarewell(presence),
         ),
       );
     } on Object {
@@ -378,4 +380,15 @@ final class MessageDeliveryController extends Notifier<MessageDeliveryStage> {
       state = stage;
     }
   }
+}
+
+/// Presence's goodbye, as the supervisor waits for it before it closes the
+/// socket for the background.
+final class _PresenceFarewell implements SocketFarewellPort {
+  const _PresenceFarewell(this.presence);
+
+  final PresenceChannel presence;
+
+  @override
+  Future<void> beforeSocketCloses() => presence.farewell();
 }

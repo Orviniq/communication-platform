@@ -17,7 +17,11 @@ import 'package:communication_platform/features/pairwise/infrastructure/native_p
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/application/presence_channel.dart';
+import 'package:communication_platform/features/signals/application/presence_share_setting.dart';
+import 'package:communication_platform/features/signals/application/presence_status_book.dart';
+import 'package:communication_platform/features/signals/domain/peer_status_model.dart';
 import 'package:communication_platform/features/signals/infrastructure/cached_presence_peers.dart';
+import 'package:communication_platform/features/signals/infrastructure/drift_presence_stores.dart';
 import 'package:communication_platform/features/signals/infrastructure/presence_adapters.dart';
 import 'package:communication_platform/features/voice/infrastructure/pairwise_voice_signal_crypto.dart';
 import 'package:communication_platform/features/voice/infrastructure/published_voice_deployment.dart';
@@ -67,8 +71,58 @@ final signalRouterProvider =
       return router;
     });
 
-/// Typing over `CPPSV001` for a signed-in device (ADR-098). The delivery
-/// session starts and stops it with the socket.
+/// "Show my online status" on this phone (ADR-098 D9): on by default, read
+/// once, and applied by every reader when it changes.
+final presenceShareSettingProvider = FutureProvider<PresenceShareSetting>((
+  ref,
+) async {
+  final database = await ref.watch(localDatabaseProvider.future);
+  final setting = PresenceShareSetting(DriftPresenceSharePreference(database));
+  ref.onDispose(() => unawaited(setting.dispose()));
+  return setting;
+});
+
+/// Who is online, and the last seen of each peer, as this phone saw them
+/// (ADR-098 D4, D8). The presence channel feeds it; the screens read it
+/// through [peerStatusProvider] and [groupOnlineCountProvider].
+final presenceStatusBookProvider = FutureProvider<PresenceStatusBook>((
+  ref,
+) async {
+  final database = await ref.watch(localDatabaseProvider.future);
+  final groups = await ref.watch(groupRepositoryProvider.future);
+  final book = PresenceStatusBook(
+    store: DriftPresenceDevices(database),
+    sharing: await ref.watch(presenceShareSettingProvider.future),
+    conversations: DriftPresenceConversations(
+      database: database,
+      groups: groups,
+    ),
+    clock: ref.watch(timeSourceProvider),
+    timers: const TimerPresenceTimers(),
+  );
+  ref.onDispose(() => unawaited(book.dispose()));
+  return book;
+});
+
+/// The online status of one peer account: online, a last seen, or nothing,
+/// which is also the answer while "Show my online status" is off.
+final peerStatusProvider = StreamProvider.autoDispose
+    .family<PeerStatus, String>((ref, userId) async* {
+      final book = await ref.watch(presenceStatusBookProvider.future);
+      yield* book.watchUser(userId);
+    });
+
+/// How many other members of one group are online: 0 for a group over 32
+/// members and while "Show my online status" is off.
+final groupOnlineCountProvider = StreamProvider.autoDispose.family<int, String>(
+  (ref, conversationId) async* {
+    final book = await ref.watch(presenceStatusBookProvider.future);
+    yield* book.watchOnlineCount(conversationId);
+  },
+);
+
+/// Typing and the online status over `CPPSV001` for a signed-in device
+/// (ADR-098). The delivery session starts and stops it with the socket.
 final presenceChannelProvider =
     FutureProvider.family<PresenceChannel, MessagingScope>((ref, scope) async {
       final router = await ref.watch(signalRouterProvider(scope).future);
@@ -80,6 +134,8 @@ final presenceChannelProvider =
       final groups = await ref.watch(groupRepositoryProvider.future);
       final config = ref.watch(serverConfigSnapshotProvider);
       final clock = ref.watch(timeSourceProvider);
+      final status = await ref.watch(presenceStatusBookProvider.future);
+      final sharing = await ref.watch(presenceShareSettingProvider.future);
       final store = DriftPairwiseTransportStore(database, config: config);
       final verifier = ContactPairwiseLiveDeviceResolverAdapter(
         delegate: authentication,
@@ -115,12 +171,14 @@ final presenceChannelProvider =
           groups: groups,
         ),
         peers: peers,
-        ledger: MemoryPresenceLedger(),
+        ledger: DriftPresenceDevices(database),
         typingSink: VolatileStateTypingSink(
           ref.watch(volatileConversationStateProvider),
         ),
         visibility: _RegistryVisibility(ref.watch(visibleConversationProvider)),
         activity: ref.watch(chatActivityProvider).events,
+        status: status,
+        sharing: sharing,
         clock: clock,
         timers: const TimerPresenceTimers(),
         pacerTimer: const TimerVoiceSignalTimer(),

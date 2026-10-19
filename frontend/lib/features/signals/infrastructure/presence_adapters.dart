@@ -161,10 +161,12 @@ final class VolatileStateTypingSink implements PresenceTypingSinkPort {
   void clearAll() => state.clearDisconnected();
 }
 
-/// The probe ledger in memory, for as long as the process lives. Schema 26
-/// keeps the same entries durably (ADR-098 D8).
-final class MemoryPresenceLedger implements PresenceLedgerPort {
+/// The probe ledger and the last seen in memory, for as long as the process
+/// lives. `DriftPresenceDevices` keeps the same entries durably (ADR-098 D8).
+final class MemoryPresenceLedger
+    implements PresenceLedgerPort, PresenceLastSeenPort {
   final _entries = <String, PresenceLedgerEntry>{};
+  final _lastSeen = <String, PresenceLastSeen>{};
 
   @override
   Future<Result<PresenceLedgerEntry?>> read({
@@ -178,8 +180,58 @@ final class MemoryPresenceLedger implements PresenceLedgerPort {
     return const Result.success(null);
   }
 
+  @override
+  Future<Result<List<PresenceLastSeen>>> readLastSeen(
+    Set<String> userIds,
+  ) async {
+    final users = {for (final user in userIds) user.toLowerCase()};
+    return Result.success([
+      for (final seen in _lastSeen.values)
+        if (users.contains(seen.userId)) seen,
+    ]);
+  }
+
+  @override
+  Future<Result<void>> writeLastSeen(
+    PresenceDevice device,
+    int lastSeenMs,
+  ) async {
+    _lastSeen[device.key] = PresenceLastSeen(
+      userId: device.userId.toLowerCase(),
+      deviceId: device.key,
+      lastSeenMs: lastSeenMs,
+    );
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<void>> forgetLastSeen([PresenceDevice? device]) async {
+    if (device == null) {
+      _lastSeen.clear();
+    } else {
+      _lastSeen.remove(device.key);
+    }
+    return const Result.success(null);
+  }
+
   static String _key(String userId, String deviceId) =>
       '${userId.toLowerCase()}|${deviceId.toLowerCase()}';
+}
+
+/// "Show my online status" in memory, on until it is turned off.
+final class MemoryPresenceSharePreference implements PresenceSharePort {
+  MemoryPresenceSharePreference({this.sharing = true});
+
+  bool sharing;
+
+  @override
+  Future<bool> readSharing() async => sharing;
+
+  @override
+  Future<Result<void>> writeSharing({required bool sharing}) async {
+    this.sharing = sharing;
+    return const Result.success(null);
+  }
 }
 
 /// Dart timers.

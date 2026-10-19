@@ -168,6 +168,42 @@ abstract interface class PresenceLedgerPort implements Port {
   Future<Result<void>> write(PresenceLedgerEntry entry);
 }
 
+/// When this phone last saw one peer device online (ADR-098 D8).
+final class PresenceLastSeen {
+  const PresenceLastSeen({
+    required this.userId,
+    required this.deviceId,
+    required this.lastSeenMs,
+  });
+
+  final String userId;
+  final String deviceId;
+  final int lastSeenMs;
+
+  @override
+  String toString() => 'PresenceLastSeen(<redacted>)';
+}
+
+/// Where the last seen of each peer device is kept, beside its probe ledger.
+/// It is only what this phone saw, and nothing in it ever leaves the phone.
+abstract interface class PresenceLastSeenPort implements Port {
+  /// The last seen of every device of [userIds] that has one.
+  Future<Result<List<PresenceLastSeen>>> readLastSeen(Set<String> userIds);
+
+  Future<Result<void>> writeLastSeen(PresenceDevice device, int lastSeenMs);
+
+  /// Forgets the last seen of [device], or of every device when it is null.
+  Future<Result<void>> forgetLastSeen([PresenceDevice? device]);
+}
+
+/// "Show my online status", a preference of this phone (ADR-098 D9).
+abstract interface class PresenceSharePort implements Port {
+  /// The stored choice. A missing or unreadable choice reads as on (T3).
+  Future<bool> readSharing();
+
+  Future<Result<void>> writeSharing({required bool sharing});
+}
+
 /// Where a received typing state is shown.
 abstract interface class PresenceTypingSinkPort implements Port {
   /// Shows [active] typing until [expiresAt], or ends it.

@@ -9,6 +9,8 @@ import 'package:communication_platform/features/messaging/infrastructure/memory_
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/application/presence_channel.dart';
+import 'package:communication_platform/features/signals/application/presence_share_setting.dart';
+import 'package:communication_platform/features/signals/application/presence_status_book.dart';
 import 'package:communication_platform/features/signals/domain/presence_signal_codec.dart';
 import 'package:communication_platform/features/signals/domain/presence_signal_model.dart';
 import 'package:communication_platform/features/signals/infrastructure/presence_adapters.dart';
@@ -91,6 +93,9 @@ final class RecordingPresenceSealer implements PresenceSealPort {
 
   final FakeSignalClock clock;
   final seals = <PresenceSeal>[];
+
+  /// Every payload sealed, byte for byte.
+  final payloads = <Uint8List>[];
   final refused = <String, PresenceSealRefusal>{};
 
   @override
@@ -106,6 +111,7 @@ final class RecordingPresenceSealer implements PresenceSealPort {
         else
           PresenceSealed(target, Uint8List(1024)),
     ];
+    payloads.add(Uint8List.fromList(payload));
     final decoded = PresenceSignalCodec.decode(payload);
     seals.add(
       PresenceSeal((decoded as DecodedPresenceSignal).message, [
@@ -127,6 +133,33 @@ final class RecordingPresenceSealer implements PresenceSealPort {
     for (final seal in seals)
       if (seal.message.kind == kind && seal.devices.isNotEmpty) seal,
   ];
+}
+
+/// The last seen in [delegate], with every write on the record.
+final class RecordingLastSeen implements PresenceLastSeenPort {
+  RecordingLastSeen(this.delegate);
+
+  final PresenceLastSeenPort delegate;
+
+  /// Each write: the device and the time it wrote.
+  final writes = <(String, int)>[];
+  var forgets = 0;
+
+  @override
+  Future<Result<List<PresenceLastSeen>>> readLastSeen(Set<String> userIds) =>
+      delegate.readLastSeen(userIds);
+
+  @override
+  Future<Result<void>> writeLastSeen(PresenceDevice device, int lastSeenMs) {
+    writes.add((device.key, lastSeenMs));
+    return delegate.writeLastSeen(device, lastSeenMs);
+  }
+
+  @override
+  Future<Result<void>> forgetLastSeen([PresenceDevice? device]) {
+    forgets += 1;
+    return delegate.forgetLastSeen(device);
+  }
 }
 
 final class FakePresenceConversations implements PresenceConversationsPort {
@@ -269,6 +302,8 @@ final class PresenceRig {
       typingSink: sink,
       visibility: visibility,
       activity: activity.events,
+      status: status,
+      sharing: sharing,
       clock: clock,
       timers: timers,
       pacerTimer: pacerTimer,
@@ -284,6 +319,20 @@ final class PresenceRig {
   final conversations = FakePresenceConversations();
   final peers = FakePresencePeers();
   final ledger = MemoryPresenceLedger();
+
+  /// "Show my online status", on until a test turns it off.
+  final shareStore = MemoryPresenceSharePreference();
+  late final sharing = PresenceShareSetting(shareStore);
+
+  /// Who this phone sees online, and the last seen it keeps in [ledger].
+  late final lastSeen = RecordingLastSeen(ledger);
+  late final status = PresenceStatusBook(
+    store: lastSeen,
+    sharing: sharing,
+    conversations: conversations,
+    clock: clock,
+    timers: timers,
+  );
 
   /// The typing state the chat headers read, on this rig's clock.
   late final state = MemoryVolatileConversationState(clock: clock);
@@ -306,6 +355,7 @@ final class PresenceRig {
       await Future<void>.delayed(Duration.zero);
     }
     await channel.idle;
+    await status.idle;
   }
 
   Future<void> advance(Duration duration) =>
@@ -391,6 +441,8 @@ final class PresenceRig {
 
   Future<void> close() async {
     await channel.stop();
+    await status.dispose();
+    await sharing.dispose();
     await router.dispose();
     await socket.close();
     await visibility.close();
