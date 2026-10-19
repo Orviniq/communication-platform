@@ -13,12 +13,16 @@ import 'package:communication_platform/features/groups/application/group_outboun
 import 'package:communication_platform/features/groups/application/group_state_recovery_service.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_access_adapters.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_conversation_resolver.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pairwise_send_preparation_adapter.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pending_receipt_post_inbox_work.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
+import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
+import 'package:communication_platform/features/signals/application/presence_probe_ledger.dart';
+import 'package:communication_platform/features/signals/infrastructure/drift_presence_stores.dart';
 import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -227,6 +231,7 @@ final durableSyncEngineProvider =
           // front of work it owes itself.
           DeviceLogGossipPostInboxWork(owedGossip),
         ]),
+        committedSenders: _PresenceLedgerHearing(database),
       );
     });
 
@@ -323,4 +328,20 @@ final class _CompositePostInboxWork implements PostInboxCommitWorkPort {
       await item.run();
     }
   }
+}
+
+/// A committed envelope is a frame heard from its sender device, which lifts
+/// the silence rule of the presence probe ledger (ADR-098 D6, D8). The
+/// ledger writes only when that device has probes outstanding.
+final class _PresenceLedgerHearing implements CommittedEnvelopeSenderPort {
+  _PresenceLedgerHearing(LocalDatabase database)
+    : _ledger = PresenceProbeLedger(DriftPresenceDevices(database));
+
+  final PresenceProbeLedger _ledger;
+
+  @override
+  Future<void> committedFrom({
+    required String userId,
+    required String deviceId,
+  }) => _ledger.heard(PresenceDevice(userId: userId, deviceId: deviceId));
 }

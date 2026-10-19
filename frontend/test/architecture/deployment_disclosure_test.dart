@@ -40,6 +40,7 @@ void main() {
       DisclosurePoint.deviceOnlyHistory,
       DisclosurePoint.recoveryExcludesHistory,
       DisclosurePoint.pairwiseGroups,
+      DisclosurePoint.onlineStatus,
       DisclosurePoint.unbuiltSurfaces,
       DisclosurePoint.intendedUse,
     ]);
@@ -85,7 +86,7 @@ void main() {
   test('the disclosure revision moves whenever the disclosure moves', () {
     // ADR-045 rejects periodic re-consent - repetition of an unchanged warning
     // measurably destroys it - and makes re-consent content-triggered instead.
-    expect(DeploymentDisclosure.distributed.revision, 10);
+    expect(DeploymentDisclosure.distributed.revision, 11);
 
     final english = _catalogue('lib/l10n/app_en.arb');
 
@@ -149,6 +150,17 @@ void main() {
       'one encrypted copy for each device of each member. If this phone loses '
       "a group's current state, only another member's app can send it again, "
       'and until then you cannot send messages in that group.',
+    );
+    expect(
+      english['disclosureOnlineStatus'],
+      'While this app is open on your screen, verified contacts you share a '
+      'chat with can see that you are online and when you are typing, and '
+      'they learn when you open your chat with them or a group you share. '
+      'After you leave the app, they see when they last saw you online. The '
+      'server cannot read any of this, but it can see that your phone sends '
+      'short signals to theirs while a chat is open. You can turn this off '
+      'for this phone in Settings, under Show my online status. While it is '
+      "off, you do not see anyone else's either.",
     );
     expect(
       english['disclosureUnbuiltSurfaces'],
@@ -510,8 +522,15 @@ void main() {
     const disclosure = DeploymentDisclosure.distributed;
 
     test('a current reader is asked nothing', () {
-      expect(disclosure.requiresReacknowledgement(10), isFalse);
-      expect(disclosure.changedSince(10), isEmpty);
+      expect(disclosure.requiresReacknowledgement(11), isFalse);
+      expect(disclosure.changedSince(11), isEmpty);
+    });
+
+    test('a reader from revision 10 sees the online status point alone', () {
+      // Revision 11 added the one point: a peer can now see when the user is
+      // online and typing (ADR-098 D10). Nothing else moved.
+      expect(disclosure.requiresReacknowledgement(10), isTrue);
+      expect(disclosure.changedSince(10), {DisclosurePoint.onlineStatus});
     });
 
     test('a reader from revision 9 sees the delivery and surface points', () {
@@ -523,6 +542,7 @@ void main() {
       expect(disclosure.requiresReacknowledgement(9), isTrue);
       expect(disclosure.changedSince(9), {
         DisclosurePoint.bestEffortDelivery,
+        DisclosurePoint.onlineStatus,
         DisclosurePoint.unbuiltSurfaces,
       });
     });
@@ -535,6 +555,7 @@ void main() {
       expect(disclosure.changedSince(8), {
         DisclosurePoint.bestEffortDelivery,
         DisclosurePoint.pairwiseGroups,
+        DisclosurePoint.onlineStatus,
         DisclosurePoint.unbuiltSurfaces,
       });
     });
@@ -550,6 +571,7 @@ void main() {
             DisclosurePoint.bestEffortDelivery,
             DisclosurePoint.messagesExpireUnread,
             DisclosurePoint.pairwiseGroups,
+            DisclosurePoint.onlineStatus,
             DisclosurePoint.unbuiltSurfaces,
           },
           reason: 'a reader from revision $accepted',
@@ -564,6 +586,7 @@ void main() {
         DisclosurePoint.messagesExpireUnread,
         DisclosurePoint.deviceOnlyHistory,
         DisclosurePoint.pairwiseGroups,
+        DisclosurePoint.onlineStatus,
         DisclosurePoint.unbuiltSurfaces,
       });
     });

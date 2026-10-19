@@ -23,6 +23,7 @@ final class SyncLifecycleSupervisor {
     required DelayPort delay,
     BackgroundConnectionPolicy backgroundConnection =
         const NeverHoldsInBackground(),
+    SocketFarewellPort? farewell,
     this.reconnectPolicy = const SyncRetryPolicy(
       baseDelay: Duration(seconds: 1),
       maximumDelay: Duration(minutes: 5),
@@ -37,7 +38,12 @@ final class SyncLifecycleSupervisor {
        _clock = clock,
        _jitter = jitter,
        _delay = delay,
-       _backgroundConnection = backgroundConnection;
+       _backgroundConnection = backgroundConnection,
+       _farewell = farewell;
+
+  /// The longest the socket waits for [_farewell] before it closes anyway
+  /// (ADR-098 D5).
+  static const farewellLimit = Duration(milliseconds: 500);
 
   final DurableSyncEngine _engine;
   final DurableSyncStore _store;
@@ -57,6 +63,10 @@ final class SyncLifecycleSupervisor {
   /// supervisor that is already backgrounded and would otherwise never
   /// re-evaluate.
   final BackgroundConnectionPolicy _backgroundConnection;
+
+  /// What leaves before the socket closes for the background: presence's
+  /// goodbye. Null when nothing does.
+  final SocketFarewellPort? _farewell;
   final SyncRetryPolicy reconnectPolicy;
   final Duration stableConnectionThreshold;
 
@@ -293,8 +303,23 @@ final class SyncLifecycleSupervisor {
   /// periodic platform job restarts its window every time it is re-registered
   /// and a process that dies while foregrounded would otherwise leave nothing
   /// scheduled at all.
+  ///
+  /// Before the close it waits for [_farewell], for at most [farewellLimit]:
+  /// the goodbye presence sends on leaving, which would otherwise be sealed
+  /// and never sent. A farewell that fails or hangs releases the close all the
+  /// same.
   Future<void> _enterBackground() async {
     _generation += 1;
+    final farewell = _farewell;
+    if (farewell != null) {
+      await Future.any<void>([
+        farewell.beforeSocketCloses().then<void>(
+          (_) {},
+          onError: (Object _) {},
+        ),
+        _delay.wait(farewellLimit),
+      ]);
+    }
     await _realtime.close();
     if (_lifecycle.current == ApplicationExecutionState.detached) {
       await _store.markConnectionPhase(SyncConnectionPhase.stopped);

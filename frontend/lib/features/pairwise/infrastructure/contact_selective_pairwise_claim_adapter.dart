@@ -149,6 +149,13 @@ final class ContactPairwiseLiveDeviceResolverAdapter
     return Result.success(Map.unmodifiable(resolved));
   }
 
+  /// [resolveVerifiedLiveDevices]'s judgement of a resolution already read,
+  /// for a caller that reads many accounts at once and keeps each answer.
+  Result<List<VerifiedPairwiseLiveDevice>> verifiedFrom(
+    String userId,
+    Result<AuthenticatedPeer> result,
+  ) => _verified(userId, result);
+
   Result<List<VerifiedPairwiseLiveDevice>> _verified(
     String userId,
     Result<AuthenticatedPeer> result,

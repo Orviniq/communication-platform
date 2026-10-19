@@ -195,6 +195,8 @@
   "@disclosurePairwiseGroups": {
     "description": "Revision 9 (ADR-076). It replaces disclosureExperimentalGroups, which still described the deleted closed-beta MLS track: unfinished experimental encryption, a group an update could reset, and groups switched off on an untested processor. A group is now a set of the pairwise sessions direct messages use (ADR-075), so the point states what that design costs the reader instead."
   },
+  "disclosureOnlineStatus": "While this app is open on your screen, verified contacts you share a chat with can see that you are online and when you are typing, and they learn when you open your chat with them or a group you share. After you leave the app, they see when they last saw you online. The server cannot read any of this, but it can see that your phone sends short signals to theirs while a chat is open. You can turn this off for this phone in Settings, under Show my online status. While it is off, you do not see anyone else's either.",
+  "@disclosureOnlineStatus": {"description": "Revision 11 (ADR-098 D10). Typing and the online status are visible to verified peers while the app is on screen."},
   "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: group chats cannot send files, and the display name and photo you choose are not published — other people see the username you registered with.",
   "@disclosureUnbuiltSurfaces": {
     "description": "Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature. Revision 10 (ADR-094) removed voice rooms (built since phase 6) and narrowed file attachments to groups, the only chats that still cannot send them (ADR-089)."
@@ -443,7 +445,14 @@
   },
   "chatPinnedExpandAction": "View all",
   "chatPinnedMessagesTitle": "Pinned messages",
-  "chatTypingStatus": "typing… encrypted signal may lag",
+  "chatTypingStatus": "typing…",
+  "chatPeerOnline": "online",
+  "chatPeerLastSeenToday": "last seen today at {time}",
+  "@chatPeerLastSeenToday": {"placeholders": {"time": {"type": "String"}}},
+  "chatPeerLastSeenYesterday": "last seen yesterday at {time}",
+  "@chatPeerLastSeenYesterday": {"placeholders": {"time": {"type": "String"}}},
+  "chatPeerLastSeenOn": "last seen {date}",
+  "@chatPeerLastSeenOn": {"placeholders": {"date": {"type": "String"}}},
   "chatSearchAction": "Search in chat",
   "chatSearchInputLabel": "Search local messages",
   "chatSearchEmptyQueryTitle": "Search this device's history",
@@ -611,6 +620,25 @@
   "@groupSelectedCount": {"placeholders": {"count": {"type": "int"}}},
   "groupMemberCount": "{count} members",
   "@groupMemberCount": {"placeholders": {"count": {"type": "int"}}},
+  "groupOnlineCount": "{count, plural, other{{count} online}}",
+  "@groupOnlineCount": {"description": "A group chat's header beside the member count when at least one other member is online (ADR-098 D4).", "placeholders": {"count": {"type": "int"}}},
+  "groupMemberCountOnline": "{members} · {online}",
+  "@groupMemberCountOnline": {"description": "A group chat's header: the member count, then how many are online (ADR-098 D11).", "placeholders": {"members": {"type": "String"}, "online": {"type": "String"}}},
+  "groupTypingOne": "{name} is typing…",
+  "@groupTypingOne": {
+    "description": "A group chat's header while one member types (ADR-098 D3). {name} is what this phone calls the member, as on their messages.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "groupTypingTwo": "{first} and {second} are typing…",
+  "@groupTypingTwo": {
+    "description": "A group chat's header while two members type (ADR-098 D3).",
+    "placeholders": {"first": {"type": "String"}, "second": {"type": "String"}}
+  },
+  "groupTypingMany": "{count, plural, =1{{name} and 1 other are typing…} other{{name} and {count} others are typing…}}",
+  "@groupTypingMany": {
+    "description": "A group chat's header while three or more members type (ADR-098 D3). {count} is how many besides {name}.",
+    "placeholders": {"name": {"type": "String"}, "count": {"type": "int"}}
+  },
   "groupInfoTitle": "Group Info",
   "groupEditTitle": "Edit Group",
   "groupEditAction": "Edit",
@@ -681,6 +709,9 @@
   "settingsSustainedExemptionWithdrawn": "On, but your phone has taken back permission to run while it saves battery.",
   "settingsSustainedStopped": "On, but it is not running right now.",
   "settingsSustainedUnavailable": "Not available in this build.",
+  "settingsOnlineStatusTitle": "Show my online status",
+  "settingsOnlineStatusSummary": "Off on this phone: nobody sees when you are online or typing, and you do not see anyone's.",
+  "settingsOnlineStatusSaveFailed": "This choice could not be saved on this phone.",
   "sustainedTitle": "Receiving while closed",
   "sustainedWhatItDoes": "Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead, so a message can reach you without waiting for that. How quickly it does on your phone has not been measured.",
   "sustainedWhatItCosts": "It uses more battery, because the app stays connected. It puts a permanent notice on your phone saying the app is running: anyone who unlocks your phone and looks can see it, and it stays there until you turn this off. It is hidden on the lock screen.",

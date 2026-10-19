@@ -175,8 +175,6 @@ abstract interface class ApplicationFanoutPort implements Port {
 abstract interface class VolatileConversationStatePort implements Port {
   Stream<List<TypingProjection>> watchTyping(String conversationId);
 
-  Stream<PresenceProjection> watchPresence(String userId);
-
   void applyTyping({
     required String conversationId,
     required String userId,
@@ -184,12 +182,6 @@ abstract interface class VolatileConversationStatePort implements Port {
     required bool isTyping,
     required DateTime expiresAt,
     required DateTime authenticatedAt,
-  });
-
-  void applyPresence({
-    required String userId,
-    required String deviceId,
-    required bool socketOnline,
   });
 
   void clearDisconnected();

@@ -5,6 +5,7 @@ import 'package:communication_platform/core/application/ports/application_protoc
 import 'package:communication_platform/core/application/ports/device_control_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_session_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/application/signal_router.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -499,6 +500,14 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required String senderDeviceId,
     required Uint8List openedPayload,
   }) async {
+    // A volatile channel's payload is accepted only from the channel it
+    // belongs to, a `signal` frame, and never applied from the queue
+    // (ADR-098 D1), as the typing event is not.
+    if (SignalChannel.of(openedPayload) != null) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+    }
     if (RoomSyncPayloadCodec.matches(openedPayload)) {
       return _prepareRoomPayload(
         envelopeId: envelopeId,

@@ -62,7 +62,8 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `room_state_requests` | Rooms whose control state this device still has to ask a member for, after a mailbox gap or something that named state it does not hold. A room with a row joins no call, invites nobody and renames nothing |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
 | `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
-| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, and whether the notification permission prompt has ever been shown. Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
+| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, whether the notification permission prompt has ever been shown, and "Show my online status" (`presence.share.v1`, `on` or `off`; a missing or unreadable row reads as on, [ADR-098](decisions.md) D9). Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
+| `presence_devices` | One row per peer device, keyed by `peer_device_id` (schema 26, [ADR-098](decisions.md) D6 and D8): the probe ledger that bounds the watches sent to a device that may be away (`probes_since_heard`, `tokens` from 0 to 4 as of `tokens_at_ms`, `last_probe_ms`) and `last_seen_ms`, this phone's own clock at the latest presence frame it accepted from the device. A row is written on a probe, on the first committed frame or durable envelope after a probe, and when an online state ends or at most once a minute while it lasts; a renewal, an answer or a typing frame writes nothing. Turning "Show my online status" off clears every `last_seen_ms`, and a `gone` with reason 2 clears its sender's. Never synced, and no row is ever sent anywhere |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
 ## Indexes
@@ -408,6 +409,11 @@ under reason codes 48 to 51.
   creates `inbox_envelopes_held_by_sender` and `inbox_envelopes_held_by_session` with
   `IF NOT EXISTS`. Nothing is back-filled, and no other table or column changes. The CHECK
   constraint on `processing_state` already allowed 5, so the table is not rebuilt.
+
+- Schema version 26 creates `presence_devices` empty ([ADR-098](decisions.md) D8): nothing
+  before it kept a probe ledger or a last seen. The statement is `CREATE TABLE IF NOT EXISTS`,
+  so a database this build made and something stamped back keeps its rows. No other table or
+  column changes.
 
 ## Retention and deletion
 

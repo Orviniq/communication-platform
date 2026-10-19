@@ -470,6 +470,10 @@ class AppLocalizationsFa extends AppLocalizations {
       'پیام‌های گروهی از همان رمزنگاری پیام‌های مستقیم استفاده می‌کنند. تغییرات امضاشده‌ای که اعضا را اضافه و حذف می‌کنند روی همین رمزنگاری ساخته شده‌اند و هیچ‌کس بیرون از این پروژه آن‌ها را بازبینی نکرده است. هر پیام گروهی به‌صورت یک نسخهٔ رمزنگاری‌شده برای هر دستگاه هر عضو فرستاده می‌شود. اگر این گوشی وضعیت فعلی یک گروه را از دست بدهد، فقط برنامهٔ یکی دیگر از اعضا می‌تواند آن را دوباره بفرستد، و تا آن وقت نمی‌توانید در آن گروه پیام بفرستید.';
 
   @override
+  String get disclosureOnlineStatus =>
+      'وقتی این برنامه روی صفحهٔ گوشی‌تان باز است، مخاطبان تأییدشده‌ای که با آن‌ها گفتگو دارید می‌بینند که آنلاین هستید و چه وقت در حال نوشتن هستید، و می‌فهمند چه وقت گفتگو با آن‌ها یا گروهی مشترک را باز می‌کنید. وقتی از برنامه بیرون بروید، می‌بینند آخرین بار چه وقت شما را آنلاین دیده‌اند. سرور هیچ‌کدام از این‌ها را نمی‌تواند بخواند، اما می‌تواند ببیند که وقتی گفتگویی باز است، گوشی شما سیگنال‌های کوتاهی به گوشی آن‌ها می‌فرستد. می‌توانید این را برای همین گوشی در تنظیمات، در بخش «نمایش وضعیت آنلاین من»، خاموش کنید. تا وقتی خاموش است، وضعیت دیگران را هم نمی‌بینید.';
+
+  @override
   String get disclosureUnbuiltSurfaces =>
       'بخش‌هایی که می‌بینید هنوز ساخته نشده‌اند: در گروه‌ها نمی‌توان فایل فرستاد، و نام و عکسی که انتخاب می‌کنید منتشر نمی‌شود — دیگران همان نام کاربری ثبت‌نامتان را می‌بینند.';
 
@@ -1013,8 +1017,25 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatPinnedMessagesTitle => 'پیام‌های پین‌شده';
 
   @override
-  String get chatTypingStatus =>
-      'در حال نوشتن… سیگنال رمزنگاری‌شده ممکن است با تأخیر برسد';
+  String get chatTypingStatus => 'در حال نوشتن…';
+
+  @override
+  String get chatPeerOnline => 'آنلاین';
+
+  @override
+  String chatPeerLastSeenToday(String time) {
+    return 'آخرین بازدید امروز ساعت $time';
+  }
+
+  @override
+  String chatPeerLastSeenYesterday(String time) {
+    return 'آخرین بازدید دیروز ساعت $time';
+  }
+
+  @override
+  String chatPeerLastSeenOn(String date) {
+    return 'آخرین بازدید $date';
+  }
 
   @override
   String get chatSearchAction => 'جست‌وجو در گفت‌وگو';
@@ -1412,6 +1433,41 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String groupOnlineCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count آنلاین',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String groupMemberCountOnline(String members, String online) {
+    return '$members · $online';
+  }
+
+  @override
+  String groupTypingOne(String name) {
+    return '$name در حال نوشتن است…';
+  }
+
+  @override
+  String groupTypingTwo(String first, String second) {
+    return '$first و $second در حال نوشتن هستند…';
+  }
+
+  @override
+  String groupTypingMany(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$name و $count نفر دیگر در حال نوشتن هستند…',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get groupInfoTitle => 'اطلاعات گروه';
 
   @override
@@ -1606,6 +1662,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get settingsSustainedUnavailable => 'در این نسخه در دسترس نیست.';
+
+  @override
+  String get settingsOnlineStatusTitle => 'نمایش وضعیت آنلاین من';
+
+  @override
+  String get settingsOnlineStatusSummary =>
+      'خاموش روی همین گوشی: هیچ‌کس نمی‌بیند چه وقت آنلاین هستید یا می‌نویسید، و شما هم وضعیت کسی را نمی‌بینید.';
+
+  @override
+  String get settingsOnlineStatusSaveFailed =>
+      'این انتخاب روی همین گوشی ذخیره نشد.';
 
   @override
   String get sustainedTitle => 'دریافت هنگام بسته بودن';

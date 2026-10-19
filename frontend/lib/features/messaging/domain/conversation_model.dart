@@ -29,8 +29,6 @@ enum MessageReceiptState { none, delivered, read }
 
 enum MessageTimestampState { plausible, skewed }
 
-enum PresenceMeaning { offline, socketOnline }
-
 final class ConversationSummary {
   const ConversationSummary({
     required this.conversationId,
@@ -333,18 +331,4 @@ final class TypingProjection {
   final String userId;
   final String deviceId;
   final DateTime expiresAt;
-}
-
-final class PresenceProjection {
-  const PresenceProjection({
-    required this.userId,
-    required this.onlineDeviceCount,
-  });
-
-  final String userId;
-  final int onlineDeviceCount;
-
-  PresenceMeaning get meaning => onlineDeviceCount > 0
-      ? PresenceMeaning.socketOnline
-      : PresenceMeaning.offline;
 }

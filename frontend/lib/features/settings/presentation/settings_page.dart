@@ -6,6 +6,7 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/notifications/presentation/notification_settings_entry.dart';
 import 'package:communication_platform/features/settings/presentation/erase_account_dialog.dart';
 import 'package:communication_platform/features/settings/presentation/settings_components.dart';
+import 'package:communication_platform/features/signals/presentation/online_status_settings_entry.dart';
 import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -69,6 +70,10 @@ final class SettingsPage extends StatelessWidget {
               // closed. Off until the user opens this and turns it on, which is
               // why it is a row here rather than a prompt anywhere else.
               const SustainedDeliverySettingsEntry(),
+              // Whether verified contacts see this phone online or typing,
+              // and whether it shows theirs (ADR-098 D9): one switch, on by
+              // default, for this phone alone.
+              const OnlineStatusSettingsEntry(),
               SettingsEntry(
                 entryKey: const ValueKey('settings-appearance'),
                 icon: AppIcons.settings,

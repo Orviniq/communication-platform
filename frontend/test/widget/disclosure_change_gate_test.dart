@@ -22,11 +22,12 @@ void main() {
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOne);
     expect(find.text('What this build is'), findsOne);
 
-    // Three points have moved since revision 8 - the delivery and group points
-    // revision 9 rewrote (ADR-076) and the delivery and unbuilt-surface points
-    // revision 10 rewrote (ADR-094) - and three badges say so. The mark is a
-    // labelled badge rather than a colour, so a screen reader reaches it too.
-    expect(find.text('New or changed'), findsNWidgets(3));
+    // Four points have moved since revision 8 - the delivery and group points
+    // revision 9 rewrote (ADR-076), the delivery and unbuilt-surface points
+    // revision 10 rewrote (ADR-094) and the online status point revision 11
+    // added (ADR-098) - and four badges say so. The mark is a labelled badge
+    // rather than a colour, so a screen reader reaches it too.
+    expect(find.text('New or changed'), findsNWidgets(4));
     expect(
       find.textContaining('the same encryption as direct messages'),
       findsOne,
@@ -43,12 +44,26 @@ void main() {
     );
   });
 
+  testWidgets('a reader from revision 10 is shown the online status point '
+      'alone', (tester) async {
+    await _pump(tester, acknowledged: 10);
+
+    expect(find.byKey(const ValueKey('disclosure-change-screen')), findsOne);
+    expect(find.text('New or changed'), findsOne);
+    expect(
+      find.textContaining('verified contacts you share a chat with'),
+      findsOne,
+    );
+    // Nothing else moved at revision 11, so no other point carries a badge.
+    expect(find.textContaining('group chats cannot send files'), findsOne);
+  });
+
   testWidgets('a reader from revision 9 is shown the two points revision 10 '
-      'rewrote', (tester) async {
+      'rewrote and the one revision 11 added', (tester) async {
     await _pump(tester, acknowledged: 9);
 
     expect(find.byKey(const ValueKey('disclosure-change-screen')), findsOne);
-    expect(find.text('New or changed'), findsNWidgets(2));
+    expect(find.text('New or changed'), findsNWidgets(3));
     expect(
       find.textContaining('In Settings you can turn on receiving while closed'),
       findsOne,
@@ -92,7 +107,7 @@ void main() {
       find.text('آنچه این برنامه دربارهٔ خودش می‌گوید تغییر کرده است'),
       findsOne,
     );
-    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(3));
+    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(4));
     expect(find.textContaining('What this app tells you'), findsNothing);
   });
 

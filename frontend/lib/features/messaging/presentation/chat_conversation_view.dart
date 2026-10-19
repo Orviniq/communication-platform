@@ -13,6 +13,8 @@ import 'package:communication_platform/features/messaging/presentation/chat_time
 import 'package:communication_platform/features/messaging/presentation/chat_undelivered_hint.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
+import 'package:communication_platform/features/signals/domain/peer_status_model.dart';
+import 'package:communication_platform/features/signals/presentation/peer_status_line.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +24,7 @@ class ChatConversationView extends StatefulWidget {
     required this.model,
     required this.onIntent,
     this.peerUserId,
+    this.peerStatus = const PeerStatusNone(),
     this.initialDraft,
     this.forwardTargets,
     this.attachments = ChatAttachmentAvailability.notBuilt,
@@ -36,6 +39,10 @@ class ChatConversationView extends StatefulWidget {
   final ChatTimelineViewModel model;
   final ChatIntentCallback onIntent;
   final String? peerUserId;
+
+  /// What this phone knows of the peer's online status, drawn under the name
+  /// when the peer is verified (ADR-098 D11). Nothing for Saved Messages.
+  final PeerStatus peerStatus;
   final String? initialDraft;
 
   /// What the composer's paperclip does here.
@@ -95,6 +102,34 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       return;
     }
     widget.onIntent(intent);
+  }
+
+  /// The line under the peer's name, or null for none. Typing wins over
+  /// online, which wins over a last seen. Saved Messages has no peer, and a
+  /// peer this user has not verified shows no status (T2, T4).
+  Widget? _statusLine(BuildContext context, AppLocalizations strings) {
+    if (widget.model.savedMessages) {
+      return null;
+    }
+    final verified = widget.model.securityGate == ChatSecurityGate.ready;
+    final text = widget.model.typing
+        ? strings.chatTypingStatus
+        : verified
+        ? peerStatusLine(context, widget.peerStatus, now: widget.now())
+        : null;
+    if (text == null) {
+      return null;
+    }
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: context.tokens.typography.label.copyWith(
+        color: widget.model.typing || widget.peerStatus is PeerStatusOnline
+            ? context.tokens.colors.accent
+            : context.tokens.colors.textMuted,
+      ),
+    );
   }
 
   @override
@@ -164,23 +199,13 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        // Only while somebody is actually typing.
-                        //
-                        // This line used to fall through to a presence claim,
-                        // and the claim was structurally false: the server
-                        // holds no presence at all (server ADR-0022), so there
-                        // is nothing for it to emit and every peer read as
-                        // offline forever — including one holding a live socket
-                        // in the same conversation. Presence between members is
-                        // client protocol over `signal` frames if it is ever
-                        // built; until then, saying nothing is the honest state.
-                        if (!widget.model.savedMessages && widget.model.typing)
-                          Text(
-                            strings.chatTypingStatus,
-                            style: context.tokens.typography.label.copyWith(
-                              color: context.tokens.colors.accent,
-                            ),
-                          ),
+                        // Typing, else online, else last seen, else nothing
+                        // (ADR-098 D11). Every claim here is one this phone
+                        // heard from the peer in a `signal` frame; the server
+                        // holds no presence (server ADR-0022), so a peer this
+                        // phone has not heard from says nothing rather than
+                        // "offline".
+                        ?_statusLine(context, strings),
                       ],
                     ),
                   ),

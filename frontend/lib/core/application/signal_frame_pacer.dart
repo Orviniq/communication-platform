@@ -1,15 +1,15 @@
 import 'dart:math' as math;
 
+import 'package:communication_platform/core/application/ports/signal_ports.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
-import 'package:communication_platform/features/voice/application/ports/voice_signalling_ports.dart';
 
-/// Paces outbound `signal` frames: a bucket of 32 that refills at 24 a second
-/// (`voice-signalling-v1.md`, "The socket limits").
+/// Paces outbound `signal` frames: by default a bucket of 32 that refills at
+/// 24 a second (`voice-signalling-v1.md`, "The socket limits").
 ///
 /// A ten-device join sends 27 frames, so it leaves at once. The worst second
-/// this can produce is a full bucket and a second's refill, 56 frames, which
-/// leaves the socket's 100-frame rolling second with room for everything
-/// else a later version sends.
+/// the default can produce is a full bucket and a second's refill, 56 frames.
+/// Presence paces through a second one of 16 and 12 (ADR-098 D7), so the two
+/// together, with acks, stay at 94 of the socket's 100-frame rolling second.
 ///
 /// Frames leave in the order they asked, and the arithmetic is in whole
 /// micro-tokens so that it never drifts.
@@ -32,7 +32,7 @@ final class SignalFramePacer {
   final int capacity;
   final int refillPerSecond;
   final TimeSource clock;
-  final VoiceSignalTimerPort timer;
+  final SignalTimerPort timer;
 
   int _credit;
   DateTime? _refilledAt;

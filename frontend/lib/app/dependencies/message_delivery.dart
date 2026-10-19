@@ -6,13 +6,17 @@ import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/networking_foundation.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/app/dependencies/signal_providers.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/app/dependencies/voice_providers.dart';
+import 'package:communication_platform/core/application/signal_router.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
+import 'package:communication_platform/features/signals/application/presence_channel.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/application/sync_lifecycle_supervisor.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/gateway_realtime_sync_adapter.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/platform_deferred_delivery_scheduler.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/sync_platform_adapters.dart';
@@ -92,11 +96,15 @@ final class MessageDeliverySession {
     required DeliveryPlatformPorts platform,
     required RealtimeGateway gateway,
     required GatewayVoiceSignalSocket voiceSignals,
+    required SignalRouter? signals,
+    required PresenceChannel? presence,
   }) : _supervisor = supervisor,
        _realtime = realtime,
        _platform = platform,
        _gateway = gateway,
-       _voiceSignals = voiceSignals;
+       _voiceSignals = voiceSignals,
+       _signals = signals,
+       _presence = presence;
 
   static Future<MessageDeliverySession> compose(
     Ref ref, {
@@ -126,11 +134,24 @@ final class MessageDeliverySession {
             config: ref.read(serverConfigSnapshotProvider),
           );
       realtime.attach(gateway);
+      // Volatile frames are no part of delivery: a router or a presence
+      // channel that cannot be composed leaves the session delivering, with
+      // no call signalling or typing to read.
+      SignalRouter? signals;
+      PresenceChannel? presence;
+      try {
+        signals = await ref.read(signalRouterProvider(scope).future);
+        presence = await ref.read(presenceChannelProvider(scope).future);
+      } on Object {
+        // Whatever was composed is still started and stopped below.
+      }
       return MessageDeliverySession._(
         realtime: realtime,
         platform: platform,
         gateway: gateway,
         voiceSignals: ref.read(voiceSignalSocketProvider),
+        signals: signals,
+        presence: presence,
         supervisor: SyncLifecycleSupervisor(
           engine: engine,
           store: store,
@@ -147,6 +168,8 @@ final class MessageDeliverySession {
           clock: ref.read(timeSourceProvider),
           jitter: FullJitterSource(),
           delay: platform.delay,
+          // Presence says goodbye before the socket closes (ADR-098 D5).
+          farewell: presence == null ? null : _PresenceFarewell(presence),
         ),
       );
     } on Object {
@@ -166,6 +189,12 @@ final class MessageDeliverySession {
   /// 100-frame rolling second the server counts per connection.
   final GatewayVoiceSignalSocket _voiceSignals;
 
+  /// The one reader of that socket's `signal` frames, and the typing that
+  /// rides them (ADR-098). Null when they could not be composed.
+  final SignalRouter? _signals;
+  final PresenceChannel? _presence;
+  StreamSubscription<RealtimeDisconnect>? _disconnects;
+
   /// Starts the supervisor and arms the deferred catch-up for the whole
   /// session.
   ///
@@ -176,6 +205,12 @@ final class MessageDeliverySession {
   /// process that dies while foregrounded would leave nothing scheduled at all.
   Future<void> start() async {
     await _voiceSignals.attach(_gateway);
+    _signals?.start();
+    _presence?.start();
+    // Every typing state shown ends when the socket does.
+    _disconnects = _realtime.disconnects.listen(
+      (_) => _presence?.socketClosed(),
+    );
     await _supervisor.start();
     await _platform.polling.schedule(minimumInterval: deferredCatchUpInterval);
   }
@@ -186,6 +221,10 @@ final class MessageDeliverySession {
   /// to, so leaving the job armed would wake the process every interval to
   /// discover exactly that.
   Future<void> dispose() async {
+    await _disconnects?.cancel();
+    _disconnects = null;
+    await _presence?.stop();
+    await _signals?.stop();
     await _voiceSignals.detach(_gateway);
     await _supervisor.dispose();
     // Before the platform ports are released, because releasing them takes the
@@ -341,4 +380,15 @@ final class MessageDeliveryController extends Notifier<MessageDeliveryStage> {
       state = stage;
     }
   }
+}
+
+/// Presence's goodbye, as the supervisor waits for it before it closes the
+/// socket for the background.
+final class _PresenceFarewell implements SocketFarewellPort {
+  const _PresenceFarewell(this.presence);
+
+  final PresenceChannel presence;
+
+  @override
+  Future<void> beforeSocketCloses() => presence.farewell();
 }

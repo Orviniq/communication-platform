@@ -270,46 +270,35 @@ void main() {
     );
   });
 
-  test(
-    'typing expires conservatively and presence means socket count only',
-    () async {
-      final state = MemoryVolatileConversationState();
-      addTearDown(state.dispose);
-      final now = DateTime.now().toUtc();
+  test('typing expires conservatively and ends when the socket does', () async {
+    final state = MemoryVolatileConversationState();
+    addTearDown(state.dispose);
+    final now = DateTime.now().toUtc();
 
-      state.applyTyping(
-        conversationId: 'conversation',
-        userId: 'USER',
-        deviceId: 'DEVICE',
-        isTyping: true,
-        expiresAt: now.add(const Duration(seconds: 10)),
-        authenticatedAt: now,
-      );
-      var typing = await state.watchTyping('conversation').first;
-      expect(typing, hasLength(1));
-      expect(typing.single.userId, 'user');
+    state.applyTyping(
+      conversationId: 'conversation',
+      userId: 'USER',
+      deviceId: 'DEVICE',
+      isTyping: true,
+      expiresAt: now.add(const Duration(seconds: 10)),
+      authenticatedAt: now,
+    );
+    var typing = await state.watchTyping('conversation').first;
+    expect(typing, hasLength(1));
+    expect(typing.single.userId, 'user');
 
-      state.applyTyping(
-        conversationId: 'conversation',
-        userId: 'user',
-        deviceId: 'other-device',
-        isTyping: true,
-        expiresAt: now.add(const Duration(minutes: 1)),
-        authenticatedAt: now,
-      );
-      typing = await state.watchTyping('conversation').first;
-      expect(typing, hasLength(1), reason: 'overlong signals are ignored');
+    state.applyTyping(
+      conversationId: 'conversation',
+      userId: 'user',
+      deviceId: 'other-device',
+      isTyping: true,
+      expiresAt: now.add(const Duration(minutes: 1)),
+      authenticatedAt: now,
+    );
+    typing = await state.watchTyping('conversation').first;
+    expect(typing, hasLength(1), reason: 'overlong signals are ignored');
 
-      state.applyPresence(userId: 'USER', deviceId: 'one', socketOnline: true);
-      state.applyPresence(userId: 'USER', deviceId: 'two', socketOnline: true);
-      var presence = await state.watchPresence('user').first;
-      expect(presence.meaning, PresenceMeaning.socketOnline);
-      expect(presence.onlineDeviceCount, 2);
-
-      state.clearDisconnected();
-      expect(await state.watchTyping('conversation').first, isEmpty);
-      presence = await state.watchPresence('user').first;
-      expect(presence.meaning, PresenceMeaning.offline);
-    },
-  );
+    state.clearDisconnected();
+    expect(await state.watchTyping('conversation').first, isEmpty);
+  });
 }

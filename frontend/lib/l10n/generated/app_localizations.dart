@@ -896,6 +896,12 @@ abstract class AppLocalizations {
   /// **'Group messages use the same encryption as direct messages. The signed changes that add and remove members are built on top of it, and nobody outside the project has reviewed them. Each group message is sent as one encrypted copy for each device of each member. If this phone loses a group\'s current state, only another member\'s app can send it again, and until then you cannot send messages in that group.'**
   String get disclosurePairwiseGroups;
 
+  /// Revision 11 (ADR-098 D10). Typing and the online status are visible to verified peers while the app is on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'While this app is open on your screen, verified contacts you share a chat with can see that you are online and when you are typing, and they learn when you open your chat with them or a group you share. After you leave the app, they see when they last saw you online. The server cannot read any of this, but it can see that your phone sends short signals to theirs while a chat is open. You can turn this off for this phone in Settings, under Show my online status. While it is off, you do not see anyone else\'s either.'**
+  String get disclosureOnlineStatus;
+
   /// Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature. Revision 10 (ADR-094) removed voice rooms (built since phase 6) and narrowed file attachments to groups, the only chats that still cannot send them (ADR-089).
   ///
   /// In en, this message translates to:
@@ -1829,8 +1835,32 @@ abstract class AppLocalizations {
   /// No description provided for @chatTypingStatus.
   ///
   /// In en, this message translates to:
-  /// **'typing… encrypted signal may lag'**
+  /// **'typing…'**
   String get chatTypingStatus;
+
+  /// No description provided for @chatPeerOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'online'**
+  String get chatPeerOnline;
+
+  /// No description provided for @chatPeerLastSeenToday.
+  ///
+  /// In en, this message translates to:
+  /// **'last seen today at {time}'**
+  String chatPeerLastSeenToday(String time);
+
+  /// No description provided for @chatPeerLastSeenYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'last seen yesterday at {time}'**
+  String chatPeerLastSeenYesterday(String time);
+
+  /// No description provided for @chatPeerLastSeenOn.
+  ///
+  /// In en, this message translates to:
+  /// **'last seen {date}'**
+  String chatPeerLastSeenOn(String date);
 
   /// No description provided for @chatSearchAction.
   ///
@@ -2471,6 +2501,36 @@ abstract class AppLocalizations {
   /// **'{count} members'**
   String groupMemberCount(int count);
 
+  /// A group chat's header beside the member count when at least one other member is online (ADR-098 D4).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, other{{count} online}}'**
+  String groupOnlineCount(int count);
+
+  /// A group chat's header: the member count, then how many are online (ADR-098 D11).
+  ///
+  /// In en, this message translates to:
+  /// **'{members} · {online}'**
+  String groupMemberCountOnline(String members, String online);
+
+  /// A group chat's header while one member types (ADR-098 D3). {name} is what this phone calls the member, as on their messages.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is typing…'**
+  String groupTypingOne(String name);
+
+  /// A group chat's header while two members type (ADR-098 D3).
+  ///
+  /// In en, this message translates to:
+  /// **'{first} and {second} are typing…'**
+  String groupTypingTwo(String first, String second);
+
+  /// A group chat's header while three or more members type (ADR-098 D3). {count} is how many besides {name}.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{name} and 1 other are typing…} other{{name} and {count} others are typing…}}'**
+  String groupTypingMany(String name, int count);
+
   /// No description provided for @groupInfoTitle.
   ///
   /// In en, this message translates to:
@@ -2818,6 +2878,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not available in this build.'**
   String get settingsSustainedUnavailable;
+
+  /// No description provided for @settingsOnlineStatusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show my online status'**
+  String get settingsOnlineStatusTitle;
+
+  /// No description provided for @settingsOnlineStatusSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Off on this phone: nobody sees when you are online or typing, and you do not see anyone\'s.'**
+  String get settingsOnlineStatusSummary;
+
+  /// No description provided for @settingsOnlineStatusSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This choice could not be saved on this phone.'**
+  String get settingsOnlineStatusSaveFailed;
 
   /// No description provided for @sustainedTitle.
   ///
