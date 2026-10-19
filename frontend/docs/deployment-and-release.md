@@ -136,10 +136,11 @@ by contract tests and conservative client behavior, not runtime version guessing
    and it is written from that list rather than from this paragraph, so the two cannot
    drift apart the way they had by revision 4 — this step previously claimed "the same
    seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
-   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 10
-   ([ADR-094](decisions.md) rewrote the delivery point, which again offers the Settings
-   switch now that production offers it as best effort, and the unbuilt-surfaces point,
-   which still called voice rooms and every file attachment unbuilt) that is eight points:
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 11
+   ([ADR-094](decisions.md) rewrote the delivery point at revision 10, which again offers the
+   Settings switch now that production offers it as best effort, and the unbuilt-surfaces
+   point, which still called voice rooms and every file attachment unbuilt;
+   [ADR-098](decisions.md) added the online status point at revision 11) that is nine points:
 
    1. no part of the cryptography has been independently reviewed, and one person wrote
       and tested all of it;
@@ -162,9 +163,15 @@ by contract tests and conservative client behavior, not runtime version guessing
       group whose current state the phone loses comes back only when another member's
       app sends it, with sending in that group withheld until then
       ([ADR-075](decisions.md), [ui-specification.md](ui-specification.md) §9);
-   7. group chats cannot send files, and the display name and photo are not published —
+   7. while the app is open on the screen, verified contacts a user shares a chat with can
+      see that the user is online and typing and when they open a shared chat, and after the
+      user leaves the app they see when the user was last online; the server cannot read any
+      of it but can see short signals between phones while a chat is open; and the user can
+      turn it off for one phone in Settings, which also hides everyone else's status from
+      that phone ([ADR-098](decisions.md));
+   8. group chats cannot send files, and the display name and photo are not published —
       contacts see the registered username;
-   8. the build is for evaluation among people who already trust each other, and is not
+   9. the build is for evaluation among people who already trust each other, and is not
       appropriate for anyone whose safety depends on the confidentiality of their
       messages.
 
@@ -177,11 +184,12 @@ by contract tests and conservative client behavior, not runtime version guessing
    previously distributed artifact, re-deliver the written disclosure to **every**
    existing recipient, not only to new ones. The revision moves when and only when what
    the build promises moves, so a changed revision is exactly the case where a person who
-   already enrolled has been told something that is no longer true. Revision 10
-   ([ADR-094](decisions.md)) moved the delivery and unbuilt-surfaces points, so every
-   holder of a production build that carries revision 9 is owed the revision 10 written
-   statement; a holder of the deleted `beta` flavor's application who is handed a
-   production build receives the revision 10 statement under step 8.
+   already enrolled has been told something that is no longer true. Revision 11
+   ([ADR-098](decisions.md)) added the online status point, so every holder of a production
+   build that carries revision 10 is owed the revision 11 written statement (revision 10,
+   [ADR-094](decisions.md), moved the delivery and unbuilt-surfaces points, so a holder of
+   revision 9 is owed both); a holder of the deleted `beta` flavor's application who is
+   handed a production build receives the revision 11 statement under step 8.
 
    Since [ADR-052](decisions.md) their install also re-presents the statement once, on the
    first launch after the update, marking the points that moved — the accepted revision is

@@ -155,17 +155,62 @@ only after the conversation is visibly read and user privacy settings allow it.
 Typing is an encrypted volatile signal containing conversation ID, boolean state, and a
 short expiry. It is never queued.
 
-Specified by ADR-098 (Proposed). Typing is built as a `CPPSV001` payload, read by the one signal
-router (ADR-098 D1 to D3), on host tests only; the switch and the online status are not built yet.
+Typing and the online status are built (ADR-098, Accepted 2026-10-19) as one payload, `CPPSV001`,
+sent in volatile `signal` frames. Nothing about them reaches the server except 1024-byte blobs it
+already relays and drops when the target has no socket.
 
-**There is no presence.** The gateway holds none and offers no subscription frame
-(server ADR-0022), so no screen claims that a peer is online: nothing the client can
-observe supports the claim, and the chat header's old presence line was structurally
-false for exactly that reason. The one place a device's liveness is reported is a voice
-call, where it is observed rather than asserted — a participant is present because a
-connection to them is open.
+- **One reader.** `SignalRouter` is the only subscriber of the socket's inbound blobs. It opens each
+  blob once and routes it by the first 8 bytes of the plaintext: `CPVSV001` to voice, `CPPSV001` to
+  presence. A frame with a known magic is committed before its channel reads the rest. An unknown
+  payload is left uncommitted, so a durable envelope the relay replays as a signal still opens on
+  the durable path; and a `CPPSV001` or `CPVSV001` arriving in a durable envelope is refused there.
+- **The payload.** `"CPPSV001" || version:u8 (1) || kind:u8 || deterministic CBOR`. The header names
+  the sender user and device, which must be the ones the session authenticated, a random
+  `instance_id` for the process and a counter that rises within it; a frame of the same instance
+  whose counter is not above the newest is dropped. The kinds are `watch` (a conversation and a
+  `lease_ms` of 40,000), `here` (the answer to a watch, saying whether the device types),
+  `typing` (a conversation, active or not, a `ttl_ms` of at most 15,000) and `gone` (the device left
+  the foreground, or turned its status off). Every frame is a 1024-byte blob.
+- **Who may send and receive.** Only verified peers with a ready pairwise session, never the user's
+  own devices, and only for a conversation both accounts hold: a direct chat with that peer, or an
+  active group of at most 32 members. Saved Messages, a conversation this phone does not hold, a
+  blocked account and an unverified one get nothing and are answered nothing.
+- **Watching.** A phone in the foreground with the switch on sends a `watch` of the chat on
+  screen to the peer's live devices (in a group, to at most 2 devices of each member), renewed every
+  25 s. A device in the foreground answers each accepted watch with `here` and keeps a lease for the
+  asker for the lease time, never above 60 s; in the background it answers nothing. Leaving the
+  foreground sends the pending typing stops and `gone` to every device with a live lease in either
+  direction, and the socket closes after that, for at most 500 ms.
+- **Typing.** `typing` goes only to devices whose watch of that conversation is under 40 s old: the
+  first edit sends it, an edit every 10 s repeats it, 5 s without an edit, a send, clearing the
+  composer, leaving the chat and leaving the foreground stop it, and at most one frame per
+  conversation leaves every 5 s. The receiver shows it for 15 s after the latest active frame, and
+  ends it at once on a stop, on that device's `gone` and when a message of that sender appears in
+  that conversation. A group names the members who type by the name on their messages. Typing is
+  never queued and is not the `typingSet` application event, which is never sent and which the
+  durable inspector refuses.
+- **Online and last seen.** A device is online from any accepted `watch`, `here` or `typing` until
+  40 s after the latest, or until its `gone`; an account is online while one device is. The last
+  seen is this phone's own clock at the latest presence frame it accepted from the account's newest
+  device. It is kept in the encrypted database (`presence_devices`, schema 26), never sent, and
+  only what this phone saw: a durable message does not move it.
+- **The bound on dropped frames.** A frame the server drops leaves a dead skipped key on the target's
+  session for good. A `watch` to a device not heard from in 40 s is a probe: at most 4 since it was
+  last heard from and 8 a day, at most one a minute, and at most 8 live frames go to a device between
+  two frames from it. The ledger is durable, so a restart refills nothing. A session that reaches its
+  skipped-key bound is repaired by the authenticated repair, and nothing is lost.
+- **The switch.** "Show my online status" is a preference of this phone (`presence.share.v1`), on by
+  default. Off, the phone sends no `watch`, `here`, `typing` or `gone` (one `gone` with reason 2 at the
+  moment it is turned off aside), shows nobody's online state, last seen or typing, and deletes the
+  last seen it holds; a receiver of that `gone` deletes the sender's. It still opens and commits every
+  presence frame it receives, which spares the sender a dead key, and discards it.
 
-Specified by ADR-098 (Proposed). Not built yet.
+**No claim the client cannot observe.** The gateway holds no presence and offers no subscription
+frame (server ADR-0022), so no screen says a peer is "offline": a peer this phone has not heard from
+shows nothing, and the status is a lower bound (a peer online while this phone was not watching, a
+member this user has not verified and a group over 32 members show nothing). The chat header's old
+presence line was structurally false for exactly that reason. A voice call reports a participant
+present because a connection to them is open, which is observed rather than asserted.
 
 ## Blocking
 

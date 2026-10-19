@@ -562,9 +562,14 @@ experience.
 1. **Top bar:**
    - Left: back. The screen is a full-screen page at every width (§0.1): neither the tab
      bar nor the rail shows on it.
-   - Center: contact avatar + name + a presence/last-seen line (**[PRIVACY]** encrypted,
-     volatile signal; may lag).
-     - Specified by ADR-098 (Proposed). Not built yet.
+   - Center: contact avatar + name + one status line (**[PRIVACY]** encrypted, volatile
+     signal; a lower bound, may lag).
+     - The line, by precedence (ADR-098 D11): "typing…" while the peer types; else "online"
+       while a device of theirs has sent this phone a presence frame in the last 40 s; else
+       "last seen today at 2:05 PM", "last seen yesterday at 11:30 PM" or "last seen Mon, Oct 12"
+       by this phone's local days; else nothing, never "offline". It is one line, cut with an
+       ellipsis, and it shows only for a verified peer and only while "Show my online status"
+       (§15, 5c) is on. Saved Messages has none. Built; not run on a phone.
    - Tapping name/avatar → **Contact Profile** (§11).
    - Right: overflow (**⋮**) → **Search in chat**, **Mute** (§17), **Verify safety number**
      (§11.1), **Clear history** (→ confirm, honest wording), **Block/Unblock**.
@@ -789,7 +794,11 @@ history; up to ~50 members; roles **owner → admins → members**.
      - Typing names: while members type, the count gives way to "Alice is typing…", "Alice and
        Bob are typing…" or "Alice and 2 others are typing…", each by the name on their messages
        (ADR-098 D3). Built; not run on a phone.
-     - "N online": Specified by ADR-098 (Proposed). Not built yet.
+     - "N online": beside the member count, "12 members · 3 online", when at least one other
+       member is online (ADR-098 D4, D11). N counts the other members with an online device whom
+       this user has verified, never this account, so it is a lower bound; a group of more than 32
+       members and a phone with the switch off show the count alone. Typing names replace both
+       while members type. Built; not run on a phone.
    - The whole bar between the back button and **Search** is one target for the header, as high
      as the bar: a tap anywhere on it → **Group Info** (§12.2). To a screen reader it is one
      button that reads the name and the count once and names Group Info as its result.
@@ -1280,7 +1289,14 @@ Security notice, and About with Diagnostics behind it.
    in this build. **Off is the default and a complete state**: nothing runs, nothing is
    requested, nothing appears anywhere, and the row says so. This surface is reached only
    from Settings and is never suggested, prompted or advertised elsewhere.
-5c. **Show my online status** — Specified by ADR-098 (Proposed). Not built yet.
+5c. **Show my online status** — one switch row after Receiving while closed, on by default,
+   for this phone alone (ADR-098 D9). The line under the title says what it does in both
+   directions: "Off on this phone: nobody sees when you are online or typing, and you do not see
+   anyone's." Off, the phone sends no presence frame and shows no online state, last seen or
+   typing of anyone, and deletes the last seen it holds; typing goes with it. A screen reader reads
+   the title and the line as one switch with its state. A choice that cannot be stored is reported
+   in a snackbar. The switch takes no tap until the stored choice has been read, and the row is left
+   out where Settings is drawn without the providers. Built; not run on a phone.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).
