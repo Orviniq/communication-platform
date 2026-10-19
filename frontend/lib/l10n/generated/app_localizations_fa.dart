@@ -1412,6 +1412,26 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String groupTypingOne(String name) {
+    return '$name در حال نوشتن است…';
+  }
+
+  @override
+  String groupTypingTwo(String first, String second) {
+    return '$first و $second در حال نوشتن هستند…';
+  }
+
+  @override
+  String groupTypingMany(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$name و $count نفر دیگر در حال نوشتن هستند…',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get groupInfoTitle => 'اطلاعات گروه';
 
   @override

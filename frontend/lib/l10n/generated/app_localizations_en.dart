@@ -1420,6 +1420,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String groupTypingOne(String name) {
+    return '$name is typing…';
+  }
+
+  @override
+  String groupTypingTwo(String first, String second) {
+    return '$first and $second are typing…';
+  }
+
+  @override
+  String groupTypingMany(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$name and $count others are typing…',
+      one: '$name and 1 other are typing…',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get groupInfoTitle => 'Group Info';
 
   @override

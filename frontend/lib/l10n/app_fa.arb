@@ -456,6 +456,16 @@
   "@groupSelectedCount": {"placeholders": {"count": {"type": "int"}}},
   "groupMemberCount": "{count} عضو",
   "@groupMemberCount": {"placeholders": {"count": {"type": "int"}}},
+  "groupTypingOne": "{name} در حال نوشتن است…",
+  "@groupTypingOne": {"placeholders": {"name": {"type": "String"}}},
+  "groupTypingTwo": "{first} و {second} در حال نوشتن هستند…",
+  "@groupTypingTwo": {
+    "placeholders": {"first": {"type": "String"}, "second": {"type": "String"}}
+  },
+  "groupTypingMany": "{count, plural, other{{name} و {count} نفر دیگر در حال نوشتن هستند…}}",
+  "@groupTypingMany": {
+    "placeholders": {"name": {"type": "String"}, "count": {"type": "int"}}
+  },
   "groupInfoTitle": "اطلاعات گروه",
   "groupEditTitle": "ویرایش گروه",
   "groupEditAction": "ویرایش",

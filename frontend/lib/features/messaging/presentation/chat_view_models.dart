@@ -440,6 +440,15 @@ final class SaveDraftIntent extends ChatIntent {
   final String? text;
 }
 
+/// The composer's text changed, which typing follows (ADR-098 D3). It carries
+/// no text: only whether the composer now holds a message being written, which
+/// an edit of an earlier message is not.
+final class ComposerTextChangedIntent extends ChatIntent {
+  const ComposerTextChangedIntent({required this.hasText});
+
+  final bool hasText;
+}
+
 /// The paperclip when [attachment] is null; otherwise the details sheet of a
 /// ready attachment, with Open, Save and Share.
 final class OpenAttachmentIntent extends ChatIntent {

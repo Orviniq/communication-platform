@@ -611,6 +611,21 @@
   "@groupSelectedCount": {"placeholders": {"count": {"type": "int"}}},
   "groupMemberCount": "{count} members",
   "@groupMemberCount": {"placeholders": {"count": {"type": "int"}}},
+  "groupTypingOne": "{name} is typing…",
+  "@groupTypingOne": {
+    "description": "A group chat's header while one member types (ADR-098 D3). {name} is what this phone calls the member, as on their messages.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "groupTypingTwo": "{first} and {second} are typing…",
+  "@groupTypingTwo": {
+    "description": "A group chat's header while two members type (ADR-098 D3).",
+    "placeholders": {"first": {"type": "String"}, "second": {"type": "String"}}
+  },
+  "groupTypingMany": "{count, plural, =1{{name} and 1 other are typing…} other{{name} and {count} others are typing…}}",
+  "@groupTypingMany": {
+    "description": "A group chat's header while three or more members type (ADR-098 D3). {count} is how many besides {name}.",
+    "placeholders": {"name": {"type": "String"}, "count": {"type": "int"}}
+  },
   "groupInfoTitle": "Group Info",
   "groupEditTitle": "Edit Group",
   "groupEditAction": "Edit",

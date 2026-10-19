@@ -6,6 +6,7 @@ import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/app/dependencies/signal_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/attachments/application/attachment_downloads.dart';
@@ -18,6 +19,7 @@ import 'package:communication_platform/features/attachments/presentation/attachm
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_arrivals.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_attachment_tiles.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
@@ -25,6 +27,7 @@ import 'package:communication_platform/features/messaging/presentation/chat_forw
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
+import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -219,9 +222,25 @@ class _ProjectedConversationPageState
         if (page != null && page.messages.any((message) => message.unread)) {
           _readMarker?.notify();
         }
+        if (page != null) {
+          _arrivals.follow(page.messages);
+        }
       },
     );
   }
+
+  /// Ends the typing of a device whose message just appeared (ADR-098 D3).
+  late final ChatArrivals _arrivals = ChatArrivals(
+    currentUserId: widget.currentUserId,
+    report: (senderDeviceId) => ref
+        .read(chatActivityProvider)
+        .report(
+          ChatMessageArrived(
+            widget.conversationId,
+            senderDeviceId: senderDeviceId,
+          ),
+        ),
+  );
 
   @override
   void dispose() {
@@ -463,6 +482,18 @@ class _ProjectedConversationPageState
       );
       await manager.saveDraft(conversationId: conversationId, text: text);
       return;
+    }
+    // Typing (ADR-098 D3). Saved Messages has nobody to tell.
+    if (intent case ComposerTextChangedIntent(:final hasText)) {
+      if (!savedMessages) {
+        ref
+            .read(chatActivityProvider)
+            .report(ChatTextEdited(conversationId, hasText: hasText));
+      }
+      return;
+    }
+    if (intent is SendTextIntent && !savedMessages) {
+      ref.read(chatActivityProvider).report(ChatTextSent(conversationId));
     }
     if (intent is ClearConversationHistoryIntent) {
       final manager = await ref.read(

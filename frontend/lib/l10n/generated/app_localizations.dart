@@ -2471,6 +2471,24 @@ abstract class AppLocalizations {
   /// **'{count} members'**
   String groupMemberCount(int count);
 
+  /// A group chat's header while one member types (ADR-098 D3). {name} is what this phone calls the member, as on their messages.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is typing…'**
+  String groupTypingOne(String name);
+
+  /// A group chat's header while two members type (ADR-098 D3).
+  ///
+  /// In en, this message translates to:
+  /// **'{first} and {second} are typing…'**
+  String groupTypingTwo(String first, String second);
+
+  /// A group chat's header while three or more members type (ADR-098 D3). {count} is how many besides {name}.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{name} and 1 other are typing…} other{{name} and {count} others are typing…}}'**
+  String groupTypingMany(String name, int count);
+
   /// No description provided for @groupInfoTitle.
   ///
   /// In en, this message translates to:

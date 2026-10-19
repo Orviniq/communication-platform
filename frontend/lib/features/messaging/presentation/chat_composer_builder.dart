@@ -61,10 +61,16 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder>
   /// swipes back out of a conversation.
   String? _persistedDraft;
 
+  /// The text the last [ComposerTextChangedIntent] followed, so that a change
+  /// of the selection alone, which the controller also announces, reports
+  /// nothing.
+  String _reportedText = '';
+
   @override
   void initState() {
     super.initState();
     _persistedDraft = _draftOf(widget.initialDraft);
+    _reportedText = widget.initialDraft ?? '';
     _controller = TextEditingController(text: widget.initialDraft)
       ..addListener(_onTextChanged);
     _focusNode.addListener(_onFocusChanged);
@@ -83,6 +89,8 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder>
         oldWidget.initialDraft == null &&
         _controller.text.isEmpty) {
       _persistedDraft = _draftOf(widget.initialDraft);
+      // A stored draft arriving is not somebody typing.
+      _reportedText = widget.initialDraft ?? '';
       _controller.value = TextEditingValue(
         text: widget.initialDraft ?? '',
         selection: TextSelection.collapsed(
@@ -171,6 +179,15 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder>
   void _onTextChanged() {
     _draftTimer?.cancel();
     _draftTimer = Timer(draftDebounce, _flushDraft);
+    final text = _controller.text;
+    if (text != _reportedText) {
+      _reportedText = text;
+      widget.onIntent(
+        ComposerTextChangedIntent(
+          hasText: _mode != ChatComposerMode.edit && text.trim().isNotEmpty,
+        ),
+      );
+    }
   }
 
   void _cancelContext() {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:communication_platform/app/dependencies/group_member_name_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/app/dependencies/signal_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -19,6 +20,7 @@ import 'package:communication_platform/features/groups/presentation/group_member
 import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_arrivals.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_forward.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_message_readers.dart';
@@ -28,6 +30,7 @@ import 'package:communication_platform/features/messaging/presentation/chat_view
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
+import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +50,7 @@ class GroupChatPage extends ConsumerWidget {
     this.onSetPin,
     this.watchReaders,
     this.injectedMemberNames,
+    this.injectedTyping,
     super.key,
   });
 
@@ -56,6 +60,10 @@ class GroupChatPage extends ConsumerWidget {
   /// The names an injected page shows, as the contacts store would hand them
   /// to the routed page. Null: this phone names nobody.
   final GroupMemberNames? injectedMemberNames;
+
+  /// The typing an injected page shows, as the typing state would hand it to
+  /// the routed page. Null: nobody types.
+  final Stream<List<TypingProjection>>? injectedTyping;
 
   /// The messages an injected page shows, as local storage would hand them to
   /// the routed page: the same rows go through the same projection.
@@ -73,29 +81,37 @@ class GroupChatPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (injectedState != null && injectedMessages != null && onSend != null) {
-      return GroupChatView(
-        state: injectedState!,
-        memberNames: injectedMemberNames ?? const GroupMemberNames.empty(),
-        timeline: ConversationTimelineState(
-          page: ConversationMessagePage(
-            messages: injectedMessages!,
-            // Local storage hands the pinned rows beside the page.
-            pinned: [
-              for (final message in injectedMessages!)
-                if (message.pinned) message,
-            ],
-            hasMoreBefore: false,
+      final viewer = currentUserId ?? injectedState!.members.first.userId;
+      return StreamBuilder<List<TypingProjection>>(
+        stream: injectedTyping,
+        builder: (context, typing) => GroupChatView(
+          state: injectedState!,
+          memberNames: injectedMemberNames ?? const GroupMemberNames.empty(),
+          typingUserIds: groupTypers(
+            typing.data ?? const [],
+            currentUserId: viewer,
           ),
-          loadingBefore: false,
-          olderLoadFailed: false,
+          timeline: ConversationTimelineState(
+            page: ConversationMessagePage(
+              messages: injectedMessages!,
+              // Local storage hands the pinned rows beside the page.
+              pinned: [
+                for (final message in injectedMessages!)
+                  if (message.pinned) message,
+              ],
+              hasMoreBefore: false,
+            ),
+            loadingBefore: false,
+            olderLoadFailed: false,
+          ),
+          currentUserId: viewer,
+          onSend: onSend!,
+          onRetry: onRetry,
+          onReaction: onReaction,
+          onDeleteForEveryone: onDeleteForEveryone,
+          onSetPin: onSetPin,
+          watchReaders: watchReaders,
         ),
-        currentUserId: currentUserId ?? injectedState!.members.first.userId,
-        onSend: onSend!,
-        onRetry: onRetry,
-        onReaction: onReaction,
-        onDeleteForEveryone: onDeleteForEveryone,
-        onSetPin: onSetPin,
-        watchReaders: watchReaders,
       );
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -168,8 +184,25 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
       if (page != null && page.messages.any((message) => message.unread)) {
         _readMarker?.notify();
       }
+      if (page != null) {
+        _arrivals.follow(page.messages);
+      }
     });
   }
+
+  /// Ends the typing of a device whose message just appeared (ADR-098 D3).
+  late final ChatArrivals _arrivals = ChatArrivals(
+    currentUserId: widget.currentUserId,
+    report: (senderDeviceId) => _report(
+      ChatMessageArrived(widget.groupId, senderDeviceId: senderDeviceId),
+    ),
+  );
+
+  /// The presence channel's hub, held for the life of the page: the composer
+  /// reports as it leaves the tree, when `ref.read` can no longer find it.
+  late final ChatActivityHub _activity = ref.read(chatActivityProvider);
+
+  void _report(ChatActivity activity) => _activity.report(activity);
 
   @override
   void dispose() {
@@ -286,6 +319,12 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
               data: (resolved) => GroupChatView(
                 state: state,
                 memberNames: memberNames,
+                typingUserIds: groupTypingUserIds(
+                  ref,
+                  groupId,
+                  currentUserId: userId,
+                ),
+                onActivity: _report,
                 timeline: timeline,
                 currentUserId: userId,
                 initialDraft: draft,
@@ -376,6 +415,8 @@ class GroupChatView extends StatefulWidget {
     required this.timeline,
     required this.currentUserId,
     required this.onSend,
+    this.typingUserIds = const [],
+    this.onActivity,
     this.onRetry,
     this.onReaction,
     this.onDeleteForEveryone,
@@ -397,6 +438,13 @@ class GroupChatView extends StatefulWidget {
   /// What this phone calls each member. The group holds user ids and roles
   /// only.
   final GroupMemberNames memberNames;
+
+  /// The members typing now, whom the header names in place of the member
+  /// count (ADR-098 D3).
+  final List<String> typingUserIds;
+
+  /// Told of the composer's typing and sends. Null where nothing listens.
+  final void Function(ChatActivity activity)? onActivity;
   final ConversationTimelineState timeline;
   final String currentUserId;
   final SendGroupMessageCallback onSend;
@@ -592,6 +640,7 @@ class _GroupChatViewState extends State<GroupChatView> {
         titleSpacing: -_buttonSlotInset,
         title: _GroupChatHeader(
           state: state,
+          typingLine: _typingLine(widget.typingUserIds, memberName, strings),
           onOpenInfo: () => context.push('/groups/${state.groupId}/info'),
         ),
         actions: [
@@ -636,6 +685,15 @@ class _GroupChatViewState extends State<GroupChatView> {
 
   void _handleIntent(ChatIntent intent) {
     _composerKey.currentState?.handleIntent(intent);
+    if (intent case ComposerTextChangedIntent(:final hasText)) {
+      widget.onActivity?.call(
+        ChatTextEdited(widget.state.groupId, hasText: hasText),
+      );
+      return;
+    }
+    if (intent is SendTextIntent) {
+      widget.onActivity?.call(ChatTextSent(widget.state.groupId));
+    }
     if (intent case SendTextIntent(
       :final text,
       :final replyToMessageId,
@@ -814,16 +872,24 @@ const _buttonSlotInset = (kToolbarHeight - AppFocus.minimumTarget) / 2;
 /// so is the tap action of the `InkWell` with it (`excludeSemantics` drops the
 /// action of a tappable child), which the node therefore carries itself.
 class _GroupChatHeader extends StatelessWidget {
-  const _GroupChatHeader({required this.state, required this.onOpenInfo});
+  const _GroupChatHeader({
+    required this.state,
+    required this.typingLine,
+    required this.onOpenInfo,
+  });
 
   final GroupState state;
+
+  /// Who is typing, shown in place of the member count while anybody is.
+  final String? typingLine;
   final VoidCallback onOpenInfo;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final name = state.metadata.name;
-    final members = strings.groupMemberCount(state.activeMembers.length);
+    final members =
+        typingLine ?? strings.groupMemberCount(state.activeMembers.length);
     return Padding(
       padding: const EdgeInsetsDirectional.only(end: _buttonSlotInset),
       child: Semantics(
@@ -868,6 +934,59 @@ class _GroupChatHeader extends StatelessWidget {
     );
   }
 }
+
+/// The members of [groupId] typing now, other than [currentUserId], in the
+/// order the typing state lists them (ADR-098 D3).
+///
+/// Narrowed to who is typing: the projection list is rebuilt on every typing
+/// frame, and who types changes far less often.
+List<String> groupTypingUserIds(
+  WidgetRef ref,
+  String groupId, {
+  required String currentUserId,
+}) {
+  final typers = ref.watch(
+    typingProjectionsProvider(groupId).select(
+      (projections) => groupTypers(
+        projections.value ?? const [],
+        currentUserId: currentUserId,
+      ).join(' '),
+    ),
+  );
+  return typers.isEmpty ? const [] : List.unmodifiable(typers.split(' '));
+}
+
+/// The members of [typing] other than [currentUserId], each once, in the
+/// order the typing state lists them.
+List<String> groupTypers(
+  List<TypingProjection> typing, {
+  required String currentUserId,
+}) {
+  final own = currentUserId.toLowerCase();
+  return List.unmodifiable({
+    for (final projection in typing)
+      if (projection.userId != own) projection.userId,
+  });
+}
+
+/// The header's typing line: "Alice is typing…", "Alice and Bob are
+/// typing…", "Alice and 2 others are typing…", or null while nobody is.
+String? _typingLine(
+  List<String> userIds,
+  String Function(String userId) nameOf,
+  AppLocalizations strings,
+) => switch (userIds) {
+  [] => null,
+  [final only] => strings.groupTypingOne(nameOf(only)),
+  [final first, final second] => strings.groupTypingTwo(
+    nameOf(first),
+    nameOf(second),
+  ),
+  [final first, ...final others] => strings.groupTypingMany(
+    nameOf(first),
+    others.length,
+  ),
+};
 
 /// What the roster's roles let [userId] do to others' messages: Pin for the
 /// owner and the admins, and Delete for everyone on the messages of the
