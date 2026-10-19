@@ -6,3 +6,4 @@ export 'package:communication_platform/app/design_system/components/app_modals.d
 export 'package:communication_platform/app/design_system/components/app_scalar_limit.dart';
 export 'package:communication_platform/app/design_system/components/app_state_panel.dart';
 export 'package:communication_platform/app/design_system/components/app_status_badge.dart';
+export 'package:communication_platform/app/design_system/components/app_switch_row.dart';

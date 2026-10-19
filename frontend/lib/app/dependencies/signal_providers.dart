@@ -82,6 +82,12 @@ final presenceShareSettingProvider = FutureProvider<PresenceShareSetting>((
   return setting;
 });
 
+/// The choice "Show my online status" holds now, and every change after it.
+final presenceSharingProvider = StreamProvider.autoDispose<bool>((ref) async* {
+  final setting = await ref.watch(presenceShareSettingProvider.future);
+  yield* setting.watch();
+});
+
 /// Who is online, and the last seen of each peer, as this phone saw them
 /// (ADR-098 D4, D8). The presence channel feeds it; the screens read it
 /// through [peerStatusProvider] and [groupOnlineCountProvider].
