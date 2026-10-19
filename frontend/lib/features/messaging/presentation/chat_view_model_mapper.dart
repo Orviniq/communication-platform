@@ -91,9 +91,10 @@ abstract final class ChatViewModelMapper {
   /// message it replies to have now.
   ///
   /// [group] applies the rules of a group (ADR-090): a message shows as sent
-  /// only once none of its copies is owed, and the actions that need the
-  /// member roles of the signed roster — Edit, Delete for everyone and Pin —
-  /// are not offered.
+  /// only once none of its copies is owed, and Edit is not offered (ADR-096
+  /// D8). Delete for everyone is offered on an own message, as in a direct
+  /// chat (D4), and on another member's that [moderation] names (D5); Pin
+  /// only where [moderation] allows it (D6).
   static ChatMessageViewModel _message(
     ConversationMessage message, {
     required ConversationMessage? previous,
@@ -103,9 +104,15 @@ abstract final class ChatViewModelMapper {
     required String authorName,
     required String? replyAuthor,
     required bool group,
+    GroupMessageModeration moderation = const GroupMessageModeration(),
   }) {
     final outgoing =
         message.senderUserId.toLowerCase() == currentUserId.toLowerCase();
+    final moderated =
+        group &&
+        moderation.deletableAuthors.contains(
+          message.senderUserId.toLowerCase(),
+        );
     final groupedWithPrevious = _grouped(previous, message);
     final groupedWithNext = _grouped(message, next);
     final reactionCounts = <String, int>{};
@@ -148,8 +155,12 @@ abstract final class ChatViewModelMapper {
       unread: !outgoing && message.unread,
       timestampSkewed: message.timestampState == MessageTimestampState.skewed,
       canEdit: !group && outgoing && !message.deletedForEveryone,
-      canDeleteForEveryone: !group && outgoing && !message.deletedForEveryone,
-      canPin: !group,
+      // A group member deletes an own message for everyone, and the owner
+      // and the admins others' messages as their roles allow (ADR-096 D4,
+      // D5).
+      canDeleteForEveryone:
+          (outgoing || moderated) && !message.deletedForEveryone,
+      canPin: !group || moderation.pin,
       replyToMessageId: message.replyToMessageId,
       replyAuthor: replyAuthor,
       replyQuote: _quoteOf(reply) ?? message.quoteFallback,
@@ -227,6 +238,33 @@ abstract final class ChatViewModelMapper {
   }
 }
 
+/// What the current user may do to the messages of a group beyond their own,
+/// from the roles of its roster (ADR-096 D5, D6).
+@immutable
+final class GroupMessageModeration {
+  const GroupMessageModeration({
+    this.pin = false,
+    this.deletableAuthors = const {},
+  });
+
+  /// Whether Pin and Unpin are offered.
+  final bool pin;
+
+  /// The lower-case user ids of the members whose messages this user may
+  /// delete for everyone. Their own messages are not in it, and need not be.
+  final Set<String> deletableAuthors;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GroupMessageModeration &&
+      other.pin == pin &&
+      setEquals(other.deletableAuthors, deletableAuthors);
+
+  @override
+  int get hashCode =>
+      Object.hash(pin, Object.hashAllUnordered(deletableAuthors));
+}
+
 /// One open conversation's messages, re-derived only where they changed.
 ///
 /// A page arrives from local storage as freshly allocated rows on every
@@ -248,6 +286,7 @@ final class ChatMessageProjection {
   String? _currentUserName;
   String? _peerName;
   bool? _group;
+  GroupMessageModeration? _moderation;
   var _derivations = 0;
 
   /// How many elements this projection has derived since it was created.
@@ -273,6 +312,7 @@ final class ChatMessageProjection {
       currentUserName: currentUserName,
       peerName: peerName,
       group: false,
+      moderation: const GroupMessageModeration(),
     );
     return _project(
       source,
@@ -280,27 +320,32 @@ final class ChatMessageProjection {
       currentUserName: currentUserName,
       memberName: (_) => peerName,
       group: false,
+      moderation: const GroupMessageModeration(),
     );
   }
 
   /// A group (ADR-090): each author that is not the current user is named by
-  /// [memberName], and the rules of a group apply.
+  /// [memberName], and the rules of a group apply. [moderation] is what the
+  /// roster's roles let the current user do to others' messages (ADR-096).
   ///
   /// A rename does not clear what is memoized. Each element remembers the
   /// names it was derived with, so a member who changes their display name
   /// re-derives their own messages and the replies that quote them, and no
-  /// other.
+  /// other. A role change re-derives every element, because it can change
+  /// what any message's sheet offers.
   List<ChatMessageViewModel> mapGroup(
     List<ConversationMessage> source, {
     required String currentUserId,
     required String currentUserName,
     required String Function(String userId) memberName,
+    GroupMessageModeration moderation = const GroupMessageModeration(),
   }) {
     _reset(
       currentUserId: currentUserId,
       currentUserName: currentUserName,
       peerName: null,
       group: true,
+      moderation: moderation,
     );
     return _project(
       source,
@@ -308,6 +353,7 @@ final class ChatMessageProjection {
       currentUserName: currentUserName,
       memberName: memberName,
       group: true,
+      moderation: moderation,
     );
   }
 
@@ -316,16 +362,19 @@ final class ChatMessageProjection {
     required String currentUserName,
     required String? peerName,
     required bool group,
+    required GroupMessageModeration moderation,
   }) {
     if (_currentUserId != currentUserId ||
         _currentUserName != currentUserName ||
         _peerName != peerName ||
-        _group != group) {
+        _group != group ||
+        _moderation != moderation) {
       _memoized = {};
       _currentUserId = currentUserId;
       _currentUserName = currentUserName;
       _peerName = peerName;
       _group = group;
+      _moderation = moderation;
     }
   }
 
@@ -335,6 +384,7 @@ final class ChatMessageProjection {
     required String currentUserName,
     required String Function(String userId) memberName,
     required bool group,
+    required GroupMessageModeration moderation,
   }) {
     final currentUser = currentUserId.toLowerCase();
     String nameOf(String userId) => userId.toLowerCase() == currentUser
@@ -385,6 +435,7 @@ final class ChatMessageProjection {
         authorName: authorName,
         replyAuthor: replyAuthor,
         group: group,
+        moderation: moderation,
       );
       _memoized[message.messageId] = _MemoizedMessage(
         source: message,

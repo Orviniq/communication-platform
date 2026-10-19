@@ -69,10 +69,17 @@ final class AccountSessionBoundary {
     required this.offline,
     this.securitySetupComplete = true,
     this.deviceId,
+    this.username,
   });
 
   final String userId;
   final String? deviceId;
+
+  /// The username the stored session holds, or null where it holds none.
+  ///
+  /// Sign-in knows it from the form, but a restored session starts from
+  /// nothing the user typed: this is what carries it across a cold start.
+  final String? username;
   final AccountSessionScope scope;
   final bool offline;
   final bool securitySetupComplete;

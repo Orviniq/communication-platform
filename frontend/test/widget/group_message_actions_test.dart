@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:communication_platform/app/dependencies/attachment_providers.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/group_member_name_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
@@ -18,6 +19,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
+import 'package:communication_platform/features/groups/domain/group_member_names.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
@@ -41,10 +43,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import '../support/application_event_harness.dart';
 import '../support/attachment_descriptor_fixture.dart';
 import '../support/authentication_harness.dart' as auth;
+import '../support/chat_pulse.dart';
 
 const _deviceId = '00000000-0000-0000-0000-000000000011';
 const _peer = '00000000-0000-0000-0000-000000000002';
@@ -113,6 +117,60 @@ void main() {
     );
   }
 
+  testWidgets('an open group chat returns to Chats when this account is no '
+      'longer in the group (ADR-096 D3)', (tester) async {
+    await _seedConversation(
+      database,
+      conversationId: _groupId,
+      kind: ConversationKind.group,
+      messages: const [],
+    );
+    final router = GoRouter(
+      initialLocation: '/chats',
+      routes: [
+        GoRoute(
+          path: '/chats',
+          builder: (context, state) =>
+              const Scaffold(body: Center(child: Text('The Chats list'))),
+        ),
+        GoRoute(
+          path: '/groups/:groupId',
+          builder: (context, state) =>
+              GroupChatPage(groupId: state.pathParameters['groupId']!),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await _pump(
+      tester,
+      database: database,
+      fanout: fanout,
+      groupSender: groupSender,
+      groups: {
+        _groupId: _group(
+          _groupId,
+          'Team',
+          member: false,
+          lifecycle: GroupLifecycle.removed,
+        ),
+      },
+      summaries: const [],
+      page: MaterialApp.router(
+        theme: AppTheme.light(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        routerConfig: router,
+      ),
+    );
+
+    unawaited(router.push('/groups/$_groupId'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('The Chats list'), findsOneWidget);
+    expect(find.byKey(const ValueKey('group-chat-screen')), findsNothing);
+  });
+
   group('a group chat', () {
     testWidgets('Copy writes the message text to the clipboard', (
       tester,
@@ -160,6 +218,71 @@ void main() {
       expect((await _row(database, _secondMessageId)).deletedForMe, isTrue);
       expect((await _row(database, _messageId)).deletedForMe, isFalse);
       expect(find.text(strings.chatActionFailedMessage), findsNothing);
+    });
+
+    testWidgets('an admin pins a member\'s message and may delete it for '
+        'everyone, and not the owner\'s (ADR-096 D5, D6)', (tester) async {
+      await openGroup(
+        tester,
+        messages: const [
+          (id: _messageId, sender: _member, text: 'from the owner'),
+          (id: _secondMessageId, sender: _otherMember, text: 'from a member'),
+        ],
+        state: _group(_groupId, 'Team', role: GroupRole.admin),
+      );
+
+      await _openActions(tester, 'from a member');
+      await tester.tap(find.text(strings.chatPinAction));
+      await tester.pumpAndSettle();
+      expect(groupSender.pins, [(messageId: _secondMessageId, pinned: true)]);
+      expect(find.text(strings.chatActionFailedMessage), findsNothing);
+
+      await _openActions(tester, 'from a member');
+      await tester.tap(find.text(strings.chatDeleteAction));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.chatDeleteForEveryoneAction), findsOneWidget);
+      await tester.tap(find.text(strings.chatCancelAction));
+      await tester.pumpAndSettle();
+
+      await _openActions(tester, 'from the owner');
+      expect(find.text(strings.chatPinAction), findsOneWidget);
+      await tester.tap(find.text(strings.chatDeleteAction));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.chatDeleteForEveryoneAction), findsNothing);
+    });
+
+    testWidgets('a member is offered no Pin and no Unpin '
+        '(ADR-096 D6)', (tester) async {
+      await openGroup(tester);
+
+      await _openActions(tester, 'hello team');
+      expect(find.text(strings.chatPinAction), findsNothing);
+      expect(find.text(strings.chatUnpinAction), findsNothing);
+    });
+
+    testWidgets('a pinned message of the group shows the banner, and a tap '
+        'jumps to it (ADR-096 D6)', (tester) async {
+      await openGroup(tester);
+      await (database.update(database.messages)
+            ..where((row) => row.messageId.equals(_messageId)))
+          .write(const MessagesCompanion(pinned: Value(true)));
+      await tester.pumpAndSettle();
+
+      final banner = find.text(strings.chatPinnedBanner(1));
+      expect(banner, findsOneWidget);
+      await tester.tap(banner);
+      await tester.pump();
+      expect(
+        await pumpUntilPulse(tester, _messageId),
+        closeTo(chatPulsePeak, .05),
+      );
+      await tester.pumpAndSettle();
+
+      // A member sees the list, and no Unpin in it.
+      await tester.tap(find.text(strings.chatPinnedExpandAction));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.chatPinnedMessagesTitle), findsWidgets);
+      expect(find.text(strings.chatUnpinAction), findsNothing);
     });
 
     testWidgets('a draft is kept, and a reopened group shows it in the '
@@ -863,6 +986,7 @@ GroupState _group(
   String name, {
   bool member = true,
   GroupLifecycle lifecycle = GroupLifecycle.active,
+  GroupRole role = GroupRole.member,
 }) => GroupState(
   groupId: groupId,
   metadata: GroupMetadata(name: name, description: ''),
@@ -871,14 +995,14 @@ GroupState _group(
   members: [
     GroupMember(
       userId: _member,
-      displayName: 'Member',
+      displayName: '',
       role: GroupRole.owner,
       verified: true,
     ),
     GroupMember(
       userId: auth.userId,
-      displayName: 'Reader',
-      role: GroupRole.member,
+      displayName: '',
+      role: role,
       verified: true,
       membership: member
           ? GroupMembershipState.active
@@ -886,7 +1010,7 @@ GroupState _group(
     ),
     GroupMember(
       userId: _otherMember,
-      displayName: 'Other',
+      displayName: '',
       role: GroupRole.member,
       verified: true,
     ),
@@ -956,6 +1080,17 @@ Future<ProviderContainer> _pump(
       groupProvider.overrideWith(
         (ref, groupId) => Stream.value(groups[groupId]),
       ),
+      // What the contacts store would answer for the three members. The
+      // roster below carries ids and roles, as a decoded control event does.
+      groupMemberNamesProvider.overrideWith(
+        (ref, request) => Stream.value(
+          GroupMemberNames({
+            _member: const GroupMemberName(name: 'Member', verified: true),
+            auth.userId: const GroupMemberName(name: 'Reader', verified: true),
+            _otherMember: const GroupMemberName(name: 'Other', verified: true),
+          }),
+        ),
+      ),
       groupUseCasesProvider.overrideWith(
         (ref) => GroupUseCases(
           create: CreateGroup(
@@ -982,6 +1117,11 @@ Future<ProviderContainer> _pump(
             repository: groupRepository,
             sender: groupSender,
           ),
+          deleteForEveryone: DeleteGroupMessageForEveryone(
+            repository: groupRepository,
+            sender: groupSender,
+          ),
+          setPin: SetGroupPin(repository: groupRepository, sender: groupSender),
         ),
       ),
     ],
@@ -1121,6 +1261,28 @@ final class _GroupSender implements GroupMessageSenderPort {
     required String messageId,
     required String? emoji,
   }) async => const Result.success(null);
+
+  final List<({String messageId, bool pinned})> pins = [];
+
+  @override
+  Future<Result<void>> deleteForEveryone({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+  }) async => const Result.success(null);
+
+  @override
+  Future<Result<void>> setPin({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required bool pinned,
+  }) async {
+    pins.add((messageId: messageId, pinned: pinned));
+    return const Result.success(null);
+  }
 }
 
 final class _GroupRepository implements GroupRepositoryPort {

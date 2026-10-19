@@ -8,6 +8,8 @@ import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/drift_repository_base.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/infrastructure/conversation_tombstone.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
 
@@ -278,7 +280,31 @@ final class DriftGroupRepository extends DriftRepositoryBase
               );
       if (updated != 1) throw const _GroupConflict();
     }
-    await _writeConversation(next, sortKey: last.event.createdMs);
+    await _writeConversation(
+      next,
+      sortKey: last.event.createdMs,
+      // A user added back after leaving or being removed gets the group back
+      // in Chats, with no old history (ADR-096 D2).
+      reopen:
+          _outsideGroup(expectedPrevious) &&
+          next.lifecycle == GroupLifecycle.active,
+    );
+    if (_outsideGroup(next)) {
+      // Leaving, or being removed, deletes the group from this phone in the
+      // transaction that records it, on each device of the user. The signed
+      // state above stays (ADR-096 D1, D2).
+      await _removeConversation(next.groupId);
+    } else if (_rolesChanged(expectedPrevious, next)) {
+      // The projector decides deletes and pins by the roles of this roster,
+      // so a delete stored before the promotion that allows it takes effect
+      // here, and a demoted admin's stop counting (ADR-096 D7).
+      await DriftApplicationEventProjector(
+        database,
+      ).rebuildConversationInsideTransaction(
+        next.groupId,
+        currentUserId: prepared.localUserId,
+      );
+    }
     for (final control in prepared.controls) {
       final event = control.event;
       await database
@@ -311,9 +337,43 @@ final class DriftGroupRepository extends DriftRepositoryBase
     }
   }
 
+  static bool _outsideGroup(GroupState? state) =>
+      state?.lifecycle == GroupLifecycle.left ||
+      state?.lifecycle == GroupLifecycle.removed;
+
+  /// Whether a user the previous roster recorded has another role now, or is
+  /// gone from it. A member added now has written nothing yet, so an addition
+  /// alone changes nothing a fold reads.
+  static bool _rolesChanged(GroupState? previous, GroupState next) {
+    if (previous == null) return false;
+    for (final member in previous.members) {
+      if (next.member(member.userId)?.role != member.role) return true;
+    }
+    return false;
+  }
+
+  /// The roster a stored `group_states` row holds, for a reader inside the
+  /// same transaction: the projector reads the roles it folds deletes and
+  /// pins by (ADR-096 D5 to D7). Throws [FormatException] for a row that does
+  /// not decode.
+  static GroupState decodeStoredState(Uint8List bytes) => _decodeState(bytes);
+
+  /// Takes the group out of Chats and deletes its history, reusing the
+  /// tombstone of Delete chat. The group's facts are retired, not deleted, so
+  /// nothing folds them back.
+  Future<void> _removeConversation(String groupId) async {
+    if (!await tombstoneConversationInsideTransaction(database, groupId)) {
+      throw const _GroupIntegrityFailure();
+    }
+    await DriftApplicationEventProjector(
+      database,
+    ).retireConversationHistoryInsideTransaction(groupId);
+  }
+
   Future<void> _writeConversation(
     GroupState state, {
     required int sortKey,
+    required bool reopen,
   }) async {
     final title = Value(Uint8List.fromList(utf8.encode(state.metadata.name)));
     final existing =
@@ -343,6 +403,7 @@ final class DriftGroupRepository extends DriftRepositoryBase
       ConversationsCompanion(
         displayTitleCiphertext: title,
         sortKey: Value(sortKey > existing.sortKey ? sortKey : existing.sortKey),
+        tombstoned: reopen ? const Value(false) : const Value.absent(),
       ),
     );
   }

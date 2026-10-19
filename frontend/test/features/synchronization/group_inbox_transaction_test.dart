@@ -72,7 +72,10 @@ void main() {
       await groups.commitTransition(
         expectedPrevious: null,
         next: group,
-        prepared: PreparedGroupTransition(controls: [create]),
+        prepared: PreparedGroupTransition(
+          controls: [create],
+          localUserId: _member,
+        ),
       ),
       isA<Success<void>>(),
     );
@@ -123,7 +126,10 @@ void main() {
             senderDeviceId: _ownerDevice,
             expectedPrevious: group,
             next: _apply(group, rename),
-            prepared: PreparedGroupTransition(controls: [rename]),
+            prepared: PreparedGroupTransition(
+              controls: [rename],
+              localUserId: _member,
+            ),
           ),
         ),
       ),
@@ -174,7 +180,10 @@ void main() {
           senderDeviceId: _ownerDevice,
           expectedPrevious: group,
           next: _apply(group, rename),
-          prepared: PreparedGroupTransition(controls: [rename]),
+          prepared: PreparedGroupTransition(
+            controls: [rename],
+            localUserId: _member,
+          ),
         ),
       ),
     );
@@ -223,7 +232,10 @@ void main() {
           senderDeviceId: _ownerDevice,
           expectedPrevious: group,
           next: _apply(group, rename),
-          prepared: PreparedGroupTransition(controls: [rename]),
+          prepared: PreparedGroupTransition(
+            controls: [rename],
+            localUserId: _member,
+          ),
         ),
       ),
     );

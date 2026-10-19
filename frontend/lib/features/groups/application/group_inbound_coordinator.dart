@@ -128,7 +128,10 @@ final class GroupInboundCoordinator {
             senderDeviceId: sender.deviceId,
             expectedPrevious: stored,
             next: state,
-            prepared: PreparedGroupTransition(controls: [signed]),
+            prepared: PreparedGroupTransition(
+              controls: [signed],
+              localUserId: localUserId,
+            ),
           ),
         );
       case GroupControlDuplicate():
@@ -407,6 +410,7 @@ final class GroupInboundCoordinator {
         next: next,
         prepared: PreparedGroupTransition(
           controls: suffix,
+          localUserId: localUserId,
           completesStateRequest: true,
         ),
       ),
@@ -457,6 +461,7 @@ final class GroupInboundCoordinator {
         next: next,
         prepared: PreparedGroupTransition(
           controls: controls,
+          localUserId: localUserId,
           completesStateRequest: true,
         ),
       ),

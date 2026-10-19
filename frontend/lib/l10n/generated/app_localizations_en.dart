@@ -1524,6 +1524,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get groupVerifiedMember => 'Verified identity';
 
   @override
+  String get groupUnknownMember => 'Unknown member';
+
+  @override
   String get groupConfirmRemoveTitle => 'Remove member?';
 
   @override
@@ -1535,7 +1538,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupConfirmLeaveBody =>
-      'You will stop receiving new messages from this group. Content already stored on this device remains readable.';
+      'The group and its history will be deleted from this phone, and you will stop receiving its messages. The other members keep their copies.';
 
   @override
   String get groupOwnerMustTransfer =>

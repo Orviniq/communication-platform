@@ -147,6 +147,32 @@ abstract interface class GroupMessageSenderPort implements Port {
     required String messageId,
     required String? emoji,
   });
+
+  /// Deletes [messageId] for every member: this user's own (ADR-096 D4), or
+  /// another member's where the roster's roles allow it (D5).
+  Future<Result<void>> deleteForEveryone({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+  });
+
+  /// Pins or unpins [messageId] for every member (ADR-096 D6).
+  Future<Result<void>> setPin({
+    required String currentUserId,
+    required String currentDeviceId,
+    required String groupId,
+    required String messageId,
+    required bool pinned,
+  });
+}
+
+/// Deletes the decrypted files a removed group's deleted history left without
+/// a row (ADR-096 D3, ADR-089 D10). A group holds no attachment row today
+/// (ADR-089 D1); the sweep keeps that true for a file nothing names.
+abstract interface class GroupRemovalSweepPort implements Port {
+  /// Never fails: a file it could not delete waits for the next sweep.
+  Future<void> sweepAfterGroupRemoval();
 }
 
 /// Starts the authenticated repair of this device's pairwise sessions with one

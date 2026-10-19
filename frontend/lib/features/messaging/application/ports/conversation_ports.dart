@@ -131,6 +131,26 @@ abstract interface class GroupConversationMembershipPort implements Port {
   });
 }
 
+/// Answers from a group's signed roster who may change a group message
+/// another member wrote, and who may pin (ADR-096 D5, D6). The server holds
+/// no role, so the sending phone asks before it sends, and each receiving
+/// phone decides again when it folds the event.
+abstract interface class GroupMessageModerationPort implements Port {
+  /// Whether [actorUserId] may delete for everyone a message of the group
+  /// [groupId] that [authorUserId] wrote.
+  Future<Result<bool>> mayDeleteMessageOf({
+    required String groupId,
+    required String actorUserId,
+    required String authorUserId,
+  });
+
+  /// Whether [actorUserId] may pin and unpin in the group [groupId].
+  Future<Result<bool>> mayPin({
+    required String groupId,
+    required String actorUserId,
+  });
+}
+
 abstract interface class ApplicationFanoutPort implements Port {
   /// Commits the event locally, and records that its recipients are still owed.
   ///

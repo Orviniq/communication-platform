@@ -120,6 +120,7 @@ final class MutateGroup {
     required this.identity,
     required this.clock,
     this.stateMachine = const GroupControlStateMachine(),
+    this.removalSweep,
   });
 
   final GroupRepositoryPort repository;
@@ -127,6 +128,10 @@ final class MutateGroup {
   final GroupIdentityPort identity;
   final TimeSource clock;
   final GroupControlStateMachine stateMachine;
+
+  /// Asked once a change that took this account out of the group commits:
+  /// the commit deleted the group's history from this phone (ADR-096 D1).
+  final GroupRemovalSweepPort? removalSweep;
 
   Future<Result<GroupState>> call({
     required String groupId,
@@ -179,7 +184,7 @@ final class MutateGroup {
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
     }
-    return _signApplyAndCommit(
+    final committed = await _signApplyAndCommit(
       repository: repository,
       crypto: crypto,
       stateMachine: stateMachine,
@@ -187,6 +192,12 @@ final class MutateGroup {
       event: event,
       localUserId: actorUserId,
     );
+    if (committed case Success(:final value)
+        when value.lifecycle == GroupLifecycle.left ||
+            value.lifecycle == GroupLifecycle.removed) {
+      await removalSweep?.sweepAfterGroupRemoval();
+    }
+    return committed;
   }
 
   bool _authorized(
@@ -351,6 +362,84 @@ final class SetGroupReaction {
   }
 }
 
+/// Deletes a group message for every member: one of this user's own
+/// (ADR-096 D4), or another member's that the roster's roles let this user
+/// delete (D5).
+///
+/// A delete is an event of the group's conversation, held to the rule a
+/// reaction is held to: a member this group no longer lets send, or a group
+/// this device has left, is sent nothing. Whose message it is, and what the
+/// roles allow, the conversation send path checks before anything is
+/// written.
+final class DeleteGroupMessageForEveryone {
+  const DeleteGroupMessageForEveryone({
+    required this.repository,
+    required this.sender,
+  });
+
+  final GroupRepositoryPort repository;
+  final GroupMessageSenderPort sender;
+
+  Future<Result<void>> call({
+    required String groupId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required String messageId,
+  }) async {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return sender.deleteForEveryone(
+      currentUserId: senderUserId.toLowerCase(),
+      currentDeviceId: senderDeviceId.toLowerCase(),
+      groupId: (allowed as Success<GroupState>).value.groupId,
+      messageId: messageId,
+    );
+  }
+}
+
+/// Pins or unpins a group message for every member (ADR-096 D6).
+///
+/// Only the owner and the admins of a group this device is active in pin;
+/// anyone else is sent nothing.
+final class SetGroupPin {
+  const SetGroupPin({required this.repository, required this.sender});
+
+  final GroupRepositoryPort repository;
+  final GroupMessageSenderPort sender;
+
+  Future<Result<void>> call({
+    required String groupId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required String messageId,
+    required bool pinned,
+  }) async {
+    final allowed = await _requireSender(repository, groupId, senderUserId);
+    if (allowed case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final group = (allowed as Success<GroupState>).value;
+    if (!GroupAuthorization.allows(
+      group,
+      senderUserId,
+      GroupPermission.pinMessages,
+    )) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+    }
+    return sender.setPin(
+      currentUserId: senderUserId.toLowerCase(),
+      currentDeviceId: senderDeviceId.toLowerCase(),
+      groupId: group.groupId,
+      messageId: messageId,
+      pinned: pinned,
+    );
+  }
+}
+
 /// The group, once [userId] is known to be allowed to send into it.
 Future<Result<GroupState>> _requireSender(
   GroupRepositoryPort repository,
@@ -378,6 +467,8 @@ final class GroupUseCases {
     required this.sendMessage,
     required this.retryMessage,
     required this.setReaction,
+    required this.deleteForEveryone,
+    required this.setPin,
   });
 
   final CreateGroup create;
@@ -385,6 +476,8 @@ final class GroupUseCases {
   final SendGroupMessage sendMessage;
   final RetryGroupMessage retryMessage;
   final SetGroupReaction setReaction;
+  final DeleteGroupMessageForEveryone deleteForEveryone;
+  final SetGroupPin setPin;
 }
 
 /// Who a locally signed control event is owed to, and in which payloads.
@@ -515,7 +608,11 @@ Future<Result<GroupState>> _signApplyAndCommit({
   final committed = await repository.commitTransition(
     expectedPrevious: current,
     next: applied.state,
-    prepared: PreparedGroupTransition(controls: [sealed], outbound: outbound),
+    prepared: PreparedGroupTransition(
+      controls: [sealed],
+      localUserId: localUserId,
+      outbound: outbound,
+    ),
   );
   return committed.fold(
     onSuccess: (_) => Result.success(applied.state),

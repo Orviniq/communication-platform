@@ -18,6 +18,7 @@ final class SendConversationEvents {
     required this.fanout,
     required this.clock,
     required this.attachments,
+    this.groupModeration,
   });
 
   final ConversationRepositoryPort repository;
@@ -27,6 +28,10 @@ final class SendConversationEvents {
 
   /// Deletes the decrypted files a deletion for everyone leaves unnamed.
   final AttachmentSweepPort attachments;
+
+  /// Decides a group delete of another member's message and a group pin by
+  /// the roles of the roster (ADR-096 D5, D6). Null refuses both.
+  final GroupMessageModerationPort? groupModeration;
 
   Future<Result<SendMessageOutcome>> sendText({
     required String currentUserId,
@@ -242,9 +247,10 @@ final class SendConversationEvents {
     required String conversationId,
     required String messageId,
   }) async {
-    final authorized = await repository.requireOriginalSender(
+    final authorized = await _authorizeDelete(
+      currentUserId: currentUserId,
+      conversationId: conversationId,
       messageId: messageId,
-      senderUserId: currentUserId,
     );
     if (authorized case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -297,20 +303,120 @@ final class SendConversationEvents {
     );
   }
 
+  /// Pins or unpins [messageId]. In a group only the owner and the admins
+  /// pin, as the roster records their roles (ADR-096 D6).
   Future<Result<void>> setPin({
     required String currentUserId,
     required String currentDeviceId,
     required String conversationId,
     required String messageId,
     required bool pinned,
-  }) => _sendMutation(
-    currentUserId: currentUserId,
-    currentDeviceId: currentDeviceId,
-    conversationId: conversationId,
-    kind: ApplicationEventKind.pinSet,
-    targetMessageId: messageId,
-    body: (target) => PinSetBody(targetMessageId: target, pinned: pinned),
-  );
+  }) async {
+    final authorized = await _authorizePin(
+      currentUserId: currentUserId,
+      conversationId: conversationId,
+    );
+    if (authorized case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return _sendMutation(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      conversationId: conversationId,
+      kind: ApplicationEventKind.pinSet,
+      targetMessageId: messageId,
+      body: (target) => PinSetBody(targetMessageId: target, pinned: pinned),
+    );
+  }
+
+  /// A delete for everyone of an own message, anywhere it is allowed at all;
+  /// in a group also of another member's message, when the roles of the
+  /// roster allow it (ADR-096 D4, D5). Checked before anything is written.
+  Future<Result<void>> _authorizeDelete({
+    required String currentUserId,
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final conversationResult = await repository.readConversation(
+      conversationId,
+    );
+    if (conversationResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final conversation =
+        (conversationResult as Success<ConversationSummary?>).value;
+    if (conversation?.kind != ConversationKind.group) {
+      return repository.requireOriginalSender(
+        messageId: messageId,
+        senderUserId: currentUserId,
+      );
+    }
+    final id = messageId.toLowerCase();
+    final sendersResult = await repository.readMessageSenders(
+      conversationId: conversationId,
+      messageIds: [id],
+    );
+    if (sendersResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final author = (sendersResult as Success<Map<String, String>>).value[id];
+    if (author == null) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    if (author.toLowerCase() == currentUserId.toLowerCase()) {
+      return const Result.success(null);
+    }
+    final moderation = groupModeration;
+    return _allowed(
+      moderation == null
+          ? null
+          : await moderation.mayDeleteMessageOf(
+              groupId: conversationId,
+              actorUserId: currentUserId,
+              authorUserId: author,
+            ),
+    );
+  }
+
+  /// A pin in a group goes only from the owner or an admin (ADR-096 D6);
+  /// elsewhere the conversation's own rule applies in [_sendMutation].
+  Future<Result<void>> _authorizePin({
+    required String currentUserId,
+    required String conversationId,
+  }) async {
+    final conversationResult = await repository.readConversation(
+      conversationId,
+    );
+    if (conversationResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final conversation =
+        (conversationResult as Success<ConversationSummary?>).value;
+    if (conversation?.kind != ConversationKind.group) {
+      return const Result.success(null);
+    }
+    final moderation = groupModeration;
+    return _allowed(
+      moderation == null
+          ? null
+          : await moderation.mayPin(
+              groupId: conversationId,
+              actorUserId: currentUserId,
+            ),
+    );
+  }
+
+  /// A moderation answer as a result: a refusal, or no one to ask, is
+  /// `policyBlocked`; a failure to read the roster is that failure.
+  static Result<void> _allowed(Result<bool>? answer) => switch (answer) {
+    Success(value: true) => const Result.success(null),
+    FailureResult(:final failure) => Result.failure(failure),
+    _ => const Result.failure(
+      SecurityFailure(SecurityFailureKind.policyBlocked),
+    ),
+  };
 
   Future<Result<void>> sendReceipt({
     required String currentUserId,
@@ -410,11 +516,13 @@ final class SendConversationEvents {
       }
       final conversation =
           (conversationResult as Success<_OutboundConversation>).value;
-      // A group takes a reaction and nothing else here: an edit, a delete for
-      // everyone and a pin each change what the other members read, and wait
-      // for the member roles of the signed roster (ADR-090 D4).
+      // A group takes a reaction, a delete for everyone and a pin here. The
+      // delete and the pin were checked against the roster's roles before
+      // they came (ADR-096 D4 to D6). An edit stays off (D8).
       if ((conversation.kind == ConversationKind.group &&
-              kind != ApplicationEventKind.reactionSet) ||
+              kind != ApplicationEventKind.reactionSet &&
+              kind != ApplicationEventKind.messageDelete &&
+              kind != ApplicationEventKind.pinSet) ||
           (conversation.kind == ConversationKind.saved &&
               kind == ApplicationEventKind.messageDelete)) {
         return const Result.failure(

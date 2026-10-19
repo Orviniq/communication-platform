@@ -36,6 +36,15 @@ typedef SaveGroupDraftCallback = Future<Result<void>> Function(String? text);
 typedef SetGroupStarCallback =
     Future<Result<void>> Function(String messageId, bool starred);
 
+/// Deletes a message for every member: one of this user's own, or another
+/// member's that the roster's roles let this user delete (ADR-096 D4, D5).
+typedef DeleteGroupMessageForEveryoneCallback =
+    Future<Result<void>> Function(String messageId);
+
+/// Pins or unpins a message for every member (ADR-096 D6).
+typedef SetGroupPinCallback =
+    Future<Result<void>> Function(String messageId, bool pinned);
+
 /// Deletes a message from this phone only.
 typedef DeleteGroupMessageForMeCallback =
     Future<Result<void>> Function(String messageId);

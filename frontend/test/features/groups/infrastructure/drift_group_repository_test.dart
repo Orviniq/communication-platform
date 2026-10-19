@@ -1,11 +1,14 @@
 import 'dart:convert';
 
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -15,7 +18,14 @@ import 'package:flutter_test/flutter_test.dart';
 const _owner = '10000000-0000-4000-8000-000000000001';
 const _ownerDevice = '20000000-0000-4000-8000-000000000001';
 const _member = '30000000-0000-4000-8000-000000000001';
+const _memberDevice = '60000000-0000-4000-8000-000000000001';
 const _outsider = '40000000-0000-4000-8000-000000000001';
+const _admin = '70000000-0000-4000-8000-000000000001';
+const _adminDevice = '71000000-0000-4000-8000-000000000001';
+const _adminTwo = '80000000-0000-4000-8000-000000000001';
+const _adminTwoDevice = '81000000-0000-4000-8000-000000000001';
+const _later = '90000000-0000-4000-8000-000000000001';
+const _laterDevice = '91000000-0000-4000-8000-000000000001';
 const _envelope = '50000000-0000-4000-8000-000000000001';
 final _groupA = 'a1' * 32;
 final _groupB = 'b2' * 32;
@@ -43,7 +53,11 @@ void main() {
     final committed = await repository.commitTransition(
       expectedPrevious: null,
       next: group,
-      prepared: PreparedGroupTransition(controls: [create], outbound: outbound),
+      prepared: PreparedGroupTransition(
+        controls: [create],
+        localUserId: localUserId,
+        outbound: outbound,
+      ),
     );
     expect(committed, isA<Success<void>>());
     return (group: group, create: create);
@@ -52,6 +66,10 @@ void main() {
   Future<GroupState> stored(String groupId) async =>
       (await repository.readStoredGroup(groupId) as Success<GroupState?>)
           .value!;
+
+  Future<List<Message>> groupMessages() => (database.select(
+    database.messages,
+  )..where((row) => row.conversationId.equals(_groupA))).get();
 
   Future<GroupState> projected(String groupId) async =>
       (await repository.readGroup(groupId) as Success<GroupState?>).value!;
@@ -147,7 +165,10 @@ void main() {
         await repository.commitTransition(
           expectedPrevious: group,
           next: _apply(group, first),
-          prepared: PreparedGroupTransition(controls: [first]),
+          prepared: PreparedGroupTransition(
+            controls: [first],
+            localUserId: _owner,
+          ),
         ),
         isA<Success<void>>(),
       );
@@ -157,6 +178,7 @@ void main() {
         next: _apply(group, second),
         prepared: PreparedGroupTransition(
           controls: [second],
+          localUserId: _owner,
           outbound: [_work(_groupA, 'never-queued')],
         ),
       );
@@ -192,7 +214,10 @@ void main() {
     final result = await repository.commitTransition(
       expectedPrevious: null,
       next: _apply(group, rename),
-      prepared: PreparedGroupTransition(controls: [rename]),
+      prepared: PreparedGroupTransition(
+        controls: [rename],
+        localUserId: _owner,
+      ),
     );
 
     expect(
@@ -485,7 +510,10 @@ void main() {
     await repository.commitTransition(
       expectedPrevious: group,
       next: _apply(group, rename),
-      prepared: PreparedGroupTransition(controls: [rename]),
+      prepared: PreparedGroupTransition(
+        controls: [rename],
+        localUserId: _owner,
+      ),
     );
 
     await (database.update(
@@ -517,6 +545,519 @@ void main() {
       (await repository.readGroup(_groupA) as FailureResult).failure,
       const SecurityFailure(SecurityFailureKind.integrityCheckFailed),
     );
+  });
+
+  group('leaving, or being removed, deletes the group from this phone '
+      '(ADR-096 D1, D2)', () {
+    final messageOne = _messageId(0x11);
+    final messageTwo = _messageId(0x12);
+
+    Future<ApplicationApplyResult> project(ApplicationEventCommit commit) =>
+        database.writeTransaction(
+          () => DriftApplicationEventProjector(
+            database,
+          ).applyInsideTransaction(commit),
+        );
+
+    /// The group of [commitCreate] with this account as its member, two
+    /// messages, a reaction, a read, a draft and an attachment row.
+    Future<({GroupState group, SignedGroupControlEvent create})>
+    groupWithHistory() async {
+      final created = await commitCreate(_groupA, localUserId: _member);
+      await project(_groupEvent(_groupA, 0x11, sender: _owner));
+      await project(_groupEvent(_groupA, 0x12, sender: _member));
+      await project(
+        _groupEvent(
+          _groupA,
+          0x13,
+          sender: _owner,
+          kind: ApplicationEventKind.reactionSet,
+          target: messageTwo,
+        ),
+      );
+      await project(
+        _groupEvent(
+          _groupA,
+          0x14,
+          sender: _owner,
+          kind: ApplicationEventKind.receiptRead,
+          target: messageTwo,
+        ),
+      );
+      await (database.update(
+        database.conversations,
+      )..where((row) => row.conversationId.equals(_groupA))).write(
+        ConversationsCompanion(
+          draftCiphertext: Value(Uint8List.fromList(utf8.encode('unsent'))),
+        ),
+      );
+      await database
+          .into(database.attachments)
+          .insert(
+            AttachmentsCompanion.insert(
+              attachmentId: 'attachment-one',
+              messageId: protocolBytesToHex(messageOne),
+              encryptedDescriptor: Uint8List.fromList(const [1]),
+              transferState: 0,
+            ),
+          );
+      // The history is there before the change.
+      expect(await groupMessages(), hasLength(2));
+      expect(
+        await database.select(database.messageReactions).get(),
+        isNot(isEmpty),
+      );
+      expect(await database.select(database.receipts).get(), isNot(isEmpty));
+      return created;
+    }
+
+    Future<GroupState> commitNext(
+      GroupState previous,
+      SignedGroupControlEvent signed,
+    ) async {
+      final next = _apply(previous, signed, localUserId: _member);
+      expect(
+        await repository.commitTransition(
+          expectedPrevious: previous,
+          next: next,
+          prepared: PreparedGroupTransition(
+            controls: [signed],
+            localUserId: _member,
+          ),
+        ),
+        isA<Success<void>>(),
+      );
+      return next;
+    }
+
+    Future<Conversation> conversation() => (database.select(
+      database.conversations,
+    )..where((row) => row.conversationId.equals(_groupA))).getSingle();
+
+    Future<List<String>> listed() async => [
+      for (final summary in await DriftConversationDomainRepository(
+        database,
+      ).watchConversations(_member).first)
+        summary.conversationId,
+    ];
+
+    Future<void> expectGone() async {
+      final row = await conversation();
+      expect(row.tombstoned, isTrue);
+      expect(row.draftCiphertext, isNull);
+      expect(row.unreadCount, 0);
+      expect(row.listProjectionCiphertext, isEmpty);
+      expect(await listed(), isNot(contains(_groupA)));
+      expect(await groupMessages(), isEmpty);
+      expect(await database.select(database.messageReactions).get(), isEmpty);
+      expect(await database.select(database.receipts).get(), isEmpty);
+      expect(await database.select(database.attachments).get(), isEmpty);
+      final facts = await (database.select(
+        database.storedApplicationEvents,
+      )..where((row) => row.conversationId.equals(_groupA))).get();
+      expect(facts, hasLength(4));
+      expect(facts.map((fact) => fact.applyState), everyElement(4));
+    }
+
+    test('a signed leave of this account deletes it, with its rows, and '
+        'keeps the signed state', () async {
+      final (:group, :create) = await groupWithHistory();
+      expect(await listed(), contains(_groupA));
+
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: RemoveGroupMemberOperation(_member),
+          signer: _member,
+        ),
+      );
+
+      await expectGone();
+      final state = await stored(_groupA);
+      expect(state.lifecycle, GroupLifecycle.left);
+      expect(state.controlRevision, 2);
+      expect(
+        (await repository.readTranscript(_groupA)
+                as Success<List<StoredGroupControl>>)
+            .value,
+        hasLength(2),
+      );
+    });
+
+    test('a removal signed by the owner deletes it the same way', () async {
+      final (:group, :create) = await groupWithHistory();
+
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: RemoveGroupMemberOperation(_member),
+        ),
+      );
+
+      await expectGone();
+      expect((await stored(_groupA)).lifecycle, GroupLifecycle.removed);
+    });
+
+    test('a retired fact folds back nothing: not a rebuild, not a late '
+        'reaction, and a replay is a duplicate', () async {
+      final (:group, :create) = await groupWithHistory();
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: RemoveGroupMemberOperation(_member),
+          signer: _member,
+        ),
+      );
+
+      await database.writeTransaction(
+        () => DriftApplicationEventProjector(
+          database,
+        ).rebuildConversationInsideTransaction(_groupA, currentUserId: _member),
+      );
+      expect(await groupMessages(), isEmpty);
+
+      final late = await project(
+        _groupEvent(
+          _groupA,
+          0x15,
+          sender: _owner,
+          kind: ApplicationEventKind.reactionSet,
+          target: messageOne,
+        ),
+      );
+      expect(late.disposition, ApplicationApplyDisposition.applied);
+      expect(await groupMessages(), isEmpty);
+
+      final replay = await project(_groupEvent(_groupA, 0x11, sender: _owner));
+      expect(replay.disposition, ApplicationApplyDisposition.duplicate);
+      expect(await groupMessages(), isEmpty);
+    });
+
+    test('an addition after a removal brings the group back to Chats with no '
+        'old history (ADR-096 D2)', () async {
+      final (:group, :create) = await groupWithHistory();
+      final removal = _signed(
+        _groupA,
+        revision: 2,
+        previous: create,
+        operation: RemoveGroupMemberOperation(_member),
+      );
+      final removed = await commitNext(group, removal);
+      await expectGone();
+
+      final back = await commitNext(
+        removed,
+        _signed(
+          _groupA,
+          revision: 3,
+          previous: removal,
+          operation: AddGroupMembersOperation([
+            GroupMember(
+              userId: _member,
+              displayName: 'Member',
+              role: GroupRole.member,
+            ),
+          ]),
+        ),
+      );
+
+      expect(back.lifecycle, GroupLifecycle.active);
+      expect((await stored(_groupA)).lifecycle, GroupLifecycle.active);
+      expect((await conversation()).tombstoned, isFalse);
+      expect(await listed(), contains(_groupA));
+      expect(await groupMessages(), isEmpty);
+
+      await project(_groupEvent(_groupA, 0x21, sender: _owner, text: 'again'));
+      final messages = await groupMessages();
+      expect(messages.map((message) => message.messageId), [
+        protocolBytesToHex(_messageId(0x21)),
+      ]);
+    });
+
+    test('a change that keeps this account in the group clears no '
+        'tombstone the user set', () async {
+      final (:group, :create) = await groupWithHistory();
+      expect(
+        await DriftConversationDomainRepository(
+          database,
+        ).deleteConversationForMe(_groupA),
+        isA<Success<void>>(),
+      );
+
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: const RenameGroupOperation(GroupMetadata(name: 'Renamed')),
+        ),
+      );
+
+      expect((await conversation()).tombstoned, isTrue);
+      expect(await groupMessages(), hasLength(2));
+    });
+  });
+
+  group('the roles of the roster decide who deletes and pins '
+      '(ADR-096 D5 to D7)', () {
+    Future<ApplicationApplyResult> project(ApplicationEventCommit commit) =>
+        database.writeTransaction(
+          () => DriftApplicationEventProjector(
+            database,
+          ).applyInsideTransaction(commit),
+        );
+
+    /// A group with an owner, two admins and two members, as a member's phone
+    /// holds it, and one message from each of the first four.
+    Future<({GroupState group, SignedGroupControlEvent create})>
+    moderated() async {
+      final create = _signed(
+        _groupA,
+        revision: 1,
+        previous: null,
+        operation: CreateGroupOperation(
+          metadata: const GroupMetadata(name: 'Moderated'),
+          invitationPolicy: GroupInvitationPolicy.ownerAndAdmins,
+          historySharingPolicy: GroupHistorySharingPolicy.newMessagesOnly,
+          members: [
+            GroupMember(
+              userId: _owner,
+              displayName: 'Owner',
+              role: GroupRole.owner,
+            ),
+            GroupMember(
+              userId: _admin,
+              displayName: 'Admin',
+              role: GroupRole.admin,
+            ),
+            GroupMember(
+              userId: _adminTwo,
+              displayName: 'Admin two',
+              role: GroupRole.admin,
+            ),
+            GroupMember(
+              userId: _member,
+              displayName: 'Member',
+              role: GroupRole.member,
+            ),
+            GroupMember(
+              userId: _later,
+              displayName: 'Later',
+              role: GroupRole.member,
+            ),
+          ],
+        ),
+      );
+      final group = _apply(null, create, localUserId: _member);
+      expect(
+        await repository.commitTransition(
+          expectedPrevious: null,
+          next: group,
+          prepared: PreparedGroupTransition(
+            controls: [create],
+            localUserId: _member,
+          ),
+        ),
+        isA<Success<void>>(),
+      );
+      await project(_groupEvent(_groupA, 0x31, sender: _admin));
+      await project(_groupEvent(_groupA, 0x32, sender: _member));
+      await project(_groupEvent(_groupA, 0x33, sender: _owner));
+      await project(_groupEvent(_groupA, 0x34, sender: _adminTwo));
+      return (group: group, create: create);
+    }
+
+    Future<Message> message(int seed) =>
+        (database.select(database.messages)..where(
+              (row) =>
+                  row.messageId.equals(protocolBytesToHex(_messageId(seed))),
+            ))
+            .getSingle();
+
+    Future<void> delete(int seed, int target, String sender) => project(
+      _groupEvent(
+        _groupA,
+        seed,
+        sender: sender,
+        kind: ApplicationEventKind.messageDelete,
+        target: _messageId(target),
+      ),
+    );
+
+    Future<void> pin(int seed, int target, String sender) => project(
+      _groupEvent(
+        _groupA,
+        seed,
+        sender: sender,
+        kind: ApplicationEventKind.pinSet,
+        target: _messageId(target),
+      ),
+    );
+
+    Future<GroupState> commitNext(
+      GroupState previous,
+      SignedGroupControlEvent signed,
+    ) async {
+      final next = _apply(previous, signed, localUserId: _member);
+      expect(
+        await repository.commitTransition(
+          expectedPrevious: previous,
+          next: next,
+          prepared: PreparedGroupTransition(
+            controls: [signed],
+            localUserId: _member,
+          ),
+        ),
+        isA<Success<void>>(),
+      );
+      return next;
+    }
+
+    test("the owner deletes an admin's message", () async {
+      await moderated();
+
+      await delete(0x41, 0x31, _owner);
+
+      final row = await message(0x31);
+      expect(row.deletedForEveryone, isTrue);
+      expect(row.projectionCiphertext, isEmpty);
+    });
+
+    test("an admin deletes a member's message", () async {
+      await moderated();
+
+      await delete(0x42, 0x32, _admin);
+
+      expect((await message(0x32)).deletedForEveryone, isTrue);
+    });
+
+    test("an admin's delete of the owner's message, and of another admin's, "
+        'is ignored', () async {
+      await moderated();
+
+      await delete(0x43, 0x33, _admin);
+      await delete(0x44, 0x34, _admin);
+
+      for (final seed in [0x33, 0x34]) {
+        final row = await message(seed);
+        expect(row.deletedForEveryone, isFalse, reason: 'message $seed');
+        expect(
+          utf8.decode(row.projectionCiphertext),
+          'said in the group',
+          reason: 'message $seed',
+        );
+      }
+      // The facts are kept, for a later roster to decide again (D7).
+      final kept =
+          await (database.select(database.storedApplicationEvents)..where(
+                (row) => row.kind.equals(
+                  ApplicationEventKind.messageDelete.wireValue,
+                ),
+              ))
+              .get();
+      expect(kept.map((row) => row.applyState), [0, 0]);
+    });
+
+    test("a member's pin is ignored, and an admin's shows in the pinned "
+        'list', () async {
+      await moderated();
+      final conversations = DriftConversationDomainRepository(database);
+
+      await pin(0x45, 0x33, _member);
+      expect((await message(0x33)).pinned, isFalse);
+
+      await pin(0x46, 0x32, _admin);
+      expect((await message(0x32)).pinned, isTrue);
+      final page = await conversations
+          .watchMessages(
+            currentUserId: _member,
+            conversationId: _groupA,
+            window: const NewestConversationMessages(100),
+          )
+          .first;
+      expect(page.pinned.map((message) => message.messageId), [
+        protocolBytesToHex(_messageId(0x32)),
+      ]);
+    });
+
+    test('a delete that arrives before the promotion that allows it applies '
+        'after the promotion', () async {
+      final (:group, :create) = await moderated();
+      await delete(0x47, 0x32, _later);
+      expect((await message(0x32)).deletedForEveryone, isFalse);
+
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: ChangeGroupRoleOperation(
+            targetUserId: _later,
+            role: GroupRole.admin,
+          ),
+        ),
+      );
+
+      expect((await message(0x32)).deletedForEveryone, isTrue);
+    });
+
+    test("a demotion undoes the demoted admin's deletes and pins", () async {
+      final (:group, :create) = await moderated();
+      await delete(0x48, 0x32, _admin);
+      await pin(0x49, 0x33, _admin);
+      expect((await message(0x32)).deletedForEveryone, isTrue);
+      expect((await message(0x33)).pinned, isTrue);
+
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: ChangeGroupRoleOperation(
+            targetUserId: _admin,
+            role: GroupRole.member,
+          ),
+        ),
+      );
+
+      expect((await message(0x32)).deletedForEveryone, isFalse);
+      expect((await message(0x33)).pinned, isFalse);
+    });
+
+    test('an admin who leaves keeps the deletes made while a member', () async {
+      final (:group, :create) = await moderated();
+      await delete(0x4a, 0x32, _admin);
+
+      await commitNext(
+        group,
+        _signed(
+          _groupA,
+          revision: 2,
+          previous: create,
+          operation: RemoveGroupMemberOperation(_admin),
+          signer: _admin,
+        ),
+      );
+      await database.writeTransaction(
+        () => DriftApplicationEventProjector(
+          database,
+        ).rebuildConversationInsideTransaction(_groupA, currentUserId: _member),
+      );
+
+      expect((await message(0x32)).deletedForEveryone, isTrue);
+    });
   });
 
   group("a group message's delivery", () {
@@ -584,6 +1125,7 @@ SignedGroupControlEvent _signed(
   required SignedGroupControlEvent? previous,
   required GroupControlOperation operation,
   int branch = 0,
+  String signer = _owner,
 }) {
   final marker = ((branch << 4) | revision).toRadixString(16).padLeft(2, '0');
   final eventId = '${groupId.substring(0, 16)}${marker * 8}';
@@ -593,7 +1135,7 @@ SignedGroupControlEvent _signed(
       groupId: groupId,
       revision: revision,
       previousControlStateHash: previous?.controlStateHash,
-      signerUserId: _owner,
+      signerUserId: signer,
       signerDeviceId: _ownerDevice,
       createdMs: 1700000000000 + revision,
       operation: operation,
@@ -601,6 +1143,70 @@ SignedGroupControlEvent _signed(
     controlStateHash: '${groupId.substring(0, 32)}${marker * 16}',
     canonicalBytes: Uint8List.fromList(utf8.encode('control $eventId')),
     signature: Uint8List.fromList(List<int>.filled(64, revision)),
+  );
+}
+
+Uint8List _messageId(int seed) => Uint8List.fromList(List.filled(16, seed));
+
+/// One application event of [groupId]'s conversation, as a member's device
+/// sent it: a message, or a reaction, a read, a delete or a pin of [target].
+ApplicationEventCommit _groupEvent(
+  String groupId,
+  int seed, {
+  required String sender,
+  ApplicationEventKind kind = ApplicationEventKind.messageCreate,
+  Uint8List? target,
+  String text = 'said in the group',
+  bool pinned = true,
+}) {
+  final eventId = _messageId(seed);
+  final event = ApplicationEventRecord(
+    version: ApplicationMessageProtocolV1.version,
+    eventId: eventId,
+    conversationId: Uint8List.fromList([
+      for (var index = 0; index < groupId.length; index += 2)
+        int.parse(groupId.substring(index, index + 2), radix: 16),
+    ]),
+    kindValue: kind.wireValue,
+    senderUserId: protocolUuidBytes(sender),
+    senderDeviceId: protocolUuidBytes(switch (sender) {
+      _owner => _ownerDevice,
+      _admin => _adminDevice,
+      _adminTwo => _adminTwoDevice,
+      _later => _laterDevice,
+      _ => _memberDevice,
+    }),
+    senderCounter: seed,
+    createdMs: 1700000000000 + seed * 1000,
+    references: [?target],
+    body: switch (kind) {
+      ApplicationEventKind.reactionSet => ReactionSetBody(
+        targetMessageId: target!,
+        emoji: '\u{1F44D}',
+      ),
+      ApplicationEventKind.receiptRead => ReceiptBody(messageIds: [target!]),
+      ApplicationEventKind.messageDelete => MessageDeleteBody(
+        targetMessageId: target!,
+      ),
+      ApplicationEventKind.pinSet => PinSetBody(
+        targetMessageId: target!,
+        pinned: pinned,
+      ),
+      _ => MessageCreateBody(messageId: eventId, text: text),
+    },
+  );
+  return ApplicationEventCommit(
+    event: event,
+    canonicalBytes: Uint8List.fromList([seed, kind.wireValue, ...eventId]),
+    currentUserId: _member,
+    currentDeviceId: _memberDevice,
+    conversationKind: ConversationKind.group.index,
+    peerUserId: null,
+    localOrigin: false,
+    authenticatedAt: DateTime.fromMillisecondsSinceEpoch(
+      1700000300000,
+      isUtc: true,
+    ),
   );
 }
 

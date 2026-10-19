@@ -2663,6 +2663,12 @@ abstract class AppLocalizations {
   /// **'Verified identity'**
   String get groupVerifiedMember;
 
+  /// No description provided for @groupUnknownMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown member'**
+  String get groupUnknownMember;
+
   /// No description provided for @groupConfirmRemoveTitle.
   ///
   /// In en, this message translates to:
@@ -2684,7 +2690,7 @@ abstract class AppLocalizations {
   /// No description provided for @groupConfirmLeaveBody.
   ///
   /// In en, this message translates to:
-  /// **'You will stop receiving new messages from this group. Content already stored on this device remains readable.'**
+  /// **'The group and its history will be deleted from this phone, and you will stop receiving its messages. The other members keep their copies.'**
   String get groupConfirmLeaveBody;
 
   /// No description provided for @groupOwnerMustTransfer.

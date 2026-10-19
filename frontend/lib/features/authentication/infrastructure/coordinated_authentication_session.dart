@@ -96,6 +96,7 @@ final class CoordinatedAuthenticationSession
         AccountSessionBoundary(
           userId: grant.userId,
           deviceId: grant.deviceId,
+          username: username,
           scope: grant.scope,
           offline: false,
           securitySetupComplete:
@@ -150,6 +151,7 @@ final class CoordinatedAuthenticationSession
           AccountSessionBoundary(
             userId: current!.userId!,
             deviceId: current.deviceId,
+            username: current.username,
             scope: AccountSessionScope.full,
             offline: false,
             securitySetupComplete: await tokens.hasCompletedSecureSetup(),
@@ -161,6 +163,7 @@ final class CoordinatedAuthenticationSession
             AccountSessionBoundary(
               userId: before.userId!,
               deviceId: before.deviceId,
+              username: before.username,
               scope: AccountSessionScope.full,
               offline: true,
               securitySetupComplete: await tokens.hasCompletedSecureSetup(),

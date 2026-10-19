@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
@@ -865,6 +866,136 @@ void main() {
       );
     },
   );
+
+  group('a delete for everyone in a group (ADR-096 D4)', () {
+    ApplicationEventCommit create(int seed, String sender, String device) =>
+        _commit(
+          eventSeed: seed,
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: sender,
+          senderDevice: device,
+          counter: seed,
+          body: MessageCreateBody(messageId: _id(seed, 16), text: 'to all'),
+          conversationKind: ConversationKind.group,
+          peerUserId: null,
+          localOrigin: sender == currentUser,
+          authenticatedAt: authenticatedAt,
+        );
+    ApplicationEventCommit delete(
+      int seed,
+      int target,
+      String sender,
+      String device,
+    ) => _commit(
+      eventSeed: seed,
+      kind: ApplicationEventKind.messageDelete,
+      senderUser: sender,
+      senderDevice: device,
+      counter: seed,
+      references: [_id(target, 16)],
+      body: MessageDeleteBody(targetMessageId: _id(target, 16)),
+      conversationKind: ConversationKind.group,
+      peerUserId: null,
+      localOrigin: sender == currentUser,
+      authenticatedAt: authenticatedAt,
+    );
+    Future<Message> message(LocalDatabase database, int seed) =>
+        (database.select(database.messages)..where(
+              (row) => row.messageId.equals(protocolBytesToHex(_id(seed, 16))),
+            ))
+            .getSingle();
+
+    test('an own delete shows the message deleted on the author\'s phone and '
+        'on a member\'s', () async {
+      // The author's phone: its own create and its own delete.
+      final author = LocalDatabase(NativeDatabase.memory());
+      addTearDown(author.close);
+      await _apply(author, create(80, currentUser, currentDevice));
+      await _apply(author, delete(81, 80, currentUser, currentDevice));
+      // A member's phone, where another member wrote and deleted.
+      final member = LocalDatabase(NativeDatabase.memory());
+      addTearDown(member.close);
+      await _apply(member, create(82, peerUser, peerDevice));
+      await _apply(member, delete(83, 82, peerUser, peerDevice));
+
+      for (final (database, seed) in [(author, 80), (member, 82)]) {
+        final row = await message(database, seed);
+        expect(row.deletedForEveryone, isTrue, reason: 'message $seed');
+        expect(row.projectionCiphertext, isEmpty, reason: 'message $seed');
+      }
+    });
+
+    test('a delete of another member\'s message is not applied', () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await _apply(database, create(84, currentUser, currentDevice));
+
+      await _apply(database, delete(85, 84, peerUser, peerDevice));
+
+      final row = await message(database, 84);
+      expect(row.deletedForEveryone, isFalse);
+      expect(utf8.decode(row.projectionCiphertext), 'to all');
+    });
+  });
+
+  // A record of what the projector does today, not a decision: ADR-096 asked
+  // whether a direct chat removed with Delete chat stays hidden when its peer
+  // writes again. Nothing in the projector clears `tombstoned`.
+  test('a direct chat removed with Delete chat stays out of Chats when its '
+      'peer writes again', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final repository = DriftConversationDomainRepository(database);
+    final conversationId = protocolBytesToHex(_id(9, 32));
+    await _apply(
+      database,
+      _commit(
+        eventSeed: 70,
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: peerUser,
+        senderDevice: peerDevice,
+        counter: 1,
+        body: MessageCreateBody(messageId: _id(70, 16), text: 'before'),
+        authenticatedAt: authenticatedAt,
+      ),
+    );
+    expect(
+      await repository.deleteConversationForMe(conversationId),
+      isA<Success<void>>(),
+    );
+
+    await _apply(
+      database,
+      _commit(
+        eventSeed: 71,
+        kind: ApplicationEventKind.messageCreate,
+        senderUser: peerUser,
+        senderDevice: peerDevice,
+        counter: 2,
+        body: MessageCreateBody(messageId: _id(71, 16), text: 'after'),
+        authenticatedAt: authenticatedAt,
+      ),
+    );
+
+    final row = await (database.select(
+      database.conversations,
+    )..where((item) => item.conversationId.equals(conversationId))).getSingle();
+    expect(row.tombstoned, isTrue);
+    expect(
+      (await repository.watchConversations(currentUser).first).map(
+        (summary) => summary.conversationId,
+      ),
+      isNot(contains(conversationId)),
+    );
+    // The new message is stored and counted unread, and nothing lists it.
+    final after =
+        await (database.select(database.messages)..where(
+              (item) => item.messageId.equals(protocolBytesToHex(_id(71, 16))),
+            ))
+            .getSingle();
+    expect(after.deletedForMe, isFalse);
+    expect(row.unreadCount, 1);
+  });
 }
 
 Future<ApplicationApplyResult> _apply(

@@ -7,6 +7,8 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
 import 'package:communication_platform/features/devices/infrastructure/drift_linked_device_repository.dart';
+import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
+import 'package:communication_platform/features/groups/infrastructure/group_pairwise_adapters.dart';
 import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
@@ -223,6 +225,11 @@ final sendConversationEventsProvider =
         ),
         clock: ref.watch(timeSourceProvider),
         attachments: ref.watch(attachmentSweepProvider),
+        // A group's delete of another member's message, and its pin, go out
+        // only when the roster's roles allow them (ADR-096 D5, D6).
+        groupModeration: GroupRosterMessageModeration(
+          DriftGroupRepository(database),
+        ),
       );
     });
 

@@ -129,6 +129,22 @@ logical message.
   accepted only from the original sender or an explicitly authorized group moderator.
   It replaces local display with a tombstone and requests attachment-cache deletion; it
   cannot force a recipient to erase previously decrypted content.
+- **Who changes a group message** ([ADR-096](decisions.md) D4 to D7). Each member deletes an
+  own message for everyone. A `message.delete` from anyone else counts when the group's
+  roster records its sender as the owner, or as an admin and the message's author as a
+  member; a `message.pin_set` counts when the roster records its sender as the owner or an
+  admin. An edit is accepted from the original sender only, and a group sends none. The
+  server holds no role (`backend/CLIENT_CONTRACT.md` §F), so the sending phone checks the
+  rule before it sends and each receiving phone checks it again when it folds the event,
+  from its own `group_states` row.
+- **Order.** The roles are those of the roster this device holds now, not those at the
+  time of the event: an application event names no control revision, and the sender's
+  clock is a display value. A delete or a pin the roles do not allow is kept as a candidate
+  fact and not shown. A control event that changes a role re-folds the group's messages in
+  the transaction that commits it, so a delete that arrived before the promotion that
+  allows it takes effect then, and a demoted admin's deletes and pins stop counting. A
+  role counts as recorded whatever the membership: an admin who leaves keeps the deletes
+  made while a member.
 
 ## Receipts and typing
 

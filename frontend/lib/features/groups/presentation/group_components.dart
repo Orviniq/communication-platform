@@ -5,6 +5,7 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 /// The group's identity block: avatar, name, description and member count.
 ///
@@ -180,6 +181,22 @@ Widget groupLoadingPage(BuildContext context) => Scaffold(
     ),
   ),
 );
+
+/// Whether this account left [state] or was removed from it. Such a group is
+/// deleted from this phone, and a page of it returns to Chats (ADR-096 D1,
+/// D3).
+bool groupGoneFromThisPhone(GroupState state) =>
+    state.lifecycle == GroupLifecycle.left ||
+    state.lifecycle == GroupLifecycle.removed;
+
+/// What a routed group page shows for a group that is gone from this phone:
+/// the loading placeholder for the one frame before it returns to Chats.
+Widget groupGonePage(BuildContext context) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (context.mounted) GoRouter.maybeOf(context)?.go('/chats');
+  });
+  return groupLoadingPage(context);
+}
 
 /// The screen every group route shows when a provider fails or a group that
 /// was routed to is not there.
