@@ -470,6 +470,97 @@ void main() {
     await supervisor.dispose();
     await database.close();
   });
+
+  group('the farewell before the socket closes (ADR-098 D5)', () {
+    late LocalDatabase database;
+    late DriftSyncStore store;
+    late List<String> log;
+    late _OrderedRealtime realtime;
+    late FakeLifecyclePort lifecycle;
+    late _ManualDelay delay;
+
+    SyncLifecycleSupervisor supervisor(SocketFarewellPort farewell) {
+      final clock = SupervisorClock();
+      return SyncLifecycleSupervisor(
+        engine: DurableSyncEngine(
+          store: store,
+          remote: CountingRemote(),
+          inspector: const RetainingInspector(),
+          staleDeviceRefresh: const NoopStaleRefresh(),
+          clock: clock,
+          jitter: const SupervisorJitter(),
+        ),
+        store: store,
+        realtime: realtime,
+        network: FakeNetworkPort(NetworkAvailability.available),
+        lifecycle: lifecycle,
+        polling: FakePollingPort(),
+        clock: clock,
+        jitter: const SupervisorJitter(),
+        delay: delay,
+        farewell: farewell,
+      );
+    }
+
+    setUp(() {
+      database = LocalDatabase(NativeDatabase.memory());
+      store = DriftSyncStore(database);
+      log = [];
+      realtime = _OrderedRealtime(log);
+      lifecycle = FakeLifecyclePort(ApplicationExecutionState.foreground);
+      delay = _ManualDelay();
+    });
+
+    tearDown(() => database.close());
+
+    test('the goodbye reaches the socket before it closes', () async {
+      final subject = supervisor(_Farewell(log));
+      await subject.start();
+      log.clear();
+
+      lifecycle.set(ApplicationExecutionState.background);
+      await pumpEvents();
+
+      expect(log, ['farewell sent', 'close']);
+      expect(
+        delay.waited,
+        contains(SyncLifecycleSupervisor.farewellLimit),
+        reason: 'the wait is bounded',
+      );
+      await subject.dispose();
+    });
+
+    test('a goodbye that hangs releases the close at 500 ms', () async {
+      final hanging = _Farewell(log, hangs: true);
+      final subject = supervisor(hanging);
+      await subject.start();
+      log.clear();
+
+      lifecycle.set(ApplicationExecutionState.background);
+      await pumpEvents();
+      expect(log, isEmpty, reason: 'the close waits for the goodbye');
+      expect(
+        SyncLifecycleSupervisor.farewellLimit,
+        const Duration(milliseconds: 500),
+      );
+
+      delay.elapse(SyncLifecycleSupervisor.farewellLimit);
+      await pumpEvents();
+      expect(log, ['close']);
+      await subject.dispose();
+    });
+
+    test('a goodbye that fails releases the close at once', () async {
+      final subject = supervisor(_Farewell(log, fails: true));
+      await subject.start();
+      log.clear();
+
+      lifecycle.set(ApplicationExecutionState.background);
+      await pumpEvents();
+      expect(log, ['close']);
+      await subject.dispose();
+    });
+  });
 }
 
 final class CountingRemote implements SyncRemotePort {
@@ -786,5 +877,71 @@ final class ImmediateDelay implements DelayPort {
 Future<void> pumpEvents() async {
   for (var index = 0; index < 8; index += 1) {
     await Future<void>.delayed(Duration.zero);
+  }
+}
+
+/// The socket, writing its close into a shared log.
+final class _OrderedRealtime implements RealtimeSyncPort {
+  _OrderedRealtime(this.log);
+
+  final List<String> log;
+
+  @override
+  Stream<void> get durableEnvelopeHints => const Stream.empty();
+
+  @override
+  Stream<RealtimeDisconnect> get disconnects => const Stream.empty();
+
+  @override
+  Future<Result<void>> connect() async => const Result.success(null);
+
+  @override
+  void markStableConnection() {}
+
+  @override
+  Future<void> close() async => log.add('close');
+}
+
+/// Presence's goodbye: sent after a turn of the event loop, or never.
+final class _Farewell implements SocketFarewellPort {
+  _Farewell(this.log, {this.hangs = false, this.fails = false});
+
+  final List<String> log;
+  final bool hangs;
+  final bool fails;
+
+  @override
+  Future<void> beforeSocketCloses() async {
+    if (hangs) {
+      return Completer<void>().future;
+    }
+    await Future<void>.delayed(Duration.zero);
+    if (fails) {
+      throw StateError('the goodbye failed');
+    }
+    log.add('farewell sent');
+  }
+}
+
+/// Waits that end only when the test moves time past them.
+final class _ManualDelay implements DelayPort {
+  final waited = <Duration>[];
+  final _pending = <(Duration, Completer<void>)>[];
+
+  @override
+  Future<void> wait(Duration delay) {
+    waited.add(delay);
+    final completer = Completer<void>();
+    _pending.add((delay, completer));
+    return completer.future;
+  }
+
+  void elapse(Duration duration) {
+    for (final (delay, completer) in List.of(_pending)) {
+      if (delay <= duration) {
+        _pending.remove((delay, completer));
+        completer.complete();
+      }
+    }
   }
 }
