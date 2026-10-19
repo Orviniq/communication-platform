@@ -122,6 +122,14 @@ enum DisclosurePoint {
   /// sends that state again (`docs/ui-specification.md` §9).
   pairwiseGroups(since: 9),
 
+  /// What the online status shows to the people a user chats with (ADR-098
+  /// D10), added at revision 11. While the app is on screen a verified contact
+  /// can see that the user is online and typing and which shared chat is open,
+  /// and afterwards when the user was last seen; the server cannot read it but
+  /// can see short signals between phones. It is on by default and off for one
+  /// phone in Settings, and while it is off the user sees no one else's.
+  onlineStatus(since: 11),
+
   /// Surfaces that are routed and visible but not implemented. Revised at
   /// revision 5: it named search among them, and search is built — the chat
   /// list filters on name and latest message, and a conversation's own search
@@ -155,6 +163,7 @@ enum DisclosurePoint {
     DisclosurePoint.recoveryExcludesHistory =>
       l10n.disclosureRecoveryExcludesHistory,
     DisclosurePoint.pairwiseGroups => l10n.disclosurePairwiseGroups,
+    DisclosurePoint.onlineStatus => l10n.disclosureOnlineStatus,
     DisclosurePoint.unbuiltSurfaces => l10n.disclosureUnbuiltSurfaces,
     DisclosurePoint.intendedUse => l10n.disclosureIntendedUse,
   };
@@ -188,7 +197,7 @@ final class DeploymentDisclosure {
   /// Experimental artifact's statement until ADR-075 deleted the `beta` flavor
   /// that carried it, and since ADR-076 production carries it.
   static const distributed = DeploymentDisclosure._(
-    revision: 10,
+    revision: 11,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,
@@ -196,6 +205,7 @@ final class DeploymentDisclosure {
       DisclosurePoint.deviceOnlyHistory,
       DisclosurePoint.recoveryExcludesHistory,
       DisclosurePoint.pairwiseGroups,
+      DisclosurePoint.onlineStatus,
       DisclosurePoint.unbuiltSurfaces,
       DisclosurePoint.intendedUse,
     ],

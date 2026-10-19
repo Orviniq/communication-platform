@@ -314,7 +314,7 @@ void main() {
       expect(find.byKey(const ValueKey('about-version')), findsOneWidget);
       expect(find.text('0.1.0+1'), findsOneWidget);
       expect(find.byKey(const ValueKey('about-disclosure')), findsOneWidget);
-      expect(find.text('10'), findsOneWidget);
+      expect(find.text('11'), findsOneWidget);
       // The build is named once, in the reviewed title, and the flavor
       // identifier never reaches a user: `PRODUCTION` beneath that title would
       // be a second name for one artifact. Nor does production carry a
