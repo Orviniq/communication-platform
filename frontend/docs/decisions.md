@@ -100,12 +100,165 @@ is not silently edited out of history.
 | ADR-087 | Accepted (2026-10-09) | The Chats top bar's search icon opens a full-screen search page at `/chats/search`, with a Chats section and a Contacts section and no message section, and the field above the list is deleted. The Chats title carries the delivery engine's status, from its live phase only: Connecting…, Syncing… or Waiting to reconnect… once the engine has been in a state other than settled for one second without a break, with a small spinner before the first two (the still `AppIcons.connecting` when animations are off), and "Chats" again the moment the engine settles. ADR-060 D11's four content-free states and its mapping of the nine phases stay. The status line above the list, the long offline notice, and the shell's connection strip with its state and the `?offline=true` query that fed it are deleted, and `/connection` opens `/chats` after every start | The search icon only moved the focus to a field on the same page, so the icon and the field did one job twice and the field held the list's height for good; a page gives search room for a second section and its scope. ADR-060 D11's line appeared and disappeared with each sync cycle and moved the list by its own height each time, where a title has no neighbour to push, and a stalled engine is still on the title after one second. The offline notice and the strip followed how the session opened, which does not change when the connection returns, so each stayed on screen after the connection was back; the strip also showed on the Chats tab root only and repeated what the title now says. A message section is not built: a chat's summary carries its latest message only, and a search across every conversation's history is a new storage query that needs its own design. Costs: for the second before the title speaks, a start with no server looks like any other, and a screen reader names the Chats route by the status while one shows. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-088 | Accepted (2026-10-09); withdraws the copy count of ADR-075 item 5 | The group chat keeps its composer in the tree while a message is sent, as a direct conversation does, so the focus and the keyboard stay where they were, and the progress bar that replaced it is deleted. A group message in flight shows the mark of its state and no text beside it: "Copies sent: 45 of 150", its two strings, the message view model's field and the group screen's progress map that carried it, and the provider that fed them are deleted. A message is still marked sent only when no copy is owed, and a failed one still offers a retry. The repository's read of what is owed stays, and no screen reads it | Taking the composer out for the length of a send took the keyboard with it after every message, and the send only writes and queues the message, as a direct one does, so there was nothing to wait for. The count was several times wider than the time and the mark beside it: on the code before this change a bubble measured 404 px while its message was sending and 131 px once it was accepted, in a widget test 800 px wide, and the mark already says where the message is. Costs: a person no longer sees how far a large group's fan-out has got, and two sends can now overlap, so the inline error is only ever raised by a send and never cleared by one that succeeds. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-089 | Accepted (2026-10-11); proposed 2026-10-10 | Attachments work in a direct chat and in Saved Messages, and a group chat's paperclip opens the "not built" sheet. The application's own Android code starts the system photo picker, the system file picker and the camera app, asks for no permission and declares no `CAMERA` permission, copies the choice into the private cache under a byte limit, and re-encodes a photo as a JPEG of at most 2048 px and quality 82 with no metadata. A message carries one attachment, uploads run one at a time and in memory, a download starts only on a tap, decrypted files stay 7 days after their last open in a cache of at most 256 MiB, the database keeps only "not downloaded", "ready" and "expired", and the transport is built on the provisioned trust | The pipeline commit `5cfcd8c` built on 2026-08-01 - encryption, padding, upload, resumable download, decryption - is tested and was never composed, so ADR-045 labelled file attachments **Not built yet**: the direct paperclip opens that notice and the group paperclip does nothing. Three system intents give what a picker package would, with no permission and no plugin code to review; a thumbnail in the descriptor would move each pairwise copy into a larger envelope bucket; a durable queue and automatic download each need a design of their own. Costs: an upload in progress dies with the process, an evicted file costs a second download while the server keeps it, and a group still sends no file. Changes no table, wire format, protocol, dependency, Android permission, disclosure text or backend file. |
-| ADR-090 | Accepted (2026-10-14); proposed 2026-10-14 | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
+| ADR-090 | Accepted (2026-10-14); proposed 2026-10-14; D4 superseded in part by ADR-096 (Pin and Delete for everyone) | The group chat reads its messages through the projection of a direct chat: `conversationMessagesProvider` with the group id as the conversation id, and `ChatMessageProjection` in a group mode. `GroupMessage`, `GroupMessageDelivery`, `DriftGroupRepository.watchMessages` and `groupMessagesProvider` are deleted. A group message still shows as sent only when no copy is owed. A reply keeps its reference and quotes the name of the member who wrote the replied message; each active member can react, and a reaction goes to each member under the rule of a group send. Pin, Edit and Delete for everyone stay off in a group. Copy, Star, Delete for me, drafts and Forward work in a group, and an attachment message cannot be forwarded into one. An open group chat marks its messages read on this phone and sends no read receipt | The owner's test on 2026-10-09: a reply in a group lost its reference, a reaction did nothing, and the other actions of the message sheet did nothing. The group page drew the bubble of a direct chat from a model that held no reply, reaction, receipt, pin, star or edit, and dropped each intent other than send, retry and the paperclip. A second projection would drift from the first and need the same work again for read receipts. Costs: the group search covers the loaded window, as a direct chat's does; pins, edits and deletes for everyone wait for the member roles of the signed roster. Changes no table, wire format, protocol, dependency or backend file. |
 | ADR-091 | Accepted (2026-10-14); proposed 2026-10-14 | A group sends read receipts and no delivered receipt. An own group message shows two ticks as soon as one member other than its sender has read it, without waiting for the other members or for owed copies; a failed message keeps its failed mark and Retry. A group read receipt names the messages of one sender, and goes to the live devices of that sender, when that sender is an active member, and to the reader's other live devices; `MarkConversationVisiblyRead` sends one receipt for each sender, with up to 64 ids each, on the triggers of a direct chat. The sender sees the reader list of an own group message: each member who read it, once, with the read time, the newest first, behind "Seen by N" or "Not seen yet" in the message sheet. The read time is the `ordering_ms` of the earliest `receipt.read` from a device that names the message, kept in a new nullable column of `receipts` (schema 24). Always on, with no setting | The owner's test of groups on phones: a group message never shows two ticks, because a group sends no receipt. The owner decided on 2026-10-14 that the first reader draws the second tick, and that the sender sees who read the message and when. A receipt is an encrypted application event that the server relays, so none of this needs a server change, and the `receipts` table already holds one row for each reader device. A receipt sent to each member would cost about 7,300 copies for one message read by 49 members of a 50-member group with 3 devices each, and would tell each member who read the messages of other members; sent to the sender alone it costs about 245. Costs: the second tick says that one member read the message, not that each did; a read time is the reader's clock, corrected as a message time is. Adds one local column (schema 24); changes no wire format, protocol, dependency or backend file. |
 | ADR-092 | Accepted (2026-10-17); proposed 2026-10-17 | The whole application blocks screen capture, in every build. `MainActivity` adds `FLAG_SECURE` to its window in `onCreate`, before `super.onCreate`, so it is set before the first frame, in the development and the production build alike. Nothing clears it. `SensitiveScreenControl` stays as an API, and the platform method `setSensitiveScreen` keeps the flag on for `enabled: true` and does nothing for `enabled: false` | The owner's requirement after the field test of 2026-10-17: no screenshot and no screen recording anywhere in the app. The flag had been set only while device enrollment and the recovery secret replacement were open, so every other screen, and the recent-apps preview, could be captured. The flag blocks screenshots, screen recording, casting to a display that is not secure and the recent-apps preview of the window. It does not hide the text of a notification, it does not stop a second camera, and it does not cover a window that is not the app's own: the system pickers and the camera app. Costs: nobody can take a screenshot of the app for a bug report in any build, and the flag has not been tried on a phone yet. Changes no wire format, table, protocol, dependency, permission or backend file. |
 | ADR-093 | Accepted (2026-10-18); proposed 2026-10-17 | A first message from a sender this account has not verified is held: not opened, not shown, not receipted. Its exact ciphertext stays in its `inbox_envelopes` row, in state 5, renamed `held`, the server copy is acknowledged, and no inspection budget is spent. Only the trust state `unverified` holds, told apart by a new inbound answer of the live-device resolver; a later regular envelope of a held session is held with it. A sender has at most 64 held envelopes and the phone 128, each for 7 days; past a limit the oldest goes to quarantine with the rest of its session. A verification returns the sender's held envelopes to inspection in mailbox order, through a port of the contacts application and a sweep in each cycle. Prekey maintenance prunes no retired signed pair a held envelope may need and postpones a rotation that would erase one. Chats shows one row for each held sender, "@username sent you N messages. Verify to read them.", which opens the safety number; the newest own direct message with no delivery receipt an hour after it was sent shows a hint | The field test of 2026-10-17: a direct message to a recipient who has not verified the sender stays at one tick and is lost. The refusal is required (`backend/CLIENT_CONTRACT.md` §C), but the initial envelope spent its budget, was quarantined and acknowledged, and the server deleted it; its regular follow-ups were quarantined at their first inspection. Costs: at most 32 MiB of held ciphertext on disk; a held session past 64 envelopes loses its start and with it the rest; a rotation can be late while an envelope is held; the row's name and count are claims. Adds four nullable columns and two partial indexes to `inbox_envelopes` (schema 25); changes no wire format, Rust core, dependency, permission or backend file. |
 | ADR-094 | Accepted (2026-10-18); proposed 2026-10-17 | Offer receiving while closed in production as best effort. `SustainedDeliveryGate.availabilityIn` answers `bestEffort` for production while the evidence ledger is incomplete, `measurementOnly` for development and `evidenced` for a complete ledger, and every answer offers the capability. The Settings row and the page show the switch in a production build. The deployment disclosure moves to revision 10: `bestEffortDelivery` offers the switch with its battery cost and its permanent notice, says it has not been tested on the reader's phone and that some phones stop it without a word, and promises no time; `unbuiltSurfaces` names only what the code still lacks (group chats cannot send files; the display name and photo are not published). The `withheld` availability, status and refusal, the stand-down of an earlier install, and their three strings are deleted because nothing returns them. The ledger, the matrix and the admissibility rules stay. Supersedes ADR-053 for production only | The owner wants the capability offered, and the seven-cell matrix needs Samsung and Xiaomi phones on three Android bands that cannot be had here (one Samsung phone exists). ADR-053 held that "we cannot measure this" is a reason to withhold, and the risk it named is still real: on a Samsung or Xiaomi phone the process can be ended without a word, and a person who turned the switch on may believe messages will arrive when they will not. ADR-094 accepts that risk instead of removing it, and keeps it honest: the cost, the lack of any test on the reader's phone and the lack of any guarantee are stated in the disclosure and on the page, and no text gives a delivery time (`sustainedWhatItDoes` says how quickly it works "has not been measured"). It changes no Kotlin, no manifest (the service and its three permissions were already declared in the shared `main` source set), no wire format and no schema. A complete ledger of seven admissible records still moves the offer from `bestEffort` to `evidenced`. Not verified on a phone |
 | ADR-095 | Proposed (2026-10-18) | Prekey maintenance runs in the delivery cycle. `DurableSyncEngine` offers it one turn as the last step of a healthy cycle, after the phase is online, unless the cycle carried a failure or its owner was asked to stand down, so the foreground session, the deferred catch-up and the sustained run all run it, one cycle at a time (ADR-050). `ScheduledPrekeyMaintenance` decides which turns run: the first of a process, then one 6 hours after a run that worked or 5 minutes after one that failed, and a turn during a run joins it. A failure or a throw changes nothing about the cycle. An initial envelope that meets a pending plan is deferred as a transient failure instead of quarantined as a conflict. ADR-093 D17 is unchanged | `prekeyMaintenanceServiceProvider` had no consumer, so no signed prekey rotated, no retired pair was pruned and no one-time prekey was replenished, while `sync-engine.md` said all three happened. The cycle is the unit one delivery owner owns, and wiring maintenance in made a plan left pending able to quarantine a first message |
+| ADR-096 | Proposed (2026-10-19) | Leaving a group, or being removed from it, deletes it from this phone in the transaction of the state change: the conversation row is tombstoned, its messages, draft, receipts and attachment rows are deleted, and its facts move to a new apply state, retired, that is never folded and still catches a replay. The signed state row stays; a re-add clears the tombstone and the group comes back with no old history. After Leave the app returns to Chats. Each member deletes an own group message for everyone under the rule of a group send. The owner deletes any message and an admin a member's; the owner and the admins pin; the roles of the current signed roster decide, and a role change re-folds the group. Edit stays off. Supersedes ADR-090 D4 for Pin and Delete for everyone | The field test of 2026-10-17: a left group stayed in Chats as a read-only copy, and no group message could be deleted for everyone or pinned. The server holds no group, no roster and no role (`backend/CLIENT_CONTRACT.md` §F), so each phone enforces the rule from the signed roster. Costs: leaving cannot be undone on the phone, and a demotion undoes the demoted admin's deletes and pins. Changes no wire format, schema, dependency or backend file |
+
+## ADR-096 in full — leaving deletes the group from the phone, and roles decide who changes a message (2026-10-19)
+
+**Status:** Proposed, 2026-10-19. Client local-state and group-authorization decision, from the
+field-test triage of 2026-10-17 and the owner's answers to it. Built on the branch
+`frontend-group-membership-moderation` in three prompts: prompt 1 names the members (no part of
+this record), prompt 2 builds D1 to D4, and prompt 3 builds D5 to D7 and accepts it.
+**Changes no wire format, event kind, cryptographic construction, Rust core, dependency, Android
+permission, server route, database schema or backend file.** It writes one new value, 4, into
+`application_events.apply_state`, whose existing check already allows 0 to 5.
+
+**Cites:** ADR-090 D3 and D4; ADR-089 D1 and D10 (a group sends no attachment; a deletion sweeps
+the cache); ADR-075 (a group is pairwise); `backend/CLIENT_CONTRACT.md` §F (the server holds no
+group, no roster and no role); `ui-specification.md` §9, §12.2 and §17.
+
+### The question
+
+Leaving a group, or being removed from one, left the group in Chats as a read-only copy, with
+every message on the phone. A member could not delete an own group message for everyone, and
+owners and admins could not delete others' messages or pin. What happens to a group on this
+phone when its user is no longer a member, and who may change a group message that the other
+members read?
+
+### The facts
+
+From the code at commit `17d1311`, prompt 1 of this branch, on top of the merge of PR #87.
+
+- **A left group stays.** `GroupControlStateMachine` sets the local lifecycle to `left` for a
+  signed removal of oneself and to `removed` for an admin's removal of the local user.
+  `DriftGroupRepository._writeConversation` writes only the title and the sort key of the
+  group's conversation row, whatever the lifecycle, and Chats lists every row that is not
+  tombstoned. The chat then shows `groupLeftState`.
+- **Delete chat keeps rows.** `deleteConversationForMe` tombstones the row, clears the draft and
+  the unread count, sets `deleted_for_me` on every message and deletes their attachment rows.
+  The message rows stay, and the timeline draws a message deleted for me as the deleted
+  placeholder. Used as it is, it would bring a re-added user back to a timeline of
+  placeholders.
+- **Messages are folded from facts.** The projector rebuilds a message from the candidate facts
+  (`apply_state` 0) of `application_events`. A deleted message row comes back on the next
+  rebuild, or when a late reaction or receipt names it.
+- **One commit path.** `commitTransitionInsideTransaction` commits a local control (through
+  `commitTransition`) and a received one (inside the inbox transaction of
+  `drift_sync_store.dart`). A signed leave is sent to the member's own devices too
+  (`includeOwnDevices`), and a re-added member gets the whole transcript, which this device
+  applies from its stored revision.
+- **Events into a group the user left are refused.** `DriftGroupConversationMembership` admits
+  an application event only while the local user and the sender are active members.
+- **Group mutations.** `_sendMutation` lets a reaction into a group and refuses an edit, a delete
+  for everyone and a pin (ADR-090 D4). `deleteForEveryone` checks `requireOriginalSender` first.
+  The projector already accepts a delete from the author of the message in a group;
+  `_authorizedGroupModerator` and `_authorizedPin` return false in a group on purpose.
+- **Roles.** `GroupAuthorization` holds them: admins and the owner have `pinMessages`, and
+  `canRemove` lets the owner remove any admin or member and an admin remove a member only.
+
+### Decisions
+
+- **D1. Leave removes the group.** When a transition leaves the local user's lifecycle `left`
+  or `removed`, the same transaction deletes the group from this phone: it tombstones the
+  conversation row, clears its draft and unread count, deletes its messages with their
+  reactions, receipts, attachment rows and owed delivered receipts, and retires the group's
+  facts (D2). The same holds when an admin removes the user. It runs in
+  `commitTransitionInsideTransaction`, the one path both a local and a received control take,
+  so each device of the user does it when the signed event reaches it, and a crash cannot leave
+  the state changed and the history kept. Running it again is harmless, so it runs on every
+  transition that ends left or removed, not only the first.
+- **D2. The signed state stays, and the facts are retired.** The `group_states` row and the
+  signed transcript stay, so the phone still recognises the group, refuses its later events
+  while the user is outside it, and can apply the transcript of a re-add. Each candidate fact of
+  the group's conversation moves to a new apply state, *retired* (4): it is never folded again,
+  so no rebuild and no late reaction or receipt brings an old message back, and it still answers
+  a replay as a duplicate and a reused sender counter as a collision. When a later transition
+  makes the local user `active` again, after `left` or `removed`, `_writeConversation` clears
+  the tombstone: the group comes back to Chats with no old history, and shows what is sent from
+  then on.
+- **D3. After Leave.** A successful Leave returns to Chats. A group chat or Group Info that sees
+  its group left or removed returns to Chats too. The confirmation says that the group and its
+  history are deleted from this phone. The attachment cache is swept after a local Leave
+  commits; a received removal relies on the sweep each process starts with, because a group
+  holds no attachment row (ADR-089 D1).
+- **D4. Own messages.** Each member deletes an own group message for everyone.
+  `DeleteGroupMessageForEveryone` requires `GroupPermission.sendMessages`, the rule of a group
+  send a reaction uses (ADR-090 D3), and `deleteForEveryone` still requires the original
+  sender. `_sendMutation` lets a delete into a group. The message sheet offers **Delete for
+  everyone** on an own group message that is not deleted.
+- **D5. Others' messages.** The owner deletes the message of any member or admin. An admin
+  deletes the message of a member, not of an admin and not of the owner: the rule of
+  `GroupAuthorization.canRemove`, applied to the author of the message.
+- **D6. Pin.** The owner and the admins pin and unpin (`GroupPermission.pinMessages`). A group
+  shows the pinned banner.
+- **D7. Order.** The roles of the signed roster decide. A delete or a pin that arrives before
+  the role change that allows it is kept as a fact, and checked again when the roster changes.
+- **D8. Edit stays off in a group.**
+
+### How the projector reads the roles (D5 to D7)
+
+Built in prompt 3; decided here.
+
+- **The roster it reads.** The projector reads the group's `group_states` row inside its own
+  transaction, through the group repository's decoder made public, once for each fold. The row
+  is this device's projection of the signed transcript, so every member who holds the same
+  transcript decides the same way.
+- **The rule.** A delete from someone other than the author, and any pin, counts when the
+  roster records the sender's role as owner, or as admin and, for a delete, the author's role as
+  member. The role counts as recorded, whatever the membership: a fact is admitted only from an
+  active member (`DriftGroupConversationMembership`), so an admin who later leaves, or is
+  removed, keeps the deletes and pins made while a member.
+- **Checked again.** When a transition changes a member's role, `commitTransitionInsideTransaction`
+  rebuilds the group's conversation through `rebuildConversationInsideTransaction`, the
+  projector's documented door for a change to conversation-level authorization. A delete stored
+  before the promotion that allows it then takes effect, on each device, in the same
+  transaction as the promotion.
+- **Why not the role at the time of the event.** An application event names no control revision,
+  and naming one is a wire change. The sender's clock is a display value. The current roster is
+  the one value every member converges on.
+
+### What this supersedes
+
+ADR-090 D4, for Pin and Delete for everyone: they are offered in a group, under D4 to D7 here.
+Its Edit stays off (D8). ADR-090's other decisions stand.
+
+### Rejected
+
+- **Keep the read-only copy.** The owner asked for the group to go. A copy that cannot be sent
+  into, and that its user left on purpose, is history they asked to be rid of.
+- **Delete the group state too.** The phone would then treat the group's later events, and the
+  transcript of a re-add, as a group it never knew, and open state requests for it.
+- **Delete the facts instead of retiring them.** It removes the duplicate and counter checks for
+  the group's old events, which the inbox's own deduplication only partly covers.
+- **Reuse `deleteConversationForMe` unchanged.** Its rows stay and draw placeholders (The facts).
+  The tombstone, the draft and unread reset and the attachment delete are shared with it; the
+  rest is the group's own.
+
+### Costs
+
+- **Leaving cannot be undone on the phone.** A re-add brings the group back empty. The other
+  members keep their copies.
+- **Own pending sends fail.** A message still owed copies when the user leaves is refused by the
+  audience resolver and deleted with the rest.
+- **Demotion undoes moderation.** A delete or pin made by an admin who is later demoted, or by an
+  owner who hands the group over, stops counting when the roster changes, and the message shows
+  again (D7 checks the current roster). An owner who demotes an admin for deleting messages gets
+  them back.
+- **A role change re-folds the group.** One rebuild of the group's conversation for each role
+  change, which is rare.
+- **Delete for everyone is best effort,** as in a direct chat: a member who already read the
+  message has read it.
+
+### What this does not do
+
+It does not change what `deleteConversationForMe` does for a direct chat, and the projector
+still never clears a direct chat's tombstone (prompt 2 records what a test found). It sends no
+system line for a membership change. It changes no group control event.
 
 ## ADR-095 in full — prekey maintenance runs at the end of a healthy delivery cycle (2026-10-18)
 
