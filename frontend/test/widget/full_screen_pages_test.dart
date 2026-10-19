@@ -733,7 +733,7 @@ void main() {
       await tester.tap(find.byTooltip('Attach'));
       await _settle(tester);
 
-      for (final label in ['Photo or image', 'File', 'Camera']) {
+      for (final label in ['Photo or video', 'File', 'Camera']) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
       expect(find.text('Not built yet'), findsNothing);

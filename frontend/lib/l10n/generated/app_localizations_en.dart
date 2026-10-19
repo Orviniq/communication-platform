@@ -1037,7 +1037,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Group chats cannot send files yet. Files can be sent in direct chats and in Saved Messages.';
 
   @override
-  String get attachmentPhotoOption => 'Photo or image';
+  String get attachmentPhotoOption => 'Photo or video';
 
   @override
   String get attachmentFileOption => 'File';
@@ -1050,6 +1050,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get attachmentFileLabel => 'Encrypted attachment';
+
+  @override
+  String get attachmentVideoLabel => 'Encrypted video';
 
   @override
   String get attachmentPickBusy =>

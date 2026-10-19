@@ -1040,7 +1040,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'گفت‌وگوهای گروهی هنوز نمی‌توانند فایل بفرستند. فایل را می‌توان در گفت‌وگوهای دونفره و در پیام‌های ذخیره‌شده فرستاد.';
 
   @override
-  String get attachmentPhotoOption => 'عکس یا تصویر';
+  String get attachmentPhotoOption => 'عکس یا ویدیو';
 
   @override
   String get attachmentFileOption => 'فایل';
@@ -1053,6 +1053,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get attachmentFileLabel => 'پیوست رمزنگاری‌شده';
+
+  @override
+  String get attachmentVideoLabel => 'ویدیوی رمزنگاری‌شده';
 
   @override
   String get attachmentPickBusy =>

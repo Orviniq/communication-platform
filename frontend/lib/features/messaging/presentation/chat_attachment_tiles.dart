@@ -101,6 +101,13 @@ final class ChatAttachmentScope extends InheritedWidget {
       retentionDays != oldWidget.retentionDays;
 }
 
+/// Whether [attachment] is a video: a `file` with a video type the sanitiser
+/// keeps (ADR-097 V3, V4). Such a tile draws a video icon and nothing more:
+/// no thumbnail, and Open hands the file to the system player.
+bool isChatVideoAttachment(EncryptedAttachmentDescriptor attachment) =>
+    attachment.mediaKind == AttachmentMediaKind.file &&
+    attachment.mimeType.startsWith('video/');
+
 /// The widest a tile is, and the largest a picture is drawn, in logical
 /// pixels.
 const chatAttachmentTileMaxWidth = 260.0;
@@ -150,6 +157,8 @@ class _ChatAttachmentTileState extends State<ChatAttachmentTile> {
   String get _id => widget.attachment.capabilityId;
 
   bool get _inlinePicture => widget.attachment.isInlineImage;
+
+  bool get _video => isChatVideoAttachment(widget.attachment);
 
   @override
   void didChangeDependencies() {
@@ -272,6 +281,8 @@ class _ChatAttachmentTileState extends State<ChatAttachmentTile> {
     };
     final kind = _inlinePicture
         ? strings.attachmentImageLabel
+        : _video
+        ? strings.attachmentVideoLabel
         : strings.attachmentFileLabel;
     final size = formatAttachmentSize(strings, attachment.plaintextSize);
     final onTap = action == null ? null : () => widget.onIntent(action);
@@ -303,6 +314,7 @@ class _ChatAttachmentTileState extends State<ChatAttachmentTile> {
               math.min(chatAttachmentTileMaxWidth, constraints.maxWidth);
           final details = _Details(
             picture: _inlinePicture,
+            video: _video,
             name: attachment.displayName,
             size: size,
             stateText: stateText,
@@ -395,6 +407,7 @@ class _Frame extends StatelessWidget {
 class _Details extends StatelessWidget {
   const _Details({
     required this.picture,
+    required this.video,
     required this.name,
     required this.size,
     required this.stateText,
@@ -403,6 +416,7 @@ class _Details extends StatelessWidget {
   });
 
   final bool picture;
+  final bool video;
   final String name;
   final String size;
   final String stateText;
@@ -435,7 +449,14 @@ class _Details extends StatelessWidget {
         state == ChatAttachmentTileState.verifying;
     return Row(
       children: [
-        AppIcon(picture ? AppIcons.photo : AppIcons.file, color: colors.accent),
+        AppIcon(
+          picture
+              ? AppIcons.photo
+              : video
+              ? AppIcons.video
+              : AppIcons.file,
+          color: colors.accent,
+        ),
         const SizedBox(width: AppSpacing.x2),
         Expanded(
           child: Column(

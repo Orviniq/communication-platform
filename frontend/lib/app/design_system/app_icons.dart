@@ -44,6 +44,9 @@ abstract final class AppIcons {
   static const attach = AppIconData._(FLucideIcons.paperclip, 'attach');
   static const photo = AppIconData._(FLucideIcons.image, 'photo');
   static const file = AppIconData._(FLucideIcons.file, 'file');
+
+  /// A video attachment's tile (ADR-097).
+  static const video = AppIconData._(FLucideIcons.video, 'video');
   static const camera = AppIconData._(FLucideIcons.camera, 'camera');
 
   /// Fetch a received attachment.

@@ -28,7 +28,7 @@ void main() {
     await _open(tester, const AttachmentSheet.choose());
 
     expect(find.text('Choose encrypted media or a file.'), findsOneWidget);
-    for (final label in ['Photo or image', 'File', 'Camera']) {
+    for (final label in ['Photo or video', 'File', 'Camera']) {
       expect(
         tester.getSemantics(find.widgetWithText(ListTile, label)),
         isSemantics(label: label, isButton: true, hasTapAction: true),
@@ -43,7 +43,7 @@ void main() {
 
   testWidgets('a choice closes the sheet with the kind chosen', (tester) async {
     for (final (label, kind) in [
-      ('Photo or image', AttachmentPickKind.photo),
+      ('Photo or video', AttachmentPickKind.photo),
       ('File', AttachmentPickKind.file),
       ('Camera', AttachmentPickKind.camera),
     ]) {
@@ -90,7 +90,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Not built yet'), findsOneWidget);
-    for (final label in ['Photo or image', 'File', 'Camera']) {
+    for (final label in ['Photo or video', 'File', 'Camera']) {
       expect(find.text(label), findsNothing);
     }
   });
