@@ -140,9 +140,9 @@ void main() {
     final refusals = <String, Future<void> Function()>{
       'an unverified account': () =>
           watchFrom(malloryChat, user: mallory, device: m1),
-      'an unverified member of a shared groupChat': () =>
+      'an unverified member of a shared group': () =>
           watchFrom(groupChat, user: mallory, device: m1),
-      'a member of no groupChat this phone holds with it': () async {
+      'a member of no group this phone holds with it': () async {
         final other = conversationOf(0x55);
         rig.conversations.held[other] = PresenceGroupConversation(other, [
           me,
@@ -150,7 +150,7 @@ void main() {
         ]);
         await watchFrom(other, user: carol, device: c1);
       },
-      'a groupChat this account is not a member of': () async {
+      'a group this account is not a member of': () async {
         final other = conversationOf(0x56);
         rig.conversations.held[other] = PresenceGroupConversation(other, [
           bob,
@@ -158,7 +158,7 @@ void main() {
         ]);
         await watchFrom(other);
       },
-      'a groupChat of more than 32 members': () async {
+      'a group of more than 32 members': () async {
         final large = conversationOf(0x57);
         rig.conversations.held[large] = PresenceGroupConversation(large, [
           me,
@@ -586,20 +586,17 @@ void main() {
       },
     );
 
-    test(
-      'a groupChat watches at most two devices of each other verified member, '
-      'and none of this account',
-      () async {
-        rig.peers.devices
-          ..[bob] = [b1, b2, uuid(0x903)]
-          ..[me] = [myDevice, myOtherDevice];
-        await rig.show(groupChat);
+    test('a group watches at most two devices of each other verified member, '
+        'and none of this account', () async {
+      rig.peers.devices
+        ..[bob] = [b1, b2, uuid(0x903)]
+        ..[me] = [myDevice, myOtherDevice];
+      await rig.show(groupChat);
 
-        expect(rig.sealer.devicesOf(PresenceSignalKind.watch), [b1, b2, c1]);
-      },
-    );
+      expect(rig.sealer.devicesOf(PresenceSignalKind.watch), [b1, b2, c1]);
+    });
 
-    test('a groupChat of more than 32 members watches nobody', () async {
+    test('a group of more than 32 members watches nobody', () async {
       final large = conversationOf(0x57);
       rig.conversations.held[large] = PresenceGroupConversation(large, [
         me,
