@@ -225,6 +225,31 @@ void main() {
       expect(await onlineIn(groupChat), 0);
     });
 
+    test(
+      'a group never counts this account, whichever device of it speaks',
+      () async {
+        await watchFrom(groupChat);
+        expect(await onlineIn(groupChat), 1);
+
+        // Verified, as the peer read answers for the user's own devices too.
+        rig.peers.devices[me] = [uuid(0x903)];
+        await watchFrom(groupChat, user: me, device: uuid(0x903));
+        await hereFrom(groupChat, user: me, device: uuid(0x903));
+
+        expect(
+          await onlineIn(groupChat),
+          1,
+          reason: 'another device of this account is not "another member"',
+        );
+        expect(rig.status.isOnline(uuid(0x903)), isFalse);
+        expect(
+          rig.sealer.devicesOf(PresenceSignalKind.here),
+          [b1],
+          reason: 'and it is answered nothing',
+        );
+      },
+    );
+
     test('a watched account answers the open chat, and its answer makes it '
         'online', () async {
       await rig.show(direct);

@@ -51,6 +51,7 @@ class GroupChatPage extends ConsumerWidget {
     this.watchReaders,
     this.injectedMemberNames,
     this.injectedTyping,
+    this.injectedOnlineCount = 0,
     super.key,
   });
 
@@ -64,6 +65,10 @@ class GroupChatPage extends ConsumerWidget {
   /// The typing an injected page shows, as the typing state would hand it to
   /// the routed page. Null: nobody types.
   final Stream<List<TypingProjection>>? injectedTyping;
+
+  /// How many other members an injected page shows online, as the status book
+  /// would hand it to the routed page (ADR-098 D4).
+  final int injectedOnlineCount;
 
   /// The messages an injected page shows, as local storage would hand them to
   /// the routed page: the same rows go through the same projection.
@@ -87,6 +92,7 @@ class GroupChatPage extends ConsumerWidget {
         builder: (context, typing) => GroupChatView(
           state: injectedState!,
           memberNames: injectedMemberNames ?? const GroupMemberNames.empty(),
+          onlineCount: injectedOnlineCount,
           typingUserIds: groupTypers(
             typing.data ?? const [],
             currentUserId: viewer,
@@ -324,6 +330,11 @@ class _GroupChatSessionState extends ConsumerState<_GroupChatSession> {
                   groupId,
                   currentUserId: userId,
                 ),
+                onlineCount: ref.watch(
+                  groupOnlineCountProvider(
+                    groupId,
+                  ).select((count) => count.value ?? 0),
+                ),
                 onActivity: _report,
                 timeline: timeline,
                 currentUserId: userId,
@@ -416,6 +427,7 @@ class GroupChatView extends StatefulWidget {
     required this.currentUserId,
     required this.onSend,
     this.typingUserIds = const [],
+    this.onlineCount = 0,
     this.onActivity,
     this.onRetry,
     this.onReaction,
@@ -442,6 +454,10 @@ class GroupChatView extends StatefulWidget {
   /// The members typing now, whom the header names in place of the member
   /// count (ADR-098 D3).
   final List<String> typingUserIds;
+
+  /// How many other members are online now, beside the member count while it
+  /// is above zero (ADR-098 D4, D11).
+  final int onlineCount;
 
   /// Told of the composer's typing and sends. Null where nothing listens.
   final void Function(ChatActivity activity)? onActivity;
@@ -641,6 +657,7 @@ class _GroupChatViewState extends State<GroupChatView> {
         title: _GroupChatHeader(
           state: state,
           typingLine: _typingLine(widget.typingUserIds, memberName, strings),
+          onlineCount: widget.onlineCount,
           onOpenInfo: () => context.push('/groups/${state.groupId}/info'),
         ),
         actions: [
@@ -875,6 +892,7 @@ class _GroupChatHeader extends StatelessWidget {
   const _GroupChatHeader({
     required this.state,
     required this.typingLine,
+    required this.onlineCount,
     required this.onOpenInfo,
   });
 
@@ -882,14 +900,24 @@ class _GroupChatHeader extends StatelessWidget {
 
   /// Who is typing, shown in place of the member count while anybody is.
   final String? typingLine;
+
+  /// How many other members are online, said after the member count.
+  final int onlineCount;
   final VoidCallback onOpenInfo;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final name = state.metadata.name;
+    final memberCount = strings.groupMemberCount(state.activeMembers.length);
     final members =
-        typingLine ?? strings.groupMemberCount(state.activeMembers.length);
+        typingLine ??
+        (onlineCount > 0
+            ? strings.groupMemberCountOnline(
+                memberCount,
+                strings.groupOnlineCount(onlineCount),
+              )
+            : memberCount);
     return Padding(
       padding: const EdgeInsetsDirectional.only(end: _buttonSlotInset),
       child: Semantics(

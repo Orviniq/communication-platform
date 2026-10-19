@@ -28,6 +28,7 @@ import 'package:communication_platform/features/messaging/presentation/chat_view
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
+import 'package:communication_platform/features/signals/domain/peer_status_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -78,6 +79,21 @@ class SavedMessagesPage extends ConsumerWidget {
   );
 }
 
+/// What this phone knows of the peer's online status: online, a last seen,
+/// or nothing, which is also the answer while "Show my online status" is off
+/// and for Saved Messages.
+PeerStatus _watchPeerStatus(
+  WidgetRef ref,
+  String? peerUserId,
+  bool savedMessages,
+) => peerUserId == null || savedMessages
+    ? const PeerStatusNone()
+    : ref.watch(
+        peerStatusProvider(
+          peerUserId,
+        ).select((status) => status.value ?? const PeerStatusNone()),
+      );
+
 class _ConversationBoundary extends ConsumerWidget {
   const _ConversationBoundary({
     required this.savedMessages,
@@ -100,6 +116,8 @@ class _ConversationBoundary extends ConsumerWidget {
         model: model,
         onIntent: onIntent ?? (_) {},
         peerUserId: peerUserId,
+        peerStatus: _watchPeerStatus(ref, peerUserId, savedMessages),
+        now: ref.watch(timeSourceProvider).now,
       );
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -315,6 +333,7 @@ class _ProjectedConversationPageState
       ).select((projections) => projections.value?.isNotEmpty ?? false),
     );
     final draft = ref.watch(conversationDraftProvider(conversationId)).value;
+    final peerStatus = _watchPeerStatus(ref, peerUserId, savedMessages);
     // One gate for every load state. The projection is only allowed to speak
     // about trust once it has an answer to give: a first read that is still in
     // flight has neither a value nor an error, and reading that as "unverified"
@@ -400,6 +419,7 @@ class _ProjectedConversationPageState
       child: ChatConversationView(
         model: model,
         peerUserId: peerUserId,
+        peerStatus: peerStatus,
         initialDraft: draft,
         forwardTargets: () => _forwardTargets(strings),
         // Attachments need the private cache to keep their files in, and
