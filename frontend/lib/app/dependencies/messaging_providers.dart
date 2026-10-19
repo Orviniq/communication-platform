@@ -146,7 +146,9 @@ final visibleConversationProvider = Provider<VisibleConversationRegistry>((
 
 final volatileConversationStateProvider =
     Provider<VolatileConversationStatePort>((ref) {
-      final state = MemoryVolatileConversationState();
+      final state = MemoryVolatileConversationState(
+        clock: ref.watch(timeSourceProvider),
+      );
       ref.onDispose(state.dispose);
       return state;
     });

@@ -1,14 +1,20 @@
 import 'dart:async';
 
+import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 
 final class MemoryVolatileConversationState
     implements VolatileConversationStatePort {
+  MemoryVolatileConversationState({this.clock = const SystemTimeSource()});
+
   static const Duration maximumTypingLifetime = Duration(seconds: 15);
   static const int maximumTypingEntries = 256;
   static const int maximumPresenceDevices = 500;
 
+  /// What expiry is measured against.
+  final TimeSource clock;
   final Map<String, TypingProjection> _typing = {};
   final Map<String, Set<String>> _presence = {};
   final StreamController<void> _changes = StreamController.broadcast();
@@ -16,10 +22,8 @@ final class MemoryVolatileConversationState
 
   @override
   Stream<List<TypingProjection>> watchTyping(String conversationId) async* {
-    yield _typingFor(conversationId, DateTime.now().toUtc());
-    yield* _changes.stream.map(
-      (_) => _typingFor(conversationId, DateTime.now().toUtc()),
-    );
+    yield _typingFor(conversationId, _now());
+    yield* _changes.stream.map((_) => _typingFor(conversationId, _now()));
   }
 
   @override
@@ -134,13 +138,15 @@ final class MemoryVolatileConversationState
     final earliest = _typing.values
         .map((value) => value.expiresAt)
         .reduce((left, right) => left.isBefore(right) ? left : right);
-    final delay = earliest.difference(DateTime.now().toUtc());
+    final delay = earliest.difference(_now());
     _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
-      _removeExpired(DateTime.now().toUtc());
+      _removeExpired(_now());
       _scheduleExpiry();
       _emit();
     });
   }
+
+  DateTime _now() => clock.now().toUtc();
 
   void _emit() {
     if (!_changes.isClosed) {

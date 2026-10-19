@@ -5,6 +5,7 @@ import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/server_config_limits.dart';
+import 'package:communication_platform/app/dependencies/signal_providers.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_volatile_opener.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_volatile_sealer.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
@@ -57,14 +58,16 @@ final voiceSignalSocketProvider = Provider<GatewayVoiceSignalSocket>((ref) {
 
 /// The call's signalling channel for one signed-in device.
 ///
-/// It seals and opens with the durable path's own store, device lists and
-/// native core, so a frame moves exactly the sessions a message would; it adds
-/// only that nothing about a frame is queued or kept.
+/// It seals with the durable path's own store, device lists and native core,
+/// so a frame moves exactly the sessions a message would; it adds only that
+/// nothing about a frame is queued or kept. Its inbound frames come from the
+/// one [signalRouterProvider], which opens each of them once.
 final voiceSignallingProvider =
     FutureProvider.family<VoiceSignallingPort, MessagingScope>((
       ref,
       scope,
     ) async {
+      final router = await ref.watch(signalRouterProvider(scope).future);
       final database = await ref.watch(localDatabaseProvider.future);
       final authentication = await ref.watch(
         peerAuthenticationServiceProvider.future,
@@ -105,6 +108,7 @@ final voiceSignallingProvider =
         buckets: PublishedVoiceDeployment(config),
         clock: clock,
         timer: const TimerVoiceSignalTimer(),
+        router: router,
       )..start();
       ref.onDispose(() => unawaited(transport.dispose()));
       return transport;
