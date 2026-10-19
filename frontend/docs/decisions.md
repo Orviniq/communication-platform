@@ -108,7 +108,7 @@ is not silently edited out of history.
 | ADR-095 | Proposed (2026-10-18) | Prekey maintenance runs in the delivery cycle. `DurableSyncEngine` offers it one turn as the last step of a healthy cycle, after the phase is online, unless the cycle carried a failure or its owner was asked to stand down, so the foreground session, the deferred catch-up and the sustained run all run it, one cycle at a time (ADR-050). `ScheduledPrekeyMaintenance` decides which turns run: the first of a process, then one 6 hours after a run that worked or 5 minutes after one that failed, and a turn during a run joins it. A failure or a throw changes nothing about the cycle. An initial envelope that meets a pending plan is deferred as a transient failure instead of quarantined as a conflict. ADR-093 D17 is unchanged | `prekeyMaintenanceServiceProvider` had no consumer, so no signed prekey rotated, no retired pair was pruned and no one-time prekey was replenished, while `sync-engine.md` said all three happened. The cycle is the unit one delivery owner owns, and wiring maintenance in made a plan left pending able to quarantine a first message |
 | ADR-096 | Accepted (2026-10-19); proposed 2026-10-19 | Leaving a group, or being removed from it, deletes it from this phone in the transaction of the state change: the conversation row is tombstoned, its messages, draft, receipts and attachment rows are deleted, and its facts move to a new apply state, retired, that is never folded and still catches a replay. The signed state row stays; a re-add clears the tombstone and the group comes back with no old history. After Leave the app returns to Chats. Each member deletes an own group message for everyone under the rule of a group send. The owner deletes any message and an admin a member's; the owner and the admins pin; the roles of the current signed roster decide, and a role change re-folds the group. Edit stays off. Supersedes ADR-090 D4 for Pin and Delete for everyone | The field test of 2026-10-17: a left group stayed in Chats as a read-only copy, and no group message could be deleted for everyone or pinned. The server holds no group, no roster and no role (`backend/CLIENT_CONTRACT.md` §F), so each phone enforces the rule from the signed roster. Costs: leaving cannot be undone on the phone, and a demotion undoes the demoted admin's deletes and pins. Changes no wire format, schema, dependency or backend file |
 | ADR-097 | Accepted (2026-10-19); proposed 2026-10-19 | A direct chat and Saved Messages send a video. The Photo option of the attachment sheet is renamed **Photo or video** and offers both: the system photo picker with no type, or `ACTION_GET_CONTENT` with `*/*` and the types `image/*` and `video/*`. A video of type `video/mp4`, `video/webm`, `video/3gpp` or `video/quicktime` is copied as its exact bytes, with no re-encoding, and travels with the media kind `file` and its real type; the same four types join the type allowlist on both sides of the channel and in the received descriptor. A video message draws a video tile (a video icon, the name, the size and the state of any attachment tile), and Open hands the file to the system player; there is no in-app player, no thumbnail and no inline playback. The 64 MiB limit is accepted, and a video over it is refused with the sentence that names the largest size. A group still sends no attachment | The field test of 2026-10-17: a video could not be sent. The Photo picker asked for pictures only, a File pick of a video travelled as `application/octet-stream`, and the recipient got a file that a player might not open. A new media kind would change the encrypted wire format, and a thumbnail would change the bucket of each pairwise copy, so the video stays a `file`. Costs: a video is at most 63.98 MiB, four such videos fill the 256 MiB daily allowance, one upload runs at a time and dies with the process, and the server gives an upload 120 seconds, which a 64 MiB video needs 4.5 Mbit/s to meet. Changes no wire format, table, protocol, dependency, Android permission, disclosure text or backend file. Not verified on a phone. Amends ADR-089 for video |
-| ADR-098 | Proposed (2026-10-19) | Typing and online status travel as `CPPSV001` payloads in volatile `signal` frames, read by one router that opens each frame once and routes it by its magic: `CPVSV001` to voice, unchanged, `CPPSV001` to presence, anything else left uncommitted. A phone in the foreground with the switch on sends a `watch` of the chat it shows to the peer's devices (in a group of at most 32 members, 2 devices of each), renewed every 25 s; a device in the foreground answers `here`, sends `typing` only to devices whose watch of that chat is under 40 s old, and sends `gone` before the socket closes. A device is online for 40 s after its latest frame. A watch to a device not heard from in 40 s is a probe: at most 4 since it was last heard from and 8 a day, and at most 8 other frames go to a device between two frames from it. Schema 26 keeps that ledger and the last seen, which never leaves the phone. "Show my online status" is a preference of this phone, on by default; off, it sends and shows nothing, typing included. The disclosure moves to revision 11 | The field test of 2026-10-17 asked for typing and an online line. The server holds no presence (server ADR-0022), so devices tell each other in `signal` frames, and each frame the server drops leaves a dead skipped key for the life of the session. The rules hold one pair to 8 a day with no vanish (2,000 after 250 days), a phone that is away to 12 from each sender however long it is away, and a phone with 100 peer devices to 800 a day in the worst case (20,000 after 25 days); at either bound the session is repaired, and nothing is lost. Costs: a peer learns which shared chat the user opens; the status is a lower bound; groups of 33 to 50 members show neither. Changes no server route, Rust core or dependency. Not built yet |
+| ADR-098 | Proposed (2026-10-19) | Typing and online status travel as `CPPSV001` payloads in volatile `signal` frames, read by one router that opens each frame once and routes it by its magic: `CPVSV001` to voice, unchanged, `CPPSV001` to presence, anything else left uncommitted. A phone in the foreground with the switch on sends a `watch` of the chat it shows to the peer's devices (in a group of at most 32 members, 2 devices of each), renewed every 25 s; a device in the foreground answers `here`, sends `typing` only to devices whose watch of that chat is under 40 s old, and sends `gone` before the socket closes. A device is online for 40 s after its latest frame. A watch to a device not heard from in 40 s is a probe: at most 4 since it was last heard from and 8 a day, and at most 8 other frames go to a device between two frames from it. Schema 26 keeps that ledger and the last seen, which never leaves the phone. "Show my online status" is a preference of this phone, on by default; off, it sends and shows nothing, typing included. The disclosure moves to revision 11 | The field test of 2026-10-17 asked for typing and an online line. The server holds no presence (server ADR-0022), so devices tell each other in `signal` frames, and each frame the server drops leaves a dead skipped key for the life of the session. The rules hold one pair to 8 a day with no vanish (2,000 after 250 days), a phone that is away to 12 from each sender however long it is away, and a phone with 100 peer devices to 800 a day in the worst case (20,000 after 25 days); at either bound the session is repaired, and nothing is lost. Costs: a peer learns which shared chat the user opens; the status is a lower bound; groups of 33 to 50 members show neither. Changes no server route, Rust core or dependency. Built on host tests by prompts 2 and 3 (2026-10-19); the screens, the switch row and the disclosure are not built yet |
 
 ## ADR-098 in full — typing and online status over volatile signals (2026-10-19)
 
@@ -598,6 +598,50 @@ memory ledger, D7 and the group typing line, on host tests only. Where the build
   watches and types as if the switch were on, and shows no online line.
 - **Account blocking** has no client state (`contact.block_set` is not built), so "blocked" here is
   an identity this phone has blocked, which the verified-peer read already refuses.
+
+### Built by prompt 3 (2026-10-19)
+
+Schema 26 and the Drift ledger, the durable hearing from the inbox pass, D4's online state and its
+expiry, D5 with the supervisor's wait, D8's last seen and D9, on host tests only. Where the build
+reads this record:
+
+- **The codec** of every kind, which the prompt for this step lists first, was prompt 2's; this
+  step changes no wire byte.
+- **Where the state lives.** `PresenceStatusBook` (`lib/features/signals/application/`) holds the
+  online state of each device in memory and the last seen in `presence_devices` through
+  `DriftPresenceDevices`, which keeps the ledger in the same row. `PresenceShareSetting` holds the
+  switch for the process over `DriftPresenceSharePreference`. Both are one for each database, not
+  for each signed-in scope, so the screens read them with no scope: `peerStatusProvider(userId)`
+  answers online, a last seen, or nothing; `groupOnlineCountProvider(conversationId)` answers N.
+  `presenceShareSettingProvider` is what prompt 4's switch row writes.
+- **Online from a watch in the background.** A device in the background answers nothing (D4), but
+  a watch it accepts still makes the sender online, as every accepted frame does.
+- **Which `gone` is accepted.** From a device this phone holds a lease for, watches, or shows
+  online: a device whose lease here has ended may still be shown online, and its goodbye ends that.
+- **Leaving the foreground** sends the pending stops the pace allows, then `gone` with reason 1 to
+  every device with a live lease in either direction, and ends every lease this phone holds.
+  `SyncLifecycleSupervisor` waits for `PresenceChannel.farewell` (`SocketFarewellPort`) for at most
+  500 ms before it closes the socket; a farewell that fails releases the close at once. A socket
+  held open by receiving while closed is not closed, and the channel still says goodbye when the
+  registry reports the app off the screen.
+- **The durable hearing** is `CommittedEnvelopeSenderPort` on `DurableSyncEngine`, told the sender
+  device of each envelope whose commit carried a pairwise receive, held envelopes excluded. It
+  resets P1 through the ledger and nothing else: it makes no device live and moves no L1 count,
+  since a durable envelope may have waited for hours (D4).
+- **The group targets** take the devices with the newest of their stored last seen and the time
+  this process last heard them, ties by device id.
+- **The switch.** The stored choice is read before the channel sends anything; until then it
+  counts as off. Off is applied even when it cannot be stored, so that nothing more leaves while
+  the process lives, and the failure is answered; on is applied only once stored. Each path that
+  sends has its own gate (the answer, the watch, typing, the goodbye), so that one defect cannot
+  hide behind another in a mutation check.
+- **N** is recomputed when a device goes online or offline, not when the group's membership
+  changes.
+- **The leftovers** are deleted: `watchPresence`, `applyPresence`, `PresenceProjection`, its
+  `PresenceMeaning`, and the 500-device map. `clearDisconnected` stays: the socket closing still
+  ends every typing state shown.
+- **Open for prompt 4.** A last seen stored for an account whose verification is later withdrawn
+  is kept; whether the header shows it is the screen's decision (T2 says a verified peer).
 
 ### Not verified
 
