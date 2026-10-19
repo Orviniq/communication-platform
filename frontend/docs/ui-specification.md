@@ -793,8 +793,9 @@ history; up to ~50 members; roles **owner → admins → members**.
    The first bubble of each run from another member carries that member's display name from
    the roster, or a short form of the user id for a sender the roster does not name; there is
    no avatar beside a bubble. A reply quotes the name of the member who wrote the replied
-   message. A group shows no pinned banner. Inline system lines for membership changes ("X was
-   added", "Y left") are **not built**.
+   message. A group shows no pinned banner yet: the owner and the admins pin, and a group shows
+   the pinned banner, **Specified by [ADR-096](decisions.md)** (D6), built in its third prompt.
+   Inline system lines for membership changes ("X was added", "Y left") are **not built**.
 3. **Input bar:** as §8, with no upload tray: a group chat sends no attachment in this phase,
    and its attachment button opens the sheet in its not-built mode (§8.2,
    [ADR-089](decisions.md) D1). By default all members can post; if you implement any
@@ -809,9 +810,12 @@ the rule of a group send. Forward lists every other conversation and Saved Messa
 message forwarded into a group goes through the group's own send, and the picker of an
 attachment message lists no group, because a group sends no attachment. A forward to several
 conversations goes on past one that refuses it, and then says that the action failed.
-**Pin**, **Edit** and **Delete for everyone** are **not offered in a group yet**: each needs
-the member roles of the signed roster, which the client does not read for messages yet, so
-the message sheet and the delete dialog leave them out.
+**Delete for everyone** is offered on an own message that is not deleted, as in §8, and goes
+to each member under the rule of a group send ([ADR-096](decisions.md) D4); the delete dialog
+of another member's message offers *Delete for me* only. **Edit** is not offered in a group
+(ADR-096 D8). **Pin** is not offered yet. The owner deleting any member's message, an admin
+deleting a member's, and the owner and admins pinning are **Specified by
+[ADR-096](decisions.md)** (D5 to D7) and built in its third prompt.
 
 **Read on this phone.** An open group chat marks its messages read on this phone, as a direct
 chat does: when it becomes visible with the application in front, and when a message arrives
@@ -823,9 +827,10 @@ account left, or one waiting for its state, is read on this phone alone.
 **Role-gated actions** (owner/admins only): appear on member rows within Group Info
 (§12.2), not on individual messages.
 
-**States.** As §8, plus: *removed* (read-only/exited; nothing sent after the removal
-reaches this device); *waiting for group state*; and *forked* (members hold conflicting
-histories, so the group is quarantined). Waiting for group state follows a queue gap, or
+**States.** As §8, plus: *left* and *removed*: the group is deleted from this phone with its
+history, and an open group chat or Group Info returns to Chats ([ADR-096](decisions.md) D1,
+D3), on each device of the account; *waiting for group state*; and *forked* (members hold
+conflicting histories, so the group is quarantined). Waiting for group state follows a queue gap, or
 an event this device cannot yet place. It disables the composer and group changes until a
 member confirms the group's current control state, and it never asks members to remove and
 re-add this device.
@@ -1060,7 +1065,11 @@ Reached from Contacts (§7). Multi-step:
    - **Add members** (visible per the group's invite policy) → member picker (like §12.1
      step 1).
    - The same statement of what a group message costs as §12.1 step 2.
-4. **Leave group** (all members) → confirm.
+4. **Leave group** (all members) → confirm. The confirmation says that the group and its
+   history are deleted from this phone and that the other members keep their copies. A Leave
+   that commits returns to Chats; a refused one stays here and says the action failed. Being
+   removed by an admin deletes the group the same way ([ADR-096](decisions.md) D1 to D3). If
+   the account is added again, the group comes back to Chats with no old history (D2).
 
 Group Info has **no quick-action row**. **Mute** is set from the Chats list (§17), and
 **Search in chat** from the conversation's own app bar; **Shared media** (a grid like §11.2)
@@ -1419,7 +1428,9 @@ transfer locally held history.
 The recurring modal surfaces and their contents:
 
 - **Delete message dialog** (§8) — two labeled options, *Delete for me* / *Delete for
-  everyone*, with the honest note that "for everyone" is best-effort.
+  everyone*, with the honest note that "for everyone" is best-effort. In a group, *Delete for
+  everyone* is on an own message only ([ADR-096](decisions.md) D4); a moderator's delete of
+  another member's message is **Specified by ADR-096** (D5) and built in its third prompt.
 - **Confirm dialogs** — Leave group, Remove member, Remove device, Clear history, Log out:
   each states the consequence plainly, including irreversibility where true.
 - **Mute options sheet** — durations / until toggled.

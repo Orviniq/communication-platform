@@ -260,6 +260,69 @@ It does not change what `deleteConversationForMe` does for a direct chat, and th
 still never clears a direct chat's tombstone (prompt 2 records what a test found). It sends no
 system line for a membership change. It changes no group control event.
 
+### As built, prompt 2 (D1 to D4)
+
+- **D1 and D2.** `commitTransitionInsideTransaction` in `drift_group_repository.dart` calls
+  `_removeConversation` for each transition that ends `left` or `removed`. It runs
+  `tombstoneConversationInsideTransaction` (`conversation_tombstone.dart`), the tombstone,
+  draft, unread and attachment step that `deleteConversationForMe` now shares, and then
+  `DriftApplicationEventProjector.retireConversationHistoryInsideTransaction`, which moves the
+  candidate facts to apply state 4 and deletes the messages, reactions, receipts, attachment
+  rows and owed delivered receipts. `_writeConversation` clears the tombstone when the
+  transition takes the local lifecycle from `left` or `removed` to `active`, and only then: a
+  rename leaves a Delete chat in place.
+- **D3.** `groupGoneFromThisPhone` and `groupGonePage` (`group_components.dart`): the routed
+  group chat and Group Info return to Chats for a group that is left or removed. Group Info's
+  `onLeft` goes to Chats once a Leave this page asked for commits. `MutateGroup` takes an
+  optional `GroupRemovalSweepPort`, which `groupUseCasesProvider` gives the attachment sweep.
+  `groupConfirmLeaveBody` says, in English and Persian, that the group and its history are
+  deleted from this phone and that the other members keep their copies.
+- **D4.** `DeleteGroupMessageForEveryone` (`group_use_cases.dart`) requires
+  `GroupPermission.sendMessages` and sends through `GroupMessageSenderPort.deleteForEveryone`,
+  which `ConversationGroupMessageSender` hands to `SendConversationEvents.deleteForEveryone`.
+  That still requires the original sender, and `_sendMutation` now lets a delete into a group.
+  `ChatMessageProjection.mapGroup` sets `canDeleteForEveryone` on an own message that is not
+  deleted for everyone, as in a direct chat, and the group chat answers `DeleteForEveryoneIntent`.
+
+**The related check (task 4).** A direct chat removed with Delete chat **stays out of Chats**
+when its peer writes again: the projector stores the new message, counts it unread, and never
+clears `tombstoned`, so nothing lists it. Recorded by a test and not changed here.
+
+### Verified by
+
+- `test/features/groups/infrastructure/drift_group_repository_test.dart`, over an in-memory
+  database: a signed leave of this account, and a removal, delete the group from Chats with its
+  messages, reactions, receipts, draft and attachment row, retire its facts and keep the signed
+  state; a rebuild, a late reaction and a replay bring nothing back; an addition after a
+  removal brings the group back with no old history; a rename keeps a tombstone the user set.
+- `test/features/messaging/drift_application_event_projector_test.dart`: an own delete shows the
+  message deleted on the author's phone and on a member's, a delete of another member's message
+  is not applied, and the task-4 record.
+- `test/features/messaging/conversation_use_cases_test.dart` and
+  `test/features/groups/application/group_use_cases_test.dart`: the send path commits an own
+  delete into a group and sweeps, refuses another member's, still refuses an edit and a pin; the
+  group use case refuses a removed member and a left group; a committed Leave sweeps once.
+- `test/widget/group_leave_test.dart`: Leave states the deletion and returns to Chats, a removal
+  seen from another device returns to Chats, a refused Leave stays and says so.
+  `test/widget/group_message_actions_test.dart`: an open group chat returns to Chats.
+  `test/widget/group_pages_test.dart` and `chat_view_model_mapper_test.dart`: Delete for
+  everyone on an own group message only.
+- Four mutation checks, each caught: a removed lifecycle keeping the group in Chats, a re-add
+  keeping the tombstone, the send path refusing an own delete, and the chat page ignoring a
+  removal.
+
+### Not verified
+
+No run on a phone, and no run against the live server: Leave on one device and the removal on
+the account's other devices, and a re-add.
+
+### Not done
+
+- D5 to D7 (prompt 3): others' messages, pins, the pinned banner and the projector's roles.
+- `groupRemovedState` and `groupLeftState` still say the copy stays readable. No routed page shows
+  them now, because the page returns to Chats; only an injected page does.
+- A received removal sweeps the cache only at the next process start (D3).
+
 ## ADR-095 in full — prekey maintenance runs at the end of a healthy delivery cycle (2026-10-18)
 
 **Status:** Proposed, 2026-10-18. Client delivery and key-upkeep decision, from the correction
