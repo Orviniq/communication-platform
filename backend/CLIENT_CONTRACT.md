@@ -5,7 +5,10 @@ opaque bytes and **verifies none of it**. Every security property below therefor
 in the client. This document is the binding list of those client-side halves, written
 for the Flutter developer. The server-side halves are specified in `SECURITY.md` and
 the per-app `API.md` files; the residual-risk statement (what none of this protects) is
-`SECURITY.md` § "Residual risk".
+`SECURITY.md` § "Residual risk". Contacts, the contact code, verification by both people
+for direct conversations, the profile key and what a file carries are bound in
+[`CLIENT_CONTACTS_AND_TRUST.md`](CLIENT_CONTACTS_AND_TRUST.md), exactly as this document
+binds; §Q routes to it.
 
 A server-side sanity check (length, bucket, monotonic version) is never a security
 control. If the client ever skips a verification because "the server already checks
@@ -108,6 +111,14 @@ signature you rely on to know a prekey belongs to the device serving it. Verify 
 - Before encrypting to, or accepting a message from, any peer device: verify the device
   bundle signature chains self-signing → master, and that the master key equals the one
   confirmed out-of-band. Reject otherwise.
+- **A direct conversation needs both people.** Beyond that check of each device, a direct
+  conversation carries content only once each person has verified the other's master key
+  out of band. Until then only the allowlist of `CLIENT_CONTACTS_AND_TRUST.md` §5.2 passes,
+  in either direction, and that holds on a session you accepted earlier as on a new one.
+  The one exception to "reject otherwise" above is the read that surfaces a verification
+  notice: an initial envelope from a sender you have not verified may be opened in memory
+  to read one fixed-length record, committing nothing, and what it says is shown as a
+  claim that changes no trust (§5.3 there).
 - **Verify the key bytes, never a server-supplied identifier.** CVE-2022-39250
   (matrix-js-sdk cross-signing identity injection, CVSS 8.6) happened because checking
   and signing were two separate steps, letting a malicious homeserver substitute the key
@@ -119,7 +130,11 @@ signature you rely on to know a prekey belongs to the device serving it. Verify 
 
 - **SAS:** display a short emoji/number string derived from both parties' master keys;
   both users confirm out-of-band.
-- **QR:** encode the master key fingerprint; scanning cross-signs.
+- **QR:** the contact code of `CLIENT_CONTACTS_AND_TRUST.md` §4, which encodes the
+  master-key fingerprint. Scanned live with the camera from the other person's screen, it
+  cross-signs; read from an image it adds the contact unverified; a code whose fingerprint
+  does not match the master key the server serves fails hard and adds nothing.
+  Verification by both people takes a scan, or a comparison, in each direction.
 - This is the **only** defense against first-contact MITM. It must be prominent, not
   buried.
 - **Safety-number-style change warning:** if a contact's master key or a device's
@@ -130,7 +145,7 @@ signature you rely on to know a prekey belongs to the device serving it. Verify 
 | Condition | Required behavior |
 |-----------|-------------------|
 | Unsigned / invalidly-signed device | Refuse to encrypt to it; show "unverified device — messages withheld" |
-| Master key change | Block the conversation pending re-verification. Never silently re-trust. |
+| Master key change | Block the conversation pending re-verification. Never silently re-trust. A direct conversation drops back on both sides — your attestation and the peer's claim are each bound to the old key — and needs both people to verify again (`CLIENT_CONTACTS_AND_TRUST.md` §5.5) |
 | Log fork detected | Global alert state; halt sensitive operations pending an out-of-band check |
 
 ## F. Sessions and groups
@@ -184,6 +199,8 @@ group key; a group exists only in its members' clients.
 - A new device has **no history** until an existing device is online to send it.
 - The key backup blob no longer contains a history key; it carries cross-signing private
   key material.
+- The transfer also carries the contact list, the block list, the verifications in both
+  directions and the profile keys, as the snapshot of `CLIENT_CONTACTS_AND_TRUST.md` §3.5.
 
 ## H. Queue gap handling
 
@@ -382,9 +399,10 @@ in ([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-repl
   client that trusts a lookup has made the adversary of the threat model its directory.
 - **The contact list lives on the client.** It is never uploaded in any form the server
   can read: not as a list, not as hashes of names, not as a set of `user_id`s on a
-  route. If it travels between the user's own devices, it travels inside end-to-end
-  encrypted blobs — the key backup, or a device-to-device transfer. A contact is held
-  by its `user_id`, so reaching it again never needs another lookup.
+  route. It travels between the user's own devices only inside end-to-end encrypted
+  envelopes — the own-device records and the history-transfer snapshot of
+  `CLIENT_CONTACTS_AND_TRUST.md` §3 — and never in the key backup. A contact is held by
+  its `user_id`, so reaching it again never needs another lookup.
 - **Look up only what the user asked for.** One call when a person types a name.
   Never in a loop, never as a refresh, never to re-check a known contact: each call is
   a question asked of the adversary, naming who the user is looking for.
@@ -395,4 +413,32 @@ in ([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-repl
   claim more: a caller who already holds the `user_id` reaches the account through
   every route addressed by one, and registration still reports the name as taken
   (`backend/SECURITY.md` § "Residual risk").
+
+## Q. Contacts, verification by both people, the profile key, and file metadata
+
+The binding text is [`CLIENT_CONTACTS_AND_TRUST.md`](CLIENT_CONTACTS_AND_TRUST.md)
+([ADR-0029](../docs/architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md)).
+This section names what it binds; where the two could differ, that document is
+authoritative.
+
+- **The contact list** is the client's alone. People are added by the exact lookup of §P
+  or by a contact code, the pickers read the contact list only, and it travels between
+  the user's own devices only as end-to-end encrypted `CPCTV001` records and in the
+  history-transfer snapshot (§3 there).
+- **The contact code** carries a version, the `user_id`, the username and a master-key
+  fingerprint, and no secret. Scanned live it adds and verifies; read from an image it adds
+  only; a mismatch with the served key fails hard (§4 there, with golden vectors).
+- **A direct conversation needs both people verified.** Nothing passes before that but
+  session establishment, the verification notice, `session.repair` and `protocol.notice`;
+  sending is blocked, and anything else is acknowledged and dropped. A peer's "I verified
+  you" is trusted only once you have verified that peer's master key (§5 and §6 there).
+- **Groups are unchanged** (§5.9 there).
+- **The profile key** is fresh for every profile version and goes only to the audience of
+  that moment, and blocking someone or removing a contact publishes a new version at once
+  (§7 there).
+- **A file's metadata** is removed where the format lets it go safely, and a warning shows
+  before a file that keeps its metadata is sent (§8 there).
+
+The server takes no part in any of it and changed nothing for it. What it can observe is
+§9 there.
 
