@@ -176,8 +176,14 @@ private, or unlinkable.
    active) remain visible to root.
 6. **Live root reads TLS session keys** and any plaintext transiently in memory
    (routing metadata, not E2EE content). Memory hygiene does not stop this.
-7. **First-contact MITM is prevented only if users actually perform SAS/QR
-   verification**; unverified contacts remain exposed to a one-time key substitution.
+7. **First-contact MITM is prevented only where users verify** — by comparing safety
+   numbers, or by scanning each other's contact code live and in person. A direct
+   conversation carries nothing but the verification exchange until both people have
+   verified each other, so a one-time key substitution there captures no content unless a
+   user confirms a comparison they did not make; a group message is sealed only when the
+   sender has verified every member, and a copy from a sender the member has not verified
+   is held unopened. A contact code read from an image verifies nothing
+   (§ "Verification by both people, the contact code and the profile key").
 8. **Client device compromise** (out of scope) bypasses everything above.
 
 In short: content is well protected; the social graph and communication timing are not,
@@ -251,6 +257,42 @@ guard refuses the columns and the two-user table one would take.
   modified server can record everything, and can answer a lookup with any account it
   likes. A lookup is a question put to the adversary; `CLIENT_CONTRACT.md` §P binds the
   client to verify whatever it answers.
+
+## Verification by both people, the contact code and the profile key
+
+None of this is server code, and the server stores and checks nothing new for it. It is
+stated here because it changes what the system claims as a whole
+([ADR-0029](../docs/architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md);
+the binding text is [`CLIENT_CONTACTS_AND_TRUST.md`](CLIENT_CONTACTS_AND_TRUST.md)).
+
+- **A direct conversation carries content only once both people have verified each
+  other** out of band. Before that the two clients exchange nothing but the verification
+  exchange — the session, a notice that says "I verified you", the repair of a broken
+  session and a version announcement — and a client trusts a peer's "I verified you" only
+  once it has verified that peer's master key itself. Groups are unchanged: a group
+  message is sealed only when the sender has verified every member, and a member opens a
+  copy only from a sender it has verified.
+- **The contact code resists a man-in-the-middle only when it is scanned live**, with the
+  scanning phone's own camera, from the other person's own screen. A code read from an
+  image, a gallery or a screenshot adds a contact and verifies nothing, and a code whose
+  fingerprint does not match the master key the server serves for its account is refused
+  outright.
+- **A code is not a secret.** It carries the account's `user_id`, its username and a
+  fingerprint of its master key, so whoever sees it — or an image of it — can add the
+  account whatever its discoverability setting says, exactly as anyone who holds the
+  `user_id` can (above). No route was added for it: reading a code reads the account's
+  identity by id, as any first contact does, and the code never reaches the server.
+- **The profile key is new for every profile version**, and blocking someone or removing a
+  contact publishes a new version at once. A removed or blocked person keeps every version
+  they already opened; they can still fetch the newest blob, because the server serves a
+  profile to anyone who holds the `user_id`, but cannot open it. People who share a group
+  with the account keep receiving its profile.
+- **What live root sees of it** is ordinary envelopes: two accounts' devices exchanging a
+  few small ones as they verify each other; once, when the client version that does this
+  first starts, one envelope from a device to every device of every peer it has verified;
+  and each profile publish's fan-out, which, compared with the previous one, shows who
+  stopped receiving the profile. All of it is the social graph of residual risks 1 and 2,
+  which this deployment does not hide.
 
 ## Voice
 
@@ -341,9 +383,11 @@ None of these is ever described as one of the others.
 - **A malicious or seized server cannot read content.** It can observe everything in the
   residual-risk list, drop or delay traffic, and refuse service. Against a
   server-*forged* device, the defense is client-side: cross-signing (peers refuse
-  unsigned devices), SAS/QR verification of master keys (the only first-contact MITM
-  defense), and the client-signed device-list log, whose in-band head gossip turns
-  server equivocation into cryptographic evidence once two honest clients compare.
+  unsigned devices), out-of-band verification of master keys — a compared safety number,
+  or a contact code scanned live, required of both people before a direct conversation
+  carries content (the only first-contact MITM defense) — and the client-signed
+  device-list log, whose in-band head gossip turns server equivocation into cryptographic
+  evidence once two honest clients compare.
   The server stores and relays all of that material without verifying any of it —
   a check it applied would be one a modified server could skip, and trusting it would
   be the failure mode.
