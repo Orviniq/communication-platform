@@ -291,3 +291,27 @@ foreground service behind it, is the whole push path.
 **Reopens when.** Nothing. A push path that survives a national shutdown is a
 contradiction, and any of these would have to be defended as a second, best-effort path
 in a new ADR rather than as a replacement.
+
+---
+
+### 20. SPQR, a post-quantum ratchet
+
+**Protects.** Recovery after a device's session state has been exposed, against an
+adversary who records the traffic and later holds a quantum computer. The Double
+Ratchet's later steps are X25519 exchanges, so such an adversary, once it has a session's
+state, can follow the session through the very exchanges that would otherwise heal it.
+SPQR, which Signal announced on 2 October 2025, runs an ML-KEM-768 ratchet beside the
+Double Ratchet and mixes the two, so the healing holds against that adversary as well.
+
+**Rejected.** By the owner's decision, recorded on 2026-10-20. It is a change to the
+shared Rust core on both of its boundaries: a second ratchet with its own state, chunked
+and erasure-coded ML-KEM messages inside every ratchet message, a new session-state
+format, and a migration of every live session — against a pairwise transport whose
+version 1 is frozen around one ratchet. What it would add is narrow here. PQXDH already
+makes every session's starting secret quantum-resistant
+([`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §F), which is what protects
+recorded traffic as long as no device's state is exposed; and the exposure SPQR heals
+from is a compromised client device, which the threat model of
+[`backend/SECURITY.md`](backend/SECURITY.md) places out of scope.
+
+**Reopens when.** Only by an explicit owner decision.
