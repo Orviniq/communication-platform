@@ -31,6 +31,11 @@ authoritative and this one never restates it.
 | The account-erasure action, so a user who wants to leave has a way to | [Required before release — the erase-account action](#required-before-release--the-erase-account-action) | [`backend/accounts/API.md`](backend/accounts/API.md) |
 | `GET /api/v1/users` is gone: find people by exact name, one lookup at a time, and keep the contact list on the client | [Required before release — find people by exact name](#required-before-release--find-people-by-exact-name) | [`backend/accounts/API.md`](backend/accounts/API.md), [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §P |
 | The "find me by username" toggle, worded so it does not promise more than it hides | [Required before release — the discoverability toggle](#required-before-release--the-discoverability-toggle) | [`backend/accounts/API.md`](backend/accounts/API.md) |
+| The contact list kept on the client and synced only between the user's own devices; the pickers read it alone; the cached directory goes | [Required before release — the contact list](#required-before-release--the-contact-list) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §3 |
+| The contact code: a code to show, a live scanner that verifies, an image path that only adds, and a hard failure on a mismatch | [Required before release — the contact code](#required-before-release--the-contact-code) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §4 |
+| A direct conversation carries content only once both people have verified each other: the notice, the claims, the conversation state, the admission rule and the migration | [Required before release — verification by both people](#required-before-release--verification-by-both-people) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §5, §6 |
+| What a file carries: removed where the format allows it, and a warning before sending where it does not | [Required before release — what a file carries](#required-before-release--what-a-file-carries) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §8 |
+| The profile key, if the release publishes profiles: a fresh key for every version, its audience, and a new version when the user blocks someone or removes a contact | [Required before profiles ship — the profile key](#required-before-profiles-ship--the-profile-key) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §7 |
 | The web platform files, the conditional-import stubs and the web build step the removed web target left behind | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
 | Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
 
@@ -483,4 +488,111 @@ by one — and registration still reports the name as taken to anyone who tries 
 register it. A label such as "Hide my account" or "Make me invisible" is a claim the
 system does not keep; "Let people find me by my username" is the setting as it is.
 `backend/SECURITY.md` states the same limits.
+
+## Contacts, the contact code, and verification by both people
+
+[ADR-0029](docs/architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md)
+records the owner's decisions of 2026-10-20: the contact list is the client's alone, a
+contact QR code finds and verifies a person, a direct conversation carries content only
+once both people have verified each other, the profile key is rotated when the user blocks
+someone or removes a contact, and a file's metadata is removed where it safely can be and
+announced where it cannot. The binding text is
+[`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md), routed from
+[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §Q; where this file and it could
+differ, it is authoritative. **Nothing on the server changed**, so no server merge forces
+any of this; each section below is client work the owner decided, and the client's own
+documents move with it (the last section).
+
+What a direct envelope from an unverified sender meets today, read on 2026-10-20 at
+`be0eba5`, is §2 of the binding text: held on the phone and acknowledged when the sender is
+merely unverified (client ADR-093), retried unacknowledged for the inspection budget and
+then dropped in the other states, and opened with no trust check at all on a session
+accepted earlier.
+
+**In this order.** The contact list first, because everything else reads it; then the
+`CPCTV001` codec with the vectors of §6.6; then verification by both people, with its
+migration; then the contact code, which needs the notice of §5.3; then what a file carries,
+which depends on nothing above. The profile key waits for profiles.
+
+### Required before release — the contact list
+
+The lookup work of § "Required before release — find people by exact name" lands in the
+same files, and the two are one change.
+
+| Path | What is needed |
+|---|---|
+| `frontend/lib/features/contacts/infrastructure/drift_contact_repository.dart`, `DirectoryService` in `frontend/lib/features/contacts/application/contact_services.dart` | The `users` table stops being a copy of the server's user list and becomes the contact list of §3.1 to §3.4: entries on and off the list, last-writer-wins by `(revision, author_device_id)`, every change sent at once to this account's other devices as `CPCTV001` kind 1. Blocking is a record of its own (kind 2, §3.3) |
+| The first start of the new build | The migration of §3.6: an entry for each peer with a direct conversation or a verified trust record, the usernames of group and voice-room co-members kept as names only, and every other cached directory row deleted |
+| `frontend/lib/features/messaging/infrastructure/drift_application_conversation_resolver.dart` | Resolves an own-device copy of a direct message by scanning the `users` table for activated rows. After §3.6 it MUST resolve against the contact list and the peers of the direct conversations this device holds, or an own copy of a message to a peer who is not a contact is refused |
+| `frontend/lib/app/dependencies/group_member_name_providers.dart` | Names group members from the contacts store; after §3.6 it reads the kept names, then authenticated profiles, and otherwise says "Unknown member" as today |
+| `frontend/lib/features/contacts/presentation/contacts_new_page.dart`, `frontend/lib/features/groups/presentation/group_member_picker.dart`, `frontend/lib/features/voice/presentation/voice_room_invite_page.dart` | The pickers of §3.2: the new-conversation picker lists entries on the list; the two invite pickers list entries on the list whose trust record is `verified` |
+| `frontend/lib/features/synchronization/infrastructure/history_transfer_coordinator.dart` | Sends the snapshot of §3.5 to the new device before the transfer's completion event, and the receiving side applies it as live records |
+| Settings, the discoverability toggle | The added sentence of §3.2: "Anyone you show your code to can still add you." |
+
+### Required before release — the contact code
+
+| Path | What is needed |
+|---|---|
+| New screens | **My code**, the scanner, the image path and the mismatch alert, worded as §4.2 to §4.5 say |
+| The application's own Android code, beside `frontend/android/app/src/main/kotlin/com/example/communication_platform/AttachmentChannel.kt` | The camera frames from `android.hardware.camera2` and the decoder of §4.7, `com.google.zxing:core`, pinned exactly and added to the offline Gradle mirror |
+| `frontend/android/app/src/main/AndroidManifest.xml` | `android.permission.CAMERA`, and `<uses-feature android:name="android.hardware.camera.any" android:required="false"/>` |
+| `AttachmentChannel.kt`, the camera capture | With `CAMERA` declared, `MediaStore.ACTION_IMAGE_CAPTURE` throws `SecurityException` unless the permission is held, so the capture requests it first and says plainly when it is refused (§4.7) |
+| `frontend/lib/features/contacts/presentation/safety_number_page.dart` | Drop the display-only `CP-SAFETY-V1` symbol; offer **Scan their code** and **Show my code** in its place (§5.11) |
+| The tests | The vectors of §4.8, the refusals among them |
+
+### Required before release — verification by both people
+
+| Path | What is needed |
+|---|---|
+| `frontend/lib/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart`, `frontend/lib/features/synchronization/application/durable_sync_engine.dart` | Recognise `CPCTV001` before `_prepareApplication` (§6.1); apply the admission of §5.6 in `_inspectRegular` and after an accepted initial alike — a session accepted earlier no longer bypasses it. A dropped event is a new outcome: the envelope is committed with its session transition and without the event, and acknowledged at once — not a `policyBlocked` failure that spends the budget. Add the read of §5.3 to the unverified branch of `_inspectInitial`, committing nothing |
+| `frontend/lib/features/contacts/application/client_authentication_service.dart`, `frontend/lib/features/contacts/application/ports/contact_ports.dart` | The claims, the carried-over confirmations and the derived state of §5.4 and §5.5. A verification sends the notice to the peer's devices and the own-device copy in one call (§5.3) |
+| `frontend/lib/features/pairwise/application/pairwise_fanout_coordinator.dart`, `frontend/lib/features/messaging/application/conversation_use_cases.dart` | Refuse a direct-conversation event unless the conversation is `MUTUAL` (§5.6) |
+| `frontend/lib/features/signals/application/presence_channel.dart` | Typing and online status for a direct conversation in `MUTUAL` only; groups as today |
+| `frontend/lib/features/messaging/presentation/chats_list_page.dart`, `frontend/lib/features/messaging/presentation/direct_chat_page.dart`, the contacts screens | The panels, rows and words of §5.11 |
+| `frontend/lib/features/messaging/presentation/chat_undelivered_hint.dart` | Withdrawn, with its tests: the cause it names cannot occur any more (§5.11) |
+| The first start of the new build | The migration of §5.10, once |
+
+**Groups are unchanged, and there is a decision the owner has not made.** The brief for
+this work said that a group send skips the members its sender has not verified. It does
+not: a group send withholds the whole copy when one member is not verified
+(`pairwise_fanout_coordinator_test.dart`, "a member that fails verification withholds the
+whole copy"). The same reading shows that a group event arriving on a session accepted
+earlier is admitted with no check of its sender's current trust record — the gap §5.6
+closes for direct conversations. The binding text leaves both as they are (§5.9). Nothing
+here is the client developer's to change until the owner decides.
+
+### Required before release — what a file carries
+
+| Path | What is needed |
+|---|---|
+| `AttachmentChannel.kt`, the copy | The procedures of §8.2 on the outgoing copy, the proof of §8.3, the neutral names of §8.1 — a photo becomes `photo.jpg` in place of `jpegName`'s base of the original — and, in the answer to Dart, which of W1, W2 or none applies |
+| The preview step (`frontend/docs/ui-specification.md` §8.2) | The warnings of §8.4, above **Send**, which stays enabled |
+
+### Required before profiles ship — the profile key
+
+Profiles are not published by any production build today: `profilePublishingProvider`
+resolves the unsupported adapters, so nothing here is due until real profile encryption
+and key delivery are.
+
+| Path | What is needed |
+|---|---|
+| `ProfileService` in `frontend/lib/features/contacts/application/contact_services.dart`, and the two profile ports | §7: a fresh key for every version, the audience of §7.2, the kind-5 records of §7.3, the publish on a block or a removal of §7.4, and the rule of §7.5 for two devices at once |
+
+### The client documents to update
+
+Each of these describes behaviour this work changes. The client developer updates them as
+the work lands, and the binding text wins where they differ.
+
+| Document | What changes |
+|---|---|
+| `frontend/docs/message-protocol.md` | The registry: `contact.master_verify`, `contact.block_set`, `protocol.notice` and `profile.publish`, and the new `contact.entry_set`, are carried as `CPCTV001` payloads rather than application-event kinds, as `group.control` is carried as `CPGSV001`; `contact.master_verify` goes to the peer as well as to own devices. § "Blocking" against §3.3 and §5.6. A section for the admission of a direct conversation (§5.6). § "Receipts and typing" and the presence rules: a direct conversation in `MUTUAL` only. § "Own-device history": the snapshot |
+| `frontend/docs/cryptographic-protocol.md` | § "Safety numbers and cross-signing": the contact code replaces the `CP-SAFETY-V1` symbol, and verification is by both people. § "Recovery and device-to-device history": correct the sentence that says the backup includes user-signing signatures over verified peers' master keys — the `CPKBV001` plaintext is the three private keys and nothing else — and say that contacts and verifications travel in the snapshot. § "Profiles and labels": §7. § "Direct messages and per-device channels": the read of §5.3 |
+| `frontend/docs/pairwise-transport-v1.md` | § "Sender-hidden initial header", steps 2 to 4: the non-committing read of §5.3 as the one exception to "under the already confirmed master key" |
+| `frontend/docs/sync-engine.md` | Held envelopes: the read of §5.3. The history transfer: the snapshot of §3.5 |
+| `frontend/docs/ui-specification.md` | §6 (the rows and previews), §7 (the add sheet and the state words), §8 (the panel), §8.2 (the warnings), §11 and §11.1 (the safety-number page), §15 (My code, the discoverability sentence) |
+| `frontend/docs/platform-android.md` | "Why there is no `CAMERA` permission" no longer holds (§4.7). The scanner. The copy's removal of metadata (§8) |
+| `frontend/docs/local-data-model.md` | The contact, block, claim, carried-over and profile-key records |
+| `frontend/docs/threat-model.md` | The verification statements, against `backend/SECURITY.md` residual risk 7 |
+| `frontend/docs/decisions.md` | One new ADR recording this work on the client side — as ADR-068 to ADR-070 recorded server ADRs — that amends ADR-093 (the read of §5.3 beside D12; the row of D18 gains the claim; the hint of D19 is withdrawn), ADR-089 and ADR-097 (the neutral names and the removal of metadata) and ADR-098 (presence for a direct conversation in `MUTUAL` only), and records `com.google.zxing:core` under ADR-054's rules: the exact version, its licence, and the date and source it was read from |
+| `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
 
