@@ -165,7 +165,7 @@ the session token it presents, and the answer names nothing the caller asked for
 
 What the client does with the credential — the relay-only ICE policy, the mesh, the
 signalling over `signal` frames, and when to refresh — is
-[`CLIENT_CONTRACT.md`](../CLIENT_CONTRACT.md) §N, which is binding.
+[`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §N, which is binding.
 
 **Headers**
 

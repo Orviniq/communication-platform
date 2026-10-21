@@ -6,7 +6,7 @@ on the commit that changes one. A decision that reverses an earlier one is a row
 section 10, never a silent edit.
 
 Architecture lives in [`../architecture/DESIGN-RECORD.md`](../architecture/DESIGN-RECORD.md),
-never here. The threat model is [`../../backend/SECURITY.md`](../../backend/SECURITY.md).
+never here. The threat model is [`docs/security/SECURITY.md`](../security/SECURITY.md).
 
 ## 1. Pinned release
 

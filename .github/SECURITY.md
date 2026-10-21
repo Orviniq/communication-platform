@@ -49,7 +49,7 @@ sees the source address of each allocation. The gateway sees which device signal
 device, so room membership is inferable from that fan-out exactly as group membership is
 inferable from envelope fan-out. None of that is a finding on its own.
 
-Read [backend/SECURITY.md](../backend/SECURITY.md) before reporting. That document states
+Read [docs/security/SECURITY.md](../docs/security/SECURITY.md) before reporting. That document states
 what the system protects and enumerates the residual risk it does not, so you can tell an
 acknowledged limitation from a real finding. This file covers only how to report a case
 where the system fails to keep a property it claims.

@@ -44,7 +44,7 @@ body:
     attributes:
       label: Threat model impact
       description: >-
-        Required if you answered Yes or Unsure. Which property in `backend/SECURITY.md`
+        Required if you answered Yes or Unsure. Which property in `docs/security/SECURITY.md`
         changes, and in which direction.
     validations:
       required: false

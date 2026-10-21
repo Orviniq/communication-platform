@@ -31,7 +31,7 @@ security invariant.
 
 ## The client-server contract
 
-[`backend/CLIENT_CONTRACT.md`](../backend/CLIENT_CONTRACT.md) is authoritative for the
+[`docs/client/CLIENT_CONTRACT.md`](../docs/client/CLIENT_CONTRACT.md) is authoritative for the
 client-server contract and for the client-side half of every security property. The
 per-app `API.md` files are authoritative for endpoints, scopes, limits, and errors.
 

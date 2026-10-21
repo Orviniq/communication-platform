@@ -54,7 +54,7 @@ are not protected against that adversary, and a single-box architecture cannot p
 them.
 
 Full threat model, key inventory, and residual risk:
-[backend/SECURITY.md](backend/SECURITY.md).
+[docs/security/SECURITY.md](docs/security/SECURITY.md).
 
 ## Architecture
 
@@ -105,8 +105,9 @@ with `--no-index` and `--require-hashes`.
 | Document | Covers |
 |---|---|
 | [backend/README.md](backend/README.md) | Protocol and transport, authentication, the WebSocket gateway, attachments, padding buckets, retention, the full environment-variable table, and local development |
-| [backend/SECURITY.md](backend/SECURITY.md) | Threat model, the precise key invariant, what a seizure yields, and residual risk |
-| [backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) | The client-side half of every security property; authoritative for client implementations |
+| [docs/security/SECURITY.md](docs/security/SECURITY.md) | Threat model, the precise key invariant, what a seizure yields, and residual risk |
+| [docs/client/CLIENT_CONTRACT.md](docs/client/CLIENT_CONTRACT.md) | The client-side half of every security property; authoritative for client implementations |
+| [docs/client/CLIENT_CONTACTS_AND_TRUST.md](docs/client/CLIENT_CONTACTS_AND_TRUST.md) | Binding beside the contract: contacts, the contact code, verification by both people, the profile key, and what a file carries |
 | Per-app API reference | [accounts](backend/accounts/API.md) · [devices](backend/devices/API.md) · [vault](backend/vault/API.md) · [messaging](backend/messaging/API.md) · [attachments](backend/attachments/API.md) · [realtime](backend/realtime/API.md) · [core](backend/core/API.md) |
 | [backend/openapi.json](backend/openapi.json) | The same surface as a generated OpenAPI document: every path, method, payload shape and error status. CI fails a change that does not regenerate it |
 | [API_CHANGES.md](API_CHANGES.md) | Everything a client can observe that has moved since the pre-rebuild state, and what the client does about each one |
@@ -119,7 +120,7 @@ with `--no-index` and `--require-hashes`.
 | [docs/admin/PANEL-RECORD.md](docs/admin/PANEL-RECORD.md) | The system of record for the operator back office: the pinned release, the override ledger, the role model, and the deferrals |
 | [backend/ops/RUNBOOK.md](backend/ops/RUNBOOK.md) | The operator runbook: host setup, the offline install, the database, the units, nginx and TLS, coturn, the checks after a deploy, the rollback, and the maintenance timer |
 | [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
-| [.github/SECURITY.md](.github/SECURITY.md) | How to report a vulnerability privately, and which findings are in scope. It states the scope and routes the reader to [backend/SECURITY.md](backend/SECURITY.md) for what the system claims |
+| [.github/SECURITY.md](.github/SECURITY.md) | How to report a vulnerability privately, and which findings are in scope. It states the scope and routes the reader to [docs/security/SECURITY.md](docs/security/SECURITY.md) for what the system claims |
 | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) | The split between the two maintainers, and which side of it a change belongs to |
 
 ## Current status
@@ -153,7 +154,7 @@ package for the voice design. Both are server changes that landed work under
 from.
 
 There has been no external security audit, and
-[backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) is authoritative for what a
+[docs/client/CLIENT_CONTRACT.md](docs/client/CLIENT_CONTRACT.md) is authoritative for what a
 client must do for the security properties to hold.
 
 ## License

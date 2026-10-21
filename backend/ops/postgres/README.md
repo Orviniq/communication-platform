@@ -121,7 +121,7 @@ exits 1 otherwise. [`../RUNBOOK.md`](../RUNBOOK.md) §8 runs it after every depl
 **What this does not do.** It stops the statement text of a failure reaching disk; it
 does nothing about the rows themselves. A deleted row stays in the free space of a
 data file until that space is reused, and in a WAL segment until the segment is
-recycled — [`../../SECURITY.md`](../../SECURITY.md) carries that as residual risk, and
+recycled — [`docs/security/SECURITY.md`](../../../docs/security/SECURITY.md) carries that as residual risk, and
 the storage parameters `messaging.0006_reclaim_the_queue_promptly` sets on the queue
 table are what bound how long the first half of it lasts.
 
