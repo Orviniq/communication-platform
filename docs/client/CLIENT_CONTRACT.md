@@ -441,4 +441,3 @@ authoritative.
 
 The server takes no part in any of it and changed nothing for it. What it can observe is
 §9 there.
-
