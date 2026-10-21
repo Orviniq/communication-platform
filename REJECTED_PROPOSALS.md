@@ -11,7 +11,7 @@ Three neighbouring documents, so a reader lands in the right one:
 |---|---|
 | This file | A defence that was considered and turned down |
 | [`ACCEPTED_RISKS.md`](ACCEPTED_RISKS.md) | An exposure the project understands and carries for now |
-| [`backend/SECURITY.md`](backend/SECURITY.md) | What is protected, what a seizure yields, and what is structurally out of reach |
+| [`docs/security/SECURITY.md`](docs/security/SECURITY.md) | What is protected, what a seizure yields, and what is structurally out of reach |
 | [`docs/architecture/decisions/`](docs/architecture/decisions/) | The proposals that were **accepted**, one ADR each |
 
 An entry here routes to the ADR that holds the accepted alternative rather than
@@ -25,7 +25,7 @@ repeating it.
 
 **Rejected.** At rest it is already structural: no stored envelope carries a sender
 column, and sender identity exists only inside ciphertext
-([`backend/SECURITY.md`](backend/SECURITY.md)). What sealed sender would add is
+([`docs/security/SECURITY.md`](docs/security/SECURITY.md)). What sealed sender would add is
 concealment from the live process — and the authenticated socket that deposits the
 envelope has already named the depositor to live root, one layer above anything a
 sealed-sender construction touches.
@@ -179,7 +179,7 @@ suites did not catch, and the layer that emitted it cannot be fixed.
 unattended reboot then fails: the one host a whole circle depends on during a shutdown
 would sit at an unlock prompt until the operator can reach it. The cold-copy yield it
 would protect is usernames, public keys, day-granularity counts and opaque blobs
-([`backend/SECURITY.md`](backend/SECURITY.md)).
+([`docs/security/SECURITY.md`](docs/security/SECURITY.md)).
 
 **Reopens when.** A disk-copy adversary enters the threat model as the primary
 adversary.
@@ -256,7 +256,7 @@ lock, on the hot path of the largest table in the schema. What persists there is
 ciphertext, a recipient device id and a UTC day — no sender, no conversation, no content
 key. The window is bounded instead, by the autovacuum storage parameters
 [0026](docs/architecture/decisions/0026-host-posture-and-the-identity-backup.md) sets;
-`backend/SECURITY.md` states plainly that this bounds the window and not the residue.
+`docs/security/SECURITY.md` states plainly that this bounds the window and not the residue.
 
 **Reopens when.** A disk-copy adversary enters the threat model as the primary
 adversary.
@@ -309,9 +309,9 @@ and erasure-coded ML-KEM messages inside every ratchet message, a new session-st
 format, and a migration of every live session — against a pairwise transport whose
 version 1 is frozen around one ratchet. What it would add is narrow here. PQXDH already
 makes every session's starting secret quantum-resistant
-([`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §F), which is what protects
+([`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §F), which is what protects
 recorded traffic as long as no device's state is exposed; and the exposure SPQR heals
 from is a compromised client device, which the threat model of
-[`backend/SECURITY.md`](backend/SECURITY.md) places out of scope.
+[`docs/security/SECURITY.md`](docs/security/SECURITY.md) places out of scope.
 
 **Reopens when.** Only by an explicit owner decision.

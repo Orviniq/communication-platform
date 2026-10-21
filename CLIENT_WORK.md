@@ -4,7 +4,7 @@ What the client developer owes, and nothing else. The server cannot change a fil
 under `frontend/`, so an obligation that lands there is recorded here instead.
 
 This file routes; it never repeats. The contract the client implements is
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md), the observable changes
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md), the observable changes
 are in [`API_CHANGES.md`](API_CHANGES.md), and the endpoint reference is the per-app
 `API.md` files with [`backend/openapi.json`](backend/openapi.json) beside them.
 
@@ -25,19 +25,19 @@ authoritative and this one never restates it.
 | Work | Section | Bound by |
 |---|---|---|
 | The `/ws` handshake takes the token in the `Authorization` header; the query-parameter form is gone | [The `/ws` handshake](#the-ws-handshake--this-is-the-breaking-one) | [`backend/realtime/API.md`](backend/realtime/API.md) |
-| One session token replaces the access/refresh pair: the response bodies of register, login and renew moved, and `POST /api/v1/auth/refresh` is gone | [Required — the response bodies moved](#required--the-response-bodies-moved) | [`backend/accounts/API.md`](backend/accounts/API.md), [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §B |
+| One session token replaces the access/refresh pair: the response bodies of register, login and renew moved, and `POST /api/v1/auth/refresh` is gone | [Required — the response bodies moved](#required--the-response-bodies-moved) | [`backend/accounts/API.md`](backend/accounts/API.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §B |
 | The linked-devices screen must stop reading `last_active_date`, which no route serves | [Required — the linked-devices screen loses the last-active value](#required--the-linked-devices-screen-loses-the-last-active-value) | [`backend/devices/API.md`](backend/devices/API.md) |
 | The gateway handles `ack` and `signal` and emits `envelope` and `signal` and nothing else; the frames that left must go from the client | [The gateway frames that left](#the-gateway-frames-that-left-and-the-one-that-changed-shape) | [`backend/realtime/API.md`](backend/realtime/API.md) |
 | The account-erasure action, so a user who wants to leave has a way to | [Required before release — the erase-account action](#required-before-release--the-erase-account-action) | [`backend/accounts/API.md`](backend/accounts/API.md) |
-| `GET /api/v1/users` is gone: find people by exact name, one lookup at a time, and keep the contact list on the client | [Required before release — find people by exact name](#required-before-release--find-people-by-exact-name) | [`backend/accounts/API.md`](backend/accounts/API.md), [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §P |
+| `GET /api/v1/users` is gone: find people by exact name, one lookup at a time, and keep the contact list on the client | [Required before release — find people by exact name](#required-before-release--find-people-by-exact-name) | [`backend/accounts/API.md`](backend/accounts/API.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §P |
 | The "find me by username" toggle, worded so it does not promise more than it hides | [Required before release — the discoverability toggle](#required-before-release--the-discoverability-toggle) | [`backend/accounts/API.md`](backend/accounts/API.md) |
-| The contact list kept on the client and synced only between the user's own devices; the pickers read it alone; the cached directory goes | [Required before release — the contact list](#required-before-release--the-contact-list) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §3 |
-| The contact code: a code to show, a live scanner that verifies, an image path that only adds, and a hard failure on a mismatch | [Required before release — the contact code](#required-before-release--the-contact-code) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §4 |
-| A direct conversation carries content only once both people have verified each other: the notice, the claims, the conversation state, the admission rule and the migration | [Required before release — verification by both people](#required-before-release--verification-by-both-people) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §5, §6 |
-| What a file carries: removed where the format allows it, and a warning before sending where it does not | [Required before release — what a file carries](#required-before-release--what-a-file-carries) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §8 |
-| The profile key, if the release publishes profiles: a fresh key for every version, its audience, and a new version when the user blocks someone or removes a contact | [Required before profiles ship — the profile key](#required-before-profiles-ship--the-profile-key) | [`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md) §7 |
+| The contact list kept on the client and synced only between the user's own devices; the pickers read it alone; the cached directory goes | [Required before release — the contact list](#required-before-release--the-contact-list) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §3 |
+| The contact code: a code to show, a live scanner that verifies, an image path that only adds, and a hard failure on a mismatch | [Required before release — the contact code](#required-before-release--the-contact-code) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4 |
+| A direct conversation carries content only once both people have verified each other: the notice, the claims, the conversation state, the admission rule and the migration | [Required before release — verification by both people](#required-before-release--verification-by-both-people) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5, §6 |
+| What a file carries: removed where the format allows it, and a warning before sending where it does not | [Required before release — what a file carries](#required-before-release--what-a-file-carries) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §8 |
+| The profile key, if the release publishes profiles: a fresh key for every version, its audience, and a new version when the user blocks someone or removes a contact | [Required before profiles ship — the profile key](#required-before-profiles-ship--the-profile-key) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §7 |
 | The web platform files, the conditional-import stubs and the web build step the removed web target left behind | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
-| Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
+| Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
 
 ### Recommended
 
@@ -46,6 +46,7 @@ authoritative and this one never restates it.
 | Read the published limits from `GET /api/v1/config` rather than hard-coding them | [Recommended — read the limits rather than hard-coding them](#recommended--read-the-limits-rather-than-hard-coding-them) | [`backend/core/API.md`](backend/core/API.md) |
 | Say what the day's upload allowance is before the refusal, rather than after it | [Recommended — say what the day's allowance is, before the refusal](#recommended--say-what-the-days-allowance-is-before-the-refusal) | [`backend/attachments/API.md`](backend/attachments/API.md) |
 | The user-facing wording the removed web target left in the client | [The wording](#the-wording) | [`backend/README.md`](backend/README.md) |
+| Point the client's documents at the three documents that moved under `docs/` | [Recommended — the documents that moved](#recommended--the-documents-that-moved) | [ADR-0030](docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md) |
 
 ### Optional
 
@@ -53,7 +54,7 @@ authoritative and this one never restates it.
 |---|---|---|
 | One call for a fan-out, and a conditional identity read under `ETag` | [Optional — one call for a fan-out, and a conditional identity read](#optional--one-call-for-a-fan-out-and-a-conditional-identity-read) | [`backend/devices/API.md`](backend/devices/API.md) |
 | Resume an interrupted attachment download with a `Range` request | [Optional — resume an attachment download](#optional--resume-an-attachment-download) | [`backend/attachments/API.md`](backend/attachments/API.md) |
-| The arbitration the token rotation forced, where two devices race | [Optional — the arbitration the rotation forced](#optional--the-arbitration-the-rotation-forced) | [`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §B |
+| The arbitration the token rotation forced, where two devices race | [Optional — the arbitration the rotation forced](#optional--the-arbitration-the-rotation-forced) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §B |
 
 ## Remove the web target
 
@@ -76,7 +77,7 @@ codes it produced.
 | `frontend/lib/app/dependencies/networking_foundation.dart` | The comment describing the coordinator's `4001` refresh path |
 
 The remaining behaviour a client needs is
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §O.
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §O.
 
 ### The response headers the client may assert on
 
@@ -136,7 +137,7 @@ of this is a removal: it is what the client now owes, and the evidence behind th
 package facts below was gathered on 2026-09-05.
 
 **The client contract for voice is written.**
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N is the binding text, the
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N is the binding text, the
 route is in [`backend/realtime/API.md`](backend/realtime/API.md) with
 [`backend/openapi.json`](backend/openapi.json) beside it, and
 [`API_CHANGES.md`](API_CHANGES.md) records what moved. Where this file and §N could
@@ -217,7 +218,7 @@ full statement of what moved.
 |---|---|
 | `frontend/lib/features/networking/infrastructure/realtime/dio_websocket_gateway.dart` | The `'subscribe_presence'` arm of the outbound frame validator, and the `'presence'` arm of `_decodeEvent` with the `RealtimePresence` event behind it. Neither frame exists on the server. The `'signal'` arm's bound is the other half: it validates a blob against `maximumSignalCharacters`, and the rule is now a bucket rather than a ceiling — base64 of exactly 1024, 4096 or 16384 bytes, and anything else is dropped in silence |
 | `frontend/lib/features/networking/infrastructure/api/api_request.dart` | `maximumSignalCharacters = 16384` and `maximumPresenceTargets = 500`. The first is not the bound any more — the longest legal blob is 21848 characters, the base64 of the largest bucket — and the second bounds a frame that is gone |
-| `frontend/lib/app/dependencies/messaging_providers.dart` | `presenceProjectionProvider`, and the comment saying nothing should read it "until `subscribe_presence` is sent". It will not be sent: presence between conversation members is client protocol over `signal` frames now, per `backend/CLIENT_CONTRACT.md` §N rule 5 |
+| `frontend/lib/app/dependencies/messaging_providers.dart` | `presenceProjectionProvider`, and the comment saying nothing should read it "until `subscribe_presence` is sent". It will not be sent: presence between conversation members is client protocol over `signal` frames now, per `docs/client/CLIENT_CONTRACT.md` §N rule 5 |
 | `frontend/lib/features/messaging/presentation/chat_conversation_view.dart` | The comment describing why presence is absent, which now has a different reason behind it |
 | `frontend/docs/design-handoff/voice-room-states.md` | The "Too large" row reads `Blob over SIGNAL_MAX, 16384 chars`. `SIGNAL_MAX` is gone as a setting and as an environment variable, and a blob is dropped for being off-bucket rather than for being over a maximum — a 1500-character blob is dropped too |
 | `frontend/docs/sync-engine.md`, `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |
@@ -230,7 +231,7 @@ supersedes [ADR-0006](docs/architecture/decisions/0006-device-bound-tokens-on-py
 `POST /api/v1/auth/refresh` is gone with it, and `POST /api/v1/auth/renew` — a bearer
 token, no body — is in its place. `API_CHANGES.md` § "The token pair becomes one
 session token" is the full statement of what moved, and
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §M states both enrollment
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §M states both enrollment
 flows against one token. Paths below were read on 2026-09-05.
 
 This section has two halves, and they are not the same obligation. **The DTO changes
@@ -310,7 +311,7 @@ DTO that requires the field will fail to parse the response.
 
 There is no replacement value, by decision. The server records no activity day for
 a device at all: the socket bind stopped writing one, and no other column stands in
-for it. `backend/SECURITY.md` states the new seizure yield — a creation day, a
+for it. `docs/security/SECURITY.md` states the new seizure yield — a creation day, a
 revocation day, and nothing about when a device was last seen. A screen that needs
 to tell the user which device this is has `label_blob`, `created_date` and
 `this_device`.
@@ -343,7 +344,7 @@ ceilings, the batch sizes, the padding bucket sets and whether this deployment
 serves voice. `envelope_ttl_days` is the one the client cannot get any other way:
 `frontend/docs/sync-engine.md` records that the retention window is an operator
 setting the client cannot state, and the queue-gap disclosure of
-`backend/CLIENT_CONTRACT.md` §H needs it.
+`docs/client/CLIENT_CONTRACT.md` §H needs it.
 
 Every other value is one the client learns today from a refusal — a `413`, a
 `409`, a `400 bad_bucket` — or has hard-coded against this deployment's defaults. An
@@ -428,7 +429,7 @@ The dialog must say that this erases what the server holds and **not** copies pe
 already have. Every message this account sent was decrypted on the recipient's device
 and is stored there; nothing in this call reaches another device. A dialog that says
 "delete my data" or "erase my messages" without that sentence is a claim the system
-does not keep, and `backend/SECURITY.md` § "Best-effort features, worded honestly"
+does not keep, and `docs/security/SECURITY.md` § "Best-effort features, worded honestly"
 is the rule it breaks.
 
 Two smaller facts belong in the same text if the screen mentions them at all:
@@ -467,7 +468,7 @@ that table locally.
 | `400 invalid_request` | The name cannot be a username at all: 3 to 32 lowercase letters, digits or underscores. Say so before the call if the field validates as the user types |
 | `429 throttled` | The `lookup` scope is fifty a day per account, across all its devices, and every call spends it — found, missed or refused. Show the `Retry-After` wait, which can be hours |
 | The contact list | Kept on the client. If it is synced between the user's own devices, it travels only inside end-to-end encrypted blobs the server cannot read — the key backup, or a device-to-device transfer — and never as anything the server can parse. A contact is held by its `user_id`, so the client never needs to look a name up again to reach it |
-| The answer | A claim of the server, not a verified identity. Before the first message, the contact's identity is verified exactly as `backend/CLIENT_CONTRACT.md` §C and §D require of any peer — §P says why this matters more for a lookup |
+| The answer | A claim of the server, not a verified identity. Before the first message, the contact's identity is verified exactly as `docs/client/CLIENT_CONTRACT.md` §C and §D require of any peer — §P says why this matters more for a lookup |
 
 ### Required before release — the discoverability toggle
 
@@ -487,7 +488,7 @@ they share, holds the `user_id` and reaches the account through every route addr
 by one — and registration still reports the name as taken to anyone who tries to
 register it. A label such as "Hide my account" or "Make me invisible" is a claim the
 system does not keep; "Let people find me by my username" is the setting as it is.
-`backend/SECURITY.md` states the same limits.
+`docs/security/SECURITY.md` states the same limits.
 
 ## Contacts, the contact code, and verification by both people
 
@@ -497,8 +498,8 @@ contact QR code finds and verifies a person, a direct conversation carries conte
 once both people have verified each other, the profile key is rotated when the user blocks
 someone or removes a contact, and a file's metadata is removed where it safely can be and
 announced where it cannot. The binding text is
-[`backend/CLIENT_CONTACTS_AND_TRUST.md`](backend/CLIENT_CONTACTS_AND_TRUST.md), routed from
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §Q; where this file and it could
+[`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md), routed from
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §Q; where this file and it could
 differ, it is authoritative. **Nothing on the server changed**, so no server merge forces
 any of this; each section below is client work the owner decided, and the client's own
 documents move with it (the last section).
@@ -592,7 +593,26 @@ the work lands, and the binding text wins where they differ.
 | `frontend/docs/ui-specification.md` | §6 (the rows and previews), §7 (the add sheet and the state words), §8 (the panel), §8.2 (the warnings), §11 and §11.1 (the safety-number page), §15 (My code, the discoverability sentence) |
 | `frontend/docs/platform-android.md` | "Why there is no `CAMERA` permission" no longer holds (§4.7). The scanner. The copy's removal of metadata (§8) |
 | `frontend/docs/local-data-model.md` | The contact, block, claim, carried-over and profile-key records |
-| `frontend/docs/threat-model.md` | The verification statements, against `backend/SECURITY.md` residual risk 7 |
+| `frontend/docs/threat-model.md` | The verification statements, against `docs/security/SECURITY.md` residual risk 7 |
 | `frontend/docs/decisions.md` | One new ADR recording this work on the client side — as ADR-068 to ADR-070 recorded server ADRs — that amends ADR-093 (the read of §5.3 beside D12; the row of D18 gains the claim; the hint of D19 is withdrawn), ADR-089 and ADR-097 (the neutral names and the removal of metadata) and ADR-098 (presence for a direct conversation in `MUTUAL` only), and records `com.google.zxing:core` under ADR-054's rules: the exact version, its licence, and the date and source it was read from |
 | `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
 
+
+## Recommended — the documents that moved
+
+[ADR-0030](docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md)
+moves three documents under the root `docs/` directory. Nothing the client does changes,
+and nothing breaks: each old path keeps a pointer file that links the new one. What is left
+is the client's own documents, which still name the old paths.
+
+| Old path | New path |
+|---|---|
+| `backend/SECURITY.md` | [`docs/security/SECURITY.md`](docs/security/SECURITY.md) |
+| `backend/CLIENT_CONTRACT.md` | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) |
+| `backend/CLIENT_CONTACTS_AND_TRUST.md` | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) |
+
+On 2026-10-21, 53 files under `frontend/` linked these paths 146 times — 74 of them the
+contract, `frontend/AGENTS.md` and `frontend/docs/backend-api.md` among them — and none of
+them names a section, so a search for the three old paths finds every link to change. The
+per-app `API.md` files did not move. Once no client document names an old path, the pointer
+files can go; say so here and the server side deletes them.

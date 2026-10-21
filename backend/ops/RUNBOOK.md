@@ -18,7 +18,7 @@ detail, and the note is authoritative wherever the two could differ. The notes:
 | The nginx site, its per-location caps and its header ownership | [`nginx/`](nginx/) |
 | The coturn relay: its listener, its quotas, its denied peers and its silence | [`coturn/turnserver.conf`](coturn/turnserver.conf) |
 | Every environment variable and what it does | [`../README.md`](../README.md) §Configuration, [`../.env.example`](../.env.example) |
-| The threat model these steps serve | [`../SECURITY.md`](../SECURITY.md) |
+| The threat model these steps serve | [`docs/security/SECURITY.md`](../../docs/security/SECURITY.md) |
 
 **No secret value appears in this file, and none may be added to it.** Every
 secret is generated on the host and written only into the environment file of
@@ -712,7 +712,7 @@ else — eight tables, listed in the script with the reason for every exclusion 
 them, and pinned by `ops/tests/test_scripts.py` so the list cannot drift quietly. The
 queue, the attachment rows, the attachment bytes and the admin audit log are
 deliberately absent: a backup of any of them is a second copy of exactly the rows
-[`../SECURITY.md`](../SECURITY.md) bounds by retention, kept for seven days in a
+[`docs/security/SECURITY.md`](../../docs/security/SECURITY.md) bounds by retention, kept for seven days in a
 directory the retention sweep does not reach.
 
 ### The key

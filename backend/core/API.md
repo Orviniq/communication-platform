@@ -201,7 +201,7 @@ a limit — a client that ignores this route learns the same numbers from a `413
 
 It exists mainly for the retention window. `envelope_ttl_days` is an operator
 setting, and a client that tells a user how long an undelivered message survives has
-no other way to know it ([`../CLIENT_CONTRACT.md`](../CLIENT_CONTRACT.md) §H).
+no other way to know it ([`docs/client/CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §H).
 
 Authenticated: none of it is a secret, and none of it is anyone's business before
 they hold a session. The values change only when the operator edits the environment

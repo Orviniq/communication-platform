@@ -511,12 +511,12 @@ There is no list of accounts and no search: the server publishes no directory.
   ignored.
 - **The answer is a claim of the server.** It names an account; it proves nothing about
   whose keys that account holds. Verify the identity before trusting it —
-  [`../CLIENT_CONTRACT.md`](../CLIENT_CONTRACT.md) §P.
+  [`docs/client/CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §P.
 
 **What the setting does not hide.** An account that turned discoverability off is
 missing from this route and from nowhere else. Every route addressed by a `user_id`
 serves it to a caller who already holds the id, and `POST /api/v1/auth/register`
-still answers `409 username_taken` for its name. `backend/SECURITY.md` states both.
+still answers `409 username_taken` for its name. `docs/security/SECURITY.md` states both.
 
 **Headers**
 

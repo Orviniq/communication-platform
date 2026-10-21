@@ -10,7 +10,7 @@ risk and becomes work.
 
 Threats that are *structurally* out of reach — the social graph under live root,
 timing, voice connection metadata — are not here. They live in
-[`backend/SECURITY.md`](backend/SECURITY.md) under residual risk, because no decision
+[`docs/security/SECURITY.md`](docs/security/SECURITY.md) under residual risk, because no decision
 of this project would remove them. A defence that was considered and turned down is
 not here either: [`REJECTED_PROPOSALS.md`](REJECTED_PROPOSALS.md) holds those, with the
 trigger that reopens each one.
@@ -574,7 +574,7 @@ that exists for this, and it hands the value to the named service alone.
 shape — a settings-layer rewrite, in a run whose decisions fix the units to the
 shape they have. It is also not the binding constraint here: the threat model
 already accepts an attacker with live root on the VPS
-([`backend/SECURITY.md`](backend/SECURITY.md)), and root reads the credential
+([`docs/security/SECURITY.md`](docs/security/SECURITY.md)), and root reads the credential
 directory as easily as the environment. What `LoadCredential=` would actually buy
 is defence against an unprivileged neighbour on this shared host, which is the same
 adversary AR-6 names.
@@ -595,7 +595,7 @@ adversary AR-6 names.
   same ownership and mode.
 - None of these secrets can decrypt a message. They are infrastructure: content keys
   never reach this server, which is the property
-  [`backend/SECURITY.md`](backend/SECURITY.md) is built on.
+  [`docs/security/SECURITY.md`](docs/security/SECURITY.md) is built on.
 
 **If it were exploited.** A reader of the environment mints tokens for any account
 (`JWT_SIGNING_KEY`) and reads the database and Redis directly. That is full compromise of the relay — and it is
@@ -668,9 +668,9 @@ and whichever is chosen is recorded here in place of this row.
 **What is exposed.** Voice is a full mesh, so a room of *n* participants costs each
 device *n*−1 encodes, *n*−1 uplinks and *n*−1 relay allocations, and the relay carries
 every one of those streams twice. Ten participants is the design point at band 0, and
-[`backend/SECURITY.md`](backend/SECURITY.md) claims nothing above it. The ceiling that
+[`docs/security/SECURITY.md`](docs/security/SECURITY.md) claims nothing above it. The ceiling that
 holds a room there is a client obligation in
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N — the client refuses to
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N — the client refuses to
 admit more than ten participants and states the reason — and nothing on the server
 enforces it. The server holds no room, no membership and no participant count
 ([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)),

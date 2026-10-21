@@ -356,8 +356,8 @@ stored or relayed blob — and a live operator watching the routing can log whic
 connection writes to and reads from which device queue, i.e. who talks to whom and
 when. The social graph is not hidden from a live, hostile operator; message content is.
 The schema stores none of that graph at rest, so a seized disk yields only what
-[SECURITY.md](SECURITY.md) enumerates.
+[SECURITY.md](../docs/security/SECURITY.md) enumerates.
 
-Further reading: [SECURITY.md](SECURITY.md) for the full threat model and residual
-risk, [CLIENT_CONTRACT.md](CLIENT_CONTRACT.md) for the client-side halves of every
+Further reading: [SECURITY.md](../docs/security/SECURITY.md) for the full threat model and residual
+risk, [CLIENT_CONTRACT.md](../docs/client/CLIENT_CONTRACT.md) for the client-side halves of every
 security property.

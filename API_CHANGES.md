@@ -11,7 +11,7 @@ what the client does about it. Nothing here repeats an endpoint reference — th
 per-app [`backend/*/API.md`](backend/) files are the reference, and
 [`backend/openapi.json`](backend/openapi.json) is the same contract in a form a
 generator reads. This file records only what moved, and
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) records what the client
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) records what the client
 must do for the security properties to hold.
 
 Two things caused most of it. The HTTP surface left Django REST Framework for FastAPI
@@ -102,7 +102,7 @@ such route or resource."}`.
 |---|---|---|---|
 | `PUT /api/v1/me/devices/{device_id}/keypackages` | Stored up to 100 consumable MLS key packages per device, plus one last-resort package, and returned `{"keypackage_count": n}`; `409 {"code": "keypackage_limit"}` at the cap | `404 not_found` | Delete the upload path. Nothing replaces it: a group start needs no key package |
 | `GET /api/v1/me/devices/{device_id}/keypackages/count` | Returned `{"keypackage_count": n}` for the calling device's consumable pool | `404 not_found` | Delete the poll. Poll one-time prekeys instead, on `GET /api/v1/me/devices/{device_id}/prekeys/count` (`otpk_count`, `pq_otpk_count`) |
-| `POST /api/v1/users/{user_id}/keypackages/claim` | Returned one MLS key package per live device of the user as `{"keypackages": [{"device_id": …, "blob": …}]}`, consuming it, or the device's last-resort package when its pool was empty | `404 not_found` | Start a group session by claiming PQXDH bundles from `POST /api/v1/users/{user_id}/keys/claim` for each member, exactly as for a direct message (`backend/CLIENT_CONTRACT.md` §F) |
+| `POST /api/v1/users/{user_id}/keypackages/claim` | Returned one MLS key package per live device of the user as `{"keypackages": [{"device_id": …, "blob": …}]}`, consuming it, or the device's last-resort package when its pool was empty | `404 not_found` | Start a group session by claiming PQXDH bundles from `POST /api/v1/users/{user_id}/keys/claim` for each member, exactly as for a direct message (`docs/client/CLIENT_CONTRACT.md` §F) |
 
 **The server has no counterpart for an MLS profile.** No endpoint accepts, stores or
 serves a key package, a Welcome, a commit, or any other MLS artefact, and none will.
@@ -146,7 +146,7 @@ body; the one success body that has moved since arrived later and is recorded un
 | `messages` in a token refusal | An array of per-check messages | Gone | Drop any use of it |
 | `stale_version`, `not_found`, `token_revoked`, `voice_unconfigured` | The code with no `detail`, or with none on some routes | Every one carries a `detail` string | Compare `code`, never the whole body |
 | An unknown room on `PUT /api/v1/rooms/{room_id}` | `404` with an empty body | `404 {"code": "not_found", "detail": "No such room."}` | Parse the refusal as JSON |
-| `pruned_through` in `GET /api/v1/me/envelopes` | The same integer, but a lost envelope may have been an MLS commit: the device was permanently desynced from those groups and had to be removed and re-added with a fresh Welcome | The same integer — the highest `seq` the TTL prune has deleted from this mailbox, 0 if never. A lost envelope may now have carried a Double Ratchet message or a group control event | Replace the remove-and-re-add flow with the repair flow (`backend/CLIENT_CONTRACT.md` §H) |
+| `pruned_through` in `GET /api/v1/me/envelopes` | The same integer, but a lost envelope may have been an MLS commit: the device was permanently desynced from those groups and had to be removed and re-added with a fresh Welcome | The same integer — the highest `seq` the TTL prune has deleted from this mailbox, 0 if never. A lost envelope may now have carried a Double Ratchet message or a group control event | Replace the remove-and-re-add flow with the repair flow (`docs/client/CLIENT_CONTRACT.md` §H) |
 
 ## Realtime
 
@@ -270,7 +270,7 @@ the route's own reference.
 |---|---|---|---|
 | `POST /api/v1/auth/login` after five failed attempts on one name within fifteen minutes | Every attempt answered `401 invalid_credentials`; only the per-address limiter stood between a guesser with many addresses and the password | `429 {"code": "throttled", "detail": "Too many sign-in attempts for this name. Wait and try again."}` with `Retry-After` in seconds, for that name, until the cool-off ends. The lock applies to a name whether or not an account holds it, so it confirms nothing about existence, and a successful sign-in clears the count | Back off for `Retry-After` seconds and tell the user. Do not treat the refusal as a wrong password, and do not retry inside the window |
 | `POST /api/v1/envelopes` to a device whose undelivered bytes would pass `MAILBOX_MAX_BYTES` (default 32 MiB) with this batch | Every item to a live device was queued; a mailbox had no ceiling | The device is refused whole — nothing is written for it and its sequence does not move — and named in a new `full_devices` list beside `stale_devices`; the rest of the batch proceeds and `accepted` counts only what was written | Read `full_devices` on every send. Keep a full device in the session set and retry its items once it has drained; a full device is live, not stale |
-| `POST /api/v1/me/devicelog` when the account's log would pass `MAX_DEVICELOG_RECORDS` (default 10 000) records | Every well-formed append was stored; the log had no ceiling | `409 {"code": "devicelog_limit", "detail": "The device-list log of this account is full."}`, and nothing of the batch is stored | Append only on a device-set change or an identity rotation, as §J of `backend/CLIENT_CONTRACT.md` already says; a client that reaches the ceiling has a defect |
+| `POST /api/v1/me/devicelog` when the account's log would pass `MAX_DEVICELOG_RECORDS` (default 10 000) records | Every well-formed append was stored; the log had no ceiling | `409 {"code": "devicelog_limit", "detail": "The device-list log of this account is full."}`, and nothing of the batch is stored | Append only on a device-set change or an identity rotation, as §J of `docs/client/CLIENT_CONTRACT.md` already says; a client that reaches the ceiling has a defect |
 
 ## Saturation now says so
 
@@ -528,7 +528,7 @@ to be built. Phase 7 builds the server half of it, and it is one route, four ope
 settings and one breaking change on the socket. The reference for the route and for
 every frame is [`backend/realtime/API.md`](backend/realtime/API.md); what the client
 must implement for a call to be end to end is
-[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N, which is binding and is
+[`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N, which is binding and is
 not repeated here. The decisions are
 [ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 and [ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md).
@@ -547,7 +547,7 @@ and [ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
-| `subscribe_presence` (client → server) | Replaced the socket's presence-target set — up to 500 device UUIDs — and announced `online` to every target at once. The same targets were told `offline` when the socket closed | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame. Presence is client protocol now: fan a query announcement out as `signal` frames and let the participants answer (`backend/CLIENT_CONTRACT.md` §N) |
+| `subscribe_presence` (client → server) | Replaced the socket's presence-target set — up to 500 device UUIDs — and announced `online` to every target at once. The same targets were told `offline` when the socket closed | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame. Presence is client protocol now: fan a query announcement out as `signal` frames and let the participants answer (`docs/client/CLIENT_CONTRACT.md` §N) |
 | `presence` (server → client) | Arrived carrying `device_id` and `state` — `online` or `offline` — for a device the socket had subscribed to | Never sent | Delete the handler. A peer that has gone is one your own timeout tells you about; the server no longer knows |
 | The presence-target cap | 500 device ids for one socket; a longer list dropped the frame | Gone with the frames it bounded | None |
 | The `signal` blob | Any string of at most `SIGNAL_MAX` characters (default 16384). The server never looked inside it | **Standard base64 that decodes to exactly 1024, 4096 or 16384 bytes** — one of `SIGNAL_BUCKETS`, the padding rule every stored ciphertext already obeys. A blob outside the rule drops the frame in silence: no close code, and no error frame to read | **Breaking, and silently so.** A client that sent an arbitrary string has every `signal` frame dropped with nothing to observe but the answer that never comes. Pad the plaintext to a bucket before encrypting, encode with the standard alphabet, and treat a blob that is not one of the three lengths as a client-side bug |
@@ -654,7 +654,7 @@ Four costs the client was carrying, and one column it can no longer read
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
-| The retention window | Not published anywhere. `ENVELOPE_TTL_DAYS` is an operator setting, so a client telling a user how long an undelivered message survives was guessing | `envelope_ttl_days` in the response | Recommended. Read it once at startup and use it in the queue-gap disclosure (`backend/CLIENT_CONTRACT.md` §H) |
+| The retention window | Not published anywhere. `ENVELOPE_TTL_DAYS` is an operator setting, so a client telling a user how long an undelivered message survives was guessing | `envelope_ttl_days` in the response | Recommended. Read it once at startup and use it in the queue-gap disclosure (`docs/client/CLIENT_CONTRACT.md` §H) |
 | Every other limit | Learned from a `413`, a `409` or a `400 bad_bucket` | `attachment_ttl_days`, `mailbox_max_bytes`, `max_devices_per_user`, `max_devicelog_records`, `session_token_days`, `send_batch_max`, `ack_max`, `drain_page_max`, `claim_max`, `envelope_buckets`, `attachment_buckets`, `signal_buckets` | Recommended. Prefer these over hard-coded numbers: an operator may change any of them |
 | Whether the deployment serves voice | Discovered by calling `POST /api/v1/me/relay` and reading `503 voice_unconfigured` | `voice_configured`, a boolean | Recommended. Hide the call control rather than offering one that fails |
 
@@ -667,7 +667,7 @@ route takes a full-scope token.
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
 | `GET /api/v1/me/devices` | Each item carried `device_id`, `label_blob`, `created_date`, `last_active_date` and `this_device` | `last_active_date` is gone from the item. The other four are unchanged | **Required.** Remove the field from the DTO and from the linked-devices screen. A DTO that requires it will fail to parse |
-| What the server records about activity | The socket bind wrote `Device.last_active_date` on the day it changed, and six other columns carried a day-coarse write timestamp | Nothing. No route serves any of the seven, and the socket bind writes no row at all | None. There is no replacement, by decision: `backend/SECURITY.md` states the new seizure yield |
+| What the server records about activity | The socket bind wrote `Device.last_active_date` on the day it changed, and six other columns carried a day-coarse write timestamp | Nothing. No route serves any of the seven, and the socket bind writes no row at all | None. There is no replacement, by decision: `docs/security/SECURITY.md` states the new seizure yield |
 
 ### The rate limit and the socket keepalive
 
@@ -702,7 +702,7 @@ per-account lifetime quota went with it, because that column was what the quota 
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
-| Which account uploaded a stored attachment | `Attachment.uploader`, a foreign key to the account | Written by nothing and read by nothing. No route ever served it, so no response shape changes | None. It is stated because `backend/SECURITY.md` states the new seizure yield: an attachment row now names a size and a day and nobody |
+| Which account uploaded a stored attachment | `Attachment.uploader`, a foreign key to the account | Written by nothing and read by nothing. No route ever served it, so no response shape changes | None. It is stated because `docs/security/SECURITY.md` states the new seizure yield: an attachment row now names a size and a day and nobody |
 | The panel's view of an attachment | The operator saw the uploader, could filter by it, and saw each account's stored bytes on its page | The operator sees the size and the day. `docs/admin/PANEL-RECORD.md` §10 records the reversal | None — no client surface |
 
 ## An attachment download resumes
