@@ -200,7 +200,7 @@ after a vacuum, and the bytes are gone only when a later insert takes that space
 same row is in the write-ahead log twice, as its insert and as its delete, and a WAL
 segment holds what it holds until it is recycled and written over. Nothing in this
 deployment zeroes a page, and the proposal to do so on a schedule is rejected rather
-than deferred ([`REJECTED_PROPOSALS.md`](../REJECTED_PROPOSALS.md) 17).
+than deferred ([`REJECTED_PROPOSALS.md`](../../REJECTED_PROPOSALS.md) 17).
 
 This is a routine path and not an edge case: the queue table deletes a row on every
 acknowledgement. What persists there is exactly what the row held — bucketed
@@ -213,7 +213,7 @@ What is bounded is the window, not the residue.
 queue table so its space is reclaimed at 100 dead tuples plus one percent of the live
 ones, where the stock trigger is 50 plus a fifth — 2100 against 40 050 at the 200 000
 row shape, measured in
-[`docs/architecture/GROUND-TRUTH.md`](../docs/architecture/GROUND-TRUTH.md) §4. The
+[`docs/architecture/GROUND-TRUTH.md`](../architecture/GROUND-TRUTH.md) §4. The
 WAL has no equivalent bound here: how long a segment holds an old row follows write
 volume and checkpoint activity, and this deployment sets nothing to shorten it.
 
@@ -221,7 +221,7 @@ volume and checkpoint activity, and this deployment sets nothing to shorten it.
 
 The server publishes no list of its accounts. `GET /api/v1/users`, which answered every
 activated account to any session, is gone
-([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
+([ADR-0028](../architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
 What replaces it is `POST /api/v1/users/lookup`: one exact name, after lowercasing, in
 the request body, answered with that account's id and name or with one `404` that is
 the same for a name nobody holds, an inactive account and an account whose owner turned
@@ -262,8 +262,8 @@ guard refuses the columns and the two-user table one would take.
 
 None of this is server code, and the server stores and checks nothing new for it. It is
 stated here because it changes what the system claims as a whole
-([ADR-0029](../docs/architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md);
-the binding text is [`CLIENT_CONTACTS_AND_TRUST.md`](CLIENT_CONTACTS_AND_TRUST.md)).
+([ADR-0029](../architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md);
+the binding text is [`CLIENT_CONTACTS_AND_TRUST.md`](../client/CLIENT_CONTACTS_AND_TRUST.md)).
 
 - **A direct conversation carries content only once both people have verified each
   other** out of band. Before that the two clients exchange nothing but the verification
@@ -305,14 +305,14 @@ key for either of them to hold. Rotation is inherent — a connection's keys die
 connection, and a member who has left has no connection and gets no offer.
 
 The design is
-[ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md):
+[ADR-0021](../architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md):
 audio only, as a full mesh of WebRTC connections between client devices under a
 relay-only ICE policy. The offers, the answers and the candidates travel inside
 pairwise-session ciphertext over `/ws` `signal` frames, so this server relays them and
 cannot read or replace a DTLS fingerprint. A room is client state carried over ordinary
 envelopes, exactly as a group is, and the gateway holds no room, no membership and no
 presence
-([ADR-0022](../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
+([ADR-0022](../architecture/decisions/0022-the-gateway-holds-no-presence.md)).
 
 The whole HTTP surface of voice is `POST /api/v1/me/relay` (`realtime/API.md`), which
 mints an ephemeral coturn credential under the secret the two processes share. It reads

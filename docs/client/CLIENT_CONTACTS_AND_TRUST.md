@@ -4,11 +4,11 @@ This document binds the Flutter client exactly as [`CLIENT_CONTRACT.md`](CLIENT_
 does, and the contract routes here from its §Q. It specifies client behaviour only.
 **Nothing in it adds, changes or needs a server route, a column, a setting or a rate
 scope**: every route it names is served today, and the server stays what
-[`SECURITY.md`](SECURITY.md) says it is — a relay that verifies nothing that matters
+[`SECURITY.md`](../security/SECURITY.md) says it is — a relay that verifies nothing that matters
 for security. The decision is recorded in
-[ADR-0029](../docs/architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md);
+[ADR-0029](../architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md);
 the work it gives the client, in the order to do it, is
-[`../CLIENT_WORK.md`](../CLIENT_WORK.md).
+[`../CLIENT_WORK.md`](../../CLIENT_WORK.md).
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as described in
 RFC 2119 and RFC 8174 when, and only when, they appear in capitals.
@@ -102,7 +102,7 @@ already exists (§5.6).
   trust record is `verified` — the existing rule that verification precedes inviting. No
   picker lists anyone else.
 - **The discoverability toggle** is a user setting, specified in
-  [`../CLIENT_WORK.md`](../CLIENT_WORK.md) § "Required before release — the
+  [`../CLIENT_WORK.md`](../../CLIENT_WORK.md) § "Required before release — the
   discoverability toggle". Its text MUST also say that the user's contact code (§4) adds
   them whatever the setting says: "Anyone you show your code to can still add you."
 
@@ -153,7 +153,7 @@ history transfer has only the changes made after it was added — the same limit
 ### 3.6 Migrating the cached directory
 
 The local `users` table still holds what `GET /api/v1/users` returned before
-[ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)
+[ADR-0028](../architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)
 removed it: the server's whole user list. At the first start of a build that implements
 this document, the device MUST:
 
@@ -582,7 +582,7 @@ the code on 2026-10-20:
   `pairwise_fanout_coordinator_test.dart` pins it: "a member that fails verification
   withholds the whole copy". **The send does not skip that member, as the brief for this
   document assumed; it sends to nobody.** This document leaves that as it is, and
-  [`../CLIENT_WORK.md`](../CLIENT_WORK.md) records it as an open decision for the owner.
+  [`../CLIENT_WORK.md`](../../CLIENT_WORK.md) records it as an open decision for the owner.
 
 The same reading shows one gap this document does not close for groups: a group event that
 arrives on a session this device accepted earlier is admitted with no check of its sender's

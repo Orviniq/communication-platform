@@ -312,16 +312,16 @@ forever rather than being trusted on the server's word.
 Voice is served from this revision. A call is a full mesh of WebRTC audio between
 devices, every path across the self-hosted coturn, and each connection keyed by
 DTLS-SRTP between its two endpoints
-([ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
+([ADR-0021](../architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
 There is no application-level media key to distribute, so nothing of §F applies to the
 media itself. What §F does carry is the signalling.
 
 **The server holds no room and no participant list.** It mints a relay credential
-(`POST /me/relay`, [`realtime/API.md`](realtime/API.md)) and relays `signal` frames,
+(`POST /me/relay`, [`realtime/API.md`](../../backend/realtime/API.md)) and relays `signal` frames,
 and that is the whole of its part. Everything below is therefore yours to build, and
 none of it is checked by anything upstream. The packaging each rule implies — the media
 package, its Android dependency set, the offline mirror and the manifest permissions —
-is [`../CLIENT_WORK.md`](../CLIENT_WORK.md); what follows is the protocol.
+is [`../CLIENT_WORK.md`](../../CLIENT_WORK.md); what follows is the protocol.
 
 1. **One connection per device pair.** Create one `RTCPeerConnection` between each of
    your own devices and each member device present in the room — a room of ten
@@ -390,7 +390,7 @@ is [`../CLIENT_WORK.md`](../CLIENT_WORK.md); what follows is the protocol.
 
 The server publishes no directory. `POST /api/v1/users/lookup` turns one exact name
 into one `user_id`, and that is the whole of contact discovery the server takes part
-in ([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
+in ([ADR-0028](../architecture/decisions/0028-an-exact-username-lookup-replaces-the-directory.md)).
 
 - **The answer is a claim of the server.** A modified server can answer a lookup with
   any account it likes — an account it created, holding keys it holds. The `user_id` a
@@ -412,12 +412,12 @@ in ([ADR-0028](../docs/architecture/decisions/0028-an-exact-username-lookup-repl
 - **The discoverability setting hides a name and nothing else.** Its wording must not
   claim more: a caller who already holds the `user_id` reaches the account through
   every route addressed by one, and registration still reports the name as taken
-  (`backend/SECURITY.md` § "Residual risk").
+  (`docs/security/SECURITY.md` § "Residual risk").
 
 ## Q. Contacts, verification by both people, the profile key, and file metadata
 
 The binding text is [`CLIENT_CONTACTS_AND_TRUST.md`](CLIENT_CONTACTS_AND_TRUST.md)
-([ADR-0029](../docs/architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md)).
+([ADR-0029](../architecture/decisions/0029-a-contact-code-and-verification-by-both-people.md)).
 This section names what it binds; where the two could differ, that document is
 authoritative.
 

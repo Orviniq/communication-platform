@@ -3,6 +3,9 @@
 - Status: Accepted
 - Phase: 1 to 5
 - Date: 2026-09-03
+- Superseded in part by [0030](0030-the-security-model-and-the-client-contract-move-under-docs.md)
+  on 2026-10-21: `backend/SECURITY.md` and `backend/CLIENT_CONTRACT.md` moved under
+  `docs/`, and their old paths hold pointer files
 
 ## Context
 
