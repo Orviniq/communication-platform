@@ -315,3 +315,132 @@ from is a compromised client device, which the threat model of
 [`docs/security/SECURITY.md`](docs/security/SECURITY.md) places out of scope.
 
 **Reopens when.** Only by an explicit owner decision.
+
+---
+
+### 21. A group's online status watching every device of every member
+
+**Protects.** Nothing. It would show a member online on a third or later device that is in
+the foreground but not watching the group itself.
+
+**Rejected.** By the owner's choice of 2026-10-22, between three options costed in full
+([ADR-0031](docs/architecture/decisions/0031-online-status-stays-client-protocol-over-signal-frames.md)).
+A query of a 50-member group of ten-device members would be up to 490 frames, which the
+presence pacer cannot send inside one 25-second renewal at any rate the socket's 100-frame
+second leaves room for, and it would probe every dormant device of every member, each of which
+then collects dead skipped keys. Two devices a member — at most 98 frames — cost neither.
+
+**Reopens when.** A client surface needs the status of a device that is not among a member's
+two most recently heard, which is a new owner decision with its own cost.
+
+---
+
+### 22. The status audience and the read-receipt setting kept per phone
+
+**Protects.** Nothing. It would keep client ADR-098's per-phone switch and spare one own-device
+record.
+
+**Rejected.** By the owner's choice of 2026-10-22. A setting that hides a person's status on one
+phone and not on the tablet they forgot reveals them the moment the tablet is opened; a person's
+privacy choice belongs to the person. The account-wide record is `CPCTV001` kind 7
+([`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §5).
+
+**Reopens when.** Only by an explicit owner decision.
+
+---
+
+### 23. A coarse last seen, such as "recently" or "within a week"
+
+**Protects.** The exact time a person was last online, from people allowed to see their status.
+
+**Rejected.** The last seen is only ever shown to someone in the person's audience, and that
+someone's phone was admitted to watch them in real time: the frames have already shown it the
+exact moments the person was online while it watched. A coarser display would hide nothing the
+frames had not shown, and would make the screen less true than what the phone knows. Hiding the
+time from someone is done by leaving them out of the audience, which deletes the last seen their
+phone holds.
+
+**Reopens when.** A last seen is shown to anyone outside the audience — which this design never
+does.
+
+---
+
+### 24. Admin rights granted one by one, as Telegram grants them
+
+**Protects.** Least privilege inside a voice room: an admin who may mute but not remove, or end
+a call but not rename the room.
+
+**Rejected.** A minimal set was asked for. Fixed roles mirror the group's owner, admins and
+members, which the client already builds, checks and shows; rights granted one by one add a
+field to every role event, a rule for who may grant which right, a screen for it, and a chain of
+grants to check on every device, for rooms of at most 50 members whose owner can make and unmake
+admins at will
+([`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md) §2).
+
+**Reopens when.** An owner asks for a moderator who holds some admin powers and not others.
+
+---
+
+### 25. In-call actions as signed control events in the room's chain
+
+**Protects.** A mute or a removal from a call that every member, a late joiner included, applies
+from the same signed record, with an audit trail.
+
+**Rejected.** A control event is durable and arrives when the recipient next drains its queue,
+which may be after the call; a mute that lands an hour late is not a mute. It would also make
+every mute a revision of the room's chain, and every concurrent pair of them a fork that
+quarantines the room. The actions ride the call's own volatile signalling instead, checked
+against each device's copy of the roster, and a newcomer learns them from the owner and the
+admins in the call
+([`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md) §5). Keeping someone out
+for good is a removal from the room, which is a control event.
+
+**Reopens when.** A call action must outlive the call.
+
+---
+
+### 26. Upgrading a room before every member's devices can read version 2
+
+**Protects.** Nothing. It would start roles sooner in a room with a member who has not updated.
+
+**Rejected.** A device that cannot read version 2 cannot open the upgrade, stays at the
+version-1 state, and may sign a version-1 change the others then see as a fork. It would not know
+it had been left behind: the room would fork on its side, silently
+([`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md) §4.4).
+
+**Reopens when.** A client exists that can be made to refuse a room it cannot read, rather than
+diverge from it.
+
+---
+
+### 27. Letting an upgrade win over a change it crosses
+
+**Protects.** A room from being quarantined when its upgrade and another change are signed
+against the same revision.
+
+**Rejected.** A rule that picks the upgrade makes the upgrade a veto. A member removes the owner
+at revision *n*; the owner, or a server that controls delivery order, signs an upgrade against
+revision *n − 1*; every device that saw the upgrade first would drop the removal. The fork rule
+quarantines the room instead and lets no client pick a branch, which is what every concurrent
+pair of changes already does
+([`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md) §4.3).
+
+**Reopens when.** Rooms gain a merge rule for concurrent changes in general, which would be
+reviewed as a change to the chain itself.
+
+---
+
+### 28. A successor owner for a room whose creator has left
+
+**Protects.** Nothing. It would give roles to a version-1 room whose creator — the signer of its
+revision 1 — is no longer a member, by making the earliest remaining member the owner.
+
+**Rejected.** By the design review of 2026-10-22. Version 1 lets any member remove any other, the
+creator included, so a successor rule is a way for a member to make itself the owner: remove the
+creator, and every member who joined earlier, then sign the upgrade. Equal authority that others
+could contest would become an owner's authority that nobody can remove. Such a room keeps version
+1 instead, and members who want roles make a new room
+([`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md) §4.1).
+
+**Reopens when.** A room can name its owner by a signed act of its members, rather than by an
+order a member can arrange.
