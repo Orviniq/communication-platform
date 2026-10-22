@@ -69,8 +69,8 @@ contact list declared to the server, and a frame composed out of the server's ow
 98 devices. At the presence pacer it leaves in 6.8 seconds, the worst second stays at 94 of the
 100 frames a socket may send, and at most 98 answers come back to a socket whose queue holds
 256. Across the server, every member of a 50-member group holding the chat open on one device is
-about 196 relays a second; the measured relay rate of the gateway is 14 200 to 15 200 a second on
-the developer machine (Evidence, below).
+about 196 relays a second; the measured relay rate of the gateway is 1 520 to 3 550 a second on
+the serving host, and 14 200 to 15 200 on the developer machine (Evidence, below).
 
 ### 2. One group query reaches at most two devices of each member, in groups of up to 50
 
@@ -149,12 +149,13 @@ kind 7.
   to appeal to.
 - **Scale band.** Band 0, holding through band 1. A query is bounded by the group ceiling of 50 and
   two devices a member, not by the population; what grows with the population is the gateway's
-  relay rate, measured below with a margin of about seventy at the realistic peak of one group.
+  relay rate, measured below on the serving host with a margin of about eight, at its slowest
+  round, over the realistic peak of one group.
 - **Flip trigger.** For presence, still 0022's: a client surface that needs presence for devices it
   cannot enumerate — and, on the cost side, a group ceiling above 50, or relays in real use
-  reaching a quarter of the rate the gateway sustains on the serving host, which has not been
-  measured there. For voice, 0021's: a role that must be enforced against a modified client needs
-  a server in the media path, which is an SFU again.
+  reaching a quarter of the rate the gateway sustains on the serving host: about 380 a second, a
+  quarter of its slowest measured round. For voice, 0021's: a role that must be enforced against
+  a modified client needs a server in the media path, which is an SFU again.
 - **Cost.** Reading activity visible to live root. More devices that can probe one phone — a phone
   in one active 50-member group reaches the 20 000 dead-key bound after 54 to 270 days in the
   realistic case, against 86 to 430 at 32 members, and is then repaired with nothing lost. One more
@@ -177,11 +178,13 @@ kind 7.
   driver against a real Redis 8.8.0: fifty sockets, each sending 49 `signal` frames of 1024 bytes
   and answering the 49 it received — 4 900 relays in 322 to 345 ms, 14 200 to 15 200 a second, at
   65 to 70 µs of process CPU a relay with the driver's own work counted
-  ([`GROUND-TRUTH.md`](../GROUND-TRUTH.md) §4). Not measured on the 1-vCPU host, which runs the
-  full suite ten times slower than the developer machine; at that factor, an assumption and not a
-  measurement, it relays about 1 400 a second — about seven times the realistic peak of one
-  50-member group, and less than the band's theoretical ceiling, which ADR-098's 32-member bound
-  already put near 1 600. **Currency:** current.
+  ([`GROUND-TRUTH.md`](../GROUND-TRUTH.md) §4). The same day, the same round on the 1-vCPU serving
+  host, run as a standalone script that reads no database: 4 900 relays in 1 380 to 3 221 ms,
+  1 520 to 3 550 a second, over nine rounds in three runs (§4 there). Its slowest round is about
+  eight times the realistic peak of one 50-member group, and less than the band's theoretical
+  ceiling — as it was already less than the ceiling ADR-098's 32-member bound put near 1 600. It
+  replaces an assumption, the full suite's tenfold slowdown on the host, which had put the rate
+  near 1 400. **Currency:** current.
 
 ## Consequences
 
