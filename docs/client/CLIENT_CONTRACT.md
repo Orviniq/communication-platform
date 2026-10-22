@@ -8,7 +8,10 @@ the per-app `API.md` files; the residual-risk statement (what none of this prote
 `SECURITY.md` § "Residual risk". Contacts, the contact code, verification by both people
 for direct conversations, the profile key and what a file carries are bound in
 [`CLIENT_CONTACTS_AND_TRUST.md`](CLIENT_CONTACTS_AND_TRUST.md), exactly as this document
-binds; §Q routes to it.
+binds; §Q routes to it. Online status, who can see it, the read-receipt setting and who
+reacted are bound in [`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md)
+(§R), and roles in voice rooms in [`CLIENT_VOICE_ROLES.md`](CLIENT_VOICE_ROLES.md) (§N rule
+12), in the same way.
 
 A server-side sanity check (length, bucket, monotonic version) is never a security
 control. If the client ever skips a verification because "the server already checks
@@ -371,6 +374,18 @@ is [`../CLIENT_WORK.md`](../../CLIENT_WORK.md); what follows is the protocol.
     other time, and run a microphone-type foreground service for as long as the call
     lasts: a call outlives the moment the user looks at another screen, and the
     foreground service is what keeps it capturing when it does.
+12. **Roles, from room protocol version 2.** A room of version 2 has one owner, admins and
+    members; membership, roles and the name change only by signed control events in the
+    room's chain, and the role operation is the value 5 that version 1 reserved. Every
+    version-1 room whose creator — the signer of its revision 1 — is still a member is
+    upgraded, with the creator as its owner, once every member's devices have announced that
+    they read version 2, and never before; a room whose creator has left keeps version 1. In
+    a call, muting a participant, removing one from the call and ending the call for everyone
+    are `signal` frames, applied by each honest participant against the sender's role in its
+    own copy of the roster: nothing switches off a microphone, and nothing on the server
+    takes part. The binding text is [`CLIENT_VOICE_ROLES.md`](CLIENT_VOICE_ROLES.md)
+    ([ADR-0031](../architecture/decisions/0031-online-status-stays-client-protocol-over-signal-frames.md));
+    rules 1 to 11 hold for both versions, the ceiling of rule 10 included.
 
 ## O. The `/ws` handshake
 
@@ -441,3 +456,29 @@ authoritative.
 
 The server takes no part in any of it and changed nothing for it. What it can observe is
 §9 there.
+
+## R. Online status, who can see it, read receipts, and who reacted
+
+The binding text is [`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md)
+([ADR-0031](../architecture/decisions/0031-online-status-stays-client-protocol-over-signal-frames.md)).
+This section names what it binds; where the two could differ, that document is
+authoritative.
+
+- **Online status is client protocol over `signal` frames, and the server holds none.**
+  There is still no presence frame, no subscription and no room object on the server
+  ([ADR-0022](../architecture/decisions/0022-the-gateway-holds-no-presence.md)): devices
+  tell each other, in `CPPSV001` payloads padded to 1024 bytes, while a chat is open on a
+  screen — the protocol client ADR-098 built, bound as §3 there states it.
+- **Who answers whom.** A direct conversation in `MUTUAL`, a verified active member of a
+  group, never a blocked account, and always inside the audience the user chose. A group
+  query reaches at most two devices of each member, in groups of up to 50.
+- **Who can see my status** — everyone I share a chat with, my contacts, or nobody — is one
+  setting for the whole account, synced between its own devices as `CPCTV001` kind 7, and
+  reciprocal: a device sees only the people it lets see it (§4 and §5 there).
+- **Read receipts** in direct conversations are one setting of the same record, on by
+  default and reciprocal; groups always send them (§6 there).
+- **Who reacted** is a list built from the reactions every member already holds, with no
+  wire change (§7 there).
+
+The server changed nothing for any of it. What it can observe is §9 there, and the reading
+activity that presence frames show is stated in `SECURITY.md` § "Residual risk".

@@ -118,9 +118,9 @@ blocked member's control events are still verified and applied.
 
 ### 3.4 Between the account's own devices
 
-- Every change to an entry, a block, a verification (§5.3) or a carried-over confirmation
-  (§5.10) MUST be sent at once as `CPCTV001` to every other live device of this account,
-  and to no other account's device.
+- Every change to an entry, a block, a verification (§5.3), a carried-over confirmation
+  (§5.10) or the privacy record (kind 7) MUST be sent at once as `CPCTV001` to every other
+  live device of this account, and to no other account's device.
 - Kinds 1 and 2 are **last-writer-wins registers**, one per peer each. The order key is
   `(revision, author_device_id)`: the revision as an unsigned 32-bit integer, then the 16
   raw device-id bytes compared lexicographically. A received record replaces the stored
@@ -131,6 +131,9 @@ blocked member's control events are still verified and applied.
 - Kind 3 from an own device is this account's verification of a peer, or a peer's claim
   forwarded in a snapshot; kind 6 is a carried-over confirmation; kind 5 with scope 0 is a
   profile key. §5.3, §5.10 and §7.6 say how each is applied.
+- Kind 7 is the privacy record: one register for the whole account, holding who can see its
+  online status and whether it sends read receipts. Its layout, its order and its migration
+  are [`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md) §5.
 
 ### 3.5 The history-transfer snapshot
 
@@ -143,7 +146,8 @@ before the transfer's completion event:
   holds that is authentic on the source;
 - every kind-6 confirmation;
 - kind-5 scope-0 records for this account's current profile key and for every peer's
-  profile key it holds.
+  profile key it holds;
+- the kind-7 record it holds.
 
 Up to 256 records go in one payload. The target applies them exactly as live records, so a
 snapshot and a live change that cross in flight converge. A device that receives no
@@ -512,11 +516,11 @@ is acknowledged in the batch that inspected it.
 |---|---|---|---|
 | An envelope from a sender this device has not verified | — | Held unopened, as today; no alert | Held unopened, as today (ADR-093); the read of §5.3 may surface a claim |
 | A direct-conversation application event — `message.create`, `message.edit`, `message.delete`, `message.reaction_set`, `message.pin_set`, `receipt.delivered`, `receipt.read`, or an unsupported kind | Applied as today | Dropped | Dropped, at its first inspection: no retry and no budget spent |
-| Typing and online status (`CPPSV001`) for the direct conversation | As today (client ADR-098) | Dropped | Dropped; none is sent |
+| Typing and online status (`CPPSV001`) for the direct conversation | As [`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md) §3 and §4 say | Dropped | Dropped; none is sent |
 | `CPCTV001` kind 3 (the notice) | §5.3 | Dropped | §5.3 |
 | `CPCTV001` kind 4 | §6.4 | Dropped | §6.4 |
 | `CPCTV001` kind 5, direct scope (§7) | Applied | Dropped | Dropped |
-| `CPCTV001` kinds 1, 2 and 6, or kind 5 with scope 0 — which only this account's own devices send | Refused: quarantined with a security reason | Refused | Refused |
+| `CPCTV001` kinds 1, 2, 6 and 7, or kind 5 with scope 0 — which only this account's own devices send | Refused: quarantined with a security reason | Refused | Refused |
 | `session.repair` | As today | As today | As today |
 
 Unchanged, because none of it is the direct conversation: group payloads and group events,
@@ -706,6 +710,8 @@ kind 5  profile key         owner_user_id[16] || profile_version:u32be || profil
                             || scope:u8 || [group_id[32] when scope = 2]
                             || audience_count:u16be || audience_count × user_id[16]
 kind 6  carried-over        peer_user_id[16] || peer_master_public[32] || own_master_public[32]
+kind 7  privacy record      revision:u32be || author_device_id[16] || presence_audience:u8
+                            || read_receipts:u8
 ```
 
 A payload is refused whole when any of these fails:
@@ -721,14 +727,19 @@ A payload is refused whole when any of these fails:
 - kind 5: `scope` is 0 (own devices), 1 (direct) or 2 (a group or a voice room, named by
   its 32-byte id, which the receiver looks up among both); `audience_count` is 0 unless the
   scope is 0 and the owner is this account;
+- kind 7: `count` is exactly 1, `presence_audience` is 0 to 2 and `read_receipts` 0 or 1
+  ([`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md) §5.1);
 - the ids agree with the sender, which the pairwise session authenticated:
-  - kinds 1, 2 and 6 and scope-0 kind 5 come from this account's own devices, and a kind-1,
-    kind-2 or kind-6 record never names this account;
+  - kinds 1, 2, 6 and 7 and scope-0 kind 5 come from this account's own devices, and a
+    kind-1, kind-2 or kind-6 record never names this account;
   - kind 3 has this account as exactly one of signer and subject. From a peer, the peer is the
     signer and this account the subject. From an own device, either this account signs — its
     own verification — or the record is a peer's claim forwarded in a snapshot (§3.5);
   - kind 5 with scope 1 or 2 names its sender as the owner;
-- the kind is 1 to 6.
+- the kind is 1 to 7.
+
+Kind 7 was added to version 001 on 2026-10-22, before any client had implemented this
+payload family, so no implementation of `CPCTV001` refuses it.
 
 ### 6.3 Who sends what to whom
 
@@ -740,6 +751,7 @@ A payload is refused whole when any of these fails:
 | 4 | `protocol.notice` | Any device, in reply only (§6.4) | The devices of the peer it answers |
 | 5 | `profile.publish` | The owner's devices | §7.3; in a snapshot, peers' keys forwarded to a new own device |
 | 6 | (new) carried-over confirmation | This account's devices | This account's other devices only |
+| 7 | `privacy.settings_set` (new) | This account's devices | This account's other devices only |
 
 A kind that arrives from the wrong kind of sender is refused (§5.6).
 
@@ -759,7 +771,8 @@ version no kind 4 is ever sent.
 
 A send of `POST /api/v1/envelopes` that is retried after a lost answer queues its items twice
 (`backend/messaging/API.md`). Every kind is idempotent: kinds 1 and 2 by their order key, kind 3
-by its bytes, kind 4 by being advisory, kind 5 by the profile version, kind 6 by its bytes.
+by its bytes, kind 4 by being advisory, kind 5 by the profile version, kind 6 by its bytes, kind 7
+by its order key.
 
 ### 6.6 Golden vectors
 
@@ -845,7 +858,8 @@ bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737
 The signatures were reproduced by three independent implementations of Ed25519 — the
 `cryptography` package, OpenSSL 3.6.4 and the reference code of RFC 8032 §6 — and the
 fingerprint by a second SHA-256. A client MUST reproduce every value here byte for byte, and
-verify both signatures with `verify_user_attestation`, before any of this is enabled.
+verify both signatures with `verify_user_attestation`, before any of this is enabled. Kind 7's
+vectors are [`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md) §12.2.
 
 ## 7. The profile key, and its rotation on blocking and on removal
 

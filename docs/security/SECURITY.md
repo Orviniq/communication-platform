@@ -194,6 +194,24 @@ devices hold a socket and when, and which device signals which device. The serve
 no presence of any kind: a client learns that a peer is reachable from its own
 signalling and its own timeout, never from anything this server keeps.
 
+That signalling shows **reading activity, not just sending**. It has since client ADR-098
+(2026-10-19), which made online status and typing client protocol over `signal` frames, and
+[ADR-0031](../architecture/decisions/0031-online-status-stays-client-protocol-over-signal-frames.md)
+extended it to every group. A phone with a conversation open on its screen sends one
+1024-byte frame to each device it watches when the conversation opens and every 25 seconds
+while it stays open — every device of the peer in a direct conversation, up to two devices
+of each member in a group — and each of those devices that has the app on its screen, and
+lets that user see its status, answers with one; while its user types, it sends a few more.
+So live root learns which device opened which conversation, with which devices, when and for
+how long, whether or not anything is sent, and from the answers which of those devices were
+on screen at that moment. It does not learn the conversation's name or what was typed, which
+are inside the ciphertext, but the set of devices a phone watches names a direct conversation
+outright, and a group to anyone who can match its member devices. Whom a phone watches and
+answers also shows who its user lets see their status. A user who lets nobody see it sends
+none of these frames and answers none, though other people's phones may still probe theirs.
+None of it is presence held by this server: the gateway relays these frames as it relays every
+`signal` frame, and keeps nothing.
+
 Also at rest, below the live-root bar: **a deleted row is not erased.** PostgreSQL
 marks the tuple dead and leaves its bytes in the page; the space becomes reusable only
 after a vacuum, and the bytes are gone only when a later insert takes that space. The
@@ -335,6 +353,18 @@ inferable from the relay load. The gateway sees which device signals which devic
 membership is inferable from that fan-out, exactly as group membership is inferable from
 envelope fan-out. Neither is protected by this architecture, and neither can be on a
 single box under live root.
+
+**Roles in a room** — an owner, admins and members, from room protocol version 2
+([ADR-0031](../architecture/decisions/0031-online-status-stays-client-protocol-over-signal-frames.md);
+the binding text is [`CLIENT_VOICE_ROLES.md`](../client/CLIENT_VOICE_ROLES.md)) — are client
+state in the room's signed chain, exactly as a group's roles are, and this server holds none
+and enforces none. Muting someone, removing them from a call and ending a call for everyone
+are requests carried in `signal` frames between the participants' devices, and each
+participant's own app is the whole of the enforcement: every honest participant stops playing
+a muted person's audio, closes its connections to a removed one and refuses its offers, and
+leaves a call that was ended. Nothing switches off a microphone, and a modified app can
+ignore all three. What live root sees of it is one device of a call sending a frame to every
+other participant at once.
 
 coturn also carries no TLS listener, so its control channel is readable on the wire: an
 on-path observer sees the STUN allocation and permission requests, and therefore the
