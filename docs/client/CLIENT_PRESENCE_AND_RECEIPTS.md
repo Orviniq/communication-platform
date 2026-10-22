@@ -538,14 +538,13 @@ One watch round of a 50-member group reaches at most 49 × 2 = **98 devices**, a
 Across the server, each frame is one relay. With every member of one 50-member group holding the
 chat open on one device, that is 50 × 49 × 2 frames every 25 s, about 196 relays a second; with
 two devices each, about 784; at the band's ceiling — 50 accounts with 10 devices each, all in one
-group, all with it open at once — about 3,920. The gateway relays 14,200 to 15,200 a second,
-measured on the developer machine through its own test driver against a real Redis
-([`GROUND-TRUTH.md`](../architecture/GROUND-TRUTH.md) §4). It has not been measured on the
-1-vCPU serving host, which runs the full test suite ten times slower than the developer machine;
-at that factor the host would relay about 1,400 a second — about seven times the first figure
-above, and less than the theoretical ceiling, which ADR-098's 32-member bound already put near
-1,600. The review of these numbers is in [`DESIGN-RECORD.md`](../architecture/DESIGN-RECORD.md)
-§ "6. Review log", 2026-10-22.
+group, all with it open at once — about 3,920. The gateway relays 1,520 to 3,550 a second on the
+1-vCPU serving host and 14,200 to 15,200 on the developer machine, measured through its own test
+driver against a real Redis ([`GROUND-TRUTH.md`](../architecture/GROUND-TRUTH.md) §4). The
+host's slowest round is about eight times the first figure above and about twice the second; the
+theoretical ceiling is more than even its fastest round, as the ceiling ADR-098's 32-member bound
+put near 1,600 was already more than its slowest. The review of these numbers is in
+[`DESIGN-RECORD.md`](../architecture/DESIGN-RECORD.md) § "6. Review log", 2026-10-22.
 
 ### 8.2 Dead skipped keys
 
