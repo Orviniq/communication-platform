@@ -36,6 +36,9 @@ authoritative and this one never restates it.
 | A direct conversation carries content only once both people have verified each other: the notice, the claims, the conversation state, the admission rule and the migration | [Required before release — verification by both people](#required-before-release--verification-by-both-people) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5, §6 |
 | What a file carries: removed where the format allows it, and a warning before sending where it does not | [Required before release — what a file carries](#required-before-release--what-a-file-carries) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §8 |
 | The profile key, if the release publishes profiles: a fresh key for every version, its audience, and a new version when the user blocks someone or removes a contact | [Required before profiles ship — the profile key](#required-before-profiles-ship--the-profile-key) | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) §7 |
+| Who can see my online status — everyone I share a chat with, my contacts or nobody, for the whole account — with presence in every group of up to 50 members, both people verified, blocks refused, three sending rules tightened, and the switch migrated | [Required before release — who can see my online status](#required-before-release--who-can-see-my-online-status) | [`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §2 to §5, §8 |
+| The read-receipt setting for direct conversations: on by default, for the whole account, reciprocal; groups always send read receipts | [Required before release — the read-receipt setting](#required-before-release--the-read-receipt-setting) | [`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §5, §6 |
+| Roles in voice rooms, if voice ships: room protocol version 2, the upgrade of every existing room, version negotiation and the in-call actions | [Required if voice ships — roles in voice rooms](#required-if-voice-ships--roles-in-voice-rooms) | [`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N rule 12 |
 | The web platform files, the conditional-import stubs and the web build step the removed web target left behind | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
 | Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
 
@@ -47,6 +50,7 @@ authoritative and this one never restates it.
 | Say what the day's upload allowance is before the refusal, rather than after it | [Recommended — say what the day's allowance is, before the refusal](#recommended--say-what-the-days-allowance-is-before-the-refusal) | [`backend/attachments/API.md`](backend/attachments/API.md) |
 | The user-facing wording the removed web target left in the client | [The wording](#the-wording) | [`backend/README.md`](backend/README.md) |
 | Point the client's documents at the three documents that moved under `docs/` | [Recommended — the documents that moved](#recommended--the-documents-that-moved) | [ADR-0030](docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md) |
+| Who reacted: a list for each emoji and each person, built from the reactions already held | [Recommended — who reacted](#recommended--who-reacted) | [`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §7 |
 
 ### Optional
 
@@ -548,7 +552,7 @@ same files, and the two are one change.
 | `frontend/lib/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart`, `frontend/lib/features/synchronization/application/durable_sync_engine.dart` | Recognise `CPCTV001` before `_prepareApplication` (§6.1); apply the admission of §5.6 in `_inspectRegular` and after an accepted initial alike — a session accepted earlier no longer bypasses it. A dropped event is a new outcome: the envelope is committed with its session transition and without the event, and acknowledged at once — not a `policyBlocked` failure that spends the budget. Add the read of §5.3 to the unverified branch of `_inspectInitial`, committing nothing |
 | `frontend/lib/features/contacts/application/client_authentication_service.dart`, `frontend/lib/features/contacts/application/ports/contact_ports.dart` | The claims, the carried-over confirmations and the derived state of §5.4 and §5.5. A verification sends the notice to the peer's devices and the own-device copy in one call (§5.3) |
 | `frontend/lib/features/pairwise/application/pairwise_fanout_coordinator.dart`, `frontend/lib/features/messaging/application/conversation_use_cases.dart` | Refuse a direct-conversation event unless the conversation is `MUTUAL` (§5.6) |
-| `frontend/lib/features/signals/application/presence_channel.dart` | Typing and online status for a direct conversation in `MUTUAL` only; groups as today |
+| `frontend/lib/features/signals/application/presence_channel.dart` | Typing and online status for a direct conversation in `MUTUAL` only; groups as [§ "Required before release — who can see my online status"](#required-before-release--who-can-see-my-online-status) says |
 | `frontend/lib/features/messaging/presentation/chats_list_page.dart`, `frontend/lib/features/messaging/presentation/direct_chat_page.dart`, the contacts screens | The panels, rows and words of §5.11 |
 | `frontend/lib/features/messaging/presentation/chat_undelivered_hint.dart` | Withdrawn, with its tests: the cause it names cannot occur any more (§5.11) |
 | The first start of the new build | The migration of §5.10, once |
@@ -616,3 +620,88 @@ contract, `frontend/AGENTS.md` and `frontend/docs/backend-api.md` among them —
 them names a section, so a search for the three old paths finds every link to change. The
 per-app `API.md` files did not move. Once no client document names an old path, the pointer
 files can go; say so here and the server side deletes them.
+
+## Online status, read receipts, who reacted and roles in voice rooms
+
+[ADR-0031](docs/architecture/decisions/0031-online-status-stays-client-protocol-over-signal-frames.md)
+records the owner's decisions of 2026-10-22: who can see a person's online status, a
+read-receipt setting for direct conversations, a list of who reacted, and roles in voice rooms.
+The binding texts are
+[`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md),
+routed from [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §R, and
+[`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md), routed from §N rule
+12; where this file and they could differ, they are authoritative. **Nothing on the server
+changed**: the gateway still holds no presence, and no server merge forces any of this.
+
+Online status starts from what client ADR-098 built (PR #90): the binding text states that
+protocol as binding and lists every change to it in its §2. Two of the changes are choices the
+owner made on 2026-10-22, when asked: presence in every group of up to 50 members, still at most
+two devices of each; and the status audience and the read-receipt setting held for the whole
+account, synced between its own devices, rather than per phone.
+
+**In this order.** `CPCTV001` kind 7 first, inside the codec of § "Required before release —
+verification by both people", because both settings live in it; then who can see my online
+status, with the migration of the switch; then the read-receipt setting, which reads the same
+record; then who reacted, which depends on nothing above. Roles in voice rooms come last and are
+due only if voice ships: they need a change to the shared Rust core and the client ADR below.
+
+### Required before release — who can see my online status
+
+| Path | What is needed |
+|---|---|
+| `frontend/lib/features/signals/application/presence_channel.dart` | The admission of §3.3 on every `watch`, `here`, `typing` and `gone`: `MUTUAL` for a direct conversation, never a blocked account, always inside the audience — and again for every frame it seals, with a block, a trust drop, a group removal or a change of the audience ending that account's leases at once (`_typingTargets` checks only the lease's expiry today). The targets of §3.4, drawn from the audience. `maximumGroupMembers` from 32 to 50, with `devicesPerMember` still 2. The renewal's answer window counted from the moment its frame leaves the pacer — `_watchRound` sets `renewedAt` at the round's start today. Sealing on release (§3.8) — `_send` seals a whole round before it paces it. The goodbye's limit (§3.6). The narrowing of §4.3 |
+| `frontend/lib/features/signals/application/presence_share_setting.dart`, `DriftPresenceSharePreference` in `frontend/lib/features/signals/infrastructure/drift_presence_stores.dart` | Replaced by the audience of the privacy record (§4, §5): three values, for the whole account. `presence.share.v1` is migrated once and deleted, on a database an earlier build created (§5.4). A device that holds no record while its account has another live device, or that cannot read its record, sends no presence frame and no read receipt until it has one (§5.2) |
+| `frontend/lib/features/signals/application/presence_status_book.dart` | N counts the audience only; the last seen of an account that leaves the audience is deleted |
+| `frontend/lib/features/signals/presentation/online_status_settings_entry.dart` | The row **Who can see my online status**, its three choices and its line (§4.4) |
+| `frontend/lib/features/signals/presentation/peer_status_line.dart` | A last seen in an earlier year carries its year (§3.9) |
+| The disclosure: `DisclosurePoint.onlineStatus` and `disclosureOnlineStatus` | Revision 12, with the text of §4.4 |
+| The `CPCTV001` codec of § "Required before release — verification by both people" | Kind 7, its register and its migration (§5), against the vectors of §12.2; the record goes to each new own device as soon as it appears, with or without a history transfer (§5.3) |
+| The tests | §11, and the vectors of §12 — the `CPPSV001` ones are the client's own golden bytes |
+
+### Required before release — the read-receipt setting
+
+| Path | What is needed |
+|---|---|
+| `MarkConversationVisiblyRead` in `frontend/lib/features/messaging/application/conversation_use_cases.dart` | With the setting off, a direct conversation's read receipt is sealed for this account's other devices only, and nothing is sent later for what was read while it was off (§6) |
+| `frontend/lib/features/messaging/presentation/direct_chat_page.dart` | `allowReadReceipts: !widget.savedMessages` becomes three answers: none in Saved Messages, own devices only with the setting off, the peer and own devices with it on |
+| `_delivery` in `frontend/lib/features/messaging/presentation/chat_view_model_mapper.dart` | With the setting off, an own message of a direct conversation shows at most its delivered state |
+| Settings | The switch row **Read receipts** and its line (§6) |
+| `frontend/lib/features/groups/presentation/group_chat_page.dart` | Nothing: a group always sends its read receipts, and client ADR-091's reader list is unchanged |
+
+### Recommended — who reacted
+
+| Path | What is needed |
+|---|---|
+| `frontend/lib/features/messaging/presentation/chat_message_builder.dart` | **Reactions** in the message's context menu when it has a reaction; the chip's own tap is unchanged |
+| A new sheet, and the read behind it | §7: the tabs and their order, the rows and their names, and every chip's count equal to its tab's rows; the read needs the `ordering_ms` of the event the fold kept |
+
+### Required if voice ships — roles in voice rooms
+
+| Path | What is needed |
+|---|---|
+| `frontend/native/crypto_core/src/room_control.rs` | Version 2: operations 5 and 6, their bodies and checks, with version 1 still refusing both (§3.1), and the vectors of §10.2 beside the core's own golden tests |
+| `frontend/lib/features/voice/infrastructure/native_room_control_crypto.dart` | The projection of a version-2 event |
+| `frontend/lib/features/voice/domain/room_model.dart` | `RoomState` carries its version and each member's role; `RoomControlStateMachine` applies §3.3, the derived owner of §4.1 and the upgrade; `RoomAuthorization` answers the matrix of §2 |
+| `frontend/lib/features/voice/domain/room_sync_payload.dart`, `frontend/lib/features/voice/application/room_inbound_coordinator.dart` | `CPVRV001` kind 4, and the version each peer device announced (§4.2) |
+| `frontend/lib/features/voice/application/room_session_starter.dart` | The announcements of §4.2, and their daily re-sending to a device whose announcement is missing |
+| `frontend/lib/features/voice/application/room_use_cases.dart` | The version a new room is created at (§3.2), change of role, **Hand over and leave**, the upgrade by the owner's lowest live device and its fallback, and no upgrade of a room whose creator has left (§3.4, §4.1, §4.3) |
+| `frontend/lib/features/voice/domain/voice_signal_codec.dart`, `frontend/lib/features/voice/domain/voice_signal_model.dart` | Signalling version 2: kinds 9 to 12 and leave reasons 4 and 5 (§5.2) |
+| `frontend/lib/features/voice/application/voice_call_engine.dart`, `frontend/lib/features/voice/application/voice_signal_transport.dart` | The signalling version of each room (§5.1), the checks and effects of §5.4 and §5.5, a newcomer's `moderation` (§5.6), and the allowance of 16 (§5.3) |
+| `frontend/lib/features/voice/presentation/voice_room_info_page.dart`, `frontend/lib/features/voice/presentation/voice_call_page.dart`, `frontend/lib/features/voice/presentation/voice_room_invite_page.dart` | Role tags, the actions each role has, the words of §5.7, and the messages of §4.3 and §4.4 |
+| The tests | §9, and the vectors and scenarios of §10 |
+
+### The client documents to update
+
+Each of these describes behaviour this work changes. The client developer updates them as the
+work lands, and the binding texts win where they differ.
+
+| Document | What changes |
+|---|---|
+| `frontend/docs/message-protocol.md` | § "Receipts and typing": every statement §2.2 of `CLIENT_PRESENCE_AND_RECEIPTS.md` lists — the list in "No claim the client cannot observe" loses "a group over 32 members" and gains "a peer outside your audience"; "Who may send and receive"; "Watching"; "The switch", replaced by the audience; and the opening sentence's "user privacy settings", which becomes the read-receipt setting. § "Event registry": `privacy.settings_set` as `CPCTV001` kind 7, and `room.control` with its version 2. § "Edits, reactions, pins, and deletion": who reacted. § "Blocking": presence refuses a blocked account. § "Voice rooms": "every active member has the same authority … There is no owner and no admin" holds for version-1 rooms only |
+| `frontend/docs/voice-signalling-v1.md` | `CLIENT_VOICE_ROLES.md` folded in as its version-2 part: in Part 1, § "The operations, and who may sign each", § "Applying an event", § "The payload" (kind 4) and § "Starting the sessions a call needs" (the announcement); in Part 2, § "The kinds" (9 to 12, leave reasons 4 and 5), § "Removal" and § "The call" (the in-call actions), and the allowance beside § "Volatile seal and open" |
+| `frontend/docs/decisions.md` | One new client ADR that amends ADR-098 — D4 (every group, the answer window), D5 (the goodbye's limit), D7 (sealing on release), D9 (the audience and the privacy record in place of the switch), D10 (revision 12) and D11 (the year) — records the read-receipt setting beside ADR-091, whose reader list it leaves as it is, and supersedes ADR-077's D1 for version-2 rooms, with the allowance of 16 beside D5's 32 frames. ADR-077's open question about room text stays open |
+| `frontend/docs/ui-specification.md` | §15: item 5c becomes **Who can see my online status**, and a **Read receipts** row joins it. §8 and §9: the **Reactions** sheet. §13.2: role tags, the actions of each role and the removal confirmation, for version-2 rooms |
+| `frontend/docs/design-handoff/voice-room-states.md` | The new states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
+| `frontend/docs/local-data-model.md` | The privacy record, the room version each peer device announced, and a room's version and roles |
+| `frontend/docs/threat-model.md` | The reading activity presence shows (`docs/security/SECURITY.md` § "Residual risk") and what a mesh can enforce (`CLIENT_VOICE_ROLES.md` §6) |
+| `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
