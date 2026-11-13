@@ -175,6 +175,14 @@ already relays and drops when the target has no socket.
   own devices, and only for a conversation both accounts hold: a direct chat with that peer, or an
   active group of at most 32 members. Saved Messages, a conversation this phone does not hold, a
   blocked account and an unverified one get nothing and are answered nothing.
+- **Peer reads** (ADR-098 D7, amended by ADR-101). Presence learns a peer's verified devices from
+  one `POST /api/v1/peers` for up to 64 accounts and keeps each answer. An answer under 10 s old is
+  served as it is; one under 60 s old that verified the account is served at once and read again in
+  the background, one read at a time; a device a stale answer does not name waits for one read.
+  Every read is made before the router lock, never inside it, and any change of this phone's trust
+  in the account drops its answer at once. The goodbye reads no network at all: it seals from the
+  last answer that verified each account, however old, and skips a device with none. Voice and the
+  durable path still resolve on every send.
 - **Watching.** A phone in the foreground with the switch on sends a `watch` of the chat on
   screen to the peer's live devices (in a group, to at most 2 devices of each member), renewed every
   25 s. A device in the foreground answers each accepted watch with `here` and keeps a lease for the
@@ -186,12 +194,17 @@ already relays and drops when the target has no socket.
   does not target. A `gone` forgets the watch sent to that device. Presence follows the socket: no
   frame is sealed while it is closed, since a frame it does not carry leaves a dead skipped key on
   its target for good, and at each open the watch round of the chat on screen runs at once.
-  Leaving the foreground sends the pending typing stops and `gone` to every device with a live
-  lease in either direction, and the socket closes after that, for at most 500 ms.
+  Leaving the foreground sends `gone`, and no typing stop, to every device with a live lease in
+  either direction, at once: it waits for no other presence event and reads no peer (ADR-101). The
+  first of the two paths that see the departure (the screen's visibility and the supervisor's
+  farewell) sends it, once. Until the app is in the foreground again nothing else is sealed, and a
+  frame that arrives is committed and discarded unread. The socket closes once the `gone` has gone
+  to it, or after 1,500 ms, and not at all when the app came back during that wait.
 - **Typing** (ADR-098 D3, amended by ADR-099). `typing` goes only to devices whose watch of that
   conversation is under 40 s old. The first edit that leaves the composer non-empty, and the first
   edit after a stop, send it at once; an edit every 10 s repeats it. 5 s without an edit, clearing
-  the composer, leaving the chat and leaving the foreground stop it. A send sends no frame: it ends
+  the composer and leaving the chat stop it; leaving the foreground sends no stop, since its `gone`
+  ends the line at the receiver (ADR-101 G3). A send sends no frame: it ends
   the session, and the message ends the line at the receiver. Only the stop that follows a cleared
   composer waits for the end of 5 s since the last frame, so a change undone inside them sends
   nothing; a start and the idle stop never wait. A state counts as sent only when a frame was
