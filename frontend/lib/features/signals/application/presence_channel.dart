@@ -109,7 +109,21 @@ final class PresenceChannel {
   );
   static const typingRepeat = Duration(seconds: 10);
   static const typingIdle = Duration(seconds: 5);
+
+  /// Only the stop that follows a cleared composer waits this long after the
+  /// last frame, so a change undone inside it sends nothing. A start never
+  /// waits.
   static const typingPace = Duration(seconds: 5);
+
+  /// A start less than [typingRaceWindow] after a send is refreshed
+  /// [typingFirstRefresh] later instead of [typingRepeat]: the message it
+  /// follows may reach the receiver after this start, and ends the line it
+  /// opened (ADR-098 D3).
+  static const typingRaceWindow = Duration(seconds: 5);
+  static const typingFirstRefresh = Duration(seconds: 3);
+
+  /// After a start that no frame carried, the next try waits this long.
+  static const typingRetry = Duration(seconds: 1);
 
   /// The fan-out of one watch (D4).
   static const maximumGroupMembers = 32;
@@ -268,6 +282,10 @@ final class PresenceChannel {
     _heardAt[key] = clock.now();
     _liveFrames.remove(key);
     _gone.remove(key);
+    // A frame from a device lifts L1 for it: a start held back may leave.
+    for (final typing in _typingOut.values) {
+      typing.failedAt = null;
+    }
     await _ledger.heard(device);
   }
 
@@ -709,17 +727,27 @@ final class PresenceChannel {
             ..wanted = false
             ..idle = null;
         }
-        await _flushTyping(conversationId);
+        // Only the stop of a cleared composer is paced.
+        await _flushTyping(conversationId, paced: !hasText);
       case ChatTextSent(:final conversationId):
-        final typing = _typingOut[conversationId];
+        // A send ends the typing session and sends no frame: the message ends
+        // the line at the receiver (ADR-098 D3). The time of the send is kept
+        // for the start of the next message (N5).
+        final typing =
+            _typingOut[conversationId] ??
+            (_foreground && _sharing
+                ? (_typingOut[conversationId] = _TypingOut())
+                : null);
         if (typing == null) {
           return;
         }
         typing
+          ..cancelTimers()
           ..wanted = false
-          ..idle?.cancel()
-          ..idle = null;
-        await _flushTyping(conversationId);
+          ..sent = false
+          ..lastSentAt = null
+          ..failedAt = null
+          ..sendAt = clock.now();
       case ChatMessageArrived(:final conversationId, :final senderDeviceId):
         _hideTypingOf(
           senderDeviceId.toLowerCase(),
@@ -730,30 +758,45 @@ final class PresenceChannel {
   }
 
   /// Sends the typing state [conversationId] wants, if it is not the state
-  /// last sent: now, or at the end of the [typingPace] since the last frame.
-  /// A change undone inside the pace sends nothing.
-  Future<void> _flushTyping(String conversationId) async {
+  /// last sent. A start leaves at once. A stop leaves at once too, unless
+  /// [paced]: the stop of a cleared composer waits for the end of the
+  /// [typingPace] since the last frame, and a change undone inside it sends
+  /// nothing. A start no frame carried is tried again by a later edit, at most
+  /// once in [typingRetry].
+  Future<void> _flushTyping(String conversationId, {bool paced = false}) async {
     final typing = _typingOut[conversationId];
     if (typing == null || typing.wanted == typing.sent) {
       return;
     }
     final now = clock.now();
-    if (!typing.paceAllows(now)) {
+    if (typing.wanted) {
+      if (!typing.retryAllowed(now)) {
+        return;
+      }
+      await _sendTyping(conversationId, active: true, start: true);
+      return;
+    }
+    if (paced && !typing.paceAllows(now)) {
       typing.pace ??= timers.start(
         typing.lastSentAt!.add(typingPace).difference(now),
         () => _serially(() async {
           typing.pace = null;
-          await _flushTyping(conversationId);
+          await _flushTyping(conversationId, paced: true);
         }),
       );
       return;
     }
-    await _sendTyping(conversationId, active: typing.wanted);
+    await _sendTyping(conversationId, active: false);
   }
 
+  /// Sends one typing frame to the devices holding a lease. The state counts
+  /// as sent only when a frame was queued: with no lease, past L1 or with a
+  /// refused seal it does not, and the next edit tries again. [start] is the
+  /// first frame of a session, not a repeat.
   Future<void> _sendTyping(
     String conversationId, {
     required bool active,
+    bool start = false,
   }) async {
     final typing = _typingOut[conversationId];
     if (typing == null) {
@@ -761,32 +804,41 @@ final class PresenceChannel {
     }
     final now = clock.now();
     typing
-      ..sent = active
-      ..lastSentAt = now
       ..repeat?.cancel()
-      ..repeat = null;
-    if (active) {
-      typing.repeat = timers.start(
-        typingRepeat,
-        () => _serially(() async {
-          typing.repeat = null;
-          if (typing.wanted && typing.sent && _foreground) {
-            await _sendTyping(conversationId, active: true);
-          }
-        }),
-      );
-    }
+      ..repeat = null
+      ..pace?.cancel()
+      ..pace = null;
     final targets = _typingTargets(conversationId, now);
-    if (targets.isEmpty) {
+    final queued =
+        targets.isNotEmpty &&
+        (await _send(
+          PresenceTyping(
+            conversationId: _conversationBytes(conversationId),
+            active: active,
+            ttlMs: active ? typingTtl.inMilliseconds : null,
+          ),
+          live: targets,
+        )).isNotEmpty;
+    if (queued) {
+      typing.lastSentAt = now;
+    }
+    if (!active) {
+      typing.sent = false;
       return;
     }
-    await _send(
-      PresenceTyping(
-        conversationId: _conversationBytes(conversationId),
-        active: active,
-        ttlMs: active ? typingTtl.inMilliseconds : null,
-      ),
-      live: targets,
+    typing.sent = queued;
+    if (!queued) {
+      typing.failedAt = now;
+      return;
+    }
+    typing.repeat = timers.start(
+      start && typing.followsSend(now) ? typingFirstRefresh : typingRepeat,
+      () => _serially(() async {
+        typing.repeat = null;
+        if (typing.wanted && typing.sent && _foreground) {
+          await _sendTyping(conversationId, active: true);
+        }
+      }),
     );
   }
 
@@ -994,9 +1046,18 @@ final class _TypingOut {
   /// [PresenceChannel.typingIdle] and not empty, sent, cleared or left since.
   var wanted = false;
 
-  /// The state the last frame carried.
+  /// Whether the last frame that left carried a start and no stop since:
+  /// false until a frame was queued, and false again after a stop and after a
+  /// send.
   var sent = false;
+
+  /// When the last frame of this session was queued.
   DateTime? lastSentAt;
+
+  /// When a start was last tried and no frame was queued, and when the last
+  /// message of this conversation was sent.
+  DateTime? failedAt;
+  DateTime? sendAt;
   PresenceTimer? idle;
   PresenceTimer? pace;
   PresenceTimer? repeat;
@@ -1004,6 +1065,18 @@ final class _TypingOut {
   bool paceAllows(DateTime now) {
     final last = lastSentAt;
     return last == null || now.difference(last) >= PresenceChannel.typingPace;
+  }
+
+  bool retryAllowed(DateTime now) {
+    final failed = failedAt;
+    return failed == null ||
+        now.difference(failed) >= PresenceChannel.typingRetry;
+  }
+
+  bool followsSend(DateTime now) {
+    final sent = sendAt;
+    return sent != null &&
+        now.difference(sent) < PresenceChannel.typingRaceWindow;
   }
 
   void cancelTimers() {
