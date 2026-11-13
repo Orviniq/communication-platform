@@ -181,12 +181,20 @@ already relays and drops when the target has no socket.
   asker for the lease time, never above 60 s; in the background it answers nothing. Leaving the
   foreground sends the pending typing stops and `gone` to every device with a live lease in either
   direction, and the socket closes after that, for at most 500 ms.
-- **Typing.** `typing` goes only to devices whose watch of that conversation is under 40 s old: the
-  first edit sends it, an edit every 10 s repeats it, 5 s without an edit, a send, clearing the
-  composer, leaving the chat and leaving the foreground stop it, and at most one frame per
-  conversation leaves every 5 s. The receiver shows it for 15 s after the latest active frame, and
-  ends it at once on a stop, on that device's `gone` and when a message of that sender appears in
-  that conversation. A group names the members who type by the name on their messages. Typing is
+- **Typing** (ADR-098 D3, amended by ADR-099). `typing` goes only to devices whose watch of that
+  conversation is under 40 s old. The first edit that leaves the composer non-empty, and the first
+  edit after a stop, send it at once; an edit every 10 s repeats it. 5 s without an edit, clearing
+  the composer, leaving the chat and leaving the foreground stop it. A send sends no frame: it ends
+  the session, and the message ends the line at the receiver. Only the stop that follows a cleared
+  composer waits for the end of 5 s since the last frame, so a change undone inside them sends
+  nothing; a start and the idle stop never wait. A state counts as sent only when a frame was
+  queued, so a start that no frame carried (no lease, L1, a refused seal) is tried again by the
+  next edit, at most once a second. A start less than 5 s after a send is refreshed 3 s later
+  instead of 10 s, since the earlier message may reach the receiver after it and end its line. One
+  device sends a watcher at most 24 typing frames in 60 s, and at most 8 frames go to it between two
+  frames from it. The receiver shows it for 15 s after the latest active frame, and ends it at once
+  on a stop, on that device's `gone` and when a message of that sender appears in that
+  conversation. A group names the members who type by the name on their messages. Typing is
   never queued and is not the `typingSet` application event, which is never sent and which the
   durable inspector refuses.
 - **Online and last seen.** A device is online from any accepted `watch`, `here` or `typing` until

@@ -166,12 +166,77 @@ void main() {
       );
     }
 
-    // Alice sends: the stop waits out the 5 s pace, then clears Bob's line.
+    // Alice sends: no stop leaves, and the line stands until the message
+    // reaches Bob's phone, which ends it.
+    final carried = relay.carried.length;
     clock.advance(const Duration(seconds: 5));
     alicePhone.activity.report(ChatTextSent(direct));
     await _settleAll(phones);
+    expect(relay.carried, hasLength(carried), reason: 'a send sends no frame');
+    expect(await bobPhone.state.watchTyping(direct).first, isNotEmpty);
+
+    bobPhone.activity.report(
+      ChatMessageArrived(direct, senderDeviceId: aliceDevice),
+    );
+    await _settleAll(phones);
     expect(await bobPhone.state.watchTyping(direct).first, isEmpty);
   });
+
+  test(
+    'the next message starts its line at once, and the refresh 3 s later '
+    'repairs the line that the arrival of the earlier message ended',
+    () async {
+      final alicePhone = phoneFor(
+        alice,
+        conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+        peers: {
+          bobUser: [bobDevice],
+        },
+      );
+      final bobPhone = phoneFor(
+        bob,
+        conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+        peers: {
+          aliceUser: [aliceDevice],
+        },
+      );
+      Future<List<String>> typers() async => [
+        for (final entry in await bobPhone.state.watchTyping(direct).first)
+          entry.deviceId,
+      ];
+      // Moves the shared clock through Alice's timers, which are the ones due.
+      Future<void> advance(Duration duration) =>
+          alicePhone.timers.advance(duration, settle: () => _settleAll(phones));
+
+      bobPhone.visibility.show(direct);
+      await _settleAll(phones);
+      // Message 1: typed, then sent.
+      alicePhone.activity.report(ChatTextEdited(direct, hasText: true));
+      await _settleAll(phones);
+      await advance(const Duration(seconds: 2));
+      alicePhone.activity.report(ChatTextSent(direct));
+      await _settleAll(phones);
+      await advance(const Duration(seconds: 1));
+
+      // Message 2: Bob's phone shows the line with the first edit.
+      alicePhone.activity.report(ChatTextEdited(direct, hasText: true));
+      await _settleAll(phones);
+      expect(await typers(), [aliceDevice]);
+
+      // Message 1 reaches Bob's phone after that start, and ends the line.
+      bobPhone.activity.report(
+        ChatMessageArrived(direct, senderDeviceId: aliceDevice),
+      );
+      await _settleAll(phones);
+      expect(await typers(), isEmpty);
+
+      // Alice's refresh, 3 s after the start, shows it again.
+      await advance(const Duration(seconds: 2));
+      expect(await typers(), isEmpty);
+      await advance(const Duration(seconds: 1));
+      expect(await typers(), [aliceDevice]);
+    },
+  );
 
   test('no frame goes to a device with no session, or to an account the seal '
       'does not find verified', () async {

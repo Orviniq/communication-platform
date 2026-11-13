@@ -100,6 +100,9 @@ void main() {
     }
   }
 
+  bool isTyping(PresenceSeal seal) =>
+      seal.message.kind == PresenceSignalKind.typing;
+
   Future<PresenceLedgerEntry> ledgerOf(String device) async =>
       (await rig.ledger.read(userId: bob, deviceId: device)
               as Success<PresenceLedgerEntry?>)
@@ -239,10 +242,168 @@ void main() {
       expect((first as PresenceTyping).ttlMs, 15000);
     });
 
-    test('at most one typing frame every 5 s, and so at most 12 a minute, '
-        'however fast the composer changes', () async {
+    test(
+      'S1: a message sent after 3 s and the next typed for 8 s: the line of '
+      'the next starts with its first edit, and is refreshed after 3 s',
+      () async {
+        await typeFor(3);
+        await rig.report(ChatTextSent(direct));
+        await rig.advance(const Duration(seconds: 1));
+        await typeFor(8);
+        await rig.advance(const Duration(seconds: 20));
+
+        expect(typingTo(b1), [(0, true), (4, true), (7, true), (16, false)]);
+      },
+    );
+
+    test('S2: a message sent after 7 s and the next typed for 8 s', () async {
+      await typeFor(7);
+      await rig.report(ChatTextSent(direct));
+      await rig.advance(const Duration(seconds: 1));
+      await typeFor(8);
+      await rig.advance(const Duration(seconds: 20));
+
+      expect(typingTo(b1), [(0, true), (8, true), (11, true), (20, false)]);
+    });
+
+    test('S3: typing resumed after a pause of 6 s shows at once, and the idle '
+        'stop is not held back by a repeat', () async {
+      await typeFor(3);
+      await rig.advance(const Duration(seconds: 6));
+      await typeFor(7);
+      await rig.advance(const Duration(seconds: 20));
+
+      expect(typingTo(b1), [
+        (0, true),
+        (7, false),
+        (9, true),
+        (19, true),
+        (20, false),
+      ], reason: 'the stop at 20 s, not 24 s');
+    });
+
+    test('a send ends the session and sends no frame, and the cleared composer '
+        'that follows adds none', () async {
+      await typeFor(6);
+      await rig.report(ChatTextSent(direct));
+      await rig.edit(direct, hasText: false);
+      await rig.advance(const Duration(seconds: 30));
+
+      expect(
+        typingTo(b1),
+        [(0, true)],
+        reason: 'the message ends the line at the receiver (ADR-098 D3)',
+      );
+    });
+
+    test(
+      'a start after a stop leaves at once, however recent the stop',
+      () async {
+        await rig.edit(direct);
+        await rig.advance(const Duration(seconds: 6));
+        await rig.edit(direct);
+
+        expect(typingTo(b1), [(0, true), (5, false), (6, true)]);
+      },
+    );
+
+    test('with no lease an edit seals nothing, and the watch that comes later '
+        'is answered with the typing and the next edit starts', () async {
+      await rig.edit(groupChat);
+      expect(rig.sealer.of(PresenceSignalKind.typing), isEmpty);
+      expect(rig.sealer.seals.where(isTyping), isEmpty);
+
+      await rig.advance(const Duration(seconds: 2));
+      await watchFrom(groupChat, user: carol, device: c1);
+      final here = rig.sealer
+          .of(PresenceSignalKind.here)
+          .singleWhere((seal) => seal.devices.any((d) => d.key == c1));
+      expect((here.body as PresenceHere).typing, isTrue);
+      expect(typingTo(c1), isEmpty);
+
+      await rig.edit(groupChat);
+
+      expect(typingTo(c1), [(2, true)]);
+    });
+
+    test('L1: with 8 live frames sent since the watcher spoke an edit sends '
+        'nothing, and the next edit after the watcher spoke starts', () async {
+      // The here answered the watch (1), then seven typing frames.
+      for (var cycle = 0; cycle < 4; cycle += 1) {
+        await rig.edit(direct);
+        if (cycle < 3) {
+          await rig.advance(const Duration(seconds: 5));
+        }
+      }
+      expect(typingTo(b1), hasLength(7));
+      await rig.report(ChatTextSent(direct));
+
+      await rig.advance(const Duration(seconds: 2));
+      await rig.edit(direct);
+      expect(typingTo(b1), hasLength(7), reason: 'L1 held the start back');
+
+      await watchFrom(direct);
+      await rig.edit(direct);
+
+      expect(typingTo(b1), hasLength(8));
+      expect(typingTo(b1).last, (17, true));
+    });
+
+    test('a refused seal does not count as sent: ten edits in a second seal '
+        'once, and the next edit after the session exists starts', () async {
+      rig.sealer.refused[b1] = PresenceSealRefusal.noSession;
+      for (var edit = 0; edit < 10; edit += 1) {
+        await rig.edit(direct);
+        await rig.advance(const Duration(milliseconds: 100));
+      }
+
+      expect(rig.sealer.seals.where(isTyping), hasLength(1));
+      expect(typingTo(b1), isEmpty);
+
+      // The ten edits took a second, so the next try is allowed.
+      rig.sealer.refused.remove(b1);
+      await rig.edit(direct);
+
+      expect(typingTo(b1), [(1, true)]);
+    });
+
+    test('a start less than 5 s after a send is refreshed after 3 s, and the '
+        'refresh after it comes 10 s later', () async {
+      await rig.edit(direct);
+      await rig.advance(const Duration(seconds: 1));
+      await rig.report(ChatTextSent(direct));
+      await rig.advance(const Duration(seconds: 4));
+      await typeFor(14);
+      await rig.advance(const Duration(seconds: 20));
+
+      expect(
+        typingTo(b1),
+        [(0, true), (5, true), (8, true), (18, true), (23, false)],
+        reason:
+            'the start at 5 s, the refresh 3 s later, the repeat 10 s after '
+            'that, and the idle stop 5 s after the last edit at 18 s',
+      );
+    });
+
+    test(
+      'a start 5 s or more after a send, or with no send, repeats at 10 s',
+      () async {
+        await rig.edit(direct);
+        await rig.advance(const Duration(seconds: 1));
+        await rig.report(ChatTextSent(direct));
+        await rig.advance(const Duration(seconds: 5));
+        await typeFor(12);
+        await rig.advance(const Duration(seconds: 20));
+
+        expect(typingTo(b1), [(0, true), (6, true), (16, true), (22, false)]);
+      },
+    );
+
+    test('N7: a composer that flips every 200 ms for a minute sends at most '
+        '24 typing frames, and at most 8 live frames go between two frames '
+        'of the watcher', () async {
       for (var tick = 0; tick < 300; tick += 1) {
-        if (tick % 125 == 0) {
+        if (tick % 125 == 0 && tick > 0) {
           // The watcher renews its lease, as an open chat does.
           await watchFrom(direct);
         }
@@ -251,22 +412,38 @@ void main() {
       }
 
       final frames = typingTo(b1);
-      expect(frames.length, lessThanOrEqualTo(12));
       expect(frames, isNotEmpty);
-      for (var index = 1; index < frames.length; index += 1) {
-        expect(
-          frames[index].$1 - frames[index - 1].$1,
-          greaterThanOrEqualTo(5),
-          reason: '$frames',
-        );
+      expect(frames.length, lessThanOrEqualTo(24), reason: '$frames');
+      for (var window = 0; window < 3; window += 1) {
+        final live = [
+          for (final seal in rig.sealer.seals)
+            if (seal.devices.any((device) => device.key == b1) &&
+                seal.at.difference(t0).inSeconds >= 25 * window &&
+                seal.at.difference(t0).inSeconds < 25 * (window + 1))
+              seal,
+        ];
+        expect(live.length, lessThanOrEqualTo(8), reason: 'window $window');
       }
     });
 
-    test('a send stops at once once the pace allows', () async {
-      await typeFor(6);
-      await rig.report(ChatTextSent(direct));
+    test('N7: a user who types 2 s and sends every 6 s for a minute sends one '
+        'typing frame for each message, and L1 holds none back', () async {
+      for (var second = 0; second < 60; second += 1) {
+        if (second > 0 && second % 25 == 0) {
+          await watchFrom(direct);
+        }
+        final step = second % 6;
+        if (step < 2) {
+          await rig.edit(direct);
+        } else if (step == 2) {
+          await rig.report(ChatTextSent(direct));
+        }
+        await rig.advance(const Duration(seconds: 1));
+      }
 
-      expect(typingTo(b1), [(0, true), (6, false)]);
+      expect(typingTo(b1), [
+        for (var message = 0; message < 10; message += 1) (6 * message, true),
+      ]);
     });
 
     test('clearing the composer stops at the end of the pace', () async {
