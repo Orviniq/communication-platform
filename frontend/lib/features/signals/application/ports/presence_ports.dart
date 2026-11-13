@@ -111,9 +111,23 @@ abstract interface class PresencePeersPort implements Port {
   /// verified, in lower case. An account that is not verified, whose identity
   /// is blocked, or that could not be read is absent.
   ///
-  /// One read answers up to 64 accounts and is reused for at most 10 s
-  /// (ADR-098 D7).
-  Future<Map<String, List<String>>> verifiedDevices(Set<String> userIds);
+  /// One read answers up to 64 accounts. An answer under 10 s old is used as
+  /// it is (ADR-098 D7). One under 60 s old is used at once too, and read
+  /// again in the background. Only an account with no such answer waits for
+  /// a read.
+  ///
+  /// A device of [including] that an answer of 10 s or more does not name is
+  /// not known yet: its account is read again before this answers, so a new
+  /// device of a peer is not refused on an old answer.
+  Future<Map<String, List<String>>> verifiedDevices(
+    Set<String> userIds, {
+    Set<PresenceDevice> including = const {},
+  });
+
+  /// The live device ids, in lower case, of the last answer that verified
+  /// [userId], however old, or null when there is none or this phone's trust
+  /// in the account changed since. It never reads the network.
+  Future<List<String>?> peek(String userId);
 }
 
 /// The probe ledger of one peer device (ADR-098 D6), which schema 26 keeps.
