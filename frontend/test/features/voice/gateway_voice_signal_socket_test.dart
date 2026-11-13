@@ -92,16 +92,85 @@ void main() {
       await running.close();
     },
   );
+
+  test('isOpen and opens follow the attached gateway', () async {
+    final socket = GatewayVoiceSignalSocket();
+    final first = _Gateway();
+    final second = _Gateway();
+    var opens = 0;
+    // Subscribed before anything is attached, as the presence channel is.
+    final subscription = socket.opens.listen((_) => opens += 1);
+
+    expect(socket.isOpen, isFalse);
+
+    await socket.attach(first);
+    expect(socket.isOpen, isFalse, reason: 'the gateway has no connection');
+    first.becomeOpen();
+    await Future<void>.delayed(Duration.zero);
+    expect(socket.isOpen, isTrue);
+    expect(opens, 1);
+
+    await socket.detach(first);
+    expect(socket.isOpen, isFalse, reason: 'nothing is attached');
+    first.becomeOpen();
+    await Future<void>.delayed(Duration.zero);
+    expect(opens, 1, reason: 'a detached gateway is not listened to');
+
+    await socket.attach(second);
+    expect(socket.isOpen, isFalse);
+    second.becomeOpen();
+    await Future<void>.delayed(Duration.zero);
+    expect(opens, 2, reason: 'the same stream, across attach and detach');
+    second.open = false;
+    expect(socket.isOpen, isFalse);
+
+    await subscription.cancel();
+    await socket.dispose();
+    await first.close();
+    await second.close();
+  });
+
+  test('with no gateway attached nothing is open and a frame is refused as '
+      'offline', () async {
+    final socket = GatewayVoiceSignalSocket();
+
+    expect(socket.isOpen, isFalse);
+    final sent = await socket.sendSignal(toDeviceId: device, blob: 'blob');
+    expect(sent, isA<FailureResult<void>>());
+    expect(
+      (sent as FailureResult<void>).failure,
+      isA<TransportFailure>().having(
+        (failure) => failure.kind,
+        'kind',
+        TransportFailureKind.offline,
+      ),
+    );
+    await socket.dispose();
+  });
 }
 
 final class _Gateway implements RealtimeGateway {
   final _events = StreamController<RealtimeEvent>.broadcast(sync: true);
+  final _opens = StreamController<void>.broadcast(sync: true);
   final sent = <Map<String, Object?>>[];
+  var open = false;
 
   void emit(RealtimeEvent event) => _events.add(event);
 
+  /// The connection becomes ready: [isOpen] turns true, then [opens] emits.
+  void becomeOpen() {
+    open = true;
+    _opens.add(null);
+  }
+
   @override
   Stream<RealtimeEvent> get events => _events.stream;
+
+  @override
+  bool get isOpen => open;
+
+  @override
+  Stream<void> get opens => _opens.stream;
 
   @override
   Future<Result<void>> send(Map<String, Object?> frame) async {
@@ -116,5 +185,9 @@ final class _Gateway implements RealtimeGateway {
   void markStableConnection() {}
 
   @override
-  Future<void> close() => _events.close();
+  Future<void> close() async {
+    open = false;
+    await _events.close();
+    await _opens.close();
+  }
 }

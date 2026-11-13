@@ -385,6 +385,12 @@ final class RelaySocket implements VoiceSignalSocketPort {
   @override
   Stream<String> get inboundBlobs => _inbound.stream;
 
+  @override
+  bool get isOpen => true;
+
+  @override
+  Stream<void> get opens => const Stream<void>.empty();
+
   void _deliver(String blob) => _inbound.add(blob);
 
   @override

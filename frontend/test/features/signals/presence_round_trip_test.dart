@@ -436,7 +436,7 @@ final class _Relay {
 
   void _relay(String toDeviceId, String blob) {
     final target = _sockets[toDeviceId];
-    if (target == null) {
+    if (target == null || !target.connected) {
       return;
     }
     carried.add(base64.decode(blob));
@@ -456,18 +456,43 @@ final class _RelaySocket implements SignalSocketPort {
 
   final _Relay _relay;
   final _inbound = StreamController<String>.broadcast();
+  final _opens = StreamController<void>.broadcast();
+
+  /// Whether this phone has a connection: the relay delivers nothing to it
+  /// while it is false, and takes nothing from it.
+  var connected = true;
 
   @override
   Stream<String> get inboundBlobs => _inbound.stream;
+
+  @override
+  bool get isOpen => connected;
+
+  @override
+  Stream<void> get opens => _opens.stream;
+
+  /// The connection becomes ready.
+  void open() {
+    connected = true;
+    _opens.add(null);
+  }
 
   @override
   Future<Result<void>> sendSignal({
     required String toDeviceId,
     required String blob,
   }) async {
+    if (!connected) {
+      return const Result.failure(
+        TransportFailure(TransportFailureKind.offline),
+      );
+    }
     _relay._relay(toDeviceId, blob);
     return const Result.success(null);
   }
 
-  Future<void> close() => _inbound.close();
+  Future<void> close() async {
+    await _inbound.close();
+    await _opens.close();
+  }
 }

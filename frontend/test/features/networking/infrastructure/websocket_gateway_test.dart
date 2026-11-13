@@ -387,6 +387,82 @@ void main() {
     expect(connection.sent, isEmpty);
     await gateway.close();
   });
+
+  group('whether the connection is open', () {
+    test('isOpen is false before connect, true after it, and false after '
+        'close and after a loss of the transport', () async {
+      final connector = MultiSocketConnector();
+      final gateway = gatewayFor(connector: connector);
+
+      expect(gateway.isOpen, isFalse);
+
+      await gateway.connect();
+      expect(gateway.isOpen, isTrue);
+
+      await gateway.close();
+      expect(gateway.isOpen, isFalse);
+
+      await gateway.connect();
+      expect(gateway.isOpen, isTrue);
+      await connector.connections.last.serverClose(1012);
+      await pumpEvents();
+      expect(
+        gateway.isOpen,
+        isFalse,
+        reason: 'the transport was lost, and nothing closed the gateway',
+      );
+    });
+
+    test('one open event follows each successful connect and none follows a '
+        'failed one', () async {
+      final connector = MultiSocketConnector();
+      final gateway = gatewayFor(connector: connector);
+      final heardWhileOpen = <bool>[];
+      final subscription = gateway.opens.listen(
+        (_) => heardWhileOpen.add(gateway.isOpen),
+      );
+
+      await gateway.connect();
+      await pumpEvents();
+      expect(heardWhileOpen, [true], reason: 'isOpen is true by the event');
+
+      // Already open: nothing connects, and nothing is emitted.
+      await gateway.connect();
+      await pumpEvents();
+      expect(heardWhileOpen, [true]);
+
+      await connector.connections.last.serverClose(1012);
+      await pumpEvents();
+      await gateway.connect();
+      await pumpEvents();
+      expect(heardWhileOpen, [true, true]);
+
+      await gateway.close();
+      final refused = gatewayFor(connector: _RefusingConnector());
+      var refusedOpens = 0;
+      final refusedSubscription = refused.opens.listen(
+        (_) => refusedOpens += 1,
+      );
+      final result = await refused.connect();
+      await pumpEvents();
+      expect(result, isA<FailureResult<void>>());
+      expect(refused.isOpen, isFalse);
+      expect(refusedOpens, 0);
+
+      await subscription.cancel();
+      await refusedSubscription.cancel();
+    });
+  });
+}
+
+final class _RefusingConnector implements SocketConnector {
+  @override
+  Future<SocketConnection> connect({
+    required Uri uri,
+    required String accessToken,
+    required Duration timeout,
+    Duration? keepAlive,
+  }) => Future<SocketConnection>.error(StateError('refused'));
 }
 
 DioWebSocketGateway gatewayFor({

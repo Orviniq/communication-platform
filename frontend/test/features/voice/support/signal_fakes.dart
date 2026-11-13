@@ -76,10 +76,26 @@ final class FakeSignalSocket implements VoiceSignalSocketPort {
   final TimeSource clock;
   final sent = <SentSignal>[];
   final _inbound = StreamController<String>.broadcast(sync: true);
+  final _opens = StreamController<void>.broadcast(sync: true);
+
+  /// Whether the socket carries a frame: [isOpen], and what makes
+  /// [sendSignal] fail while it is false.
   var connected = true;
 
   @override
   Stream<String> get inboundBlobs => _inbound.stream;
+
+  @override
+  bool get isOpen => connected;
+
+  @override
+  Stream<void> get opens => _opens.stream;
+
+  /// The connection becomes ready: [isOpen] turns true, then [opens] emits.
+  void open() {
+    connected = true;
+    _opens.add(null);
+  }
 
   void deliver(String blob) => _inbound.add(blob);
 
@@ -97,7 +113,10 @@ final class FakeSignalSocket implements VoiceSignalSocketPort {
     return const Result.success(null);
   }
 
-  Future<void> close() => _inbound.close();
+  Future<void> close() async {
+    await _inbound.close();
+    await _opens.close();
+  }
 }
 
 typedef SealAnswer =
