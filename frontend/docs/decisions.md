@@ -108,8 +108,154 @@ is not silently edited out of history.
 | ADR-095 | Proposed (2026-10-18) | Prekey maintenance runs in the delivery cycle. `DurableSyncEngine` offers it one turn as the last step of a healthy cycle, after the phase is online, unless the cycle carried a failure or its owner was asked to stand down, so the foreground session, the deferred catch-up and the sustained run all run it, one cycle at a time (ADR-050). `ScheduledPrekeyMaintenance` decides which turns run: the first of a process, then one 6 hours after a run that worked or 5 minutes after one that failed, and a turn during a run joins it. A failure or a throw changes nothing about the cycle. An initial envelope that meets a pending plan is deferred as a transient failure instead of quarantined as a conflict. ADR-093 D17 is unchanged | `prekeyMaintenanceServiceProvider` had no consumer, so no signed prekey rotated, no retired pair was pruned and no one-time prekey was replenished, while `sync-engine.md` said all three happened. The cycle is the unit one delivery owner owns, and wiring maintenance in made a plan left pending able to quarantine a first message |
 | ADR-096 | Accepted (2026-10-19); proposed 2026-10-19 | Leaving a group, or being removed from it, deletes it from this phone in the transaction of the state change: the conversation row is tombstoned, its messages, draft, receipts and attachment rows are deleted, and its facts move to a new apply state, retired, that is never folded and still catches a replay. The signed state row stays; a re-add clears the tombstone and the group comes back with no old history. After Leave the app returns to Chats. Each member deletes an own group message for everyone under the rule of a group send. The owner deletes any message and an admin a member's; the owner and the admins pin; the roles of the current signed roster decide, and a role change re-folds the group. Edit stays off. Supersedes ADR-090 D4 for Pin and Delete for everyone | The field test of 2026-10-17: a left group stayed in Chats as a read-only copy, and no group message could be deleted for everyone or pinned. The server holds no group, no roster and no role (`backend/CLIENT_CONTRACT.md` §F), so each phone enforces the rule from the signed roster. Costs: leaving cannot be undone on the phone, and a demotion undoes the demoted admin's deletes and pins. Changes no wire format, schema, dependency or backend file |
 | ADR-097 | Accepted (2026-10-19); proposed 2026-10-19 | A direct chat and Saved Messages send a video. The Photo option of the attachment sheet is renamed **Photo or video** and offers both: the system photo picker with no type, or `ACTION_GET_CONTENT` with `*/*` and the types `image/*` and `video/*`. A video of type `video/mp4`, `video/webm`, `video/3gpp` or `video/quicktime` is copied as its exact bytes, with no re-encoding, and travels with the media kind `file` and its real type; the same four types join the type allowlist on both sides of the channel and in the received descriptor. A video message draws a video tile (a video icon, the name, the size and the state of any attachment tile), and Open hands the file to the system player; there is no in-app player, no thumbnail and no inline playback. The 64 MiB limit is accepted, and a video over it is refused with the sentence that names the largest size. A group still sends no attachment | The field test of 2026-10-17: a video could not be sent. The Photo picker asked for pictures only, a File pick of a video travelled as `application/octet-stream`, and the recipient got a file that a player might not open. A new media kind would change the encrypted wire format, and a thumbnail would change the bucket of each pairwise copy, so the video stays a `file`. Costs: a video is at most 63.98 MiB, four such videos fill the 256 MiB daily allowance, one upload runs at a time and dies with the process, and the server gives an upload 120 seconds, which a 64 MiB video needs 4.5 Mbit/s to meet. Changes no wire format, table, protocol, dependency, Android permission, disclosure text or backend file. Not verified on a phone. Amends ADR-089 for video |
-| ADR-098 | Accepted (2026-10-19); proposed 2026-10-19; D3 amended by ADR-099 | Typing and online status travel as `CPPSV001` payloads in volatile `signal` frames, read by one router that opens each frame once and routes it by its magic: `CPVSV001` to voice, unchanged, `CPPSV001` to presence, anything else left uncommitted. A phone in the foreground with the switch on sends a `watch` of the chat it shows to the peer's devices (in a group of at most 32 members, 2 devices of each), renewed every 25 s; a device in the foreground answers `here`, sends `typing` only to devices whose watch of that chat is under 40 s old, and sends `gone` before the socket closes. A device is online for 40 s after its latest frame. A watch to a device not heard from in 40 s is a probe: at most 4 since it was last heard from and 8 a day, and at most 8 other frames go to a device between two frames from it. Schema 26 keeps that ledger and the last seen, which never leaves the phone. "Show my online status" is a preference of this phone, on by default; off, it sends and shows nothing, typing included. The disclosure moves to revision 11 | The field test of 2026-10-17 asked for typing and an online line. The server holds no presence (server ADR-0022), so devices tell each other in `signal` frames, and each frame the server drops leaves a dead skipped key for the life of the session. The rules hold one pair to 8 a day with no vanish (2,000 after 250 days), a phone that is away to 12 from each sender however long it is away, and a phone with 100 peer devices to 800 a day in the worst case (20,000 after 25 days); at either bound the session is repaired, and nothing is lost. Costs: a peer learns which shared chat the user opens; the status is a lower bound; groups of 33 to 50 members show neither. Changes no server route, Rust core or dependency. Built by prompts 2 to 4 (2026-10-19); host and widget tests only, not run on a phone |
+| ADR-098 | Accepted (2026-10-19); proposed 2026-10-19; D3 amended by ADR-099; D4 amended by ADR-100 | Typing and online status travel as `CPPSV001` payloads in volatile `signal` frames, read by one router that opens each frame once and routes it by its magic: `CPVSV001` to voice, unchanged, `CPPSV001` to presence, anything else left uncommitted. A phone in the foreground with the switch on sends a `watch` of the chat it shows to the peer's devices (in a group of at most 32 members, 2 devices of each), renewed every 25 s; a device in the foreground answers `here`, sends `typing` only to devices whose watch of that chat is under 40 s old, and sends `gone` before the socket closes. A device is online for 40 s after its latest frame. A watch to a device not heard from in 40 s is a probe: at most 4 since it was last heard from and 8 a day, and at most 8 other frames go to a device between two frames from it. Schema 26 keeps that ledger and the last seen, which never leaves the phone. "Show my online status" is a preference of this phone, on by default; off, it sends and shows nothing, typing included. The disclosure moves to revision 11 | The field test of 2026-10-17 asked for typing and an online line. The server holds no presence (server ADR-0022), so devices tell each other in `signal` frames, and each frame the server drops leaves a dead skipped key for the life of the session. The rules hold one pair to 8 a day with no vanish (2,000 after 250 days), a phone that is away to 12 from each sender however long it is away, and a phone with 100 peer devices to 800 a day in the worst case (20,000 after 25 days); at either bound the session is repaired, and nothing is lost. Costs: a peer learns which shared chat the user opens; the status is a lower bound; groups of 33 to 50 members show neither. Changes no server route, Rust core or dependency. Built by prompts 2 to 4 (2026-10-19); host and widget tests only, not run on a phone |
 | ADR-099 | Accepted (2026-11-13); proposed 2026-11-13 | A typing session ends with the message and a start is never delayed. A send sends no `typing` frame: it resets the session (wanted and sent false, the idle, pace and repeat timers cancelled, the last frame time cleared) and notes when it happened, and the message ends the line at the receiver (ADR-098 D3). A start leaves at once, even right after a stop. The 5 s pace holds back one frame only, the stop that follows a cleared composer; the idle stop and the stop for leaving the chat leave at once. A typing state counts as sent only when a frame was queued: with no lease, past L1 or with a refused seal it does not, and a later edit tries again, at most once a second, or at once when a frame from a device lifts L1. A start less than 5 s after a send is refreshed after 3 s instead of 10 s, which repairs a line that the late arrival of the earlier message ended. Repeat 10 s, idle stop 5 s, TTL 15 s, lease 40 s, L1, P1, P2 and the wire format keep their values. The bound on typing frames to one watcher is 24 in 60 s, and L1 stays the hard cap | The field test of 2026-10-20 on `be0eba5` showed the line of the next message missing, or late by 3 to 6 s, in three scripts, and a first line later than 1 s. Four causes: the send went through the pace and left the state sent; the pace delayed a start that followed a stop; the state changed when no frame left; and the arrival of the earlier message can end the line of the next (inferred, not measured). The suggested pace of 2 s, repeat of 5 s and expiry of 8 s are rejected: they break L1, which allows 8 live frames between two frames from a watcher. Costs: the worst case is 24 typing frames a minute, and a user who types again within 5 s of a send adds one early refresh. A message that never reaches the receiver leaves its line until the 15 s expiry. Changes no server route, wire format, table, dependency or permission. Host tests only, not run on a phone |
+| ADR-100 | Accepted (2026-11-13); proposed 2026-11-13 | Presence follows the socket and answers a new watcher at once. The channel seals no presence frame while the socket is closed, checking `isOpen` before the seal and again inside the router lock, because a frame the socket does not carry has already advanced the pairwise session and leaves a dead skipped key on its target for good. A socket open runs the watch round of the chat on screen and starts again each typing session still wanted. A phone that shows a chat and accepts a `watch` of it from a device it watches sends that device a live `watch` at once, after the `here`, unless it sent that device a live watch in the last 40 s: it counts for L1, spends no probe token, leaves the 25 s renewal alone, and goes nowhere in the background, with the switch off, for a chat not on screen or to a device the watch does not target. A `gone` forgets the watch sent to that device. Renewal 25 s, lease 40 s, answer window 10 s, P1, P2, L1 and the wire format keep their values | The field test of 2026-10-20 on `be0eba5` showed the first line late and the peer online late. Measured with `PresenceRig`: with the socket closed at the open the first watch was sealed and lost at 0 s and the second left at 75 s (S4), a 5-minute outage lost 4 watches and used the peer's probes (S6), and a watch that arrived at 2 s earned a `here` but the phone's own watch waited for 25 s (the lease gap). Costs: one more frame when a peer arrives, and one more pair when both phones open the chat at once; two `isOpen` calls for each seal; a frame sealed in the last milliseconds before a close is still a dead key. The suggestions to send the first watch past the peer read and to shorten the online window are rejected. Changes no server route, wire format, table, dependency or permission. Host tests only, not run on a phone |
+
+## ADR-100 in full — presence follows the socket and answers a new watcher at once (2026-11-13)
+
+Status: Accepted (2026-11-13); proposed 2026-11-13. Amends D4 of ADR-098. Changes no server route, wire
+format, table, dependency or permission.
+
+### The question
+
+The owner tested the build of PR #90 (`be0eba5`) on two phones on 2026-10-20. Three problems: the first
+`typing…` line takes more than 1 s to show; the line of the next message does not show, or shows after more
+than 5 s; the peer shows `online` late after the app opens and stays `online` for a long time after it
+closes. Phase 1 (ADR-099) fixed the typing sessions. This ADR is phase 2: the connection and the handshake.
+It fixes the arrival part of the third problem and the handshake part of the first. The peer reads and the
+goodbye (phase 3) are not in it. What must a phone do about a socket that is closed, and about a peer that
+opens the chat while this phone already waits in it, so that the peer can type to it and shows it online at
+once?
+
+### The facts
+
+Measured with `PresenceRig` and a fake clock. S4 and S6 were measured on `be0eba5`; the lease gap on the
+code before this ADR.
+
+| Script | Before | After |
+|---|---|---|
+| S4: the chat opens with the socket closed, the socket opens at 3 s | The first watch is sealed at 0 s and lost, and its probe is spent. The renewals at 25 s and 50 s are refused by P2. The second watch is sealed at 75 s. | No frame at 0 s and no ledger entry. The watch is sealed at the open, 3.0 s. |
+| S6: the chat stays on screen with the socket closed | In 5 minutes, 4 watches are sealed and lost, and the probes of the peer device are used up (P1). | 0 frames sealed in 2 minutes of outage, none by the renewals. One watch at the open (120 s), and one probe spent. |
+| Lease gap: the chat is on screen at 0 s, the first watch is a probe, the watch of the peer arrives at 2 s | watch@0, here@2, watch@25. The peer cannot type to the phone from 2 s to 25 s. | watch@0, here@2, watch@2. The renewal at 25 s is a live watch: watch@25. |
+
+The causes, in `presence_channel.dart`:
+
+- **S4 and S6.** `_send` sealed whether or not the socket could carry the frame. The seal advances the
+  pairwise session of its target at once, so a frame that is not carried leaves a dead skipped key there
+  for good (ADR-098 D6), and the probe it spent is not given back. Presence starts before the supervisor
+  connects, and a closed socket also follows `inactive`, so frames were sealed into a closed socket at the
+  first open of a chat, after a resume and after a lost connection.
+- **The lease gap.** A `watch` gives a lease to its sender only. The device that answers holds a lease
+  for the watcher, and the watcher holds none for the answerer until the answerer's own watch, which
+  waits for its renewal, up to 25 s. A peer that opens the chat late, returns from the background or
+  reconnects could not type to the phone that waits in the chat for that time.
+
+What prompt 1 of this phase built, from the code: `SignalSocketPort` gains `isOpen` and `opens`, and the
+real gateway reports its state and emits one event after each successful connect, passed through the
+voice adapter on one broadcast stream that outlives attach and detach. `PresenceChannel` asks `isOpen`
+before it seals and again inside `SignalRouter.exclusively`, runs the watch round at each open, and starts
+each typing session still wanted again.
+
+### Decisions
+
+- **K1 and K2.** The port and the gateway report the state of the socket: `isOpen`, and one `opens` event
+  after each connect.
+- **K3.** The channel seals no frame while the socket is closed. It checks before the seal and again inside
+  the router lock. A frame that is not sealed spends no probe token, adds no L1 count and moves no ratchet.
+- **K4.** At each open the channel runs the watch round of the chat on screen and sends a start for each
+  typing session that is `wanted`. A session that was in flight on the old connection starts over.
+- **K5.** A closed socket ends the typing shown. Leases and watches end by time.
+- **K6.** P1, P2, L1, the windows, the wire format and the voice behavior did not change.
+- **W1.** When the channel accepts a `watch` for the conversation on screen from a device that is a target
+  of the current watch, and it sent no live watch to that device in the last 40 s, it sends that device a
+  `watch` at once, after the `here`.
+- **W2.** The reciprocal watch counts as a live frame for L1. It is not a probe, because the device has
+  just spoken: no probe token. It records the time in `renewedAt` of the current watch, and does not move
+  the 25 s renewal timer.
+- **W3.** There is none in the background, with the switch off, when the conversation is not on screen,
+  or when the device is not a target of the current watch (for example a member of a group of more than 32
+  members, or a third device of a member in a group).
+- **W4.** Kept: the renewal (25 s), the lease (40 s), the answer window (10 s), P1, P2, L1, the wire format
+  and the rules of prompt 1.
+
+One detail that W1 needs and the prompt did not name: a `gone` forgets the watch sent to that device
+(`renewedAt` and `answeredAt` of the current watch). The device left the foreground and dropped its
+leases, so the watch sent to it before no longer holds, and without this its return within 40 s of that
+watch would not be answered. A watch that is accepted also clears the gone state of its sender at once.
+
+### Rejected
+
+The report of the field test proposed these.
+
+- **Send the first watch at once and bypass the peer read.** The watch already goes at once when the chat
+  opens. The delay came from the closed socket (K3, K4) and from the missing reciprocal watch (W1). The
+  peer read is a cache; phase 3 handles it.
+- **A shorter online window.** Phase 3 handles it.
+
+### Costs
+
+- One more frame, a live `watch`, when a peer arrives at a phone that waits in the chat, and the `here`
+  that answers it. It counts for L1: after a late join the typing to that device has 6 of the 8 frames
+  left.
+- When both phones open the chat within seconds of each other, each sends the other a reciprocal watch,
+  because the first watch of each was a probe and a probe is not a live watch. The two-phone test counts
+  6 frames to the first line (probe, here, watch, here, watch, here), where the late join of one phone
+  counts 4 and the situation before this ADR 2. The exchange ends there: the second reciprocal finds a
+  live watch less than 40 s old. Counting an answered probe as live would save the last pair; it is not
+  done, since it changes W1.
+- One `isOpen` call for each seal, and a second inside the router lock.
+- The gate cannot stop a frame that is sealed in the last milliseconds before a close, and that frame is
+  still a dead key; the bound of ADR-098 D6 holds for it as before.
+
+### Built
+
+- `presence_channel.dart`: `_watchBack` and its call in the `PresenceWatch` case of `_receive`; the `gone`
+  case forgets the watch sent to its sender. The class comment names the rule. No log line, no print.
+- Prompt 1 of the phase, in the commits before: `SignalSocketPort.isOpen` and `opens`, the gateway and
+  voice adapter, the gate and the open handshake in `PresenceChannel`.
+- `presence_reciprocal_watch_test.dart` (new), `presence_round_trip_test.dart`: the cases below.
+
+### Verified by
+
+Host tests, T1 and T3 written first and run on the code of prompt 1: T1 gave watch@0, here@2, watch@25,
+and T3 failed. T2 passed before the change and guards against a storm of reciprocal watches. T6, T7 and T8
+failed too. After the change all pass:
+
+- T1: watch@0, here@2, watch@2; the peer answers at 2.5 s; the renewal at 25 s is a live watch, and the
+  ledger shows one probe in all.
+- T2: 2 minutes of renewals from both sides seal the watches at 0, 25, 50, 75 and 100 s and a here for each
+  of the four watches of the peer, 9 frames, no reciprocal watch.
+- T3 (two phones): Alice has the chat on screen; Bob's phone opens its chat 2 s later. In the same settle
+  each shows the other online, and when Bob types, Alice's phone shows the line in that settle.
+- T4: a watch for a chat not on screen, or with none on screen, earns a `here` only. T5: nothing leaves
+  in the background or with the switch off. T6: in a group of 3 each member's watch earns one reciprocal
+  watch, a device that the watch does not target earns none, and a group of more than 32 earns nothing. T7:
+  after a `gone`, a new watch clears the gone state, earns a reciprocal watch within 40 s of the earlier
+  one, and typing and the renewal reach the device. T8: after a late join the live frames to the peer
+  between two of its frames are 8 at most. T9: a watch that arrives on a closed socket seals nothing, and
+  the open sends one watch through the watch round.
+
+Five mutation checks, each applied with a script that keeps the line endings and restores the exact bytes:
+no reciprocal watch (T1, T3, T6, T7, T8); the reciprocal watch sent as a probe (the same five, through the
+ledger and the frames); no 40 s guard (T2; the two-phone test does not end, since the phones answer each
+other without limit, which shows that the guard is what bounds the exchange); sent in the background (T5);
+sent for a chat not on screen (T4).
+
+### Not verified
+
+A run on two phones. No phone ran this change.
+
+### Not done
+
+Two options stay with the owner:
+
+- The notification shade, a system dialog and a picker make Flutter report `inactive`. The supervisor then
+  closes the socket and the presence channel says goodbye. Whether to change that mapping is the owner's
+  decision.
+- A phone that returns to the app but stays on the Chats list cannot be seen as online by a peer whose
+  chat is open, because the chat list sends no watch. A bounded "I am back" frame to the former watchers
+  is possible.
 
 ## ADR-099 in full — typing sessions end with the message and start at once (2026-11-13)
 

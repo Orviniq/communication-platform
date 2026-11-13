@@ -313,6 +313,110 @@ void main() {
     expect(relay.carried.map((frame) => frame.length), everyElement(1024));
   });
 
+  test('T7: a chat opened on a closed socket seals nothing, and the open '
+      'sends the watch, which Bob answers in the same settle', () async {
+    // Alice's phone has no connection: the relay takes nothing from it and
+    // brings nothing to it.
+    relay.socketFor(aliceDevice).connected = false;
+    final alicePhone = phoneFor(
+      alice,
+      conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+      peers: {
+        bobUser: [bobDevice],
+      },
+    );
+    phoneFor(
+      bob,
+      conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+      peers: {
+        aliceUser: [aliceDevice],
+      },
+    );
+    final before = (await alice.sessionWith(bobDevice))!.stateVersion;
+
+    alicePhone.visibility.show(direct);
+    await _settleAll(phones);
+
+    expect(relay.carried, isEmpty);
+    expect(
+      (await alice.sessionWith(bobDevice))!.stateVersion,
+      before,
+      reason: 'nothing was sealed, so no ratchet moved and no key is dead',
+    );
+    expect(
+      await alicePhone.status.watchUser(bobUser).first,
+      const PeerStatusNone(),
+    );
+
+    relay.socketFor(aliceDevice).open();
+    await _settleAll(phones);
+
+    expect(relay.carriedTo, [bobDevice, aliceDevice]);
+    expect(
+      await alicePhone.status.watchUser(bobUser).first,
+      const PeerStatusOnline(),
+    );
+  });
+
+  test(
+    'T3: a peer that opens its chat 2 s after the phone is online at once '
+    'and types to it in the same settle, without the renewal at 25 s',
+    () async {
+      // Alice shows the chat. Bob's phone is not connected: the relay drops her
+      // first watch, a probe.
+      final alicePhone = phoneFor(
+        alice,
+        conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+        peers: {
+          bobUser: [bobDevice],
+        },
+      );
+      alicePhone.visibility.show(direct);
+      await _settleAll(phones);
+      expect(relay.carried, isEmpty);
+
+      // Bob's phone opens its chat 2 s later: his watch reaches Alice, who
+      // answers with here and, at once, her own watch.
+      clock.advance(const Duration(seconds: 2));
+      final bobPhone = phoneFor(
+        bob,
+        conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+        peers: {
+          aliceUser: [aliceDevice],
+        },
+      );
+      bobPhone.visibility.show(direct);
+      await _settleAll(phones);
+
+      expect(
+        await alicePhone.status.watchUser(bobUser).first,
+        const PeerStatusOnline(),
+      );
+      expect(
+        await bobPhone.status.watchUser(aliceUser).first,
+        const PeerStatusOnline(),
+      );
+      // Bob's watch, Alice's here and her watch, Bob's here, and then Bob's own
+      // reciprocal watch with Alice's here: his first watch was a probe, and a
+      // probe is not a live watch (W1). The exchange ends there.
+      expect(relay.carriedTo, [
+        aliceDevice,
+        bobDevice,
+        bobDevice,
+        aliceDevice,
+        aliceDevice,
+        bobDevice,
+      ]);
+
+      // Bob types at once, and Alice's phone shows the line in the same settle.
+      bobPhone.activity.report(ChatTextEdited(direct, hasText: true));
+      await _settleAll(phones);
+
+      final typing = await alicePhone.state.watchTyping(direct).first;
+      expect(typing.map((entry) => entry.deviceId), [bobDevice]);
+    },
+  );
+
   test('a phone with status off answers nothing and sees nothing, and its '
       'sessions still move with every frame', () async {
     final alicePhone = phoneFor(
@@ -436,7 +540,7 @@ final class _Relay {
 
   void _relay(String toDeviceId, String blob) {
     final target = _sockets[toDeviceId];
-    if (target == null) {
+    if (target == null || !target.connected) {
       return;
     }
     carried.add(base64.decode(blob));
@@ -456,18 +560,43 @@ final class _RelaySocket implements SignalSocketPort {
 
   final _Relay _relay;
   final _inbound = StreamController<String>.broadcast();
+  final _opens = StreamController<void>.broadcast();
+
+  /// Whether this phone has a connection: the relay delivers nothing to it
+  /// while it is false, and takes nothing from it.
+  var connected = true;
 
   @override
   Stream<String> get inboundBlobs => _inbound.stream;
+
+  @override
+  bool get isOpen => connected;
+
+  @override
+  Stream<void> get opens => _opens.stream;
+
+  /// The connection becomes ready.
+  void open() {
+    connected = true;
+    _opens.add(null);
+  }
 
   @override
   Future<Result<void>> sendSignal({
     required String toDeviceId,
     required String blob,
   }) async {
+    if (!connected) {
+      return const Result.failure(
+        TransportFailure(TransportFailureKind.offline),
+      );
+    }
     _relay._relay(toDeviceId, blob);
     return const Result.success(null);
   }
 
-  Future<void> close() => _inbound.close();
+  Future<void> close() async {
+    await _inbound.close();
+    await _opens.close();
+  }
 }

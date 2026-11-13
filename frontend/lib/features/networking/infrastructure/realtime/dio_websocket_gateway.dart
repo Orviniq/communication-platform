@@ -60,12 +60,20 @@ final class DioWebSocketGateway implements RealtimeGateway {
   final StreamController<RealtimeEvent> _events =
       StreamController<RealtimeEvent>.broadcast();
 
+  final StreamController<void> _opens = StreamController<void>.broadcast();
+
   SocketConnection? _channel;
   StreamSubscription<Object?>? _subscription;
   bool _closingLocally = false;
 
   @override
   Stream<RealtimeEvent> get events => _events.stream;
+
+  @override
+  bool get isOpen => _channel != null;
+
+  @override
+  Stream<void> get opens => _opens.stream;
 
   @override
   Future<Result<void>> connect() async {
@@ -99,6 +107,8 @@ final class DioWebSocketGateway implements RealtimeGateway {
         cancelOnError: true,
       );
       _record(NetworkOutcome.succeeded, started);
+      // After `_channel` is set, so a listener that asks `isOpen` hears yes.
+      _opens.add(null);
       return const Result.success(null);
     } on TimeoutException {
       _record(NetworkOutcome.transportFailed, started);

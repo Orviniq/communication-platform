@@ -8,6 +8,19 @@ abstract interface class SignalSocketPort implements Port {
   /// The blob of every `signal` frame the socket delivered, as it arrived.
   Stream<String> get inboundBlobs;
 
+  /// Whether a connection that can carry a frame exists now: true from the
+  /// moment a connection is ready until it closes, for any reason.
+  ///
+  /// A frame sealed while this is false is lost, and the seal still advanced
+  /// its pairwise session, so the target pays a dead skipped key for it. A
+  /// sender that seals a frame asks first.
+  bool get isOpen;
+
+  /// Emits once for each connection that becomes ready, after [isOpen] turned
+  /// true. A broadcast stream that lives as long as the socket, whatever
+  /// connection is behind it, so a listener keeps it across reconnects.
+  Stream<void> get opens;
+
   /// Sends one `signal` frame. A failure means the socket did not take it,
   /// and nothing was sent.
   Future<Result<void>> sendSignal({

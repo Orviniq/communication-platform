@@ -16,11 +16,24 @@ import 'package:communication_platform/features/voice/application/ports/voice_si
 /// [sendSignal] says so rather than holding it.
 final class GatewayVoiceSignalSocket implements VoiceSignalSocketPort {
   final _blobs = StreamController<String>.broadcast();
+
+  /// One stream for the life of the adapter: a listener keeps it across
+  /// [attach] and [detach], because the presence channel subscribes before the
+  /// supervisor connects.
+  final _opens = StreamController<void>.broadcast();
   RealtimeGateway? _gateway;
   StreamSubscription<RealtimeEvent>? _subscription;
+  StreamSubscription<void>? _openSubscription;
 
   @override
   Stream<String> get inboundBlobs => _blobs.stream;
+
+  /// False with no gateway attached: a frame has nowhere to go.
+  @override
+  bool get isOpen => _gateway?.isOpen ?? false;
+
+  @override
+  Stream<void> get opens => _opens.stream;
 
   /// Takes `signal` frames from [gateway] and sends through it, in place of
   /// whatever was attached before.
@@ -30,6 +43,11 @@ final class GatewayVoiceSignalSocket implements VoiceSignalSocketPort {
     _subscription = gateway.events.listen((event) {
       if (event is RealtimeSignal && !_blobs.isClosed) {
         _blobs.add(event.blob);
+      }
+    });
+    _openSubscription = gateway.opens.listen((_) {
+      if (!_opens.isClosed) {
+        _opens.add(null);
       }
     });
   }
@@ -44,6 +62,8 @@ final class GatewayVoiceSignalSocket implements VoiceSignalSocketPort {
     _gateway = null;
     await _subscription?.cancel();
     _subscription = null;
+    await _openSubscription?.cancel();
+    _openSubscription = null;
   }
 
   @override
@@ -67,5 +87,6 @@ final class GatewayVoiceSignalSocket implements VoiceSignalSocketPort {
   Future<void> dispose() async {
     await detach();
     await _blobs.close();
+    await _opens.close();
   }
 }

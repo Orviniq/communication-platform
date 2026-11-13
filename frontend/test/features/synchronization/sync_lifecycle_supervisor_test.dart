@@ -805,6 +805,12 @@ final class FakeGateway implements RealtimeGateway {
   @override
   Stream<RealtimeEvent> get events => controller.stream;
 
+  @override
+  bool get isOpen => false;
+
+  @override
+  Stream<void> get opens => const Stream<void>.empty();
+
   void add(RealtimeEvent event) => controller.add(event);
 
   @override

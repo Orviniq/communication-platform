@@ -28,10 +28,11 @@ import 'package:communication_platform/features/signals/domain/presence_signal_m
 /// [maximumGroupMembers] to at most [devicesPerMember] devices of each other
 /// member, and renews it every [watchRenewal]. A device in the foreground
 /// answers each watch it accepts with `here` and keeps a lease for the
-/// watcher; typing goes only to devices holding a live lease, never to this
-/// account's own, and only through a seal that refuses an unverified account
-/// and a device with no session (T4). A chat that nobody watches costs
-/// nothing.
+/// watcher, and when that watcher is a device of the watch on screen it
+/// watches back at once (ADR-100 W1); typing goes only to devices holding a
+/// live lease, never to this account's own, and only through a seal that
+/// refuses an unverified account and a device with no session (T4). A chat
+/// that nobody watches costs nothing.
 ///
 /// **What it costs (T6).** A watch to a device not heard from in
 /// [liveWindow] is a probe, bounded by [PresenceProbeLedger]. Between two
@@ -45,6 +46,12 @@ import 'package:communication_platform/features/signals/domain/presence_signal_m
 /// holds with that sender, from an account this user has verified. Anything
 /// else is dropped without an answer. Each accepted frame makes its sender
 /// online in [status] (D4).
+///
+/// **The socket.** Presence follows it. While it is closed no frame is sealed:
+/// a frame that is not carried is a dead skipped key on its target for good,
+/// and the seal moves the ratchet whether or not the socket takes the frame.
+/// When it opens, the watch round of the chat on screen runs at once and each
+/// typing session still wanted sends its start.
 ///
 /// **Leaving.** On leaving the foreground, and in [farewell] before the
 /// socket closes, it sends `gone` to every device with a live lease in either
@@ -208,6 +215,7 @@ final class PresenceChannel {
             .channel(SignalChannel.presence)
             .listen((signal) => _serially(() => _receive(signal))),
       )
+      ..add(socket.opens.listen((_) => _serially(_onSocketOpened)))
       ..add(visibility.changes.listen((_) => _serially(_followVisibility)))
       ..add(activity.listen((event) => _serially(() => _onActivity(event))))
       ..add(
@@ -257,8 +265,34 @@ final class PresenceChannel {
     _clearShownTyping();
   }
 
-  /// The socket closed: every typing state shown ends with it.
+  /// The socket closed: every typing state shown ends with it. Leases and
+  /// watches stay and end by time. Nothing is sealed while the socket is
+  /// closed, and the handshake runs when it opens again.
   void socketClosed() => _serially(() async => _clearShownTyping());
+
+  /// A connection became ready: the handshake this phone could not send while
+  /// it had none. The watch round of the chat on screen runs at once, and each
+  /// typing session starts over: what an earlier connection carried is not
+  /// known to have reached anybody, so a session that is still wanted sends its
+  /// start now.
+  Future<void> _onSocketOpened() async {
+    if (!_foreground || !_sharing) {
+      return;
+    }
+    final watch = _watch;
+    if (watch != null) {
+      await _watchRound(watch);
+    }
+    for (final MapEntry(key: conversation, value: typing)
+        in _typingOut.entries.toList()) {
+      typing
+        ..sent = false
+        ..failedAt = null;
+      if (typing.wanted) {
+        await _sendTyping(conversation, active: true, start: true);
+      }
+    }
+  }
 
   /// Completes once every event taken so far is handled and every frame it
   /// sealed has gone to the socket.
@@ -337,6 +371,8 @@ final class PresenceChannel {
           sender,
           now.add(lease > maximumLease ? maximumLease : lease),
         );
+        // A device that watches is back, whatever it said before.
+        _gone.remove(sender.key);
         await _send(
           PresenceHere(
             conversationId: conversationId,
@@ -344,6 +380,7 @@ final class PresenceChannel {
           ),
           live: [sender],
         );
+        await _watchBack(conversation, sender);
       case PresenceHere(:final conversationId, :final typing):
         final conversation = protocolBytesToHex(conversationId);
         if (!await _accepts(conversation, sender)) {
@@ -376,11 +413,54 @@ final class PresenceChannel {
         for (final watchers in _leases.values) {
           watchers.remove(sender.key);
         }
+        // A device that left forgot our watch: the one we sent it no longer
+        // counts, and its return is answered with a new one (W1).
+        _watch?.renewedAt.remove(sender.key);
+        _watch?.answeredAt.remove(sender.key);
         _hideTypingOf(sender.key, now);
         await status.gone(
           sender,
           forget: reason == PresenceGoneReason.statusTurnedOff,
         );
+    }
+  }
+
+  /// The reciprocal watch (ADR-100 W1): a watch gives a lease to the device
+  /// that sent it, not to the phone that answers. So the phone that shows
+  /// [conversation] and has just accepted a watch of it from a device it
+  /// watches sends that device a watch of its own, at once, after the `here`.
+  /// Otherwise the device could not type to this phone until the next renewal,
+  /// up to [watchRenewal] later.
+  ///
+  /// None goes when this phone sent that device a live watch in the last
+  /// [liveWindow]: the device holds a lease for it still, and two phones that
+  /// both renew every [watchRenewal] would answer each other forever. It is a
+  /// live frame (L1 counts it, no probe token is spent) because the device has
+  /// just spoken, and it leaves the renewal timer where it is (W2). Nothing goes in the background, with the switch off, for a chat that
+  /// is not on screen or to a device that the watch does not target (W3).
+  Future<void> _watchBack(String conversation, PresenceDevice sender) async {
+    final watch = _watch;
+    if (watch == null ||
+        watch.conversationId != conversation ||
+        !_foreground ||
+        !_sharing ||
+        !watch.targets.any((target) => target.key == sender.key)) {
+      return;
+    }
+    final renewed = watch.renewedAt[sender.key];
+    if (renewed != null && clock.now().difference(renewed) < liveWindow) {
+      return;
+    }
+    final now = clock.now();
+    final sent = await _send(
+      PresenceWatch(
+        conversationId: _conversationBytes(conversation),
+        leaseMs: PresenceSignalLimits.watchLeaseMs,
+      ),
+      live: [sender],
+    );
+    if (sent.isNotEmpty && identical(_watch, watch)) {
+      watch.renewedAt[sender.key] = now;
     }
   }
 
@@ -861,11 +941,21 @@ final class PresenceChannel {
   /// Seals [body] once for every device of [live] that L1 still allows and
   /// every device of [probes] its ledger allows, commits it, and hands one
   /// paced frame for each to the socket. Answers the devices sealed to.
+  ///
+  /// While the socket is closed it seals nothing (K3): a frame that is sealed
+  /// and never written advanced the pairwise session of its target all the
+  /// same, and a dropped frame leaves a dead skipped key there for good. A
+  /// frame that is not sealed spends no probe token, adds no L1 count and moves
+  /// no ratchet. The socket is asked again inside the router lock, because the
+  /// wait for that lock is long enough for the socket to close.
   Future<List<PresenceDevice>> _send(
     PresenceSignalBody body, {
     List<PresenceDevice> live = const [],
     List<PresenceDevice> probes = const [],
   }) async {
+    if (!socket.isOpen) {
+      return const [];
+    }
     final now = clock.now();
     final own = currentDeviceId.toLowerCase();
     final me = currentUserId.toLowerCase();
@@ -898,6 +988,9 @@ final class PresenceChannel {
     }
     final published = buckets.signalBuckets;
     final queued = await router.exclusively(() async {
+      if (!socket.isOpen) {
+        return const <(PresenceDevice, String, Future<void>)>[];
+      }
       var sealed = await sealer.seal(
         payload: payload,
         targets: targets,
