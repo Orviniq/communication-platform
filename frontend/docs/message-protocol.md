@@ -178,9 +178,16 @@ already relays and drops when the target has no socket.
 - **Watching.** A phone in the foreground with the switch on sends a `watch` of the chat on
   screen to the peer's live devices (in a group, to at most 2 devices of each member), renewed every
   25 s. A device in the foreground answers each accepted watch with `here` and keeps a lease for the
-  asker for the lease time, never above 60 s; in the background it answers nothing. Leaving the
-  foreground sends the pending typing stops and `gone` to every device with a live lease in either
-  direction, and the socket closes after that, for at most 500 ms.
+  asker for the lease time, never above 60 s; in the background it answers nothing. A watch gives
+  a lease to its sender only, so a phone that shows the chat and accepts a watch of it from a device
+  it watches sends that device a live `watch` at once, after the `here`, unless it sent that device
+  a live watch in the last 40 s (ADR-100 W1); it counts for L1, spends no probe token, and goes
+  nowhere in the background, with the switch off, for a chat not on screen or to a device the watch
+  does not target. A `gone` forgets the watch sent to that device. Presence follows the socket: no
+  frame is sealed while it is closed, since a frame it does not carry leaves a dead skipped key on
+  its target for good, and at each open the watch round of the chat on screen runs at once.
+  Leaving the foreground sends the pending typing stops and `gone` to every device with a live
+  lease in either direction, and the socket closes after that, for at most 500 ms.
 - **Typing** (ADR-098 D3, amended by ADR-099). `typing` goes only to devices whose watch of that
   conversation is under 40 s old. The first edit that leaves the composer non-empty, and the first
   edit after a stop, send it at once; an edit every 10 s repeats it. 5 s without an edit, clearing
@@ -189,7 +196,8 @@ already relays and drops when the target has no socket.
   composer waits for the end of 5 s since the last frame, so a change undone inside them sends
   nothing; a start and the idle stop never wait. A state counts as sent only when a frame was
   queued, so a start that no frame carried (no lease, L1, a refused seal) is tried again by the
-  next edit, at most once a second. A start less than 5 s after a send is refreshed 3 s later
+  next edit, at most once a second; with the socket closed none is sealed, and at the open each
+  session still wanted starts again at once (ADR-100 K3, K4). A start less than 5 s after a send is refreshed 3 s later
   instead of 10 s, since the earlier message may reach the receiver after it and end its line. One
   device sends a watcher at most 24 typing frames in 60 s, and at most 8 frames go to it between two
   frames from it. The receiver shows it for 15 s after the latest active frame, and ends it at once
