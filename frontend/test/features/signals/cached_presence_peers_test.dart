@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/infrastructure/cached_presence_peers.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -311,6 +312,49 @@ void main() {
         isA<FailureResult<Object?>>(),
       );
       expect(reads.batches, hasLength(1), reason: 'no read, ever');
+    });
+
+    test("the goodbye's resolver serves an answer of any age that verified "
+        'the account, and refuses every other (ADR-101 G2)', () async {
+      final goodbye = peers.goodbyeResolver;
+      await peers.verifiedDevices({_user(1)});
+      reads.states[_user(3)] = ContactTrustState.unverified;
+      await peers.verifiedDevices({_user(3)});
+      clock.advance(const Duration(minutes: 5));
+      reads.hold = true;
+
+      final old = await goodbye.resolveVerifiedLiveDevices(_user(1));
+      expect(
+        [
+          for (final device
+              in (old as Success<List<VerifiedPairwiseLiveDevice>>).value)
+            device.deviceId,
+        ],
+        [_device(1)],
+      );
+      expect(
+        await goodbye.resolveVerifiedLiveDevices(_user(2)),
+        isA<FailureResult<Object?>>(),
+        reason: 'no answer kept',
+      );
+      expect(
+        await goodbye.resolveVerifiedLiveDevices(_user(3)),
+        isA<FailureResult<Object?>>(),
+        reason: 'the answer kept refused the account',
+      );
+      expect(
+        await peers.resolveVerifiedLiveDevices(_user(1)),
+        isA<FailureResult<Object?>>(),
+        reason: 'the ordinary seal refuses an answer of 5 minutes',
+      );
+
+      trust.states[_user(1)] = ContactTrustState.masterKeyChanged;
+      expect(
+        await goodbye.resolveVerifiedLiveDevices(_user(1)),
+        isA<FailureResult<Object?>>(),
+        reason: 'a change of trust drops it',
+      );
+      expect(reads.batches, hasLength(2), reason: 'no read');
     });
   });
 }

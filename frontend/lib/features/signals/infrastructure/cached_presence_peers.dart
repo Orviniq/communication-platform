@@ -41,8 +41,10 @@ import 'package:communication_platform/features/signals/application/ports/presen
 /// It is the presence seal's live-device resolver too, so a seal reuses the
 /// answer its targets were chosen from. A seal runs under the router lock, so
 /// that resolver never reads: the channel read every target before it took
-/// the lock, and an account with no answer young enough is refused. Voice and
-/// the durable path resolve on every send, as before.
+/// the lock, and an account with no answer young enough is refused. The
+/// goodbye seals through [goodbyeResolver] instead, which serves the last
+/// answer that verified the account, however old (ADR-101 G2). Voice and the
+/// durable path resolve on every send, as before.
 final class CachedPresencePeers
     implements PresencePeersPort, PairwiseLiveDeviceResolverPort {
   CachedPresencePeers({
@@ -69,6 +71,15 @@ final class CachedPresencePeers
 
   /// When a read of each account last failed for its whole batch.
   final _failedAt = <String, DateTime>{};
+
+  /// The goodbye's live-device resolver (ADR-101 G2): [peek], as the seal
+  /// asks it. It serves the last answer that verified each account, however
+  /// old, and never reads: the `gone` must leave before the socket closes. An
+  /// account with no such answer, or whose trust changed since, is refused as
+  /// unverified.
+  late final PairwiseLiveDeviceResolverPort goodbyeResolver = _HeldAnswers(
+    this,
+  );
 
   @override
   Future<Map<String, List<String>>> verifiedDevices(
@@ -325,6 +336,48 @@ final class CachedPresencePeers
 }
 
 typedef _ReadAnswers = Map<String, Result<List<VerifiedPairwiseLiveDevice>>>;
+
+/// The answers [cache] holds, as the goodbye's seal reads them.
+final class _HeldAnswers implements PairwiseLiveDeviceResolverPort {
+  const _HeldAnswers(this.cache);
+
+  final CachedPresencePeers cache;
+
+  @override
+  Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
+    String userId,
+  ) async {
+    final answer = await cache._current(
+      userId.toLowerCase(),
+      cache.clock.now(),
+    );
+    return answer != null && answer.verified
+        ? answer.result
+        : const Result.failure(
+            SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+          );
+  }
+
+  @override
+  Future<Result<Map<String, List<VerifiedPairwiseLiveDevice>>>>
+  resolveVerifiedLiveDevicesForUsers(List<String> userIds) async {
+    final devices = <String, List<VerifiedPairwiseLiveDevice>>{};
+    for (final user in userIds) {
+      final result = await resolveVerifiedLiveDevices(user);
+      if (result case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      devices[user] =
+          (result as Success<List<VerifiedPairwiseLiveDevice>>).value;
+    }
+    return Result.success(Map.unmodifiable(devices));
+  }
+
+  /// The inbound path's question, which the goodbye never asks.
+  @override
+  Future<Result<InboundSenderResolution>> resolveInboundSender(String userId) =>
+      cache.verifier.resolveInboundSender(userId);
+}
 
 /// One read in flight, shared by every call that wants an account of it
 /// under the trust that account's read began with.
