@@ -108,7 +108,149 @@ is not silently edited out of history.
 | ADR-095 | Proposed (2026-10-18) | Prekey maintenance runs in the delivery cycle. `DurableSyncEngine` offers it one turn as the last step of a healthy cycle, after the phase is online, unless the cycle carried a failure or its owner was asked to stand down, so the foreground session, the deferred catch-up and the sustained run all run it, one cycle at a time (ADR-050). `ScheduledPrekeyMaintenance` decides which turns run: the first of a process, then one 6 hours after a run that worked or 5 minutes after one that failed, and a turn during a run joins it. A failure or a throw changes nothing about the cycle. An initial envelope that meets a pending plan is deferred as a transient failure instead of quarantined as a conflict. ADR-093 D17 is unchanged | `prekeyMaintenanceServiceProvider` had no consumer, so no signed prekey rotated, no retired pair was pruned and no one-time prekey was replenished, while `sync-engine.md` said all three happened. The cycle is the unit one delivery owner owns, and wiring maintenance in made a plan left pending able to quarantine a first message |
 | ADR-096 | Accepted (2026-10-19); proposed 2026-10-19 | Leaving a group, or being removed from it, deletes it from this phone in the transaction of the state change: the conversation row is tombstoned, its messages, draft, receipts and attachment rows are deleted, and its facts move to a new apply state, retired, that is never folded and still catches a replay. The signed state row stays; a re-add clears the tombstone and the group comes back with no old history. After Leave the app returns to Chats. Each member deletes an own group message for everyone under the rule of a group send. The owner deletes any message and an admin a member's; the owner and the admins pin; the roles of the current signed roster decide, and a role change re-folds the group. Edit stays off. Supersedes ADR-090 D4 for Pin and Delete for everyone | The field test of 2026-10-17: a left group stayed in Chats as a read-only copy, and no group message could be deleted for everyone or pinned. The server holds no group, no roster and no role (`backend/CLIENT_CONTRACT.md` §F), so each phone enforces the rule from the signed roster. Costs: leaving cannot be undone on the phone, and a demotion undoes the demoted admin's deletes and pins. Changes no wire format, schema, dependency or backend file |
 | ADR-097 | Accepted (2026-10-19); proposed 2026-10-19 | A direct chat and Saved Messages send a video. The Photo option of the attachment sheet is renamed **Photo or video** and offers both: the system photo picker with no type, or `ACTION_GET_CONTENT` with `*/*` and the types `image/*` and `video/*`. A video of type `video/mp4`, `video/webm`, `video/3gpp` or `video/quicktime` is copied as its exact bytes, with no re-encoding, and travels with the media kind `file` and its real type; the same four types join the type allowlist on both sides of the channel and in the received descriptor. A video message draws a video tile (a video icon, the name, the size and the state of any attachment tile), and Open hands the file to the system player; there is no in-app player, no thumbnail and no inline playback. The 64 MiB limit is accepted, and a video over it is refused with the sentence that names the largest size. A group still sends no attachment | The field test of 2026-10-17: a video could not be sent. The Photo picker asked for pictures only, a File pick of a video travelled as `application/octet-stream`, and the recipient got a file that a player might not open. A new media kind would change the encrypted wire format, and a thumbnail would change the bucket of each pairwise copy, so the video stays a `file`. Costs: a video is at most 63.98 MiB, four such videos fill the 256 MiB daily allowance, one upload runs at a time and dies with the process, and the server gives an upload 120 seconds, which a 64 MiB video needs 4.5 Mbit/s to meet. Changes no wire format, table, protocol, dependency, Android permission, disclosure text or backend file. Not verified on a phone. Amends ADR-089 for video |
-| ADR-098 | Accepted (2026-10-19); proposed 2026-10-19 | Typing and online status travel as `CPPSV001` payloads in volatile `signal` frames, read by one router that opens each frame once and routes it by its magic: `CPVSV001` to voice, unchanged, `CPPSV001` to presence, anything else left uncommitted. A phone in the foreground with the switch on sends a `watch` of the chat it shows to the peer's devices (in a group of at most 32 members, 2 devices of each), renewed every 25 s; a device in the foreground answers `here`, sends `typing` only to devices whose watch of that chat is under 40 s old, and sends `gone` before the socket closes. A device is online for 40 s after its latest frame. A watch to a device not heard from in 40 s is a probe: at most 4 since it was last heard from and 8 a day, and at most 8 other frames go to a device between two frames from it. Schema 26 keeps that ledger and the last seen, which never leaves the phone. "Show my online status" is a preference of this phone, on by default; off, it sends and shows nothing, typing included. The disclosure moves to revision 11 | The field test of 2026-10-17 asked for typing and an online line. The server holds no presence (server ADR-0022), so devices tell each other in `signal` frames, and each frame the server drops leaves a dead skipped key for the life of the session. The rules hold one pair to 8 a day with no vanish (2,000 after 250 days), a phone that is away to 12 from each sender however long it is away, and a phone with 100 peer devices to 800 a day in the worst case (20,000 after 25 days); at either bound the session is repaired, and nothing is lost. Costs: a peer learns which shared chat the user opens; the status is a lower bound; groups of 33 to 50 members show neither. Changes no server route, Rust core or dependency. Built by prompts 2 to 4 (2026-10-19); host and widget tests only, not run on a phone |
+| ADR-098 | Accepted (2026-10-19); proposed 2026-10-19; D3 amended by ADR-099 | Typing and online status travel as `CPPSV001` payloads in volatile `signal` frames, read by one router that opens each frame once and routes it by its magic: `CPVSV001` to voice, unchanged, `CPPSV001` to presence, anything else left uncommitted. A phone in the foreground with the switch on sends a `watch` of the chat it shows to the peer's devices (in a group of at most 32 members, 2 devices of each), renewed every 25 s; a device in the foreground answers `here`, sends `typing` only to devices whose watch of that chat is under 40 s old, and sends `gone` before the socket closes. A device is online for 40 s after its latest frame. A watch to a device not heard from in 40 s is a probe: at most 4 since it was last heard from and 8 a day, and at most 8 other frames go to a device between two frames from it. Schema 26 keeps that ledger and the last seen, which never leaves the phone. "Show my online status" is a preference of this phone, on by default; off, it sends and shows nothing, typing included. The disclosure moves to revision 11 | The field test of 2026-10-17 asked for typing and an online line. The server holds no presence (server ADR-0022), so devices tell each other in `signal` frames, and each frame the server drops leaves a dead skipped key for the life of the session. The rules hold one pair to 8 a day with no vanish (2,000 after 250 days), a phone that is away to 12 from each sender however long it is away, and a phone with 100 peer devices to 800 a day in the worst case (20,000 after 25 days); at either bound the session is repaired, and nothing is lost. Costs: a peer learns which shared chat the user opens; the status is a lower bound; groups of 33 to 50 members show neither. Changes no server route, Rust core or dependency. Built by prompts 2 to 4 (2026-10-19); host and widget tests only, not run on a phone |
+| ADR-099 | Accepted (2026-11-13); proposed 2026-11-13 | A typing session ends with the message and a start is never delayed. A send sends no `typing` frame: it resets the session (wanted and sent false, the idle, pace and repeat timers cancelled, the last frame time cleared) and notes when it happened, and the message ends the line at the receiver (ADR-098 D3). A start leaves at once, even right after a stop. The 5 s pace holds back one frame only, the stop that follows a cleared composer; the idle stop and the stop for leaving the chat leave at once. A typing state counts as sent only when a frame was queued: with no lease, past L1 or with a refused seal it does not, and a later edit tries again, at most once a second, or at once when a frame from a device lifts L1. A start less than 5 s after a send is refreshed after 3 s instead of 10 s, which repairs a line that the late arrival of the earlier message ended. Repeat 10 s, idle stop 5 s, TTL 15 s, lease 40 s, L1, P1, P2 and the wire format keep their values. The bound on typing frames to one watcher is 24 in 60 s, and L1 stays the hard cap | The field test of 2026-10-20 on `be0eba5` showed the line of the next message missing, or late by 3 to 6 s, in three scripts, and a first line later than 1 s. Four causes: the send went through the pace and left the state sent; the pace delayed a start that followed a stop; the state changed when no frame left; and the arrival of the earlier message can end the line of the next (inferred, not measured). The suggested pace of 2 s, repeat of 5 s and expiry of 8 s are rejected: they break L1, which allows 8 live frames between two frames from a watcher. Costs: the worst case is 24 typing frames a minute, and a user who types again within 5 s of a send adds one early refresh. A message that never reaches the receiver leaves its line until the 15 s expiry. Changes no server route, wire format, table, dependency or permission. Host tests only, not run on a phone |
+
+## ADR-099 in full — typing sessions end with the message and start at once (2026-11-13)
+
+Status: Accepted (2026-11-13); proposed 2026-11-13. Amends D3 of ADR-098. Changes no server route, wire format,
+table, dependency or permission.
+
+### The question
+
+The owner tested the build of PR #90 (`be0eba5`) on two phones on 2026-10-20 and found three
+problems: the first `typing…` line takes more than 1 s to show; after a send, the line of the next
+message does not show, or shows after more than 5 s; and the peer shows `online` late after the app
+opens and stays `online` for a long time after it closes. Three phases fix them. This ADR is phase 1:
+it fixes the second problem and the typing part of the first. The connection and the handshake
+(phase 2) and the peer reads and the goodbye (phase 3) are not in it. What rules should start, end
+and repeat a typing session so that the peer sees the line of each message at the first edit of it,
+without a watcher receiving more frames than L1 allows?
+
+### The facts
+
+Measured on `be0eba5` with `PresenceRig` and a fake clock, a peer device holding a lease. The numbers
+are seconds from the first edit. "start" is an active frame, "stop" an inactive one.
+
+| Script | Frames on `be0eba5` | What the peer saw |
+|---|---|---|
+| S1: type message 1 for 3 s, send, wait 1 s, type message 2 for 8 s | start@0, start@10, stop@16 | The line of message 2 shows at 10 s; typing began at 4 s: 6 s late. |
+| S2: type 7 s, send, wait 1 s, type 8 s | start@0, stop@7, start@12, stop@20 | The line of message 2 shows at 12 s; typing began at 8 s: 4 s late. |
+| S3: type 3 s, pause 6 s, type 7 s | start@0, stop@7, start@12, stop@20 | The line shows at 12 s; typing resumed at 9 s: 3 s late. |
+
+If message 2 is sent before 10 s in S1, the peer never sees a line for it.
+
+The causes, in `presence_channel.dart`:
+
+- **C1.** `ChatTextSent` went through the pace and left `sent == true`. A later edit saw
+  `wanted == sent` and sent nothing until the 10 s repeat.
+- **C2.** The pace delayed a start that followed a stop (S2, S3).
+- **C3.** `sent` and `lastSentAt` changed when no frame left (no lease, the L1 cap or a refused seal).
+  The line then waited for the repeat.
+- **C4 (inferred, not measured on a phone).** The receiver ends the line when message 1 appears. The
+  message comes by the durable path: a socket hint, a REST drain, a decrypt. The start frame of
+  message 2 comes by the socket at once, and can reach the receiver before message 1 is applied. The
+  arrival of message 1 then ends the line of message 2.
+
+### Decisions
+
+- **N1. A send ends the typing session and sends no frame.** On `ChatTextSent` for a conversation:
+  `wanted` and `sent` become false, the idle, pace and repeat timers are cancelled, `lastSentAt` is
+  cleared, and the time of the send is recorded. The message ends the line at the receiver
+  (ADR-098 D3). The cleared composer that follows the send adds nothing.
+- **N2. A start is never delayed by the pace.** A start is the change from `sent == false` to
+  `wanted == true`. It leaves at once.
+- **N3. The pace holds back one stop only:** the stop that follows a cleared composer, so that a
+  change undone inside the pace sends nothing. The idle stop and the stop for leaving the chat leave
+  at once. Leaving the foreground keeps the rule of ADR-098 in this phase.
+- **N4. `sent` becomes true only when `_send` queued at least one frame.** If no frame left, `sent`
+  stays false and `wanted` stays true, and a later edit tries again, at most once a second. A frame
+  committed from any device ends that wait, since it also lifts L1 (D6), so a watch that arrives
+  after the cap is hit lets the next edit start. A repeat that no frame carried sets `sent` false in
+  the same way.
+- **N5. A start that follows a send by less than 5 s sets its first repeat 3 s later instead of
+  10 s.** Every later repeat comes 10 s after the frame before it. The extra frame repairs a line
+  that the arrival of the earlier message ended (C4). The names are `typingRaceWindow` (5 s) and
+  `typingFirstRefresh` (3 s).
+- **N6. Unchanged:** repeat 10 s, idle stop 5 s, TTL 15 s, lease 40 s, L1 (8), P1, P2, the wire
+  format and the receiver rules.
+- **N7. The bound on typing frames to one watcher is at most 24 in 60 s, and L1 stays the hard
+  cap.** The worst case is "type one character, wait 5 s, type again": one start and one stop in each
+  cycle of about 5 s. A user who sends one short message every 6 s sends one typing frame for each
+  message.
+
+With N1 to N5 the same scripts give: S1 start@0, start@4, start@7, stop@16; S2 start@0, start@8,
+start@11, stop@20; S3 start@0, stop@7, start@9, start@19, stop@20. The tests assert these frames.
+
+### Rejected
+
+The report of the field test proposed these.
+
+- **A pace of 2 s, a repeat of 5 s and a receiver expiry of 8 s.** L1 allows 8 live frames to a
+  device between two frames from it. A watcher renews every 25 s, and one `here` and one renewal of
+  the typer use 2 of the 8. With a 2 s pace a typer can send 12 typing frames in 25 s, so L1 stops the
+  line, without a sign, after the sixth frame. With a 5 s repeat, 25 s of typing sends 5 repeats and a
+  stop, which fills the cap with no margin. A higher L1 loosens the dead-key bound of ADR-098 D6.
+  Signal sends the start at once, refreshes every 10 s, stops after 3 s of pause and expires after
+  15 s, and IRCv3 asks for at least 3 s between two typing notifications (the author's reading of
+  both, not checked again here). The 10 s repeat and the 15 s expiry stay.
+- **Flushing a queued typing frame when `here` arrives.** It exists: a `here` answer carries the typing
+  state (ADR-098 D4, as built).
+- **Bypassing the 10 s peer read.** Phase 3 handles the peer read. It is a cache and not a delay.
+
+### Costs
+
+- A start after a stop is not paced, so the worst case is 24 typing frames a minute to a watcher (N7),
+  where ADR-098 D3 allowed 12. L1 caps the frames between two frames from a watcher at 8 whatever the
+  composer does.
+- The early refresh adds one frame when a user types again within 5 s of a send.
+- A send sends no stop. A message that never reaches the receiver (a failed send) leaves its line
+  until the 15 s expiry.
+
+### Built
+
+- `presence_channel.dart`: `_onActivity`, `_flushTyping`, `_sendTyping` and `_TypingOut` follow N1 to
+  N5, with `typingRaceWindow`, `typingFirstRefresh` and `typingRetry` (1 s). `_onHeard` lifts the
+  retry wait. A send on a conversation with no typing state records its time when the phone is in the
+  foreground and sharing. No log line, no print.
+- `presence_channel_test.dart`, `presence_round_trip_test.dart`: the scripts and the cases below.
+
+### Verified by
+
+Host tests, run on the unchanged code first: S1, S2 and S3 failed with the frames of the table above.
+Then, on the built code:
+
+- S1, S2 and S3 give the frames of N1 to N5; a send sends no frame and the cleared composer after it
+  none; a start after a stop leaves at once; the idle stop is not held back by a repeat (S3 ends
+  with stop@20, not stop@24).
+- No lease: an edit seals nothing, the `here` answer says `typing: true`, the next edit starts.
+- L1 reached: with 8 live frames since the watcher spoke an edit sends nothing; after the watcher
+  speaks the next edit starts.
+- A refused seal and ten edits in a second cause one seal call.
+- The first repeat is at 3 s only after a send less than 5 s earlier.
+- N7: a composer that flips every 200 ms for 60 s sends at most 24 typing frames, and at most 8 live
+  frames go between two frames of the watcher; a user who types 2 s and sends every 6 s for 60 s
+  sends one typing frame for each message, ten in all, and L1 holds none back.
+- Two-phone harness: a send sends no frame and the message ends Bob's line; the next message starts
+  its line at the first edit, the arrival of the earlier message ends it, and the refresh 3 s later
+  shows it again.
+
+Six mutation checks, each applied with a script that keeps the line endings and restores the exact
+bytes: a stop sent at the send (seven tests fail, S1 and S2 among them); the pace applied to a start
+(S3 and two others); `sent` set before `_send` returns (the no-lease, L1 and refused-seal tests); no 3 s
+refresh (S1, S2 and the two-phone test); the pace applied to the idle stop (S3). One mutation, keeping
+`lastSentAt` after a send, is not caught, and is equivalent: `lastSentAt` is read only for a stop,
+and a stop exists only when a start of the same session was queued, which sets `lastSentAt` again.
+
+### Not verified
+
+A run on two phones. C4 is inferred from the code and not measured: no test or phone shows the order in
+which the start and the earlier message reach a receiver.
+
+### Not done
+
+The connection, the handshake and the first-line latency of the status (phase 2); the peer reads and
+the goodbye (phase 3); a pace for the stop at leaving the foreground, which keeps ADR-098's rule.
 
 ## ADR-098 in full — typing and online status over volatile signals (2026-10-19)
 
