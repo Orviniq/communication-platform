@@ -358,6 +358,65 @@ void main() {
     );
   });
 
+  test(
+    'T3: a peer that opens its chat 2 s after the phone is online at once '
+    'and types to it in the same settle, without the renewal at 25 s',
+    () async {
+      // Alice shows the chat. Bob's phone is not connected: the relay drops her
+      // first watch, a probe.
+      final alicePhone = phoneFor(
+        alice,
+        conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+        peers: {
+          bobUser: [bobDevice],
+        },
+      );
+      alicePhone.visibility.show(direct);
+      await _settleAll(phones);
+      expect(relay.carried, isEmpty);
+
+      // Bob's phone opens its chat 2 s later: his watch reaches Alice, who
+      // answers with here and, at once, her own watch.
+      clock.advance(const Duration(seconds: 2));
+      final bobPhone = phoneFor(
+        bob,
+        conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+        peers: {
+          aliceUser: [aliceDevice],
+        },
+      );
+      bobPhone.visibility.show(direct);
+      await _settleAll(phones);
+
+      expect(
+        await alicePhone.status.watchUser(bobUser).first,
+        const PeerStatusOnline(),
+      );
+      expect(
+        await bobPhone.status.watchUser(aliceUser).first,
+        const PeerStatusOnline(),
+      );
+      // Bob's watch, Alice's here and her watch, Bob's here, and then Bob's own
+      // reciprocal watch with Alice's here: his first watch was a probe, and a
+      // probe is not a live watch (W1). The exchange ends there.
+      expect(relay.carriedTo, [
+        aliceDevice,
+        bobDevice,
+        bobDevice,
+        aliceDevice,
+        aliceDevice,
+        bobDevice,
+      ]);
+
+      // Bob types at once, and Alice's phone shows the line in the same settle.
+      bobPhone.activity.report(ChatTextEdited(direct, hasText: true));
+      await _settleAll(phones);
+
+      final typing = await alicePhone.state.watchTyping(direct).first;
+      expect(typing.map((entry) => entry.deviceId), [bobDevice]);
+    },
+  );
+
   test('a phone with status off answers nothing and sees nothing, and its '
       'sessions still move with every frame', () async {
     final alicePhone = phoneFor(

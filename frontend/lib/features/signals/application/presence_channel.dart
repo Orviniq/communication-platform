@@ -28,10 +28,11 @@ import 'package:communication_platform/features/signals/domain/presence_signal_m
 /// [maximumGroupMembers] to at most [devicesPerMember] devices of each other
 /// member, and renews it every [watchRenewal]. A device in the foreground
 /// answers each watch it accepts with `here` and keeps a lease for the
-/// watcher; typing goes only to devices holding a live lease, never to this
-/// account's own, and only through a seal that refuses an unverified account
-/// and a device with no session (T4). A chat that nobody watches costs
-/// nothing.
+/// watcher, and when that watcher is a device of the watch on screen it
+/// watches back at once (ADR-100 W1); typing goes only to devices holding a
+/// live lease, never to this account's own, and only through a seal that
+/// refuses an unverified account and a device with no session (T4). A chat
+/// that nobody watches costs nothing.
 ///
 /// **What it costs (T6).** A watch to a device not heard from in
 /// [liveWindow] is a probe, bounded by [PresenceProbeLedger]. Between two
@@ -370,6 +371,8 @@ final class PresenceChannel {
           sender,
           now.add(lease > maximumLease ? maximumLease : lease),
         );
+        // A device that watches is back, whatever it said before.
+        _gone.remove(sender.key);
         await _send(
           PresenceHere(
             conversationId: conversationId,
@@ -377,6 +380,7 @@ final class PresenceChannel {
           ),
           live: [sender],
         );
+        await _watchBack(conversation, sender);
       case PresenceHere(:final conversationId, :final typing):
         final conversation = protocolBytesToHex(conversationId);
         if (!await _accepts(conversation, sender)) {
@@ -409,11 +413,54 @@ final class PresenceChannel {
         for (final watchers in _leases.values) {
           watchers.remove(sender.key);
         }
+        // A device that left forgot our watch: the one we sent it no longer
+        // counts, and its return is answered with a new one (W1).
+        _watch?.renewedAt.remove(sender.key);
+        _watch?.answeredAt.remove(sender.key);
         _hideTypingOf(sender.key, now);
         await status.gone(
           sender,
           forget: reason == PresenceGoneReason.statusTurnedOff,
         );
+    }
+  }
+
+  /// The reciprocal watch (ADR-100 W1): a watch gives a lease to the device
+  /// that sent it, not to the phone that answers. So the phone that shows
+  /// [conversation] and has just accepted a watch of it from a device it
+  /// watches sends that device a watch of its own, at once, after the `here`.
+  /// Otherwise the device could not type to this phone until the next renewal,
+  /// up to [watchRenewal] later.
+  ///
+  /// None goes when this phone sent that device a live watch in the last
+  /// [liveWindow]: the device holds a lease for it still, and two phones that
+  /// both renew every [watchRenewal] would answer each other forever. It is a
+  /// live frame (L1 counts it, no probe token is spent) because the device has
+  /// just spoken, and it leaves the renewal timer where it is (W2). Nothing goes in the background, with the switch off, for a chat that
+  /// is not on screen or to a device that the watch does not target (W3).
+  Future<void> _watchBack(String conversation, PresenceDevice sender) async {
+    final watch = _watch;
+    if (watch == null ||
+        watch.conversationId != conversation ||
+        !_foreground ||
+        !_sharing ||
+        !watch.targets.any((target) => target.key == sender.key)) {
+      return;
+    }
+    final renewed = watch.renewedAt[sender.key];
+    if (renewed != null && clock.now().difference(renewed) < liveWindow) {
+      return;
+    }
+    final now = clock.now();
+    final sent = await _send(
+      PresenceWatch(
+        conversationId: _conversationBytes(conversation),
+        leaseMs: PresenceSignalLimits.watchLeaseMs,
+      ),
+      live: [sender],
+    );
+    if (sent.isNotEmpty && identical(_watch, watch)) {
+      watch.renewedAt[sender.key] = now;
     }
   }
 
