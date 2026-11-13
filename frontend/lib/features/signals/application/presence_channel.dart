@@ -480,7 +480,13 @@ final class PresenceChannel {
     if (!shared) {
       return false;
     }
-    final verified = await peers.verifiedDevices({sender.userId});
+    // An answer under 60 s old accepts at once; one that does not name the
+    // sender's device is read again first, so a new device is not refused on
+    // an old answer.
+    final verified = await peers.verifiedDevices(
+      {sender.userId},
+      including: {sender},
+    );
     return verified[sender.userId]?.contains(sender.key) ?? false;
   }
 
@@ -948,6 +954,12 @@ final class PresenceChannel {
   /// frame that is not sealed spends no probe token, adds no L1 count and moves
   /// no ratchet. The socket is asked again inside the router lock, because the
   /// wait for that lock is long enough for the socket to close.
+  ///
+  /// The accounts of the targets are resolved before the router lock, never
+  /// inside it: the lock holds off every open and every voice seal, and a peer
+  /// read is a round trip. A target its account's answer does not name is
+  /// sealed nothing, as the seal would refuse it; the seal then finds each
+  /// answer it needs in the cache.
   Future<List<PresenceDevice>> _send(
     PresenceSignalBody body, {
     List<PresenceDevice> live = const [],
@@ -978,7 +990,19 @@ final class PresenceChannel {
         allowedProbes.add(device);
       }
     }
-    final targets = [...allowedLive, ...allowedProbes];
+    final candidates = [...allowedLive, ...allowedProbes];
+    if (candidates.isEmpty) {
+      return const [];
+    }
+    final verified = await peers.verifiedDevices({
+      for (final device in candidates) device.userId.toLowerCase(),
+    }, including: candidates.toSet());
+    final targets = [
+      for (final device in candidates)
+        if (verified[device.userId.toLowerCase()]?.contains(device.key) ??
+            false)
+          device,
+    ];
     if (targets.isEmpty) {
       return const [];
     }
