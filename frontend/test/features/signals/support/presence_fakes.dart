@@ -6,6 +6,7 @@ import 'package:communication_platform/core/application/signal_router.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/infrastructure/memory_volatile_conversation_state.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/application/presence_channel.dart';
@@ -75,19 +76,27 @@ final class _ManualTimer implements PresenceTimer {
   void cancel() => cancelled = true;
 }
 
-/// One seal: the payload, decoded, and the devices it was sealed to.
+/// One seal: the payload, decoded, the devices it was sealed to, and whether
+/// the goodbye's seal made it.
 final class PresenceSeal {
-  const PresenceSeal(this.message, this.devices, this.at);
+  const PresenceSeal(
+    this.message,
+    this.devices,
+    this.at, {
+    this.goodbye = false,
+  });
 
   final PresenceSignalMessage message;
   final List<PresenceDevice> devices;
   final DateTime at;
+  final bool goodbye;
 
   PresenceSignalBody get body => message.body;
 }
 
 /// Seals every target into a 1024-byte frame, except a device named in
-/// [refused], and keeps every seal.
+/// [refused], and keeps every seal. [goodbye] is the goodbye's seal, kept in
+/// the same record.
 final class RecordingPresenceSealer implements PresenceSealPort {
   RecordingPresenceSealer(this.clock);
 
@@ -98,26 +107,65 @@ final class RecordingPresenceSealer implements PresenceSealPort {
   final payloads = <Uint8List>[];
   final refused = <String, PresenceSealRefusal>{};
 
+  /// When set, a target is sealed only when this resolver's answer for its
+  /// account names the device, as the production seal resolves each account
+  /// under the router lock; any other is refused as unverified.
+  PairwiseLiveDeviceResolverPort? resolver;
+
+  /// [resolver], for [goodbye].
+  PairwiseLiveDeviceResolverPort? goodbyeResolver;
+
+  late final PresenceSealPort goodbye = _RecordingGoodbyeSeal(this);
+
   @override
   Future<Result<List<PresenceSealOutcome>>> seal({
     required Uint8List payload,
     required List<PresenceDevice> targets,
     required Set<int> allowedLengths,
+  }) => _seal(payload, targets, resolver, goodbye: false);
+
+  Future<Result<List<PresenceSealOutcome>>> _seal(
+    Uint8List payload,
+    List<PresenceDevice> targets,
+    PairwiseLiveDeviceResolverPort? resolver, {
+    required bool goodbye,
   }) async {
+    final named = <String, Set<String>>{};
+    if (resolver != null) {
+      for (final user in {
+        for (final target in targets) target.userId.toLowerCase(),
+      }) {
+        named[user] = switch (await resolver.resolveVerifiedLiveDevices(user)) {
+          Success(value: final devices) => {
+            for (final device in devices) device.deviceId.toLowerCase(),
+          },
+          FailureResult() => const {},
+        };
+      }
+    }
     final outcomes = [
       for (final target in targets)
         if (refused[target.key] case final reason?)
           PresenceSealRefused(target, reason)
+        else if (resolver != null &&
+            !(named[target.userId.toLowerCase()]?.contains(target.key) ??
+                false))
+          PresenceSealRefused(target, PresenceSealRefusal.unverified)
         else
           PresenceSealed(target, Uint8List(1024)),
     ];
     payloads.add(Uint8List.fromList(payload));
     final decoded = PresenceSignalCodec.decode(payload);
     seals.add(
-      PresenceSeal((decoded as DecodedPresenceSignal).message, [
-        for (final outcome in outcomes)
-          if (outcome is PresenceSealed) outcome.device,
-      ], clock.now()),
+      PresenceSeal(
+        (decoded as DecodedPresenceSignal).message,
+        [
+          for (final outcome in outcomes)
+            if (outcome is PresenceSealed) outcome.device,
+        ],
+        clock.now(),
+        goodbye: goodbye,
+      ),
     );
     return Result.success(outcomes);
   }
@@ -133,6 +181,19 @@ final class RecordingPresenceSealer implements PresenceSealPort {
     for (final seal in seals)
       if (seal.message.kind == kind && seal.devices.isNotEmpty) seal,
   ];
+}
+
+final class _RecordingGoodbyeSeal implements PresenceSealPort {
+  const _RecordingGoodbyeSeal(this.record);
+
+  final RecordingPresenceSealer record;
+
+  @override
+  Future<Result<List<PresenceSealOutcome>>> seal({
+    required Uint8List payload,
+    required List<PresenceDevice> targets,
+    required Set<int> allowedLengths,
+  }) => record._seal(payload, targets, record.goodbyeResolver, goodbye: true);
 }
 
 /// The last seen in [delegate], with every write on the record.
@@ -171,16 +232,34 @@ final class FakePresenceConversations implements PresenceConversationsPort {
 }
 
 /// The verified accounts and their live devices. An account absent from
-/// [devices] is unverified.
+/// [devices] is unverified. It keeps no answer: every call is a read.
 final class FakePresencePeers implements PresencePeersPort {
   final devices = <String, List<String>>{};
   final reads = <Set<String>>[];
 
+  /// The devices each read had to name, in the order of [reads].
+  final including = <Set<PresenceDevice>>[];
+
+  /// While set, a read that has to name a device waits for it: the read a
+  /// frame makes before the router lock, and the receive path's.
+  Completer<void>? gate;
+
   @override
-  Future<Map<String, List<String>>> verifiedDevices(Set<String> userIds) async {
+  Future<Map<String, List<String>>> verifiedDevices(
+    Set<String> userIds, {
+    Set<PresenceDevice> including = const {},
+  }) async {
     reads.add(userIds);
+    this.including.add(including);
+    final held = gate;
+    if (held != null && including.isNotEmpty) {
+      await held.future;
+    }
     return {for (final user in userIds) user: ?devices[user]};
   }
+
+  @override
+  Future<List<String>?> peek(String userId) async => devices[userId];
 }
 
 final class ShownTyping {
@@ -283,7 +362,13 @@ Uint8List conversationBytes(String conversationId) => Uint8List.fromList([
 /// One phone's presence channel over fakes, with a router fed by a fake
 /// socket and opener.
 final class PresenceRig {
-  PresenceRig({required this.userId, required this.deviceId}) {
+  /// [peersFor] builds the peer reads the channel asks instead of [peers],
+  /// on this rig's clock.
+  PresenceRig({
+    required this.userId,
+    required this.deviceId,
+    PresencePeersPort Function(FakeSignalClock clock)? peersFor,
+  }) {
     router = SignalRouter(
       socket: socket,
       opener: opener,
@@ -295,9 +380,10 @@ final class PresenceRig {
       router: router,
       socket: socket,
       sealer: sealer,
+      goodbyeSealer: sealer.goodbye,
       buckets: const FixedSignalBuckets(),
       conversations: conversations,
-      peers: peers,
+      peers: peersFor?.call(clock) ?? peers,
       ledger: ledger,
       typingSink: sink,
       visibility: visibility,
@@ -351,11 +437,17 @@ final class PresenceRig {
   final _counters = <String, int>{};
 
   Future<void> settle() async {
+    await pump();
+    await channel.idle;
+    await status.idle;
+  }
+
+  /// Lets every microtask and zero timer run, without waiting for the channel
+  /// to be idle: a test that holds a read looks at what moved meanwhile.
+  Future<void> pump() async {
     for (var turn = 0; turn < 30; turn += 1) {
       await Future<void>.delayed(Duration.zero);
     }
-    await channel.idle;
-    await status.idle;
   }
 
   Future<void> advance(Duration duration) =>
@@ -371,6 +463,7 @@ final class PresenceRig {
     String? headerUser,
     Uint8List? instanceId,
     int? counter,
+    bool settle = true,
   }) {
     final key = senderDevice.toLowerCase();
     final instance =
@@ -399,13 +492,17 @@ final class PresenceRig {
       payload,
       senderUser: senderUser,
       senderDevice: senderDevice,
+      settle: settle,
     );
   }
 
+  /// Hands [payload] to the router as a frame. With [settle] false it only
+  /// [pump]s, so a held read is not waited for.
   Future<FakeOpening> deliverPayload(
     Uint8List payload, {
     required String senderUser,
     required String senderDevice,
+    bool settle = true,
   }) async {
     _marker = _marker % 255 + 1;
     final opening = FakeOpening(
@@ -415,7 +512,7 @@ final class PresenceRig {
     );
     opener.openings[_marker] = opening;
     socket.deliver(base64.encode(Uint8List(1024)..[0] = _marker));
-    await settle();
+    await (settle ? this.settle() : pump());
     return opening;
   }
 

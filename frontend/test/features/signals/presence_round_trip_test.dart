@@ -7,18 +7,21 @@ import 'package:communication_platform/core/application/signal_router.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/infrastructure/memory_volatile_conversation_state.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/signals/application/chat_activity.dart';
 import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/application/presence_channel.dart';
 import 'package:communication_platform/features/signals/application/presence_share_setting.dart';
 import 'package:communication_platform/features/signals/application/presence_status_book.dart';
 import 'package:communication_platform/features/signals/domain/peer_status_model.dart';
+import 'package:communication_platform/features/signals/infrastructure/cached_presence_peers.dart';
 import 'package:communication_platform/features/signals/infrastructure/presence_adapters.dart';
 import 'package:communication_platform/features/voice/infrastructure/pairwise_voice_signal_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/volatile_pairwise_harness.dart';
 import '../voice/support/signal_fakes.dart';
+import 'support/peer_read_fakes.dart';
 import 'support/presence_fakes.dart';
 
 /// Typing between two faked phones, each with its own database, sessions,
@@ -47,11 +50,14 @@ void main() {
   final phones = <_Phone>[];
 
   /// [peers] is what this phone's verified-peer reads answer, which the seal
-  /// checks again against [liveDevices].
+  /// checks again against [liveDevices]. With [peerCache] the phone asks that
+  /// cache instead, and its goodbye seals through the cache's goodbye
+  /// resolver, as the app wires it.
   _Phone phoneFor(
     VolatileDevice device, {
     required Map<String, PresenceConversation> conversations,
-    required Map<String, List<String>> peers,
+    Map<String, List<String>> peers = const {},
+    CachedPresencePeers? peerCache,
   }) {
     final socket = relay.socketFor(device.deviceId);
     final router = SignalRouter(
@@ -61,18 +67,21 @@ void main() {
       ),
       buckets: const FixedSignalBuckets(),
     )..start();
+    PresenceSealPort sealOver(PairwiseLiveDeviceResolverPort devices) =>
+        PairwisePresenceSeal(
+          sealer: device.sealer(crypto: crypto, liveDevices: devices),
+          currentUserId: device.userId,
+          currentDeviceId: device.deviceId,
+        );
     final phone = _Phone(
       router: router,
       clock: clock,
       device: device,
-      sealer: PairwisePresenceSeal(
-        sealer: device.sealer(crypto: crypto, liveDevices: liveDevices),
-        currentUserId: device.userId,
-        currentDeviceId: device.deviceId,
-      ),
+      sealer: sealOver(liveDevices),
+      goodbyeSealer: sealOver(peerCache?.goodbyeResolver ?? liveDevices),
       socket: socket,
       conversations: FakePresenceConversations()..held.addAll(conversations),
-      peers: FakePresencePeers()..devices.addAll(peers),
+      peers: peerCache ?? (FakePresencePeers()..devices.addAll(peers)),
     );
     phones.add(phone);
     return phone;
@@ -313,6 +322,121 @@ void main() {
     expect(relay.carried.map((frame) => frame.length), everyElement(1024));
   });
 
+  test('T8: Alice leaves with a peer cache that cannot read: Bob shows her '
+      'last seen at once, and her typing line ends', () async {
+    final reads = FakePeerReads(clock: clock)..devices[bobUser] = [bobDevice];
+    addTearDown(() {
+      reads
+        ..hold = false
+        ..release();
+    });
+    final alicePhone = phoneFor(
+      alice,
+      conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+      peerCache: cachedPeers(
+        reads: reads,
+        trust: FakeContactTrust(),
+        clock: clock,
+        currentUserId: aliceUser,
+      ),
+    );
+    final bobPhone = phoneFor(
+      bob,
+      conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+      peers: {
+        aliceUser: [aliceDevice],
+      },
+    );
+    Future<List<String>> typers() async => [
+      for (final entry in await bobPhone.state.watchTyping(direct).first)
+        entry.deviceId,
+    ];
+
+    // Bob opens the chat; Alice's cache reads Bob once.
+    bobPhone.visibility.show(direct);
+    await _settleAll(phones);
+    expect(reads.batches, hasLength(1));
+
+    // From now on Alice's cache cannot read. Bob's renewals keep his watch,
+    // and Alice's lease, alive while her one answer ages.
+    reads.hold = true;
+    await bobPhone.timers.advance(
+      const Duration(seconds: 50),
+      settle: () => _settleAll(phones),
+    );
+    clock.advance(const Duration(seconds: 5));
+    alicePhone.activity.report(ChatTextEdited(direct, hasText: true));
+    await _settleAll(phones);
+    expect(await typers(), [aliceDevice]);
+
+    // 61 s after the answer, still typing, Alice leaves.
+    clock.advance(const Duration(seconds: 6));
+    final readsBefore = reads.batches.length;
+    final carried = relay.carried.length;
+    alicePhone.visibility.setForeground(foreground: false);
+    await alicePhone.channel.farewell();
+    await _settleAll(phones);
+
+    expect(relay.carriedTo.skip(carried), [bobDevice]);
+    expect(
+      await bobPhone.status.watchUser(aliceUser).first,
+      PeerStatusLastSeen(clock.now()),
+    );
+    expect(await typers(), isEmpty);
+    expect(reads.batches, hasLength(readsBefore), reason: 'no read');
+  });
+
+  test('T9: Alice types and leaves, and one frame leaves for the goodbye: '
+      'gone', () async {
+    final alicePhone = phoneFor(
+      alice,
+      conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+      peers: {
+        bobUser: [bobDevice],
+      },
+    );
+    final bobPhone = phoneFor(
+      bob,
+      conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+      peers: {
+        aliceUser: [aliceDevice],
+      },
+    );
+    Future<List<String>> typers() async => [
+      for (final entry in await bobPhone.state.watchTyping(direct).first)
+        entry.deviceId,
+    ];
+    Future<void> advance(Duration duration) =>
+        alicePhone.timers.advance(duration, settle: () => _settleAll(phones));
+
+    bobPhone.visibility.show(direct);
+    await _settleAll(phones);
+    // Typing for 6 s: the start went at 0, so the pace would allow a stop.
+    for (var edit = 0; edit < 3; edit += 1) {
+      if (edit > 0) {
+        await advance(const Duration(seconds: 3));
+      }
+      alicePhone.activity.report(ChatTextEdited(direct, hasText: true));
+      await _settleAll(phones);
+    }
+    expect(await typers(), [aliceDevice]);
+    final carried = relay.carried.length;
+    final version = (await alice.sessionWith(bobDevice))!.stateVersion;
+
+    alicePhone.visibility.setForeground(foreground: false);
+    await alicePhone.channel.farewell();
+    await _settleAll(phones);
+
+    expect(relay.carriedTo.skip(carried), [bobDevice], reason: 'one frame');
+    expect((await alice.sessionWith(bobDevice))!.stateVersion, version + 1);
+    expect(
+      await bobPhone.status.watchUser(aliceUser).first,
+      PeerStatusLastSeen(clock.now()),
+      reason: 'the frame is the gone',
+    );
+    expect(await typers(), isEmpty, reason: 'which ends the line');
+  });
+
   test('T7: a chat opened on a closed socket seals nothing, and the open '
       'sends the watch, which Bob answers in the same settle', () async {
     // Alice's phone has no connection: the relay takes nothing from it and
@@ -474,6 +598,7 @@ final class _Phone {
     required this.clock,
     required VolatileDevice device,
     required PresenceSealPort sealer,
+    required PresenceSealPort goodbyeSealer,
     required SignalSocketPort socket,
     required PresenceConversationsPort conversations,
     required PresencePeersPort peers,
@@ -484,6 +609,7 @@ final class _Phone {
       router: router,
       socket: socket,
       sealer: sealer,
+      goodbyeSealer: goodbyeSealer,
       buckets: const FixedSignalBuckets(),
       conversations: conversations,
       peers: peers,

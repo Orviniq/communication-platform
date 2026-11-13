@@ -1,15 +1,14 @@
-import 'dart:typed_data';
+import 'dart:async';
 
-import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
-import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
-import 'package:communication_platform/features/contacts/application/ports/contact_ports.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
-import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
+import 'package:communication_platform/features/signals/application/ports/presence_ports.dart';
 import 'package:communication_platform/features/signals/infrastructure/cached_presence_peers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../voice/support/signal_fakes.dart';
+import 'support/peer_read_fakes.dart';
 
 const _own = '00000000-0000-4000-8000-0000000000a1';
 
@@ -17,26 +16,31 @@ const _own = '00000000-0000-4000-8000-0000000000a1';
 /// at most 10 s, and discarded at once when this phone changes its trust.
 void main() {
   late FakeSignalClock clock;
-  late _Reads reads;
-  late _Trust trust;
+  late FakePeerReads reads;
+  late FakeContactTrust trust;
   late CachedPresencePeers peers;
 
   setUp(() {
     clock = FakeSignalClock();
-    reads = _Reads();
-    trust = _Trust();
-    peers = CachedPresencePeers(
-      delegate: reads,
-      verifier: ContactPairwiseLiveDeviceResolverAdapter(
-        delegate: reads,
-        currentUserId: _own,
-      ),
+    reads = FakePeerReads(deviceOf: (user) => _device(_index(user)));
+    trust = FakeContactTrust();
+    peers = cachedPeers(
+      reads: reads,
       trust: trust,
       clock: clock,
+      currentUserId: _own,
     );
   });
 
-  test('one read answers many accounts, and is reused for 10 s', () async {
+  tearDown(() {
+    // A test that failed with a read held must not leave it waiting.
+    reads
+      ..hold = false
+      ..release();
+  });
+
+  test('one read answers many accounts, is reused for 10 s, and is then '
+      'served while it is read again', () async {
     final users = {for (var index = 1; index <= 3; index += 1) _user(index)};
 
     final first = await peers.verifiedDevices(users);
@@ -52,9 +56,16 @@ void main() {
       reason: 'the seal reuses the answer its targets came from',
     );
 
+    // At 10 s the answer is stale: served at once, and read again behind.
     clock.advance(const Duration(seconds: 1));
-    await peers.verifiedDevices(users);
-    expect(reads.batches, hasLength(2));
+    reads.hold = true;
+    final stale = _Watched(peers.verifiedDevices(users));
+    await pumpEventQueue();
+
+    expect(stale.done, isTrue, reason: 'it did not wait for the read');
+    expect(stale.value?[_user(1)], [_device(1)]);
+    expect(reads.batches, hasLength(2), reason: 'one background read');
+    expect(reads.held, hasLength(1));
   });
 
   test('at most 64 accounts in one read', () async {
@@ -93,84 +104,280 @@ void main() {
     expect(await peers.verifiedDevices({_user(1)}), hasLength(1));
     expect(reads.batches, hasLength(2));
   });
+
+  group('a stale answer is served while it is read again', () {
+    test('T1: an answer of 11 s is served at once, the read runs in the '
+        'background, and its answer is used without another', () async {
+      await peers.verifiedDevices({_user(1)});
+      clock.advance(const Duration(seconds: 11));
+      reads.hold = true;
+
+      final served = _Watched(peers.verifiedDevices({_user(1)}));
+      await pumpEventQueue();
+
+      expect(served.done, isTrue, reason: 'served while the read is pending');
+      expect(served.value?[_user(1)], [_device(1)]);
+      expect(reads.batches, hasLength(2), reason: 'the read started');
+      expect(reads.held, hasLength(1), reason: 'and is still pending');
+
+      reads.devices[_user(1)] = [_device(1), _device(2)];
+      reads.release();
+      await pumpEventQueue();
+      clock.advance(const Duration(seconds: 1));
+
+      final next = await peers.verifiedDevices({_user(1)});
+
+      expect(next[_user(1)], [_device(1), _device(2)], reason: 'the new one');
+      expect(reads.batches, hasLength(2), reason: 'fresh: no read');
+    });
+
+    test('T2: an answer of 61 s waits for one read', () async {
+      await peers.verifiedDevices({_user(1)});
+      clock.advance(const Duration(seconds: 61));
+      reads.hold = true;
+
+      final answer = _Watched(peers.verifiedDevices({_user(1)}));
+      await pumpEventQueue();
+
+      expect(answer.done, isFalse, reason: 'expired: it waits');
+      expect(reads.batches, hasLength(2));
+
+      reads.release();
+      await pumpEventQueue();
+
+      expect(answer.done, isTrue);
+      expect(answer.value?[_user(1)], [_device(1)]);
+      expect(reads.batches, hasLength(2), reason: 'one read');
+    });
+
+    test('T3: concurrent calls share one read, cold and stale', () async {
+      reads.hold = true;
+
+      final cold = [
+        for (var call = 0; call < 5; call += 1)
+          _Watched(peers.verifiedDevices({_user(1)})),
+      ];
+      await pumpEventQueue();
+
+      expect(reads.batches, hasLength(1), reason: 'one read for five calls');
+      expect(cold.where((call) => call.done), isEmpty);
+
+      reads.release();
+      await pumpEventQueue();
+
+      expect(cold.every((call) => call.done), isTrue);
+      expect(
+        cold.map((call) => call.value?[_user(1)]),
+        everyElement([_device(1)]),
+      );
+
+      clock.advance(const Duration(seconds: 11));
+      final stale = [
+        for (var call = 0; call < 5; call += 1)
+          _Watched(peers.verifiedDevices({_user(1)})),
+      ];
+      await pumpEventQueue();
+
+      expect(stale.every((call) => call.done), isTrue, reason: 'served');
+      expect(reads.batches, hasLength(2), reason: 'one background read');
+      expect(reads.held, hasLength(1));
+    });
+
+    test('T4: a background read that failed keeps the stale answer, and the '
+        'next waits 5 s', () async {
+      await peers.verifiedDevices({_user(1)});
+      clock.advance(const Duration(seconds: 11));
+      reads.failing = true;
+
+      expect(
+        (await peers.verifiedDevices({_user(1)}))[_user(1)],
+        [_device(1)],
+        reason: 'stale, served',
+      );
+      await pumpEventQueue();
+      expect(reads.batches, hasLength(2), reason: 'the refresh ran, failed');
+
+      clock.advance(const Duration(seconds: 1));
+      expect(
+        (await peers.verifiedDevices({_user(1)}))[_user(1)],
+        [_device(1)],
+        reason: 'the stale answer stays',
+      );
+      await pumpEventQueue();
+      expect(reads.batches, hasLength(2), reason: 'no refresh within 5 s');
+
+      clock.advance(const Duration(seconds: 5));
+      expect((await peers.verifiedDevices({_user(1)}))[_user(1)], [_device(1)]);
+      await pumpEventQueue();
+      expect(reads.batches, hasLength(3), reason: 'a refresh 6 s after');
+
+      // 60 s after the read that answered: expired, so the call waits for
+      // the read, which fails, and nobody is named.
+      clock.advance(const Duration(seconds: 43));
+      expect(await peers.verifiedDevices({_user(1)}), isEmpty);
+      expect(reads.batches, hasLength(4));
+    });
+
+    test('T5: a change of trust drops a stale answer at once', () async {
+      await peers.verifiedDevices({_user(1)});
+      clock.advance(const Duration(seconds: 11));
+      trust.states[_user(1)] = ContactTrustState.masterKeyChanged;
+      reads.states[_user(1)] = ContactTrustState.masterKeyChanged;
+      reads.hold = true;
+
+      final answer = _Watched(peers.verifiedDevices({_user(1)}));
+      await pumpEventQueue();
+
+      expect(answer.done, isFalse, reason: 'not served: it waits for a read');
+
+      reads.release();
+      await pumpEventQueue();
+
+      expect(answer.done, isTrue);
+      expect(answer.value, isEmpty);
+      expect(reads.batches, hasLength(2));
+    });
+
+    test('T6: a device a stale answer does not name waits for one read, '
+        'and is named when that read names it', () async {
+      await peers.verifiedDevices({_user(1)});
+      final added = PresenceDevice(userId: _user(1), deviceId: _device(2));
+      reads.devices[_user(1)] = [_device(1), _device(2)];
+
+      // Fresh, the answer is all there is: no read for a device it lacks.
+      clock.advance(const Duration(seconds: 5));
+      expect(
+        (await peers.verifiedDevices({_user(1)}, including: {added}))[_user(1)],
+        [_device(1)],
+      );
+      expect(reads.batches, hasLength(1));
+
+      clock.advance(const Duration(seconds: 6));
+      reads.hold = true;
+      final answer = _Watched(
+        peers.verifiedDevices({_user(1)}, including: {added}),
+      );
+      await pumpEventQueue();
+
+      expect(answer.done, isFalse, reason: 'unknown device: it waits');
+      expect(reads.batches, hasLength(2));
+
+      reads.release();
+      await pumpEventQueue();
+
+      expect(answer.value?[_user(1)], [_device(1), _device(2)]);
+      expect(reads.batches, hasLength(2), reason: 'one read');
+    });
+
+    test('T7: peek answers from any age, never reads, and knows nothing of an '
+        'account never read', () async {
+      await peers.verifiedDevices({_user(1)});
+      clock.advance(const Duration(minutes: 5));
+
+      expect(await peers.peek(_user(1)), [_device(1)]);
+      expect(await peers.peek(_user(2)), isNull);
+      expect(reads.batches, hasLength(1), reason: 'no read');
+
+      trust.states[_user(1)] = ContactTrustState.masterKeyChanged;
+      expect(
+        await peers.peek(_user(1)),
+        isNull,
+        reason: 'a change of trust drops it',
+      );
+      expect(reads.batches, hasLength(1));
+    });
+
+    test('peek knows nothing of an account the last answer refused', () async {
+      reads.states[_user(1)] = ContactTrustState.unverified;
+      await peers.verifiedDevices({_user(1)});
+
+      expect(await peers.peek(_user(1)), isNull);
+    });
+  });
+
+  group('the seal, under the router lock, never reads', () {
+    test('it is served a stale answer and refused an expired one', () async {
+      await peers.verifiedDevices({_user(1)});
+      clock.advance(const Duration(seconds: 59));
+
+      final stale = await peers.resolveVerifiedLiveDevices(_user(1));
+      expect((stale as Success).value, hasLength(1));
+
+      clock.advance(const Duration(seconds: 1));
+      final expired = await peers.resolveVerifiedLiveDevices(_user(1));
+      expect(expired, isA<FailureResult<Object?>>());
+
+      expect(
+        await peers.resolveVerifiedLiveDevices(_user(2)),
+        isA<FailureResult<Object?>>(),
+      );
+      expect(reads.batches, hasLength(1), reason: 'no read, ever');
+    });
+
+    test("the goodbye's resolver serves an answer of any age that verified "
+        'the account, and refuses every other (ADR-101 G2)', () async {
+      final goodbye = peers.goodbyeResolver;
+      await peers.verifiedDevices({_user(1)});
+      reads.states[_user(3)] = ContactTrustState.unverified;
+      await peers.verifiedDevices({_user(3)});
+      clock.advance(const Duration(minutes: 5));
+      reads.hold = true;
+
+      final old = await goodbye.resolveVerifiedLiveDevices(_user(1));
+      expect(
+        [
+          for (final device
+              in (old as Success<List<VerifiedPairwiseLiveDevice>>).value)
+            device.deviceId,
+        ],
+        [_device(1)],
+      );
+      expect(
+        await goodbye.resolveVerifiedLiveDevices(_user(2)),
+        isA<FailureResult<Object?>>(),
+        reason: 'no answer kept',
+      );
+      expect(
+        await goodbye.resolveVerifiedLiveDevices(_user(3)),
+        isA<FailureResult<Object?>>(),
+        reason: 'the answer kept refused the account',
+      );
+      expect(
+        await peers.resolveVerifiedLiveDevices(_user(1)),
+        isA<FailureResult<Object?>>(),
+        reason: 'the ordinary seal refuses an answer of 5 minutes',
+      );
+
+      trust.states[_user(1)] = ContactTrustState.masterKeyChanged;
+      expect(
+        await goodbye.resolveVerifiedLiveDevices(_user(1)),
+        isA<FailureResult<Object?>>(),
+        reason: 'a change of trust drops it',
+      );
+      expect(reads.batches, hasLength(2), reason: 'no read');
+    });
+  });
 }
+
+/// A call whose answer the test looks at without awaiting it.
+final class _Watched<T> {
+  _Watched(Future<T> future) {
+    unawaited(
+      future.then((value) {
+        this.value = value;
+        done = true;
+      }),
+    );
+  }
+
+  var done = false;
+  T? value;
+}
+
+int _index(String userId) => int.parse(userId.substring(24), radix: 16) - 0x100;
 
 String _user(int index) =>
     '00000000-0000-4000-8000-${(0x100 + index).toRadixString(16).padLeft(12, '0')}';
 
 String _device(int index) =>
     '00000000-0000-4000-8000-${(0x900 + index).toRadixString(16).padLeft(12, '0')}';
-
-/// The batched peer read: every account verified with one signed device,
-/// unless [states] says otherwise.
-final class _Reads implements VerifiedLiveDeviceResolverPort {
-  final batches = <List<String>>[];
-  final states = <String, ContactTrustState>{};
-  var failing = false;
-
-  AuthenticatedPeer _peer(String userId) {
-    final index = int.parse(userId.substring(24), radix: 16) - 0x100;
-    return AuthenticatedPeer(
-      trust: ContactTrustRecord(
-        userId: userId,
-        state: states[userId] ?? ContactTrustState.verified,
-        identity: PeerIdentityPublic(
-          masterPublic: _bytes(32, 1),
-          selfSigningPublic: _bytes(32, 2),
-          userSigningPublic: _bytes(32, 3),
-          masterSignature: _bytes(64, 4),
-          version: 1,
-        ),
-      ),
-      devices: [
-        PeerPublicDevice(
-          deviceId: _device(index),
-          identityPublic: _bytes(64, 5),
-          registrationId: 7,
-          bundleVersion: 1,
-          crossSignature: _bytes(64, 6),
-        ),
-      ],
-      claimedBundles: const [],
-    );
-  }
-
-  @override
-  Future<Result<AuthenticatedPeer>> resolveLiveDevices({
-    required String userId,
-  }) async => Result.success(_peer(userId));
-
-  @override
-  Future<Result<Map<String, Result<AuthenticatedPeer>>>>
-  resolveLiveDevicesForUsers({required List<String> userIds}) async {
-    batches.add(List.of(userIds));
-    if (failing) {
-      return const Result.failure(
-        TransportFailure(TransportFailureKind.offline),
-      );
-    }
-    return Result.success({
-      for (final userId in userIds) userId: Result.success(_peer(userId)),
-    });
-  }
-}
-
-/// The trust this phone stores, which is all the cache reads of it.
-final class _Trust implements ContactLocalPort {
-  final states = <String, ContactTrustState>{};
-
-  @override
-  Future<Result<ContactTrustRecord?>> readTrust(String userId) async =>
-      Result.success(
-        ContactTrustRecord(
-          userId: userId,
-          state: states[userId] ?? ContactTrustState.verified,
-        ),
-      );
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-Uint8List _bytes(int length, int marker) =>
-    Uint8List.fromList(List<int>.filled(length, marker));

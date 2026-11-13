@@ -42,8 +42,11 @@ final class SyncLifecycleSupervisor {
        _farewell = farewell;
 
   /// The longest the socket waits for [_farewell] before it closes anyway
-  /// (ADR-098 D5).
-  static const farewellLimit = Duration(milliseconds: 500);
+  /// (ADR-098 D5, ADR-101 G5). The goodbye is local work: it waits for no
+  /// queue and reads no peer. A cached app is frozen 10 s after it enters the
+  /// cached state, so this leaves a large margin; a goodbye that ends sooner
+  /// closes the socket sooner.
+  static const farewellLimit = Duration(milliseconds: 1500);
 
   final DurableSyncEngine _engine;
   final DurableSyncStore _store;
@@ -308,8 +311,13 @@ final class SyncLifecycleSupervisor {
   /// the goodbye presence sends on leaving, which would otherwise be sealed
   /// and never sent. A farewell that fails or hangs releases the close all the
   /// same.
+  ///
+  /// A transition that starts during that wait owns the socket from then on
+  /// (ADR-101 G6): when the app came back, the resume has opened, or is
+  /// opening, a connection that this late close must not take away.
   Future<void> _enterBackground() async {
     _generation += 1;
+    final generation = _generation;
     final farewell = _farewell;
     if (farewell != null) {
       await Future.any<void>([
@@ -319,6 +327,9 @@ final class SyncLifecycleSupervisor {
         ),
         _delay.wait(farewellLimit),
       ]);
+      if (generation != _generation) {
+        return;
+      }
     }
     await _realtime.close();
     if (_lifecycle.current == ApplicationExecutionState.detached) {
