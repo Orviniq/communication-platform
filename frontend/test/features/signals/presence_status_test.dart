@@ -268,13 +268,16 @@ void main() {
       expect(rig.sealer.devicesOf(PresenceSignalKind.here), [b1]);
 
       await rig.setForeground(foreground: false);
-      await watchFrom(direct, device: b2);
+      final opening = await watchFrom(direct, device: b2);
 
       expect(rig.sealer.devicesOf(PresenceSignalKind.here), [b1]);
+      expect(opening.commits, 1, reason: 'the router spares b2 a dead key');
       expect(
         rig.status.isOnline(b2),
-        isTrue,
-        reason: 'the background still sees who asked',
+        isFalse,
+        reason:
+            'a frame handled after the app left returns without work until '
+            'the app is in the foreground again (ADR-101 G4)',
       );
     });
 
@@ -342,7 +345,7 @@ void main() {
 
   group('the goodbye (D5)', () {
     test('leaving the foreground says gone to every live lease in either '
-        'direction, after the pending stop', () async {
+        'direction, and no typing stop (ADR-101 G3)', () async {
       await rig.show(direct);
       await hereFrom(direct); // b1 answers this phone's watch.
       await watchFrom(direct, device: b2); // b2 watches this phone.
@@ -353,12 +356,15 @@ void main() {
       await rig.advance(const Duration(seconds: 3));
       await rig.edit(direct);
       await rig.advance(const Duration(seconds: 2));
+      final sealedBefore = rig.sealer.seals.length;
       await rig.setForeground(foreground: false);
 
-      final last = rig.sealer.seals.reversed.take(2).toList().reversed;
       expect(
-        [for (final seal in last) seal.message.kind],
-        [PresenceSignalKind.typing, PresenceSignalKind.gone],
+        [
+          for (final seal in rig.sealer.seals.skip(sealedBefore))
+            seal.message.kind,
+        ],
+        [PresenceSignalKind.gone],
       );
       final gone = rig.sealer.of(PresenceSignalKind.gone).single;
       expect(

@@ -474,10 +474,12 @@ void main() {
       expect(typingTo(b1), [(0, true)]);
     });
 
-    test('leaving the foreground stops at once, or not at all', () async {
+    test('leaving the foreground sends no stop: its gone ends the line '
+        '(ADR-101 G3)', () async {
       await typeFor(6);
       await rig.setForeground(foreground: false);
-      expect(typingTo(b1), [(0, true), (6, false)]);
+      expect(typingTo(b1), [(0, true)]);
+      expect(rig.sealer.devicesOf(PresenceSignalKind.gone), [b1]);
 
       await rig.advance(const Duration(seconds: 14));
       await rig.setForeground(foreground: true);
@@ -489,11 +491,13 @@ void main() {
 
       expect(
         typingTo(b1),
-        [(0, true), (6, false), (20, true)],
+        [(0, true), (20, true)],
         reason:
-            'a stop the pace holds back is not sent after the socket '
-            'closed, and nothing repeats in the background',
+            'each departure sends gone and no stop, the session starts '
+            'again when the app returns, and nothing repeats in the '
+            'background',
       );
+      expect(rig.sealer.devicesOf(PresenceSignalKind.gone), [b1, b1]);
     });
 
     test('a chat nobody watches costs nothing', () async {

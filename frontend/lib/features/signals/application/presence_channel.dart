@@ -53,9 +53,13 @@ import 'package:communication_platform/features/signals/domain/presence_signal_m
 /// When it opens, the watch round of the chat on screen runs at once and each
 /// typing session still wanted sends its start.
 ///
-/// **Leaving.** On leaving the foreground, and in [farewell] before the
-/// socket closes, it sends `gone` to every device with a live lease in either
-/// direction (D5).
+/// **Leaving** (D5, ADR-101 G1 to G4). The app leaving the foreground, seen by
+/// the visibility or by [farewell] before the socket closes, whichever comes
+/// first, sends one `gone` to every device with a live lease in either
+/// direction, and nothing else. It waits for no event of the queue and reads
+/// no peer: it seals with the answers the peer cache holds, however old, by
+/// [goodbyeSealer]. Until the app is in the foreground again an event that
+/// waits in the queue returns without work, and nothing else is sealed.
 ///
 /// **The switch** (D9). While [sharing] is off it sends nothing, answers
 /// nothing and shows nothing; the router still commits every frame, and this
@@ -70,6 +74,7 @@ final class PresenceChannel {
     required this.router,
     required this.socket,
     required this.sealer,
+    required this.goodbyeSealer,
     required this.buckets,
     required this.conversations,
     required this.peers,
@@ -145,6 +150,11 @@ final class PresenceChannel {
   final SignalRouter router;
   final SignalSocketPort socket;
   final PresenceSealPort sealer;
+
+  /// The seal of the goodbye: [sealer]'s, over a view of the peer cache that
+  /// serves the last answer that verified each account, however old, and
+  /// never reads (ADR-101 G2).
+  final PresenceSealPort goodbyeSealer;
   final SignalBucketsPort buckets;
   final PresenceConversationsPort conversations;
   final PresencePeersPort peers;
@@ -167,6 +177,15 @@ final class PresenceChannel {
   final _inFlight = <Future<void>>{};
   var _running = false;
   var _foreground = false;
+
+  /// Whether the app left the foreground and the channel has not followed it
+  /// back yet (ADR-101 G1, G4). Set at once by the first path that sees the
+  /// departure, before anything is queued.
+  var _departing = false;
+
+  /// The goodbye of the departure under way. The second path that sees the
+  /// same departure waits for it, and sends no `gone` of its own (G1).
+  Future<void>? _goodbye;
 
   /// "Show my online status", as this channel last applied it. Off until the
   /// stored choice is read, so nothing leaves before it is known.
@@ -213,11 +232,13 @@ final class PresenceChannel {
       ..add(
         router
             .channel(SignalChannel.presence)
-            .listen((signal) => _serially(() => _receive(signal))),
+            .listen((signal) => _unlessDeparting(() => _receive(signal))),
       )
-      ..add(socket.opens.listen((_) => _serially(_onSocketOpened)))
-      ..add(visibility.changes.listen((_) => _serially(_followVisibility)))
-      ..add(activity.listen((event) => _serially(() => _onActivity(event))))
+      ..add(socket.opens.listen((_) => _unlessDeparting(_onSocketOpened)))
+      ..add(visibility.changes.listen((_) => _onVisibilityChanged()))
+      ..add(
+        activity.listen((event) => _unlessDeparting(() => _onActivity(event))),
+      )
       ..add(
         sharing.changes.listen(
           (on) => _serially(() => _onSharingChanged(on: on)),
@@ -229,20 +250,13 @@ final class PresenceChannel {
     });
   }
 
-  /// Says goodbye before the socket closes (D5): the pending typing stops
-  /// and `gone` to every device with a live lease in either direction, then
-  /// nothing more until the app is in the foreground again. Completes once
-  /// those frames have gone to the socket.
-  Future<void> farewell() async {
-    _serially(() async {
-      if (_foreground) {
-        await _leaveForeground();
-        _foreground = false;
-        _closeWatch();
-      }
-    });
-    await idle;
-  }
+  /// Says goodbye before the socket closes (D5, ADR-101 G1 to G3): `gone` to
+  /// every device with a live lease in either direction, then nothing more
+  /// until the app is in the foreground again. It waits for no event of the
+  /// queue and reads no peer, and when the visibility already started this
+  /// departure it sends nothing more. Completes once that `gone`, and every
+  /// frame sealed before it, has gone to the socket.
+  Future<void> farewell() => _depart();
 
   /// Stops everything, forgets every lease and every watch, and ends every
   /// typing state shown.
@@ -547,14 +561,68 @@ final class PresenceChannel {
   // ---------------------------------------------------------------------
   // The chat on screen.
 
+  /// The app leaving the foreground starts the goodbye at once, before the
+  /// queue; the queue then follows the visibility as for any change.
+  void _onVisibilityChanged() {
+    if (!visibility.isForeground) {
+      unawaited(_depart());
+    }
+    _serially(_followVisibility);
+  }
+
+  /// Starts the departure that the visibility or [farewell] saw first (G1):
+  /// marks it, takes the live lease holders of this moment without an
+  /// `await`, and seals `gone` to them through [_sayGoodbye]. The clean-up of
+  /// the leases, the watch and the typing runs in the queue afterward. A
+  /// second start of the same departure gets the same goodbye.
+  Future<void> _depart() {
+    if (_departing) {
+      return _goodbye ?? Future<void>.value();
+    }
+    if (!_running || !_foreground) {
+      return Future<void>.value();
+    }
+    _departing = true;
+    final goodbye = _goodbye = _sayGoodbye(_liveLeaseHolders(clock.now()));
+    _serially(() async {
+      if (_foreground) {
+        _leaveForeground();
+        _foreground = false;
+        _closeWatch();
+      }
+    });
+    return goodbye;
+  }
+
+  /// Seals `gone` to [holders] with the answers the peer cache holds, and
+  /// waits until it, and every frame sealed before it, has gone to the
+  /// socket. It sends no typing stop: the `gone` ends the line at its
+  /// receiver (G3). Best effort: the online window is its fallback.
+  Future<void> _sayGoodbye(List<PresenceDevice> holders) async {
+    if (_sharing && holders.isNotEmpty) {
+      await _send(
+        const PresenceGone(PresenceGoneReason.leftForeground),
+        live: holders,
+        goodbye: true,
+      ).then<void>((_) {}, onError: (Object _) {});
+    }
+    await Future.wait(List.of(_inFlight));
+  }
+
   Future<void> _followVisibility() async {
     final foreground = visibility.isForeground;
+    if (foreground && _departing) {
+      // Back in the foreground: the departure is over, and the queue handles
+      // events again (G4).
+      _departing = false;
+      _goodbye = null;
+    }
     // Off, nothing is watched (D9).
     final shown = foreground && _sharing
         ? visibility.visibleConversationId
         : null;
     if (_foreground && !foreground) {
-      await _leaveForeground();
+      _leaveForeground();
     }
     _foreground = foreground;
     final watched = _watch?.conversationId;
@@ -581,38 +649,16 @@ final class PresenceChannel {
     }
   }
 
-  /// Leaving the foreground stops typing at once and says `gone` to every
-  /// device with a live lease in either direction (D5), which ends the
-  /// typing it shows too. A stop the pace holds back is not sent: the socket
-  /// closes now, and a frame sealed after it closed would be a drop; the
-  /// `gone` ends it instead. Every lease ends here, since a device in the
-  /// background answers nothing.
-  Future<void> _leaveForeground() async {
-    final now = clock.now();
-    final stops = <String>[];
-    for (final MapEntry(key: conversation, value: typing)
-        in _typingOut.entries) {
+  /// The clean-up of a departure, in the queue after the goodbye (G1). Typing
+  /// ends and sends no stop: the `gone` ended the line at its receiver (G3).
+  /// Every lease ends, since a device in the background answers nothing, and
+  /// every typing state shown ends.
+  void _leaveForeground() {
+    for (final typing in _typingOut.values) {
       typing
         ..wanted = false
+        ..sent = false
         ..cancelTimers();
-      if (!typing.sent) {
-        continue;
-      }
-      if (typing.paceAllows(now)) {
-        stops.add(conversation);
-      } else {
-        typing.sent = false;
-      }
-    }
-    for (final conversation in stops) {
-      await _sendTyping(conversation, active: false);
-    }
-    final farewell = _liveLeaseHolders(now);
-    if (_sharing && farewell.isNotEmpty) {
-      await _send(
-        const PresenceGone(PresenceGoneReason.leftForeground),
-        live: farewell,
-      );
     }
     _leases.clear();
     _clearShownTyping();
@@ -801,7 +847,7 @@ final class PresenceChannel {
             ..wanted = true
             ..idle = timers.start(
               typingIdle,
-              () => _serially(() async {
+              () => _unlessDeparting(() async {
                 typing
                   ..wanted = false
                   ..idle = null;
@@ -865,7 +911,7 @@ final class PresenceChannel {
     if (paced && !typing.paceAllows(now)) {
       typing.pace ??= timers.start(
         typing.lastSentAt!.add(typingPace).difference(now),
-        () => _serially(() async {
+        () => _unlessDeparting(() async {
           typing.pace = null;
           await _flushTyping(conversationId, paced: true);
         }),
@@ -919,7 +965,7 @@ final class PresenceChannel {
     }
     typing.repeat = timers.start(
       start && typing.followsSend(now) ? typingFirstRefresh : typingRepeat,
-      () => _serially(() async {
+      () => _unlessDeparting(() async {
         typing.repeat = null;
         if (typing.wanted && typing.sent && _foreground) {
           await _sendTyping(conversationId, active: true);
@@ -960,12 +1006,18 @@ final class PresenceChannel {
   /// read is a round trip. A target its account's answer does not name is
   /// sealed nothing, as the seal would refuse it; the seal then finds each
   /// answer it needs in the cache.
+  ///
+  /// The [goodbye] reads no peer at all (ADR-101 G2): its targets are named by
+  /// the answer the cache holds, however old, a target with none is skipped,
+  /// and [goodbyeSealer] seals it from the same answers. During a departure
+  /// nothing but the goodbye is sealed (G4).
   Future<List<PresenceDevice>> _send(
     PresenceSignalBody body, {
     List<PresenceDevice> live = const [],
     List<PresenceDevice> probes = const [],
+    bool goodbye = false,
   }) async {
-    if (!socket.isOpen) {
+    if (!socket.isOpen || (_departing && !goodbye)) {
       return const [];
     }
     final now = clock.now();
@@ -994,9 +1046,12 @@ final class PresenceChannel {
     if (candidates.isEmpty) {
       return const [];
     }
-    final verified = await peers.verifiedDevices({
+    final users = {
       for (final device in candidates) device.userId.toLowerCase(),
-    }, including: candidates.toSet());
+    };
+    final verified = goodbye
+        ? {for (final user in users) user: ?await peers.peek(user)}
+        : await peers.verifiedDevices(users, including: candidates.toSet());
     final targets = [
       for (final device in candidates)
         if (verified[device.userId.toLowerCase()]?.contains(device.key) ??
@@ -1011,17 +1066,18 @@ final class PresenceChannel {
       return const [];
     }
     final published = buckets.signalBuckets;
+    final seal = goodbye ? goodbyeSealer : sealer;
     final queued = await router.exclusively(() async {
-      if (!socket.isOpen) {
+      if (!socket.isOpen || (_departing && !goodbye)) {
         return const <(PresenceDevice, String, Future<void>)>[];
       }
-      var sealed = await sealer.seal(
+      var sealed = await seal.seal(
         payload: payload,
         targets: targets,
         allowedLengths: published,
       );
       if (_isConflict(sealed)) {
-        sealed = await sealer.seal(
+        sealed = await seal.seal(
           payload: payload,
           targets: targets,
           allowedLengths: published,
@@ -1092,6 +1148,14 @@ final class PresenceChannel {
         .then<void>((_) {}, onError: (Object _) {});
   }
 
+  /// [_serially], for an event that the app leaving the foreground makes
+  /// moot: when it starts during a departure it returns without work (G4).
+  void _unlessDeparting(Future<void> Function() action) => _serially(() async {
+    if (!_departing) {
+      await action();
+    }
+  });
+
   void _track(Future<void> Function() action) {
     late final Future<void> future;
     future = action()
@@ -1108,7 +1172,7 @@ final class PresenceChannel {
           return;
         }
         arm();
-        _serially(action);
+        _unlessDeparting(action);
       });
     }
 

@@ -11,6 +11,7 @@ import 'package:communication_platform/core/application/signal_router.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_volatile_opener.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_volatile_sealer.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/native_pairwise_outbound_preparation.dart';
@@ -153,24 +154,29 @@ final presenceChannelProvider =
         trust: contacts,
         clock: clock,
       );
+      // The goodbye's seal resolves through the answers the cache holds,
+      // however old, and never reads (ADR-101 G2).
+      PairwisePresenceSeal sealOver(PairwiseLiveDeviceResolverPort devices) =>
+          PairwisePresenceSeal(
+            sealer: PairwiseVolatileSealer(
+              store: store,
+              volatileStore: store,
+              liveDevices: devices,
+              crypto: NativePairwiseOutboundPreparation(
+                ref.watch(pairwiseSessionCryptoProvider),
+              ),
+              clock: clock,
+            ),
+            currentUserId: scope.userId,
+            currentDeviceId: scope.deviceId,
+          );
       final channel = PresenceChannel(
         currentUserId: scope.userId,
         currentDeviceId: scope.deviceId,
         router: router,
         socket: ref.watch(voiceSignalSocketProvider),
-        sealer: PairwisePresenceSeal(
-          sealer: PairwiseVolatileSealer(
-            store: store,
-            volatileStore: store,
-            liveDevices: peers,
-            crypto: NativePairwiseOutboundPreparation(
-              ref.watch(pairwiseSessionCryptoProvider),
-            ),
-            clock: clock,
-          ),
-          currentUserId: scope.userId,
-          currentDeviceId: scope.deviceId,
-        ),
+        sealer: sealOver(peers),
+        goodbyeSealer: sealOver(peers.goodbyeResolver),
         buckets: PublishedVoiceDeployment(config),
         conversations: DriftPresenceConversations(
           database: database,
