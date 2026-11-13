@@ -46,6 +46,12 @@ import 'package:communication_platform/features/signals/domain/presence_signal_m
 /// else is dropped without an answer. Each accepted frame makes its sender
 /// online in [status] (D4).
 ///
+/// **The socket.** Presence follows it. While it is closed no frame is sealed:
+/// a frame that is not carried is a dead skipped key on its target for good,
+/// and the seal moves the ratchet whether or not the socket takes the frame.
+/// When it opens, the watch round of the chat on screen runs at once and each
+/// typing session still wanted sends its start.
+///
 /// **Leaving.** On leaving the foreground, and in [farewell] before the
 /// socket closes, it sends `gone` to every device with a live lease in either
 /// direction (D5).
@@ -208,6 +214,7 @@ final class PresenceChannel {
             .channel(SignalChannel.presence)
             .listen((signal) => _serially(() => _receive(signal))),
       )
+      ..add(socket.opens.listen((_) => _serially(_onSocketOpened)))
       ..add(visibility.changes.listen((_) => _serially(_followVisibility)))
       ..add(activity.listen((event) => _serially(() => _onActivity(event))))
       ..add(
@@ -257,8 +264,34 @@ final class PresenceChannel {
     _clearShownTyping();
   }
 
-  /// The socket closed: every typing state shown ends with it.
+  /// The socket closed: every typing state shown ends with it. Leases and
+  /// watches stay and end by time. Nothing is sealed while the socket is
+  /// closed, and the handshake runs when it opens again.
   void socketClosed() => _serially(() async => _clearShownTyping());
+
+  /// A connection became ready: the handshake this phone could not send while
+  /// it had none. The watch round of the chat on screen runs at once, and each
+  /// typing session starts over: what an earlier connection carried is not
+  /// known to have reached anybody, so a session that is still wanted sends its
+  /// start now.
+  Future<void> _onSocketOpened() async {
+    if (!_foreground || !_sharing) {
+      return;
+    }
+    final watch = _watch;
+    if (watch != null) {
+      await _watchRound(watch);
+    }
+    for (final MapEntry(key: conversation, value: typing)
+        in _typingOut.entries.toList()) {
+      typing
+        ..sent = false
+        ..failedAt = null;
+      if (typing.wanted) {
+        await _sendTyping(conversation, active: true, start: true);
+      }
+    }
+  }
 
   /// Completes once every event taken so far is handled and every frame it
   /// sealed has gone to the socket.
@@ -861,11 +894,21 @@ final class PresenceChannel {
   /// Seals [body] once for every device of [live] that L1 still allows and
   /// every device of [probes] its ledger allows, commits it, and hands one
   /// paced frame for each to the socket. Answers the devices sealed to.
+  ///
+  /// While the socket is closed it seals nothing (K3): a frame that is sealed
+  /// and never written advanced the pairwise session of its target all the
+  /// same, and a dropped frame leaves a dead skipped key there for good. A
+  /// frame that is not sealed spends no probe token, adds no L1 count and moves
+  /// no ratchet. The socket is asked again inside the router lock, because the
+  /// wait for that lock is long enough for the socket to close.
   Future<List<PresenceDevice>> _send(
     PresenceSignalBody body, {
     List<PresenceDevice> live = const [],
     List<PresenceDevice> probes = const [],
   }) async {
+    if (!socket.isOpen) {
+      return const [];
+    }
     final now = clock.now();
     final own = currentDeviceId.toLowerCase();
     final me = currentUserId.toLowerCase();
@@ -898,6 +941,9 @@ final class PresenceChannel {
     }
     final published = buckets.signalBuckets;
     final queued = await router.exclusively(() async {
+      if (!socket.isOpen) {
+        return const <(PresenceDevice, String, Future<void>)>[];
+      }
       var sealed = await sealer.seal(
         payload: payload,
         targets: targets,

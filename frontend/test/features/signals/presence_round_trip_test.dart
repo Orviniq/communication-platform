@@ -313,6 +313,51 @@ void main() {
     expect(relay.carried.map((frame) => frame.length), everyElement(1024));
   });
 
+  test('T7: a chat opened on a closed socket seals nothing, and the open '
+      'sends the watch, which Bob answers in the same settle', () async {
+    // Alice's phone has no connection: the relay takes nothing from it and
+    // brings nothing to it.
+    relay.socketFor(aliceDevice).connected = false;
+    final alicePhone = phoneFor(
+      alice,
+      conversations: {direct: PresenceDirectConversation(direct, bobUser)},
+      peers: {
+        bobUser: [bobDevice],
+      },
+    );
+    phoneFor(
+      bob,
+      conversations: {direct: PresenceDirectConversation(direct, aliceUser)},
+      peers: {
+        aliceUser: [aliceDevice],
+      },
+    );
+    final before = (await alice.sessionWith(bobDevice))!.stateVersion;
+
+    alicePhone.visibility.show(direct);
+    await _settleAll(phones);
+
+    expect(relay.carried, isEmpty);
+    expect(
+      (await alice.sessionWith(bobDevice))!.stateVersion,
+      before,
+      reason: 'nothing was sealed, so no ratchet moved and no key is dead',
+    );
+    expect(
+      await alicePhone.status.watchUser(bobUser).first,
+      const PeerStatusNone(),
+    );
+
+    relay.socketFor(aliceDevice).open();
+    await _settleAll(phones);
+
+    expect(relay.carriedTo, [bobDevice, aliceDevice]);
+    expect(
+      await alicePhone.status.watchUser(bobUser).first,
+      const PeerStatusOnline(),
+    );
+  });
+
   test('a phone with status off answers nothing and sees nothing, and its '
       'sessions still move with every frame', () async {
     final alicePhone = phoneFor(
