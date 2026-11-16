@@ -75,6 +75,7 @@ def test_locking_the_device_rows_would_not_have_held(collector):
     Under this same load it lets the account past the cap, which is why the unit
     of work locks the user row instead."""
     start = threading.Barrier(CONCURRENT_REGISTRATIONS)
+    counted = threading.Barrier(CONCURRENT_REGISTRATIONS)
 
     def naive_register():
         try:
@@ -85,6 +86,13 @@ def test_locking_the_device_rows_would_not_have_held(collector):
                     .filter(user_id=collector.id, revoked_date__isnull=True)
                     .count()
                 )
+                # Every racer reads the count before any of them inserts. Without
+                # this, a slow runner can run one racer's whole unit of work before
+                # the others read, they see the cap reached, and the cap holds by
+                # timing rather than by any lock. If a lock did hold, the racers
+                # queued behind it never reach this barrier, it breaks at its
+                # timeout, nobody inserts, and the assertion below fails.
+                counted.wait(timeout=10)
                 if n >= CAP:
                     return
                 make_device(collector, registration_id=999)
