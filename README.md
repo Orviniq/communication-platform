@@ -1,40 +1,30 @@
 # Communication Platform
 
 A private, self-hosted messaging platform with end-to-end encrypted direct messages and
-group chats, built to survive a national internet shutdown. Audio-only voice is designed,
-and the server half of it is served.
+group chats, an Android client, and audio-only voice rooms.
 
-> **Status: work in progress.** The backend is substantially built, and the Android
-> client implements registration, enrollment, cross-signing, direct messaging, history
-> transfer, background delivery and notifications against it. Voice is served on the
-> server side only: phase 6 removed the SFU and the room object, phase 7 landed the
-> route that mints a relay credential, and no client places a call against it yet.
-> Attachments, shared media and profile publishing are not built on the client. Nothing
-> here has had an external security audit. This is not recommended for anyone whose
-> safety depends on it.
+> **Status: work in progress.** The project is in private, invite-only testing.
+> It has yet to undergo an external security audit and is unsuitable for safety-critical use.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 ## Why it exists
 
-When a state cuts international connectivity, mainstream messengers stop working: their
-servers, push infrastructure, CDNs, and STUN/TURN relays all sit outside the country, so
-people lose private communication exactly when they most need it. Every design decision
-here follows from removing that dependency — at runtime the system contacts no CDN, no
-FCM or APNs, no public STUN/TURN, no external CA, and no third-party API. The only
-deployment is a private, invite-only instance serving a small circle from a single VPS;
-it is not a public service and is not open for signup.
+The project is designed for small groups that want to run their own messaging service.
+A single VPS hosts the service and its voice relay. The Android app uses its provisioned
+server and private certificate authority, with zero runtime reliance on third-party push
+services, CDNs, public STUN/TURN servers, or external APIs.
 
 ## What it does
 
 - Direct messages between two users.
-- Group chats of up to roughly 50 members.
+- Group chats for up to 50 members, including the creator.
+- Encrypted file, photo, and supported video attachments in direct chats and Saved Messages.
+- Audio-only voice rooms over a self-hosted coturn relay. WebRTC carries audio in a mesh
+  of device-to-device connections encrypted with DTLS-SRTP.
 
-Audio-only voice is decided and served: a full mesh of WebRTC connections between
-devices, relayed by the self-hosted coturn and keyed end to end by DTLS-SRTP
-([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
-The server's whole part in it is one route that mints an ephemeral relay credential;
-the client half is not built.
+See the [voice architecture decision](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+and the [Android voice test record](frontend/docs/validation/voice-mesh/2026-10-05/README.md).
 
 ## Security model
 
@@ -86,17 +76,16 @@ flowchart LR
 | Voice | WebRTC mesh between devices, keyed by DTLS-SRTP, relayed by self-hosted coturn |
 | Edge | nginx, TLS 1.3 under a pre-distributed private CA |
 
-## Repository layout
+## Maintainers and repository layout
 
-| Path | Owner | Contents |
+| Path | Maintainer | Contributions |
 |---|---|---|
-| [`backend/`](backend/) | [Nima Shadloo](https://github.com/n-shadloo) | The server: the `accounts`, `devices`, `vault`, `messaging`, `attachments`, `realtime` and `core` apps, the `api` package that composes the FastAPI runtime over them, the `config` project, and `ops/` deployment artefacts for a single VPS |
-| [`frontend/`](frontend/) | [realSeyed](https://github.com/realSeyed) | Flutter client for Android, including all client-side cryptography |
+| [`backend/`](backend/) | [Nima Shadloo](https://github.com/n-shadloo) | Developed the FastAPI and Django backend and led the system architecture and deployment. The backend covers account and device APIs, message and attachment relay, the WebSocket gateway, the operator admin panel, and single-VPS deployment tooling. |
+| [`frontend/`](frontend/) | [realSeyed](https://github.com/realSeyed) | Developed the Flutter app for Android, including the Rust-backed client cryptography, device enrollment and contact verification, encrypted local storage and sync, direct and group chat, attachments, and audio rooms. Built the English and Persian interfaces and the Android build and signing tooling. |
 
 `backend/vendor/wheels` is the offline wheel cache, and it is not tracked in git. The
-no-foreign-dependency constraint means the server must install and rebuild with no
-internet access, so the operator builds the cache on the VPS with
-[`backend/ops/vendor.sh`](backend/ops/vendor.sh) while the network is still available;
+cache lets the operator install and rebuild the server without internet access. The
+operator prepares it on the VPS with [`backend/ops/vendor.sh`](backend/ops/vendor.sh).
 [`backend/ops/offline_install.sh`](backend/ops/offline_install.sh) then installs from it
 with `--no-index` and `--require-hashes`.
 
@@ -105,7 +94,8 @@ with `--no-index` and `--require-hashes`.
 | Document | Covers |
 |---|---|
 | [backend/README.md](backend/README.md) | Protocol and transport, authentication, the WebSocket gateway, attachments, padding buckets, retention, the full environment-variable table, and local development |
-| [docs/security/SECURITY.md](docs/security/SECURITY.md) | Threat model, the precise key invariant, what a seizure yields, and residual risk |
+| [frontend/README.md](frontend/README.md) | Android toolchain, build environments, signing, and verification |
+| [docs/security/SECURITY.md](docs/security/SECURITY.md) | Threat model, the precise key invariant, what a host compromise exposes, and residual risk |
 | [docs/client/CLIENT_CONTRACT.md](docs/client/CLIENT_CONTRACT.md) | The client-side half of every security property; authoritative for client implementations |
 | [docs/client/CLIENT_CONTACTS_AND_TRUST.md](docs/client/CLIENT_CONTACTS_AND_TRUST.md) | Binding beside the contract: contacts, the contact code, verification by both people, the profile key, and what a file carries |
 | Per-app API reference | [accounts](backend/accounts/API.md) · [devices](backend/devices/API.md) · [vault](backend/vault/API.md) · [messaging](backend/messaging/API.md) · [attachments](backend/attachments/API.md) · [realtime](backend/realtime/API.md) · [core](backend/core/API.md) |
@@ -116,7 +106,7 @@ with `--no-index` and `--require-hashes`.
 | [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
 | [ACCEPTED_RISKS.md](ACCEPTED_RISKS.md) | Every risk the project has looked at and decided to carry, each with what it exposes, what reduces it, and the event that ends the acceptance |
 | [REJECTED_PROPOSALS.md](REJECTED_PROPOSALS.md) | Every defence the project considered and turned down, each with what it would have protected, why it is not built, and the event that reopens it |
-| [CLIENT_WORK.md](CLIENT_WORK.md) | What the client developer owes, when a server change lands work under `frontend/` that the server cannot make itself |
+| [CLIENT_WORK.md](CLIENT_WORK.md) | Client follow-up work from server changes |
 | [docs/admin/PANEL-RECORD.md](docs/admin/PANEL-RECORD.md) | The system of record for the operator back office: the pinned release, the override ledger, the role model, and the deferrals |
 | [backend/ops/RUNBOOK.md](backend/ops/RUNBOOK.md) | The operator runbook: host setup, the offline install, the database, the units, nginx and TLS, coturn, the checks after a deploy, the rollback, and the maintenance timer |
 | [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
@@ -125,37 +115,26 @@ with `--no-index` and `--require-hashes`.
 
 ## Current status
 
-**Server.** Built, with tests: the seven backend apps above — account and device
-registration, device-scoped JWT authentication, cross-signing and classical + ML-KEM
+**Server.** The backend includes account and device registration, device-scoped JWT
+authentication, cross-signing and classical + ML-KEM
 prekey distribution, the durable envelope queue, bucketed attachments, and the `/ws`
-gateway — together with the `ops/` artefacts for deploying them to one VPS. Voice is
-one route among them: phase 6 removed the SFU and the room object, and phase 7 added
-`POST /api/v1/me/relay`, which mints the ephemeral coturn credential the mesh design
-needs and stores nothing behind it.
+gateway. The gateway relays call signalling, and `POST /api/v1/me/relay` issues
+short-lived coturn credentials. The Android client manages voice-room state.
 
-The API surface is frozen at `v1`: [backend/openapi.json](backend/openapi.json) is the
-generated contract and CI fails a change that does not regenerate it, and
-[API_CHANGES.md](API_CHANGES.md) records every observable change from here on.
+The backend exposes a versioned `v1` API. CI checks the generated
+[OpenAPI contract](backend/openapi.json), and [API_CHANGES.md](API_CHANGES.md) records
+changes that affect clients.
 
-**Client.** Android is the only target. `frontend/README.md` and
-`frontend/docs/implementation-checklist.md` are the live status; as they stand,
-registration, login, device enrollment and cross-signing, contacts, direct messaging,
-Saved Messages, local search, linked devices, history transfer, notifications, background
-delivery, the settings surfaces and a user-initiated diagnostics export are implemented.
-Group chats exist only in the closed-beta build, behind a gate that opens per CPU
-architecture on measured on-device evidence, and resolve unavailable in production.
-Voice, file attachments, shared media and profile publishing are not built, and every
-routed surface without an implementation behind it says so.
+**Client.** The Android app implements registration, sign-in, device enrollment,
+cross-signing, and contact verification. Direct and group chats, Saved Messages, local
+search, linked devices, history transfer, notifications, best-effort background delivery,
+and user-initiated diagnostics are implemented. Group attachments, the shared-media
+view, and profile publishing remain pending. See the
+[implementation checklist](frontend/docs/implementation-checklist.md) for delivery and
+verification status.
 
-The client tree still carries the web platform files, the conditional-import stubs and
-the web build step that the removed web target left behind, and it carries no media
-package for the voice design. Both are server changes that landed work under
-`frontend/`, and [CLIENT_WORK.md](CLIENT_WORK.md) is the list the client developer works
-from.
-
-There has been no external security audit, and
-[docs/client/CLIENT_CONTRACT.md](docs/client/CLIENT_CONTRACT.md) is authoritative for what a
-client must do for the security properties to hold.
+The [client contract](docs/client/CLIENT_CONTRACT.md) defines the requirements a client
+must meet for the security properties to hold.
 
 ## License
 
@@ -179,9 +158,8 @@ inside it:
 | Inter (four `woff2` weights) | SIL OFL 1.1 |
 | Material Symbols Outlined (`woff2`) | Apache-2.0 |
 
-Each carries its own `LICENSE` file inside the package, and each is served from
-this host rather than from a CDN — the same no-foreign-dependency rule that governs
-everything else here.
+Each carries its own `LICENSE` file inside the package. The deployment serves all of
+these assets from its own host.
 
 On the client side, `frontend/assets/fonts/vazirmatn/` bundles the Vazirmatn font
 under SIL OFL 1.1.
