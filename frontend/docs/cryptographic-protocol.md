@@ -70,9 +70,10 @@ the implementation MUST NOT invent alternate labels or normalize fields.
 On the first installation the client generates independent Ed25519 master,
 self-signing, and user-signing key pairs. The master key signs a canonical encoding of
 the two subkey bytes; the self-signing key signs device bundles; the user-signing key
-signs another user's exact master-key bytes after SAS/QR verification. Private halves
+signs another user's exact master-key bytes after out-of-band verification. Private halves
 remain in platform-protected client storage and leave a device only inside the
-recovery-protected key backup. The published identity is never trusted because the
+recovery-protected key backup (which wraps the account UUID and those three private keys
+alone, with no peer attestations). The published identity is never trusted because the
 server returned it: clients verify `master_sig` and compare the exact master-key bytes
 with the out-of-band-confirmed value.
 
@@ -197,8 +198,19 @@ PQ prekeys rotate every seven days. Superseded private signed prekeys are retain
 eight days, matching the authoritative seven-day envelope TTL plus one day, then erased.
 The exception is a first message held, unopened, for a verification of its sender: it keeps
 every retired pair it may need until it expires, 7 days after it was held, and a rotation
-that would erase one waits ([ADR-093](decisions.md) D6, D17). The held envelope is not
-accepted: nothing past the sender block opens before the verification.
+that would erase one waits ([ADR-093](decisions.md) D6, D17). In the current client
+implementation (`PairwiseOpaqueEnvelopeInspector._inspectInitial`), an initial envelope
+from an unverified sender stops after probing the sender block and is held unopened without
+running initial acceptance. Under the binding contract
+([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §C and
+[`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5.3),
+the one permitted exception to "nothing past the sender block opens before the
+verification" is a **non-committing read** before holding: the inspector may run the core's
+acceptance in memory without committing any state (no session, no device-state transition,
+no consumed one-time key, and no replay marker) solely to check whether the opened payload
+is a fixed-length 140-byte `CPCTV001` kind-3 verification notice naming the claimed sender
+as signer and this account as subject; any other payload is discarded unread, nothing past
+those 140 bytes is parsed, and the envelope remains held.
 Rotating any signed bundle field atomically uploads a fresh `cross_sig` and incremented
 `bundle_version` in the same prekey request.
 
@@ -226,7 +238,7 @@ only an additional contribution and can never replace the authenticated PQ layer
 
 ## Groups
 
-A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F; server ADR-0001,
+A group is a set of pairwise sessions (`docs/client/CLIENT_CONTRACT.md` §F; server ADR-0001,
 recorded for the client in [ADR-075](decisions.md)). There is no group key agreement, no
 group key, no epoch, and no key package, and the client uploads no group key material.
 
@@ -282,13 +294,36 @@ explicit out-of-band resolution.
 
 Version 1 computes the 32-byte safety fingerprint as SHA-256 over
 `"chat:v1:safety-fingerprint"` followed by 4-byte-length-framed
-`(user_uuid_raw[16], master_pub[32])` pairs, ordered by raw user UUID. The QR payload is
-`CP-SAFETY-V1:` followed by unpadded base64url of those exact 32 bytes; the numeric and
-emoji forms are alternative presentations of that same digest. Confirmation signs
+`(user_uuid_raw[16], master_pub[32])` pairs, ordered by raw user UUID. The numeric and
+emoji forms are presentations of that digest. Confirmation signs
 `"chat:v1:user-signing-attestation" || frame(local_user_uuid_raw) ||
 frame(peer_user_uuid_raw) || frame(peer_master_pub)` with the local user-signing key.
 The stored attestation is reverified before a persisted contact can return to verified
 state; first-seen keys never authorize messaging.
+
+**Current code vs. binding mutual-admission contract:**
+
+- In the current codebase (`SafetyFingerprint.qrValue` in
+  `lib/core/protocol/identity_protocol_model.dart` and `SafetyNumberPage` in
+  `lib/features/contacts/presentation/safety_number_page.dart`), the safety-number page
+  still displays a `CP-SAFETY-V1:` QR payload (unpadded base64url of the 32-byte safety
+  fingerprint), and `ClientAuthenticationService.confirmOutOfBand` records one-sided
+  verification without requiring the peer's attestation (`MUTUAL`).
+- Under the binding contract
+  ([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4–§6,
+  §5.11), the display-only `CP-SAFETY-V1` QR symbol is dropped and replaced by the
+  **contact code** `CP-CONTACT-V1:` (`"CP-CONTACT-V1:" || BASE32(user_id[16] ||
+  fingerprint[32] || username)`, using
+  `SHA-256("chat:v1:contact-code" || u32be(16) || user_id || u32be(32) || master_public)`
+  and canonical RFC 4648 uppercase Base32 without padding). Scanning a `CP-CONTACT-V1`
+  code live with the camera adds the peer and runs `confirmOutOfBand` (sending a
+  `CPCTV001` kind-3 verification notice), reading one from an image adds the peer
+  unverified, and a fingerprint mismatch against the server-served master key fails hard.
+- Direct conversations require **both** people verified (`MUTUAL` state) before
+  application content is sent or admitted (on both new and existing sessions); until then,
+  only session establishment (for a sender this device verified), `CPCTV001` kind-3
+  notices, `session.repair`, and `CPCTV001` kind-4 `protocol.notice` pass. `CP-CONTACT-V1`,
+  `CPCTV001`, and `MUTUAL` admission are not yet implemented in `frontend/lib/`.
 
 ## Device-list log
 
@@ -309,10 +344,17 @@ order.
 ## Recovery and device-to-device history
 
 At account setup the client generates a random high-entropy recovery secret with a
-checksum and human-safe encoding. The encrypted backup contains the master,
-self-signing, and user-signing private keys plus required account identity material,
-including user-signing-key signatures over already verified peer master keys. It
-contains no archive/history key, device ratchet state, group state, or message history.
+checksum and human-safe encoding. As implemented in `encrypt_backup`
+(`native/crypto_core/src/enrollment.rs`), the encrypted `CPKBV001` backup wraps the
+120-byte `CPIPV001` plaintext containing the account identifier (`user_id`, 16 raw UUID
+bytes) and the three 32-byte Ed25519 private keys (`master`, `self_signing`, and
+`user_signing`), and nothing else. It contains **no** peer attestations (user-signing-key
+signatures over verified peer master keys), no contact list, no profile keys, and no
+archive/history key, device ratchet state, group state, or message history. Contacts,
+peer verifications (attestations and claims), carried-over confirmations, and profile keys
+travel between an account's own devices only in device-to-device history-transfer
+snapshots and `CPCTV001` envelopes
+([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §3.4–§3.5).
 
 Argon2id derives a wrapping key from the recovery secret and a random salt. Version 1 uses
 a 16-byte salt and 32-byte output, with a floor of 64 MiB memory, three iterations, and
@@ -356,7 +398,11 @@ Until pairwise transport is implemented, development builds may use the explicit
 non-production `ProfileProtectionPort` and `ProfileKeyDistributionPort` fake adapters.
 Production composition remains fail-closed. The fake envelope exists only to exercise
 profile versioning, cache authentication, presentation gating, and distribution hooks;
-it is not cryptographic acceptance evidence.
+it is not cryptographic acceptance evidence. Under the binding contract
+([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §7),
+every published profile version uses a fresh 32-byte key distributed via `CPCTV001` kind 5
+to the active audience (excluding blocked peers and removed contacts outside shared
+groups), and blocking a peer or removing a contact immediately publishes a new version.
 
 Fixed-bucket metadata uses `MetadataBlobV1`:
 
@@ -402,7 +448,8 @@ interoperability fixtures, and an ADR; silent algorithm substitution is forbidde
 
 ## Primary references
 
-- [Binding backend client contract](../../backend/CLIENT_CONTRACT.md)
+- [Binding backend client contract](../../docs/client/CLIENT_CONTRACT.md)
+- [Binding client contacts, trust, and file metadata contract](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
 - [Signal PQXDH specification](https://signal.org/docs/specifications/pqxdh/)
 - [Signal Double Ratchet specification](https://signal.org/docs/specifications/doubleratchet/)
 - [Server ADR-0001: pairwise Double Ratchet group fan-out](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)

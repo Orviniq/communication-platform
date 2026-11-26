@@ -163,6 +163,24 @@ Receiving an initial envelope is two phase and side-effect free until commit:
    leaves every private prekey usable for an exact retry; successful commit makes each
    used private one-time key unreachable.
 
+**Current code and binding non-committing read exception:**
+
+- In the current codebase (`PairwiseOpaqueEnvelopeInspector._inspectInitial` in
+  `lib/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart`),
+  an initial envelope from an unverified sender stops after step 1 (`probeInitial`) and
+  sender-device matching against the unverified server-served list, and is held unopened
+  without executing steps 3 or 4.
+- Under [`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §C and
+  [`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5.3,
+  the one permitted exception to "under the already confirmed master key" in steps 2–4 is
+  a **non-committing read** before holding: the inspector may execute step 3 in memory
+  while skipping step 4 (committing no session, no device-state transition, no consumed
+  one-time prekey, and no replay marker) solely to check whether the opened payload is a
+  fixed-length 140-byte `CPCTV001` kind-3 verification notice whose signer is the claimed
+  sender (verified under the server-served identity) and whose subject is this account.
+  Any other payload is discarded unread, nothing past those 140 bytes is parsed, and the
+  envelope remains held unopened; follow-ups on a held session are never opened this way.
+
 ## Ratchet header and envelope
 
 `EnvelopeV1` is exactly one allowed backend bucket:
@@ -316,7 +334,7 @@ out-of-band resolution.
 
 ## Group fan-out
 
-A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F, server ADR-0001).
+A group is a set of pairwise sessions (`docs/client/CLIENT_CONTRACT.md` §F, server ADR-0001).
 This profile carries a group unchanged: there is no group suite, header flag, key, or epoch.
 
 - **One copy per device.** A group message is one send with one event ID, sealed

@@ -10,7 +10,8 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 
 - Message, profile, group, room, attachment, locally held history, and voice plaintext.
 - Cross-signing, device identity, ML-KEM, ratchet, attachment, and media private keys.
-- Login and refresh credentials.
+- Login credentials and device-bound session tokens (register and full-scope; there is no
+  refresh token).
 - Recovery secrets.
 - Local decrypted indexes, thumbnails, drafts, and notification previews.
 - The fact that background delivery is armed. Two different exposures, and they are not
@@ -97,11 +98,14 @@ backing is preferred but not assumed on every device.
 
 ### Web
 
-The browser origin, browser implementation, and served application code are trusted for
-the duration of a session. Non-extractable WebCrypto keys reduce accidental extraction;
-they do not defend against malicious JavaScript executing in the same origin. A server
-that can replace the web bundle can compromise future sessions. The UI MUST disclose
-that the installed Android client has a stronger distribution trust boundary.
+*No Web client exists in version 1:* the server serves no browser surface (server
+ADR-0020), and the client's web target was removed on 2026-09-08. If a post-v1 Web release
+were ever reopened, the browser origin, browser implementation, and served application
+code would be trusted for the duration of a session: non-extractable WebCrypto keys reduce
+accidental extraction, they do not defend against malicious JavaScript executing in the
+same origin, a server that can replace the web bundle can compromise future sessions, and
+the UI would have to disclose that the installed Android client has a stronger
+distribution trust boundary.
 
 ### Dependencies
 
@@ -116,10 +120,27 @@ evidence for a future Web trust boundary or its browser vectors.
 
 ## Required controls
 
-- TLS 1.3, provisioned private CA, native SPKI pins with a backup pin, and strict
-  Android origin/network controls. Strict Web origin controls are post-v1.
+- TLS 1.3 and strict origin/network controls:
+  - **Runtime (`dart:io`):** All REST, attachment, and WebSocket traffic uses
+    `TransportSecurity.provisioned`, anchoring `HttpClient` exclusively to the provisioned
+    private CA (`SecurityContext(withTrustedRoots: false)`), with `badCertificateCallback`
+    returning `false`. Leaf SPKI pins are **not** checked in Dart at runtime.
+  - **Build-time and Android XML:** `tool/build_production_release.sh` checks
+    `PRODUCTION_PRIMARY_SPKI_SHA256` against the live host at build time, and
+    `tool/render_production_trust.sh` embeds primary and backup SPKI pins into Android's
+    `network_security_config.xml` (which governs Android Java HTTP stacks and WebView only,
+    not `dart:io`).
+  - **Owner decision (ADR-076 D7):** Whether Dart runtime must also enforce SPKI pins (or
+    whether exclusive private-CA anchoring in `dart:io` suffices) remains an open owner
+    decision.
 - Authenticated end-to-end encryption with domain-separated associated data.
-- Safety-number verification and prominent identity-change state.
+- Safety-number / contact-code verification and prominent identity-change state. Currently
+  the client implements one-sided out-of-band verification (and `SafetyNumberPage` still
+  displays `CP-SAFETY-V1`); under
+  [`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) and
+  [`SECURITY.md`](../../docs/security/SECURITY.md) (residual risk 7), direct
+  conversations must require both people verified (`MUTUAL`) before carrying content,
+  replacing `CP-SAFETY-V1` with `CP-CONTACT-V1`.
 - Cross-signing of the exact canonical device-bundle key bytes against an out-of-band
   confirmed account master key; unsigned devices are never messaged.
 - Client-signed device-log verification and encrypted head gossip; a fork raises a global
@@ -168,10 +189,23 @@ own, and the client states them rather than implying a mesh is anonymous.
   16384 bytes and buys nothing above that: it is a malformed-input guard and never a
   security control, because a modified server would relay anything (server ADR-0022).
 - **A room's membership is not hidden either**, for the same reason a group's is not:
-  control events are one envelope per member device, and the server sees each target.
+  control events are one envelope per member device, and the server sees each target. Under
+  [`CLIENT_VOICE_ROLES.md`](../../docs/client/CLIENT_VOICE_ROLES.md) §6, in-call role
+  actions (mute, remove, end call) are `signal`-frame requests enforced by each honest
+  participant rather than by the server.
 - What is **not** exposed: the audio, the room's name, the roster's contents, the SDP,
   the DTLS fingerprints and the ephemeral room text. None of those exists in plaintext
   anywhere outside a member's device, and no application-level media key exists to leak.
+
+### Reading activity and presence signals
+
+As documented in [`SECURITY.md`](../../docs/security/SECURITY.md) § "Residual risk" and
+built under ADR-098, client-side online status and typing over `signal` frames
+(`CPPSV001`, 1024-byte frames) reveal reading activity when a conversation is open on
+screen (when, with which peer devices, and which devices are in the foreground answering
+watches), even when no durable message is sent. Under
+[`CLIENT_PRESENCE_AND_RECEIPTS.md`](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §4,
+choosing an audience of `nobody` stops sending and answering these frames.
 
 ## Security release gates
 
@@ -196,8 +230,8 @@ build over under them acceptable.
 
 ## Primary references
 
-- [Backend security contract](../../backend/SECURITY.md)
-- [Binding client contract](../../backend/CLIENT_CONTRACT.md)
+- [Backend security contract](../../docs/security/SECURITY.md)
+- [Binding client contract](../../docs/client/CLIENT_CONTRACT.md)
 - [OWASP MASVS](https://mas.owasp.org/MASVS/)
 - [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
 - [Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/)

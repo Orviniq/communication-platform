@@ -37,7 +37,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `enrollment_intents` | Resumable first/later-device phase, generated opaque device/identity state, assigned device ID, backup, and exact pending device-log append |
 | `secure_secrets` | Wrapped cross-signing/device/PQ/storage key handles; never raw loggable bytes |
 | `account_identity` | Verified master/self/user-signing public state, backup version, recovery status |
-| `users` | Activated directory entries and local presentation state |
+| `users` | Activated directory entries and local presentation state today (`DriftContactRepository`); planned to become the client-owned contact list under `CLIENT_CONTACTS_AND_TRUST.md` §3 / §5 (alongside `CPCTV001` contact, block, claim, carried-over, and profile-key records, which are not yet in the schema) |
 | `profiles` | Encrypted/decrypted profile cache, version, verification state |
 | `devices` | Own and peer public bundles, ETags, labels, revocation state |
 | `device_log` | Verified signed hash-chain records, last head/hash, fork state, gossip state |
@@ -56,13 +56,13 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
 | `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
 | `receipts` | Per-message/device/user delivered/read projection. `read_at_ms` (schema 24) is the read time of a read row: the `ordering_ms` of the earliest `receipt.read` from that device that names the message, skipping an `ordering_ms` of 0, which is a clock the projector could not place. It is null on a delivered row, on a read row whose every read had such a clock, and on a row from before schema 24. Both projection paths write it; a reaction, an edit, a delete or a pin does not rewrite it ([ADR-091](decisions.md) D8 and D9). The reader list of a message is one entry per user with a read row, at the earliest time over that user's devices, never earlier than the message's own `ordering_ms` |
-| `room_states` | One voice room this device holds: its encrypted projection (the name, and every member with a membership state), the accepted control revision and state hash, its lifecycle, and when this device last checked the room's member devices for a missing pairwise session. A room is client state exactly as a group is; the server holds no room ([ADR-077](decisions.md)) |
+| `room_states` | One voice room this device holds: its encrypted projection (the name, and every member with a membership state), the accepted control revision and state hash, its lifecycle, and when this device last checked the room's member devices for a missing pairwise session. A room is client state exactly as a group is; the server holds no room ([ADR-077](decisions.md)). Room version, role assignments, and per-device announced room protocol versions are planned under `CLIENT_VOICE_ROLES.md` |
 | `room_control_events` | A room's accepted control transcript, one row per signed event in chain order, with the exact canonical bytes and signature, kept so that this device can hand the transcript to a member it adds |
 | `room_outbound_objects` | Exact room payloads owed to other devices — a signed control event, a state request, a transcript, an answer, or a request that starts a missing session — committed with the change or the check that produced them and marked routed once they are in the pairwise outbox |
 | `room_state_requests` | Rooms whose control state this device still has to ask a member for, after a mailbox gap or something that named state it does not hold. A room with a row joins no call, invites nobody and renames nothing |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
 | `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
-| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, whether the notification permission prompt has ever been shown, and "Show my online status" (`presence.share.v1`, `on` or `off`; a missing or unreadable row reads as on, [ADR-098](decisions.md) D9). Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
+| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, whether the notification permission prompt has ever been shown, and "Show my online status" (`presence.share.v1`, `on` or `off`; a missing or unreadable row reads as on, [ADR-098](decisions.md) D9; planned to migrate to `CPCTV001` kind 7 under `CLIENT_PRESENCE_AND_RECEIPTS.md` §5.4). Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
 | `presence_devices` | One row per peer device, keyed by `peer_device_id` (schema 26, [ADR-098](decisions.md) D6 and D8): the probe ledger that bounds the watches sent to a device that may be away (`probes_since_heard`, `tokens` from 0 to 4 as of `tokens_at_ms`, `last_probe_ms`) and `last_seen_ms`, this phone's own clock at the latest presence frame it accepted from the device. A row is written on a probe, on the first committed frame or durable envelope after a probe, and when an online state ends or at most once a minute while it lasts; a renewal, an answer or a typing frame writes nothing. Turning "Show my online status" off clears every `last_seen_ms`, and a `gone` with reason 2 clears its sender's. Never synced, and no row is ever sent anywhere |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
@@ -131,9 +131,20 @@ values 0 to 8 the CHECK of `transfer_state` allows, the client writes three (D9)
 | `ready` (6) | a decrypted file is on this device | the cache id, as UTF-8 | its last open plus 7 days |
 | `expired` (7) | the server no longer holds the attachment | null | null |
 
-Every other state of a transfer — encrypting, uploading, downloading, a failure — lives in
-memory with the transfer and dies with the process. `AttachmentLocalStatePort`
-(`DriftAttachmentLocalState`) is the one writer, and it throws an `ArgumentError` for any other
+Every other state of a transfer — encrypting, uploading, sending, downloading, a failure —
+lives in memory (`AttachmentUploads` / `AttachmentDownloads`) and dies with the process.
+Until `AttachmentUploads._attempt` completes its upload (`AttachmentTransferService.createAndUpload`)
+and calls `AttachmentMessagePort.send` (`SendConversationEvents.sendAttachments` ->
+`PairwiseApplicationFanoutAdapter.commitLocalEcho` ->
+`DriftPairwiseTransportStore.commitLocalEcho`), nothing is committed to Drift. That call
+executes the **first durable message commit** in a single transaction (writing
+`pairwise_local_applications`, `pending_send_preparations`, and
+`DriftApplicationEventProjector` rows in `conversations`, `message_events`,
+`stored_application_events`, `messages`, and `attachments` in state `queued`). Only after
+that durable commit answers does `AttachmentUploads._adopt` read the `attachments` row and
+call `AttachmentFileCache.adoptOutgoing`, moving the `outgoing/` copy into `plain/` and
+marking the row `ready`.
+`AttachmentLocalStatePort` (`DriftAttachmentLocalState`) is the one writer, and it throws an `ArgumentError` for any other
 state, and for a cache id or an expiry that does not go with the state, before it writes. A row
 that claims more than it holds — `ready` with no expiry or a cache id of the wrong form, or a
 state another build wrote — reads as `queued`. The cache id is a random 32-character
@@ -261,7 +272,9 @@ re-presenting the event converges.
 Before the registration POST, one encrypted-database transaction persists the flow,
 phase, public-key fingerprint, and complete Rust-owned device key package. The POST is
 never automatically replayed after an in-flight process death or transport response
-loss. Its assigned device ID, full-scope refresh material, and `registeredUnsigned`
+loss. Its assigned device ID, the **one full-scope session token** (`token`, `expiresAt`,
+and `lifetime`, written to `account_session` via `SessionTokenStore.replaceWithAtomicMutation`
+in `DriftEnrollmentJournalStore.persistRegistrationResult`), and the `registeredUnsigned`
 journal phase commit in one transaction; an in-flight row observed after restart is
 converted to the explicit ambiguous-outcome reconciliation phase.
 
