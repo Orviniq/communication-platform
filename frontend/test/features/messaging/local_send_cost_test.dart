@@ -111,7 +111,7 @@ void main() {
     expect(message.status, MessageTransportState.relayAccepted.index);
 
     // What one of those transitions used to cost: a full projection of this
-    // conversation. Since [ADR-063](decisions.md) the event path no longer runs
+    // conversation. Since [ADR-063](../../../docs/architecture/decisions/063-event-projection.md) the event path no longer runs
     // one, so it is measured through the recovery path that still does — which
     // keeps the comparison between two numbers this suite produced rather than
     // between a number and an estimate.
@@ -161,7 +161,7 @@ void main() {
     // it projected the conversation, so at 61 messages it cost 201 statements
     // against 33 at five. It applies one event to one message now, so it is
     // equal across the two lengths like everything else on this path
-    // ([ADR-063](decisions.md)).
+    // ([ADR-063](../../../docs/architecture/decisions/063-event-projection.md)).
     expect(longHistory.echo, shortHistory.echo);
     expect(longHistory.echo, lessThan(32));
 

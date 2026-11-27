@@ -1,9 +1,9 @@
 # ADR-074: Reserving the double-tick glyph for read messages and sending read receipts
 
-- **Status:** Accepted; group read receipts later added by ADR-091 (2026-10-14)
+- **Status:** Accepted; group read receipts later added by [ADR-091](091-group-receipts.md) (2026-10-14)
 - **Date:** 2026-09-10 (explicitly recorded in register; code in `023f100a`, docs in `a16dc613`)
 - **Supersedes in part:** [ADR-073](073-visible-read.md) (completes the unwired read-receipt / `MarkConversationVisiblyRead` items left deferred)
-- **Related:** [ADR-016](016-english-and-persian.md), [ADR-031](031-semantic-icons.md), [ADR-061](061-durable-send.md), [ADR-073](073-visible-read.md), ADR-091
+- **Related:** [ADR-016](016-english-and-persian.md), [ADR-031](031-semantic-icons.md), [ADR-061](061-durable-send.md), [ADR-073](073-visible-read.md), [ADR-091](091-group-receipts.md)
 
 ## Decision (Position)
 

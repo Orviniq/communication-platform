@@ -1,8 +1,8 @@
 # ADR-007: Flyer Chat behind a timeline adapter
 
-- **Status:** Superseded by ADR-066 (2026-08-30); packages removed by ADR-054 (2026-08-24)
+- **Status:** Superseded by [ADR-066](066-sliver-timeline.md) (2026-08-30); packages removed by [ADR-054](054-dependency-policy.md) (2026-08-24)
 - **Date:** Undocumented in the ADR register (introduced in commit `1b321da1`, 2026-07-24)
-- **Superseded by:** ADR-066 (2026-08-30); package dependency removed earlier in ADR-054 (2026-08-24)
+- **Superseded by:** [ADR-066](066-sliver-timeline.md) (2026-08-30); package dependency removed earlier in [ADR-054](054-dependency-policy.md) (2026-08-24)
 - **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-006](006-forui-boundary.md), [ADR-024](024-visual-system.md)
 
 ## Decision (Position)

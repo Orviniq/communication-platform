@@ -1,9 +1,9 @@
 # ADR-029: Android background messaging uses best-effort polling, not a persistent service
 
-- **Status:** Superseded by ADR-046 (2026-08-21); token hazard note updated by ADR-083 (2026-10-07)
+- **Status:** Superseded by [ADR-046](046-layered-delivery.md) (2026-08-21); token hazard note updated by [ADR-083](083-resumable-download.md) (2026-10-07)
 - **Date:** Undocumented in the ADR register (introduced in commit `7e4930f8`, 2026-07-25; superseded 2026-08-21)
 - **Supersedes:** [ADR-014](014-foreground-connection.md)
-- **Superseded by:** ADR-046 (2026-08-21); see also ADR-049, ADR-051, ADR-053, ADR-094
+- **Superseded by:** [ADR-046](046-layered-delivery.md) (2026-08-21); see also [ADR-049](049-background-catch-up.md), [ADR-051](051-sustained-delivery.md), [ADR-053](053-field-evidence-gate.md), [ADR-094](094-best-effort-delivery.md)
 - **Related:** [ADR-013](013-no-foreign-push.md)
 
 ## Decision (Position)
@@ -21,7 +21,7 @@ Why superseded: primary Android platform analysis on 2026-08-21 showed deferrabl
 ## Constraints and Open Gates
 
 - Superseded; see ADR-046, ADR-049, ADR-051, ADR-053, and ADR-094, plus [Frontend status](../../STATUS.md#presence-voice-and-delivery) (sustained-delivery physical-device validation gate remains closed/unmet; production offers the switch as `bestEffort` with disclosed battery/notification costs).
-- Note (ADR-083, 2026-10-07): The rotating-refresh-token race hazard cited in ADR-049/ADR-050 when arbitrating between UI and background isolates no longer exists after server ADR-0023 moved to a single non-rotating session token, though single-owner arbitration remains active for storage/ratchet safety.
+- Note (ADR-083, 2026-10-07): The rotating-refresh-token race hazard cited in ADR-049/ADR-050 when arbitrating between UI and background isolates no longer exists after [server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) moved to a single non-rotating session token, though single-owner arbitration remains active for storage/ratchet safety.
 
 ## Costs
 
@@ -36,4 +36,4 @@ Already superseded by ADR-046 (2026-08-21).
 - **2026-07-25 (`7e4930f8`):** Original decision added to the register (`Accepted`), superseding [ADR-014](014-foreground-connection.md).
 - **2026-08-21 (ADR-046, `85e89d54`):** Superseded by layered delivery (foreground socket + `JobScheduler` floor + opt-in `specialUse` service).
 - **2026-08-22 (ADR-051, `c505a436`):** Built the opt-in `SustainedDeliveryService`.
-- **2026-10-07 (ADR-083):** Recorded that server ADR-0023 eliminated the rotating refresh-token hazard across standby/background delivery owners.
+- **2026-10-07 (ADR-083):** Recorded that [server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) eliminated the rotating refresh-token hazard across standby/background delivery owners.

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** Undocumented in the ADR register (introduced in commit `7e4930f8`, 2026-07-25)
-- **Supersedes (with ADR-030):** [ADR-022](022-history-recovery.md)
+- **Supersedes (with [ADR-030](030-recovery-key-material.md)):** [ADR-022](022-history-recovery.md)
 - **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-012](012-local-search.md), [ADR-030](030-recovery-key-material.md)
 
 ## Decision (Position)

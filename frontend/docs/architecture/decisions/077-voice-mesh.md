@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-09-20, on owner's A answers to D1, D2, D3, and D5); open conflict decided B (2026-09-30); one open question on room-text signalling budget (2026-10-01)
 - **Date:** 2026-09-20 (explicitly recorded in register and full section in `25a8bf05` / `6fec14e`; open conflict recorded 2026-09-30 in `a0b57afb` and decided B in `2cff8039`; room and call built 2026-09-30 – 2026-10-01 in `ccca4ecd` / `16efd926`)
 - **Supersedes:** [ADR-058](058-voice-prerequisites.md) (voice prerequisites P1–P7, which named the removed MLS exporter, per-ABI MLS permit, and LiveKit SFU)
-- **Related:** [ADR-019](019-durable-fan-out.md), [ADR-023](023-voice-room-leave.md), [ADR-025](025-hybrid-pqxdh.md), [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), [ADR-078](078-media-package.md), [ADR-079](079-voice-device-run.md), ADR-098, server [ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md), server [ADR-0022](../../../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
+- **Related:** [ADR-019](019-durable-fan-out.md), [ADR-023](023-voice-room-leave.md), [ADR-025](025-hybrid-pqxdh.md), [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), [ADR-078](078-media-package.md), [ADR-079](079-voice-device-run.md), [ADR-098](098-presence-and-typing.md), server [ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md), server [ADR-0022](../../../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
 
 ## Decision (Position)
 

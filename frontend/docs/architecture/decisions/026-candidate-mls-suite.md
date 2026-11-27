@@ -1,8 +1,8 @@
 # ADR-026: Candidate PQ MLS ciphersuite selection and release gating
 
-- **Status:** Closed by ADR-075 (2026-09-13)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Date:** Undocumented in the ADR register (introduced in commit `7e4930f8`, 2026-07-25; refined `ef47bc6a` on 2026-07-27, `7e550a63` on 2026-07-28, and `91ba0f8e` / presentation clarification `2026-08-16`; closed `2026-09-13`)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-010](010-mls-groups.md), [ADR-017](017-independent-crypto-review.md), [ADR-033](033-android-release-target.md), [ADR-036](036-beta-mls-track.md)
 
 ## Decision (Position)
@@ -16,7 +16,7 @@ Production release of MLS groups remained gated on:
 4. Android interoperability and upstream vectors; and
 5. independent cryptographic review ([ADR-017](017-independent-crypto-review.md)), with Web interoperability moved to a post-v1 Web release gate under [ADR-033](033-android-release-target.md).
 
-**Closure:** Closed by ADR-075 (2026-09-13) because server ADR-0001 deleted MLS from the server and replaced group messaging with pairwise Double Ratchet fan-out. No MLS ciphersuite is used at all.
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) because [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) deleted MLS from the server and replaced group messaging with pairwise Double Ratchet fan-out. No MLS ciphersuite is used at all.
 
 ## Rationale
 

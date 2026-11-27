@@ -1,9 +1,9 @@
 # ADR-069: Retired WebSocket gateway frames, close codes, and client wire limits
 
-- **Status:** Accepted; `maximumSignalCharacters` later replaced by published `signal_buckets` ([ADR-071](071-published-limits.md), ADR-077)
+- **Status:** Accepted; `maximumSignalCharacters` later replaced by published `signal_buckets` ([ADR-071](071-published-limits.md), [ADR-077](077-voice-mesh.md))
 - **Date:** 2026-09-08 (explicitly recorded in register; code in `43fecd70`, `a6ec90a6`, docs in `78faa70`)
 - **Amends:** [ADR-060](060-delivery-latency.md) (corrects D10 wire facts and closes its `subscribe_presence` open item)
-- **Related:** [ADR-004](004-rest-and-websocket.md), [ADR-047](047-networking-composition.md), [ADR-060](060-delivery-latency.md), [ADR-071](071-published-limits.md), ADR-077, ADR-098, server [ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md), server [ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md), server [ADR-0022](../../../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
+- **Related:** [ADR-004](004-rest-and-websocket.md), [ADR-047](047-networking-composition.md), [ADR-060](060-delivery-latency.md), [ADR-071](071-published-limits.md), [ADR-077](077-voice-mesh.md), [ADR-098](098-presence-and-typing.md), server [ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md), server [ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md), server [ADR-0022](../../../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
 
 ## Decision (Position)
 

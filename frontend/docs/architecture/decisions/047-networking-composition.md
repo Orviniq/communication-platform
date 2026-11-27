@@ -1,6 +1,6 @@
 # ADR-047: Application-root delivery composition on one NetworkingFoundation
 
-- **Status:** Accepted (token-rotation hazard of a second coordinator retired by server ADR-0023 / ADR-068 & ADR-083; `bootstrap()` ownership gate added by ADR-050; `UnscheduledBestEffortPolling` replaced on Android by `PlatformDeferredDeliveryScheduler` in ADR-049)
+- **Status:** Accepted (token-rotation hazard of a second coordinator retired by [server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) / [ADR-068](068-session-token.md) & [ADR-083](083-resumable-download.md); `bootstrap()` ownership gate added by [ADR-050](050-delivery-ownership.md); `UnscheduledBestEffortPolling` replaced on Android by `PlatformDeferredDeliveryScheduler` in [ADR-049](049-background-catch-up.md))
 - **Date:** 2026-08-21 (explicitly recorded in register; committed in `1b181c75`)
 - **Implements:** [ADR-046](046-layered-delivery.md) Layer 0 (follow-up step 1)
 - **Related:** [ADR-003](003-riverpod-composition.md), [ADR-004](004-rest-and-websocket.md), [ADR-043](043-private-ca-transport.md), [ADR-045](045-maturity-disclosure.md), [ADR-046](046-layered-delivery.md), [ADR-048](048-generic-notifications.md)
@@ -22,7 +22,7 @@ Composes [ADR-046](046-layered-delivery.md)'s Layer 0 delivery path at the appli
 
 ## Rationale
 
-- **Why one `TokenCoordinator`:** Under the rotating-refresh-token backend contract in effect on 2026-08-21, a second coordinator would rotate the same refresh token and cause the loser to present a retired token, revoking the session for both. (Although server ADR-0023 / ADR-068 / ADR-083 later removed rotating tokens, keeping one `NetworkingFoundation` continues to unify trust anchors, single-flight renewal contention control, and logout/revocation teardown.)
+- **Why one `TokenCoordinator`:** Under the rotating-refresh-token backend contract in effect on 2026-08-21, a second coordinator would rotate the same refresh token and cause the loser to present a retired token, revoking the session for both. (Although [server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) / ADR-068 / ADR-083 later removed rotating tokens, keeping one `NetworkingFoundation` continues to unify trust anchors, single-flight renewal contention control, and logout/revocation teardown.)
 - **Why `listenManual` at the root:** Verified in pinned `flutter_riverpod` 3.3.2 source (`ConsumerStatefulElement._applyTickerMode`): subscriptions created in `build` are paused when their widget leaves view, which would silently stop a screen-owned controller from managing delivery sessions when navigated over.
 - **Why stop when logout begins:** `TokenCoordinator.logout` wipes protected storage and closes the database *before* emitting session termination, so stopping on completion would race storage teardown.
 - **Why outbox-depth increase rather than non-zero or an in-memory port:** Every engine run rewrites connection phase and re-emits the projection; reacting to `outbox_depth > 0` spins against a row waiting out backoff (verified by loop-safety test). An in-memory trigger port would require cross-feature wiring and would not survive restart.

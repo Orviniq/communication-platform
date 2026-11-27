@@ -118,7 +118,7 @@ values.
 The replacement adapter is verified for upward pagination, jump-to-message, dynamic
 edit/reaction/viewport sizing, mixed directionality, keyboard and screen-reader
 semantics, reduced motion, and a 50,000-message fixture with a bounded mounted-widget
-count. The attachment tiles ([ADR-089](decisions.md), `chat_attachment_tiles.dart`) were
+count. The attachment tiles ([ADR-089](architecture/decisions/089-direct-attachments.md), `chat_attachment_tiles.dart`) were
 added inside the message builder without changing this boundary: an inline picture holds
 its place with a placeholder of its ratio until it is decoded, and the size-notification
 anchor path is shared by every row builder.
@@ -141,7 +141,7 @@ anchor path is shared by every row builder.
 - **Security Notice:** exact protected/unprotected boundaries and mandatory acknowledgement
   during onboarding, plus the deployment disclosure in a build that is distributed to
   someone. One screen serves all three entry points - onboarding, Settings, and the
-  pre-login links - and is never re-shown on a schedule ([ADR-045](decisions.md)).
+  pre-login links - and is never re-shown on a schedule ([ADR-045](architecture/decisions/045-maturity-disclosure.md)).
 
 ### Discovery and chat
 
@@ -160,7 +160,7 @@ anchor path is shared by every row builder.
 - **DM Chat:** profile header, local/volatile presence, paged timeline, pinned banner,
   verification-withheld composer, PQ-key-unavailable state, all message actions, and
   honest deletion dialog.
-- **Attachment Sheet/Preview** (a DM and Saved Messages, [ADR-089](decisions.md)): photo,
+- **Attachment Sheet/Preview** (a DM and Saved Messages, [ADR-089](architecture/decisions/089-direct-attachments.md)): photo,
   file and camera through the system's pickers, a preview with the sizes, today's remainder
   and a caption, and a details sheet with Open, Save and Share; the encrypt and upload states
   are rows of the upload tray above the composer. A group chat's sheet says attachments are
@@ -179,7 +179,7 @@ anchor path is shared by every row builder.
 - **Safety Number:** master-key SAS and QR, cross-sign confirmation, messaging-withheld
   unverified state, master-key change, invalid device, and device-log-fork blocking states.
 - **Shared Media:** local decrypted index, open and jump, safe file handling. Not built
-  ([ADR-089](decisions.md) D1): its rows on Contact Profile and Group Info are drawn
+  ([ADR-089](architecture/decisions/089-direct-attachments.md) D1): its rows on Contact Profile and Group Info are drawn
   disabled.
 - **Create Group:** pick members, encrypted details, owner creation, progress/failure.
 - **Group Info:** encrypted header, policy/role/member list, add/remove/leave actions.

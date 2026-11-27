@@ -30,7 +30,7 @@ Matches the backend's 256-target batch limit on `POST /api/v1/envelopes`, suppor
 
 ## Reversal Trigger
 
-If the backend batch limit changes or if group messaging moves from pairwise fan-out to a shared-ciphertext mechanism (server ADR-0001).
+If the backend batch limit changes or if group messaging moves from pairwise fan-out to a shared-ciphertext mechanism ([server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)).
 
 ## History, Amendments, and Supersession
 

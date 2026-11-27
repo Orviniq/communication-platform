@@ -1,8 +1,8 @@
 # ADR-042: Frozen Beta application ID and persistent signing identity; Production unsigned
 
-- **Status:** Superseded by ADR-067 (2026-09-07); Production signing later established by ADR-076 (2026-09-14)
+- **Status:** Superseded by [ADR-067](067-serving-origin.md) (2026-09-07); Production signing later established by [ADR-076](076-production-signing.md) (2026-09-14)
 - **Date:** 2026-08-19 (explicitly recorded in register; committed in `49835aef`; superseded `2026-09-07`)
-- **Superseded by:** ADR-067 (2026-09-07), committed in `1a169534`
+- **Superseded by:** [ADR-067](067-serving-origin.md) (2026-09-07), committed in `1a169534`
 - **Related:** [ADR-028](028-device-history-transfer.md), [ADR-030](030-recovery-key-material.md), [ADR-043](043-private-ca-transport.md), [ADR-044](044-private-deployment.md)
 
 ## Decision (Position)

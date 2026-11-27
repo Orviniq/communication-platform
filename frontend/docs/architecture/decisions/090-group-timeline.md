@@ -1,9 +1,9 @@
 # ADR-090: Shared conversation timeline projection and message actions in group chats
 
-- **Status:** Accepted (2026-10-14); proposed 2026-10-14; D4 superseded in part by ADR-096 (2026-10-19) for Pin and Delete for everyone
+- **Status:** Accepted (2026-10-14); proposed 2026-10-14; D4 superseded in part by [ADR-096](096-group-moderation.md) (2026-10-19) for Pin and Delete for everyone
 - **Date:** 2026-10-14 (explicitly recorded in register and full section; PR #77 `9c60fc34`, commits `a8c828e7`–`d8bc6872`)
-- **Superseded in part by:** ADR-096 (2026-10-19, supersedes D4 for Pin and Delete for everyone using signed roster roles; Edit stays off)
-- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-088](088-group-composer.md), [ADR-089](089-direct-attachments.md), [ADR-091](091-group-receipts.md), ADR-096, [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../backend/CLIENT_CONTRACT.md)
+- **Superseded in part by:** [ADR-096](096-group-moderation.md) (2026-10-19, supersedes D4 for Pin and Delete for everyone using signed roster roles; Edit stays off)
+- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-088](088-group-composer.md), [ADR-089](089-direct-attachments.md), [ADR-091](091-group-receipts.md), [ADR-096](096-group-moderation.md), [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before server [ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
 
 ## Decision (Position)
 

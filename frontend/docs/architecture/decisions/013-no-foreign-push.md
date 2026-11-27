@@ -1,6 +1,6 @@
 # ADR-013: No foreign push or telemetry
 
-- **Status:** Accepted (reaffirmed by ADR-046 and ADR-054)
+- **Status:** Accepted (reaffirmed by [ADR-046](046-layered-delivery.md) and [ADR-054](054-dependency-policy.md))
 - **Date:** Undocumented in the ADR register (introduced in commit `1b321da1`, 2026-07-24)
 - **Related:** [ADR-014](014-foreground-connection.md), [ADR-029](029-background-polling.md), [ADR-033](033-android-release-target.md)
 
@@ -13,7 +13,7 @@ The application MUST include **no foreign push service, no third-party telemetry
 
 ## Rationale
 
-Required for reliable operation during international internet disconnection (domestic-only connectivity to the self-hosted deployment) and for metadata/privacy protection (`docs/security/SECURITY.md`, server ADR-0019).
+Required for reliable operation during international internet disconnection (domestic-only connectivity to the self-hosted deployment) and for metadata/privacy protection (`docs/security/SECURITY.md`, [server ADR-0019](../../../../docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md)).
 
 ## Constraints and Open Gates
 

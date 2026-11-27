@@ -27,10 +27,10 @@ Keeps the first release on the verified Android trust and delivery boundary (`da
 
 ## Reversal Trigger
 
-An explicit product/architecture decision to support a browser client, paired with server support under server ADR-0020's flip trigger and full Wasm/worker security verification.
+An explicit product/architecture decision to support a browser client, paired with server support under [server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md)'s flip trigger and full Wasm/worker security verification.
 
 ## History, Amendments, and Supersession
 
 - **2026-07-28 (`7e550a63`):** Original decision added to the register (`Accepted`).
-- **2026-09-05 – 2026-09-08 (`server ADR-0020`, `8236ca5b`, ADR-069):** Server and client removed the remaining Web scaffold and socket auth frame.
+- **2026-09-05 – 2026-09-08 ([server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md), `8236ca5b`, ADR-069):** Server and client removed the remaining Web scaffold and socket auth frame.
 - No supersession.

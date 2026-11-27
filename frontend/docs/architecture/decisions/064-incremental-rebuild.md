@@ -2,7 +2,7 @@
 
 - **Status:** Accepted *(Note: `chat_pages.dart` and `chat_timeline.dart` present at `34dff6e` were later split into [direct_chat_page.dart](../../../lib/features/messaging/presentation/direct_chat_page.dart), [chat_conversation_view.dart](../../../lib/features/messaging/presentation/chat_conversation_view.dart), [chats_list_page.dart](../../../lib/features/messaging/presentation/chats_list_page.dart), [chat_timeline_adapter.dart](../../../lib/features/messaging/presentation/chat_timeline_adapter.dart), and [chat_message_builder.dart](../../../lib/features/messaging/presentation/chat_message_builder.dart))*
 - **Date:** 2026-08-28 (explicitly recorded in register and full section; implemented in `34dff6e`, documented in `74df7ca`)
-- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-061](061-durable-send.md), [ADR-062](062-timeline-window.md), [ADR-063](063-event-projection.md), ADR-065, ADR-066
+- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-061](061-durable-send.md), [ADR-062](062-timeline-window.md), [ADR-063](063-event-projection.md), [ADR-065](065-peer-read-cost.md), [ADR-066](066-sliver-timeline.md)
 
 ## Decision (Position)
 

@@ -1,6 +1,6 @@
 # ADR-071: Published deployment limits, `full_devices` handling, and retention disclosure
 
-- **Status:** Accepted; `DeploymentDisclosure` subsequently evolved through [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), ADR-089, ADR-094, and ADR-098 (now revision 11)
+- **Status:** Accepted; `DeploymentDisclosure` subsequently evolved through [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-094](094-best-effort-delivery.md), and [ADR-098](098-presence-and-typing.md) (now revision 11)
 - **Date:** 2026-09-09 (explicitly recorded in register; implemented and documented across PR #47 / `5589e23e`, register row in `238ec4d4`)
 - **Amends:** [ADR-045](045-maturity-disclosure.md), [ADR-052](052-accurate-capability-claims.md) (raises `DeploymentDisclosure` to revision 8, superseding the outstanding rev-7 written-handover obligation), [ADR-070](070-published-peer-state.md) (replaces copied `attachmentRetentionDays` with `publishedLimitsProvider.attachmentTtlDays`)
 - **Related:** [ADR-069](069-gateway-frames.md), [ADR-070](070-published-peer-state.md), [ADR-072](072-wire-errors.md), [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), server [ADR-0024](../../../../docs/architecture/decisions/0024-peer-state-published-limits-and-no-activity-dates.md)

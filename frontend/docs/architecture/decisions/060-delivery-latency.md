@@ -1,8 +1,9 @@
 # ADR-060: Delivery-cycle ordering, poison-envelope retirement, and latency fixes
 
-- **Status:** Accepted; D10 wire facts corrected by ADR-069 (2026-09-08); where D11 status shows amended by ADR-087 (2026-10-09); D10 header rule superseded by ADR-098 (2026-10-19)
+- **Status:** Accepted; D10 wire facts corrected by [ADR-069](069-gateway-frames.md) (2026-09-08); where D11 status shows amended by [ADR-087](087-chat-status.md) (2026-10-09); D10 header rule superseded by [ADR-098](098-presence-and-typing.md) (2026-10-19)
 - **Date:** 2026-08-26 (explicitly recorded in register and full section; docs committed in `ee7af86f`, implementation in `4d673d03`, `68e2f8aa`, and `c372ac66`)
-- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-004](004-rest-and-websocket.md), [ADR-047](047-networking-composition.md), [ADR-049](049-background-catch-up.md), [ADR-057](057-measured-settings.md), ADR-061, ADR-065, ADR-069, ADR-087, ADR-098
+- **Amended / Superseded in part by:** [ADR-069](069-gateway-frames.md) (2026-09-08, corrects D10 wire facts), [ADR-087](087-chat-status.md) (2026-10-09, amends D11 Chats title indicator), [ADR-098](098-presence-and-typing.md) (2026-10-19, supersedes D10 header typing-only rule)
+- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-004](004-rest-and-websocket.md), [ADR-047](047-networking-composition.md), [ADR-049](049-background-catch-up.md), [ADR-057](057-measured-settings.md), [ADR-061](061-durable-send.md), [ADR-065](065-peer-read-cost.md), [ADR-069](069-gateway-frames.md), [ADR-087](087-chat-status.md), [ADR-098](098-presence-and-typing.md)
 
 ## Decision (Position)
 
@@ -38,7 +39,7 @@ Investigated 15–20 s DM send delays, undelivered messages, ~1.1 MB/min idle tr
    - Set `idleTimeout` to 30 s (replacing 3 s Dio / 15 s `dart:io` defaults while staying under stock nginx 65 s `keepalive_timeout`).
 10. **D10 — Withdrew false presence claim:**
     - Removed the always-"offline" chat header status so the header spoke only while someone typed.
-    - *(Amended 2026-09-08 by ADR-069)*: D10 originally kept the presence port, projection, and frame validation on the incorrect premise that `subscribe_presence` was an unimplemented frame and `auth` the only sent frame; ADR-069 deleted that dead surface after server ADR-0020 and ADR-0022 removed both frames.
+    - *(Amended 2026-09-08 by ADR-069)*: D10 originally kept the presence port, projection, and frame validation on the incorrect premise that `subscribe_presence` was an unimplemented frame and `auth` the only sent frame; ADR-069 deleted that dead surface after [server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md) and ADR-0022 removed both frames.
     - *(Superseded 2026-10-19 by ADR-098)*: Replaced the "speaks only while someone types" header rule when real presence and online/last-seen surfaces landed.
 11. **D11 — Visible content-free sync phase on Chats list:**
     - Surfaced `SyncConnectionPhase` (`connecting`, `syncing`, `waiting to reconnect`, or silent when settled; terminal states collapsed to waiting) in the Chats offline banner slot.

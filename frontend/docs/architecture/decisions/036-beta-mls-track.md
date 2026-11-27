@@ -1,8 +1,8 @@
 # ADR-036: Build draft PQ MLS as an isolated closed-beta track while keeping the production gate closed
 
-- **Status:** Closed by ADR-075 (2026-09-13)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Date:** 2026-08-02 (explicitly recorded in register; fact correction 2026-08-16; committed in `91ba0f8e`, 2026-08-17; closed `2026-09-13`)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-010](010-mls-groups.md), [ADR-017](017-independent-crypto-review.md), [ADR-026](026-candidate-mls-suite.md), [ADR-037](037-control-transcript.md), [ADR-038](038-fork-convergence.md), [ADR-039](039-two-phase-leave.md)
 
 ## Decision (Position)
@@ -12,13 +12,13 @@ Originally decided to build draft PQ MLS as a **real, isolated closed-beta track
 2. **2026-08-16 fact correction (decision unchanged):** Verification against vendored sources established that `mls-rs-crypto-hpke` 0.21.0 delivered draft-06 `TBD2`'s signature, AEAD, KDF, and hash choices, **not** its KEM `0x647a` (shipping a pre-standard X-Wing variant with an unassigned HPKE `kem_id`). Beta groups were therefore hybrid ML-KEM-768/X25519 but not `TBD2`-conformant or `TBD2` interoperability evidence.
 3. Production stayed on `UnsupportedGroupMls` until all seven production gates passed (six before the 2026-08-16 split of primitive mapping vs. MLS suite ID in [ADR-026](026-candidate-mls-suite.md)).
 
-**Closure:** Closed by ADR-075 (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) retired MLS. The closed-beta MLS core, permit, and `beta` track were deleted, and groups now run on pairwise Double Ratchet sessions with no disposable-state rule.
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) retired MLS. The closed-beta MLS core, permit, and `beta` track were deleted, and groups now run on pairwise Double Ratchet sessions with no disposable-state rule.
 
 ## Rationale
 
 Original rationale: allow end-to-end group lifecycle and backend KeyPackage/pairwise integration testing during closed beta without falsifying [ADR-017](017-independent-crypto-review.md)/[ADR-026](026-candidate-mls-suite.md) or introducing a classical fallback or project-local cryptographic fork.
 
-Why closed: server ADR-0001 removed MLS from the system entirely.
+Why closed: [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) removed MLS from the system entirely.
 
 ## Constraints and Open Gates
 

@@ -1,6 +1,6 @@
 # ADR-043: Exclusive private-CA transport trust in dart:io; Android network security config as defence in depth
 
-- **Status:** Accepted (runtime leaf SPKI pinning vs. exclusive private-CA trust flagged as open owner decision by ADR-076 D7, 2026-09-14)
+- **Status:** Accepted (runtime leaf SPKI pinning vs. exclusive private-CA trust flagged as open owner decision by [ADR-076](076-production-signing.md) D7, 2026-09-14)
 - **Date:** 2026-08-20 (explicitly recorded in register; committed in `9515be30`)
 - **Related:** [ADR-004](004-rest-and-websocket.md), [ADR-042](042-beta-signing.md), [ADR-044](044-private-deployment.md), [ADR-047](047-networking-composition.md)
 
@@ -24,7 +24,7 @@ The client's own API and WebSocket traffic trusts the provisioned private certif
 
 ## Constraints and Open Gates
 
-- **Open owner decision (ADR-076 D7, [STATUS.md](../../STATUS.md#platform-identity-and-content), [platform-android.md](../../platform-android.md#network-trust)):** ADR-043 and the current code ([transport_security_native.dart](../../../lib/features/networking/infrastructure/tls/transport_security_native.dart)) enforce exclusive private-CA trust in `dart:io` without runtime leaf SPKI pinning, whereas ADR-067 D4, server ADR-0027, and [SECURITY.md](../../../../docs/security/SECURITY.md#trust-boundaries) describe or rely on runtime SPKI pinning. Build scripts still check `PRODUCTION_PRIMARY_SPKI_SHA256` against the live host and render `network_security_config.xml` with primary and backup pins ([platform-android.md](../../platform-android.md#network-trust)). Whether runtime SPKI pinning must also be enforced in Dart remains an open owner decision.
+- **Open owner decision (ADR-076 D7, [STATUS.md](../../STATUS.md#platform-identity-and-content), [platform-android.md](../../platform-android.md#network-trust)):** ADR-043 and the current code ([transport_security_native.dart](../../../lib/features/networking/infrastructure/tls/transport_security_native.dart)) enforce exclusive private-CA trust in `dart:io` without runtime leaf SPKI pinning, whereas ADR-067 D4, [server ADR-0027](../../../../docs/architecture/decisions/0027-the-serving-origin-moves-and-a-pin-moves-with-it.md), and [SECURITY.md](../../../../docs/security/SECURITY.md#trust-boundaries) describe or rely on runtime SPKI pinning. Build scripts still check `PRODUCTION_PRIMARY_SPKI_SHA256` against the live host and render `network_security_config.xml` with primary and backup pins ([platform-android.md](../../platform-android.md#network-trust)). Whether runtime SPKI pinning must also be enforced in Dart remains an open owner decision.
 - All background and foreground entry points must construct the provisioned context through `ApplicationRuntime` ([background_delivery_policy_test.dart](../../../test/architecture/background_delivery_policy_test.dart)).
 
 ## Costs

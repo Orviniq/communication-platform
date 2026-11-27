@@ -1,6 +1,6 @@
 # ADR-095: Run prekey maintenance at the end of a healthy delivery cycle
 
-- **Status:** Proposed (2026-10-18); implementation and ADR record landed in `5eeace1b` / `b4934d9c` (PR #87 `b781646d`) while status cell remained `Proposed` in `decisions.md`
+- **Status:** Proposed (2026-10-18); implementation and ADR record landed in `5eeace1b` / `b4934d9c` (PR #87 `b781646d`) while status cell remained `Proposed` in legacy `decisions.md` (recorded as an open status gap in [index](README.md))
 - **Date:** 2026-10-18 (explicitly recorded in register and full section; implemented on `frontend-prekey-maintenance-owner` in `5eeace1b`, documented in `b4934d9c`, PR #87 `b781646d`)
 - **Completes:** [ADR-093](093-held-first-message.md) ("Not done here" prekey maintenance wiring)
 - **Related:** [ADR-050](050-delivery-ownership.md), [ADR-087](087-chat-status.md), [ADR-093](093-held-first-message.md), [sync-engine.md](../../sync-engine.md), [pairwise-transport-v1.md](../../pairwise-transport-v1.md), [devices API](../../../../backend/devices/API.md)

@@ -1,8 +1,9 @@
 # ADR-065: Delivery-cycle peer read cost and deferred device-log gossip
 
-- **Status:** Accepted; peer cache (D1–D5) superseded by ADR-082 (2026-10-06); gossip deferral (D6–D7) stands
+- **Status:** Accepted; peer cache (D1–D5) superseded by [ADR-082](082-fresh-peer-resolution.md) (2026-10-06); gossip deferral (D6–D7) stands
 - **Date:** 2026-08-28 (explicitly recorded in register and full section; implemented and documented in `3991a440`)
-- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-049](049-background-catch-up.md), [ADR-050](050-delivery-ownership.md), [ADR-060](060-delivery-latency.md), [ADR-061](061-durable-send.md), [ADR-062](062-timeline-window.md), [ADR-063](063-event-projection.md), [ADR-064](064-incremental-rebuild.md), ADR-080, ADR-082
+- **Superseded in part by:** [ADR-082](082-fresh-peer-resolution.md) (2026-10-06, deletes D1–D5 peer resolution cache; D6–D7 owed gossip stands)
+- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-049](049-background-catch-up.md), [ADR-050](050-delivery-ownership.md), [ADR-060](060-delivery-latency.md), [ADR-061](061-durable-send.md), [ADR-062](062-timeline-window.md), [ADR-063](063-event-projection.md), [ADR-064](064-incremental-rebuild.md), [ADR-080](080-batched-peers.md), [ADR-082](082-fresh-peer-resolution.md)
 
 ## Decision (Position)
 

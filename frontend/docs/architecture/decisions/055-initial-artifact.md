@@ -1,9 +1,9 @@
 # ADR-055: Direct-messaging-only initial artifact and hardware-execution gate for beta PQ MLS
 
-- **Status:** Closed by ADR-075 (2026-09-13); previously amended the same day by [ADR-056](056-abi-evidence.md) (2026-08-24)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13); previously amended the same day by [ADR-056](056-abi-evidence.md) (2026-08-24)
 - **Date:** 2026-08-24 (explicitly recorded in register and full section; implemented in `80c19481`; amended by [ADR-056](056-abi-evidence.md) on 2026-08-24; closed `2026-09-13`)
 - **Amends:** [ADR-044](044-private-deployment.md) Tier 2 (moves closed-beta PQ MLS groups from exposed Experimental to withheld behind a hardware-execution ledger) and [ADR-045](045-maturity-disclosure.md) / [ADR-052](052-accurate-capability-claims.md) (`DeploymentDisclosure` revision 5 → 6)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-017](017-independent-crypto-review.md), [ADR-032](032-rust-ffi.md), [ADR-036](036-beta-mls-track.md), [ADR-037](037-control-transcript.md), [ADR-039](039-two-phase-leave.md), [ADR-040](040-beta-kem-divergence.md), [ADR-041](041-fork-ordering.md), [ADR-044](044-private-deployment.md), [ADR-053](053-field-evidence-gate.md), [ADR-056](056-abi-evidence.md)
 
 ## Decision (Position)

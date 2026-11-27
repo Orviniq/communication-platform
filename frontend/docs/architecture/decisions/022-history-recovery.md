@@ -1,6 +1,6 @@
 # ADR-022: Recovery restores history separately from current secure membership
 
-- **Status:** Superseded by ADR-028 and ADR-030 (2026-07-25)
+- **Status:** Superseded by [ADR-028](028-device-history-transfer.md) and [ADR-030](030-recovery-key-material.md) (2026-07-25)
 - **Date:** Undocumented in the ADR register (introduced in commit `1b321da1`, 2026-07-24)
 - **Superseded by:** [ADR-028](028-device-history-transfer.md), [ADR-030](030-recovery-key-material.md)
 - **Related:** [ADR-027](027-device-cross-signing.md)

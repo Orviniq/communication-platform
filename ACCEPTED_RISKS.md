@@ -795,7 +795,7 @@ The client is one Flutter application whose two Dart isolates share one token fr
 encrypted store; at expiry both rotate, one loses, and the loser's presentation is
 indistinguishable from a replay — so the honest device was signed out. The client answered
 with an in-process ownership gate, a bounded re-read repair path and a three-owner
-arbitration (`frontend/docs/decisions.md` ADR-049 and ADR-050,
+arbitration ([`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and [`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md),
 `frontend/docs/sync-engine.md`), which is a consensus problem inside one process caused
 entirely by the server making one token unshareable.
 

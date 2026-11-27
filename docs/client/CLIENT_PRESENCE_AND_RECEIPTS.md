@@ -13,7 +13,7 @@ the work it gives the client, in the order to do it, is
 
 The online status this document binds is the one the client already built: client ADR-098
 (accepted and built on 2026-10-19, PR #90), in
-[`frontend/docs/decisions.md`](../../frontend/docs/decisions.md). §3 states that protocol as
+[`frontend/docs/architecture/decisions/098-presence-and-typing.md`](../../frontend/docs/architecture/decisions/098-presence-and-typing.md). §3 states that protocol as
 binding text, and §2 lists every change this document makes to it. The client folds those
 changes into [`frontend/docs/message-protocol.md`](../../frontend/docs/message-protocol.md)
 and records them in a new client ADR that amends ADR-098.

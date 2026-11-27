@@ -1,10 +1,10 @@
 # ADR-073: Visibility-gated conversation read marking
 
-- **Status:** Accepted; "not done here" read-receipt wiring superseded by [ADR-074](074-seen-tick.md) (2026-09-10); group read marking later added by ADR-090 / ADR-091 (2026-10-14)
+- **Status:** Accepted; "not done here" read-receipt wiring superseded by [ADR-074](074-seen-tick.md) (2026-09-10); group read marking later added by [ADR-090](090-group-timeline.md) / [ADR-091](091-group-receipts.md) (2026-10-14)
 - **Date:** 2026-09-10 (explicitly recorded in register; code in `bb2c1d87`, docs in `54f49cc3`)
 - **Amends:** [ADR-048](048-generic-notifications.md) (closes the arrival-while-open unread limitation and establishes the visibility trigger for follow-up 4)
 - **Superseded in part by:** [ADR-074](074-seen-tick.md) (wires `MarkConversationVisiblyRead` to the visibility trigger)
-- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-047](047-networking-composition.md), [ADR-048](048-generic-notifications.md), [ADR-074](074-seen-tick.md), ADR-090, ADR-091
+- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-047](047-networking-composition.md), [ADR-048](048-generic-notifications.md), [ADR-074](074-seen-tick.md), [ADR-090](090-group-timeline.md), [ADR-091](091-group-receipts.md)
 
 ## Decision (Position)
 

@@ -1,8 +1,8 @@
 # ADR-044: Initial Private Experimental Android deployment and declared maturity tiers
 
-- **Status:** Closed by ADR-075 (2026-09-13); previously amended by ADR-045 (2026-08-20), ADR-055 (2026-08-24), ADR-056 (2026-08-24), ADR-057 (2026-08-25), ADR-058 (2026-08-25), and ADR-067 (2026-09-07)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13); previously amended by [ADR-045](045-maturity-disclosure.md) (2026-08-20), [ADR-055](055-initial-artifact.md) (2026-08-24), [ADR-056](056-abi-evidence.md) (2026-08-24), [ADR-057](057-measured-settings.md) (2026-08-25), [ADR-058](058-voice-prerequisites.md) (2026-08-25), and [ADR-067](067-serving-origin.md) (2026-09-07)
 - **Date:** 2026-08-20 (explicitly recorded in register and full section; committed in `d139ca3f`; closed `2026-09-13`)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-017](017-independent-crypto-review.md), [ADR-026](026-candidate-mls-suite.md), [ADR-033](033-android-release-target.md), [ADR-036](036-beta-mls-track.md), [ADR-040](040-beta-kem-divergence.md), [ADR-042](042-beta-signing.md), [ADR-043](043-private-ca-transport.md), [ADR-045](045-maturity-disclosure.md)
 
 ## Decision (Position)

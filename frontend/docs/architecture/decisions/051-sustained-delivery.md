@@ -1,8 +1,8 @@
 # ADR-051: Opt-in sustained delivery via `specialUse` foreground service
 
-- **Status:** Accepted (distribution clause superseded on 2026-08-23 by ADR-053 restoring a compile-time `withheld` gate; fleet figures and "within seconds" claim corrected by ADR-053; distribution gate superseded for production on 2026-10-18 by ADR-094 offering `bestEffort`; token-race repair bullet corrected 2026-10-07 by ADR-068 & ADR-083)
+- **Status:** Accepted (distribution clause superseded on 2026-08-23 by [ADR-053](053-field-evidence-gate.md) restoring a compile-time `withheld` gate; fleet figures and "within seconds" claim corrected by [ADR-053](053-field-evidence-gate.md); distribution gate superseded for production on 2026-10-18 by [ADR-094](094-best-effort-delivery.md) offering `bestEffort`; token-race repair bullet corrected 2026-10-07 by [ADR-068](068-session-token.md) & [ADR-083](083-resumable-download.md))
 - **Date:** 2026-08-22 (explicitly recorded in register and full section; implemented in `e7acfcd` and documented in `c505a43`)
-- **Implements / Amends:** Builds [ADR-046](046-layered-delivery.md) Layer 2 (follow-up step 5); amends [ADR-046](046-layered-delivery.md)'s distribution clause (later restored by ADR-053 and moved to `bestEffort` in production by ADR-094); extends [ADR-050](050-delivery-ownership.md) arbitration to three owners; amends [ADR-045](045-maturity-disclosure.md) `bestEffortDelivery` (disclosure revision 3 → 4)
+- **Implements / Amends:** Builds [ADR-046](046-layered-delivery.md) Layer 2 (follow-up step 5); amends [ADR-046](046-layered-delivery.md)'s distribution clause (later restored by [ADR-053](053-field-evidence-gate.md) and moved to `bestEffort` in production by [ADR-094](094-best-effort-delivery.md)); extends [ADR-050](050-delivery-ownership.md) arbitration to three owners; amends [ADR-045](045-maturity-disclosure.md) `bestEffortDelivery` (disclosure revision 3 → 4)
 - **Related:** [ADR-013](013-no-foreign-push.md), [ADR-045](045-maturity-disclosure.md), [ADR-046](046-layered-delivery.md), [ADR-049](049-background-catch-up.md), [ADR-050](050-delivery-ownership.md), [ADR-052](052-accurate-capability-claims.md)
 
 ## Decision (Position)
@@ -62,5 +62,5 @@ Reopen if Android adds timeouts/prerequisites/non-Play justification gates to `s
 
 - **2026-08-22 (`e7acfcd`, `c505a43`):** Recorded ADR-051 (`Accepted`), implementing Layer 2 (`specialUse` FGS, 3-owner arbitration, 4-minute keepalive, reconciliation, disclosure rev 4) and relaxing ADR-046's pre-matrix distribution ban.
 - **2026-08-23 (ADR-053):** Superseded ADR-051's distribution clause by withholding Layer 2 behind an empty compile-time evidence ledger (`SustainedDeliveryGate`), corrected fleet figures (77% → ~90% of Android; ~50% → 60% ≤Android 13), and withdrew the "within seconds" timing claim.
-- **2026-09-08 & 2026-10-07 (ADR-068, ADR-083):** Retired rotating-refresh-token repair behind three-owner arbitration after server ADR-0023.
+- **2026-09-08 & 2026-10-07 (ADR-068, ADR-083):** Retired rotating-refresh-token repair behind three-owner arbitration after [server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md).
 - **2026-10-18 (ADR-094):** Superseded ADR-053 for `production` to offer Layer 2 as `bestEffort` with full disclosure of unverified hardware/OEM behavior and no delivery-time promise.

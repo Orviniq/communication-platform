@@ -1,9 +1,9 @@
 # ADR-041: Same-revision fork ordering by ungrindable precedence, authority, and signer identity
 
-- **Status:** Closed by ADR-075 (2026-09-13)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Date:** 2026-08-17 (explicitly recorded in register and full section; committed in `b41ad485`; closed `2026-09-13`)
 - **Supersedes:** [ADR-038](038-fork-convergence.md)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-036](036-beta-mls-track.md), [ADR-037](037-control-transcript.md), [ADR-039](039-two-phase-leave.md), [ADR-044](044-private-deployment.md)
 
 ## Decision (Position)
@@ -17,7 +17,7 @@ Originally decided to replace [ADR-038](038-fork-convergence.md)'s hash-only sam
 
 Sibling authentication, replay against the reconstructed parent, `GroupControlStateMachine` authorization, and recovery of a superseded branch via fork-quarantine plus remove/re-add remained unchanged, with no wire-format, schema, or state-format change (`BETA_STATE_FORMAT_VERSION` and transport v3 unchanged). Opened no production gate.
 
-**Closure:** Closed by ADR-075 (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) retired MLS. Under pairwise Double Ratchet groups, two signed control events at the same revision place the group directly in `forkQuarantined` without automated winner selection ([Cryptographic protocol](../../cryptographic-protocol.md#groups)).
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) retired MLS. Under pairwise Double Ratchet groups, two signed control events at the same revision place the group directly in `forkQuarantined` without automated winner selection ([Cryptographic protocol](../../cryptographic-protocol.md#groups)).
 
 ## Rationale
 

@@ -6,14 +6,14 @@ cover the Samsung Galaxy A56 and the API 30 and API 35 emulators. They recorded
 device conditions and exercised observation tooling. No capability trial filled a
 matrix cell.
 
-Under [ADR-094](decisions.md), production offers **Receiving while closed** as
+Under [ADR-094](architecture/decisions/094-best-effort-delivery.md), production offers **Receiving while closed** as
 `bestEffort` while the ledger is incomplete. The offer discloses battery use,
 the persistent notice and the absence of a delivery-time promise. Development
 uses `measurementOnly`. A complete ledger would move the offer to `evidenced`.
 See [frontend status](STATUS.md#presence-voice-and-delivery).
 
-Decided by [ADR-053](decisions.md), which amends ADR-051's distribution clause,
-and superseded for production by [ADR-094](decisions.md).
+Decided by [ADR-053](architecture/decisions/053-field-evidence-gate.md), which amends ADR-051's distribution clause,
+and superseded for production by [ADR-094](architecture/decisions/094-best-effort-delivery.md).
 This document is authoritative for the success criteria, the matrix, the
 measurement procedure and the recorded results. The gate constant is
 authoritative for what the software does about them.
@@ -673,7 +673,7 @@ this repository, and nothing this piece found, says what happens there.
 ## 7. The gate
 
 **State: CLOSED.** Not partially evidenced. Closed. Since 2026-10-18
-([ADR-094](decisions.md)) a closed gate means a production build offers the
+([ADR-094](architecture/decisions/094-best-effort-delivery.md)) a closed gate means a production build offers the
 capability as **best effort**; it no longer means the capability is withheld.
 
 ### What it is
@@ -691,7 +691,7 @@ fixed by the entry point, unselectable at runtime — and answers:
 | Build | Answer | Effect |
 |---|---|---|
 | any build, ledger complete | `evidenced` | offered, on the evidence |
-| production (the build handed to people, [ADR-076](decisions.md)), ledger incomplete | `bestEffort` | offered, with its cost and the statement that it is untested ([ADR-094](decisions.md)) |
+| production (the build handed to people, [ADR-076](architecture/decisions/076-production-signing.md)), ledger incomplete | `bestEffort` | offered, with its cost and the statement that it is untested ([ADR-094](architecture/decisions/094-best-effort-delivery.md)) |
 | development, ledger incomplete | `measurementOnly` | offered, so the matrix can be run |
 
 Every answer offers the capability. `SustainedDeliveryController` attaches its

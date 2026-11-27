@@ -34,5 +34,5 @@ A new approved browser target decision (reversing [server ADR-0020](../../../../
 
 - **2026-07-28 (`f7bd8115`):** Original decision added to the register (`Accepted`).
 - **2026-07-28 (`7e550a63` / [ADR-033](033-android-release-target.md)):** Formalized Web as post-v1.
-- **2026-09-08 (`8236ca5b`) & `ff95a674`:** Deleted the browser shell and collapsed conditional Web crypto imports as dead code after server ADR-0020 removed browser support.
+- **2026-09-08 (`8236ca5b`) & `ff95a674`:** Deleted the browser shell and collapsed conditional Web crypto imports as dead code after [server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md) removed browser support.
 - No supersession.

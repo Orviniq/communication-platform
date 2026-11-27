@@ -1,6 +1,6 @@
 # ADR-009: X3DH + Double Ratchet for device-pair channels
 
-- **Status:** Superseded by ADR-025 (2026-07-25)
+- **Status:** Superseded by [ADR-025](025-hybrid-pqxdh.md) (2026-07-25)
 - **Date:** Undocumented in the ADR register (introduced in commit `1b321da1`, 2026-07-24)
 - **Superseded by:** [ADR-025](025-hybrid-pqxdh.md)
 - **Related:** [ADR-018](018-authenticated-padding.md), [ADR-020](020-replay-and-ordering.md), [ADR-034](034-authenticated-pq-contribution.md)

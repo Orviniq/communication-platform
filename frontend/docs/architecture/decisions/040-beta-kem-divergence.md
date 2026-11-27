@@ -1,8 +1,8 @@
 # ADR-040: Closed-beta hybrid KEM divergence from TBD2
 
-- **Status:** Closed by ADR-075 (2026-09-13)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Date:** 2026-08-17 (explicitly recorded in register and full section; committed in `2f531703`; closed `2026-09-13`)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-017](017-independent-crypto-review.md), [ADR-026](026-candidate-mls-suite.md), [ADR-036](036-beta-mls-track.md), [ADR-044](044-private-deployment.md)
 
 ## Decision (Position)
@@ -25,7 +25,7 @@ Originally decided not to change the closed-beta hybrid KEM, to record the compl
 3. **No custom extension-point implementation:** Although `mls_rs::CryptoProvider`, `CipherSuiteProvider`, `CombinedKem::new_custom`, and `SharedSecretHashInput` are public, `AwsLcCipherSuite` and `AwsLcHpke` are private and hard-code `CombinedKem::new_xwing`, so implementing `0x647a` locally would require authoring a ~25-method `CipherSuiteProvider`, the combiner, raw-X25519 KEM, SHAKE-256 expansion via project-local `unsafe` FFI against `aws-lc-sys`, `(d || z)` split, and encapsulation-key check in project code. Authoring those algorithm steps locally crosses the line from composing maintained primitives into an unreviewed, unmaintained custom implementation prohibited by [ADR-017](017-independent-crypto-review.md), [ADR-036](036-beta-mls-track.md), and production gate 3.
 4. **No production gate opened:** Beta groups remained non-`TBD2`-conformant and were prohibited from being offered as `TBD2` interoperability evidence. All seven production gates remained closed and `UnsupportedGroupMls` remained active in production.
 
-**Closure:** Closed by ADR-075 (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) removed MLS from the system. Closed-beta MLS code and `beta` flavor were deleted; groups now use pairwise Double Ratchet fan-out ([Cryptographic protocol](../../cryptographic-protocol.md#groups)).
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) removed MLS from the system. Closed-beta MLS code and `beta` flavor were deleted; groups now use pairwise Double Ratchet fan-out ([Cryptographic protocol](../../cryptographic-protocol.md#groups)).
 
 ## Rationale
 
@@ -34,7 +34,7 @@ Original rationale:
 - The divergence cost only `TBD2` interoperability, which no gate could consume while `TBD2` lacked an IANA MLS ciphersuite value, its underlying drafts (`draft-connolly-cfrg-xwing-kem-06`/`-10`, `draft-ietf-hpke-pq-05`, `draft-irtf-cfrg-concrete-hybrid-kems-03`/`-04`, `draft-ietf-mls-pq-ciphersuites-06`) were still moving, and no upstream PQ MLS vectors existed.
 - The pinned `mls-rs` crypto crates (`mls-rs-crypto-hpke` 0.21.0, `mls-rs-crypto-awslc` 0.25.0, `mls-rs-crypto-traits` 0.22.0) were already the newest published versions, and migrating to OpenMLS (`0.8.1` / `0.9.0-rc.2`) was rejected because OpenMLS targeted `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (`0x004D`), trading one divergence class (wrong KEM) for another (wrong AEAD, KDF, and hash). Deferring without deciding was rejected because [ADR-036](036-beta-mls-track.md)'s 2026-08-16 correction left the divergence set incomplete and unresolved.
 
-Why closed: server ADR-0001 eliminated MLS groups entirely.
+Why closed: [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) eliminated MLS groups entirely.
 
 ## Constraints and Open Gates
 

@@ -26,7 +26,7 @@ Centralizes authentication headers, sensitive-field redaction in logs/diagnostic
 ## Costs
 
 - Custom WebSocket gateway and socket connector plumbing (`socket_connector.dart`, `platform_socket_connector_native.dart`) rather than an all-in-one SDK.
-- All HTTP/WebSocket traffic must route through `NetworkingFoundation` to prevent concurrent token renewal races (ADR-047; though server ADR-0023 later replaced rotating refresh tokens with a single session token, recorded in ADR-068 / ADR-083 / ADR-085).
+- All HTTP/WebSocket traffic must route through `NetworkingFoundation` to prevent concurrent token renewal races (ADR-047; though [server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) later replaced rotating refresh tokens with a single session token, recorded in ADR-068 / ADR-083 / ADR-085).
 
 ## Reversal Trigger
 
@@ -37,5 +37,5 @@ If `dio` or `web_socket_channel` over `dart:io` cannot satisfy TLS pinning requi
 - **2026-07-24 (`1b321da1`):** Original decision recorded in the initial ADR register (`Accepted`).
 - **2026-08-20 (ADR-043):** Transport trust moved to `dart:io` `SecurityContext` trusting the provisioned private CA exclusively.
 - **2026-08-21 (ADR-047):** Resolved dual composition roots into the single live `NetworkingFoundation` owned by `AuthenticationAssembly`.
-- **2026-09-08 (ADR-068, ADR-069):** Recorded single-token renewal (server ADR-0023) and retirement of the in-band WebSocket `auth` frame (server ADR-0020).
+- **2026-09-08 (ADR-068, ADR-069):** Recorded single-token renewal ([server ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md)) and retirement of the in-band WebSocket `auth` frame ([server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md)).
 - No supersession.

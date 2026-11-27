@@ -1,12 +1,12 @@
 # ADR-068: Single device-bound session token and non-rotating renewal
 
-- **Status:** Accepted; renewal trigger later moved to half-lifetime by ADR-085 (2026-10-07); single-flight role clarified by ADR-083 (2026-10-07)
+- **Status:** Accepted; renewal trigger later moved to half-lifetime by [ADR-085](085-session-renewal.md) (2026-10-07); single-flight role clarified by [ADR-083](083-resumable-download.md) (2026-10-07)
 - **Date:** 2026-09-08 (explicitly recorded in register and full section; code in PR #44 / `cab84527`, docs committed in `29a040f1`)
-- **Related:** [ADR-004](004-rest-and-websocket.md), [ADR-050](050-delivery-ownership.md), [ADR-069](069-gateway-frames.md), ADR-083, ADR-085, server [ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md)
+- **Related:** [ADR-004](004-rest-and-websocket.md), [ADR-050](050-delivery-ownership.md), [ADR-069](069-gateway-frames.md), [ADR-083](083-resumable-download.md), [ADR-085](085-session-renewal.md), server [ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md)
 
 ## Decision (Position)
 
-Client-side record aligning authentication, device registration, and token renewal with server [ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) (which superseded server ADR-0006's rotating access/refresh pair):
+Client-side record aligning authentication, device registration, and token renewal with server [ADR-0023](../../../../docs/architecture/decisions/0023-one-device-bound-session-token.md) (which superseded [server ADR-0006](../../../../docs/architecture/decisions/0006-device-bound-tokens-on-pyjwt.md)'s rotating access/refresh pair):
 
 1. **D1 — Three independent contract breaks fixed against [backend/openapi.json](../../../../backend/openapi.json):**
    - **Single session token:** Login and registration decode `SessionOut` (`token`, `expires_in`, `user_id`, plus `device_id` on full scope) into `FullScopeOut` / `RegisterScopeOut` and `SessionTokens` (holding one `AccessToken` and deriving `SessionScope` from the response discriminator rather than JWT claims).

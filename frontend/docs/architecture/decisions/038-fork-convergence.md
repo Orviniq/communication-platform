@@ -1,8 +1,8 @@
 # ADR-038: Same-revision control forks converge on smallest control state hash
 
-- **Status:** Superseded by ADR-041 (2026-08-17); ADR-041 was subsequently closed by ADR-075 (2026-09-13)
+- **Status:** Superseded by [ADR-041](041-fork-ordering.md) (2026-08-17); [ADR-041](041-fork-ordering.md) was subsequently closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Date:** 2026-08-16 (explicitly recorded in register; committed in `91ba0f8e`, 2026-08-17; superseded 2026-08-17 in `b41ad485`)
-- **Superseded by:** ADR-041 (2026-08-17), later closed by ADR-075 (2026-09-13)
+- **Superseded by:** [ADR-041](041-fork-ordering.md) (2026-08-17), later closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Related:** [ADR-036](036-beta-mls-track.md), [ADR-037](037-control-transcript.md), [ADR-039](039-two-phase-leave.md)
 
 ## Decision (Position)
@@ -11,7 +11,7 @@ Originally decided that same-revision closed-beta MLS control forks converge det
 
 **Superseded immediately on 2026-08-17 by ADR-041 (`b41ad485`):** Because `control_state_hash` hashed author-chosen fields (free 16-byte `event_id` and `created_ms`) under deterministic Ed25519 (~24,500 trials/sec/core), a member facing eviction could grind a lower hash in under a millisecond and quarantine the owner. ADR-041 replaced the tie-break with an ungrindable ordering key (operation precedence class, signer role in shared parent, authenticated user/device ID, and hash only last).
 
-**Subsequently closed (ADR-075, 2026-09-13):** With MLS retired, pairwise groups do not pick a winning branch on forks at all; a same-revision conflict moves the group to `forkQuarantined` without selecting a winner.
+**Subsequently closed ([ADR-075](075-pairwise-groups.md), 2026-09-13):** With MLS retired, pairwise groups do not pick a winning branch on forks at all; a same-revision conflict moves the group to `forkQuarantined` without selecting a winner.
 
 ## Rationale
 

@@ -59,7 +59,7 @@ successful-sync and `online` markers.
 
 Preparations go immediately before each outbox pass because a message the user has already
 sent is not in the outbox yet. Its event is committed and on their screen, and what it is
-waiting for is the fan-out that seals it ([ADR-061](decisions.md)); running that here means
+waiting for is the fan-out that seals it ([ADR-061](architecture/decisions/061-durable-send.md)); running that here means
 one cycle carries a send from the composer to the wire. The second pass exists for the same
 reason the second outbox pass does — the inbound half commits sends of its own, and a
 delivered receipt is an application event like any other.
@@ -68,7 +68,7 @@ The outbox goes before the inbox because nothing a queued outbox row needs comes
 inbox: its per-recipient ciphertext is sealed and durable before the row exists, so the only
 thing the order decides is who waits for whom. It goes a second time because the inbound half queues
 rows of its own — delivery receipts, group Commits, eviction fan-out — and skips that
-second pass when the first already found the transport unwilling. [ADR-060](decisions.md)
+second pass when the first already found the transport unwilling. [ADR-060](architecture/decisions/060-delivery-latency.md)
 records why: with the inbound half first and every stage returning its first failure, one
 envelope a device could not open stopped a message the user had already sent from ever
 leaving the process.
@@ -92,9 +92,9 @@ re-advertising sooner tells the peer nothing.
 
 Gossip is a *scheduled unit of work the cycle accounts for* rather than a detached future,
 because a delivery cycle can be a headless catch-up that disposes its container and closes its
-database the moment `synchronize()` returns ([ADR-049](decisions.md),
-[ADR-050](decisions.md)). Everything gossip does begins and ends inside the cycle. See
-[ADR-065](decisions.md).
+database the moment `synchronize()` returns ([ADR-049](architecture/decisions/049-background-catch-up.md),
+[ADR-050](architecture/decisions/050-delivery-ownership.md)). Everything gossip does begins and ends inside the cycle. See
+[ADR-065](architecture/decisions/065-peer-read-cost.md).
 
 A cycle is asked for by an event — a socket hint, a growing durable outbox, a deferred
 platform wake-up — or by a *time*: the supervisor arms a wake-up on the projection's
@@ -138,7 +138,7 @@ for a receipt — so receiving into a long conversation costs what it costs into
 full projection rebuild still exists and is still the definition of a correct projection; it is
 reached when a fact the projection already holds is *retired*, which is an event-id conflict, a
 sender-counter rollback or an unsupported-event collision, and it is the same transaction and
-the same dispositions either way ([ADR-063](decisions.md)).
+the same dispositions either way ([ADR-063](architecture/decisions/063-event-projection.md)).
 
 An envelope that will not open is retired rather than retried forever. Causes are split in
 two: a transient one — offline, rate limited, out of storage, momentarily out of entropy —
@@ -151,7 +151,7 @@ makes it stop. `inbox_envelopes.inspection_failures` holds that budget, delibera
 separate from `attempt_count`, which counts every begun attempt and drives backoff and so
 rises while a device is merely offline.
 
-**Held envelopes from an unverified sender** ([ADR-093](decisions.md)). The refusal to open a
+**Held envelopes from an unverified sender** ([ADR-093](architecture/decisions/093-held-first-message.md)). The refusal to open a
 message from a peer this account has not verified stays (`CLIENT_CONTRACT.md` §C); the loss
 does not. When the probe of an initial envelope names a sender whose refresh succeeds in the
 trust state `unverified` (`resolveInboundSender`), and the sender block matches one of that
@@ -179,7 +179,7 @@ count no held row, and `held_inbound` counts them. Nothing names a sender, a ses
 time.
 
 What the recipient and the sender see is the presentation's, not the engine's
-([ADR-093](decisions.md) D18, D19). `watchHeldSenders` streams each claimed sender with its count
+([ADR-093](architecture/decisions/093-held-first-message.md) D18, D19). `watchHeldSenders` streams each claimed sender with its count
 of rows in state 2, 3 or 5 and its latest hold time; Chats draws one row for each, and the row
 goes the moment a release, an expiry or an eviction empties the count. Released rows are not
 counted. The sender's chat asks nothing of the engine: it reads the own message's transport and
@@ -246,7 +246,7 @@ a substitute for this flow.
 one-to-one conversation the gap is shown nowhere, and on a device with no active group it
 closes on the drain that found it; `SyncProjection.isSecurityBlocked` still has **no
 consumer at all**. Direct messages lost to the retention prune are therefore silently
-absent. [ADR-052](decisions.md) discloses that silence in the deployment disclosure rather
+absent. [ADR-052](architecture/decisions/052-accurate-capability-claims.md) discloses that silence in the deployment disclosure rather
 than papering over it, and surfacing the one-to-one gap is recorded there as follow-up
 work; until it is built, no user-facing text may imply the client will name what was lost.
 
@@ -256,7 +256,7 @@ A send arrives at the engine as a row in `pending_send_preparations`: its event 
 committed and projected, and its per-recipient ciphertext is owed. The engine decides when
 that work runs and what a failure costs; it owns none of what the work does, which is
 resolving every recipient's verified live devices from one `POST /api/v1/peers`
-([ADR-080](decisions.md)), claiming prekeys where a session must be started, and running
+([ADR-080](architecture/decisions/080-batched-peers.md)), claiming prekeys where a session must be started, and running
 the ratchet once per recipient device.
 
 - The oldest due row is handed out; nothing is marked in flight, because nothing is. A
@@ -375,14 +375,14 @@ by its next one.
   considered complete. A peer observing the narrow intermediate state waits for an
   extending log record; it does not convert an otherwise exact monotonic rotation into
   permanent fork evidence.
-- A held envelope keeps the signed prekeys it may need ([ADR-093](decisions.md) D17). With H
+- A held envelope keeps the signed prekeys it may need ([ADR-093](architecture/decisions/093-held-first-message.md) D17). With H
   the earliest UTC day a held-marked row was first held, maintenance prunes with the earlier
   of today and H, so no retired pair whose last day is H or later is erased; the check that
   the current pair is not from the future stays against today. Because the core's rotation
   prunes with today, a due rotation waits while H is no later than the last rotation day
   plus one, or while today is past that day plus eight and H is not; replenishment runs
   while it waits.
-- Maintenance runs as the last step of a healthy delivery cycle ([ADR-095](decisions.md)), in
+- Maintenance runs as the last step of a healthy delivery cycle ([ADR-095](architecture/decisions/095-prekey-maintenance.md)), in
   whichever owner drives the engine: the foreground session, the deferred catch-up or the
   sustained run. It runs after the phase is online, never in a cycle that carried a failure or
   whose owner was asked to stand down, and its failure changes nothing about the cycle. The first
@@ -397,8 +397,8 @@ by its next one.
   detection.
 - A send's fan-out verifies all its recipients with one `POST /api/v1/peers`, at most 64 to a
   call, which answers `unchanged` for each peer whose stored tag still holds
-  ([ADR-080](decisions.md)). Nothing remembers a peer's answers between resolutions
-  ([ADR-082](decisions.md)): the single-peer paths read the per-user identity, device and
+  ([ADR-080](architecture/decisions/080-batched-peers.md)). Nothing remembers a peer's answers between resolutions
+  ([ADR-082](architecture/decisions/082-fresh-peer-resolution.md)): the single-peer paths read the per-user identity, device and
   device-log routes every time, the identity and the device list conditionally on the tag
   stored beside them. See [authentication-and-devices.md](authentication-and-devices.md).
 - `stale_devices` responses immediately invalidate matching outbox targets and trigger one

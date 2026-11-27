@@ -8,7 +8,7 @@
 
 Leaving a voice room is **client-side membership removal** (and, in the original framing, key removal) rather than a backend room deletion operation, and the UI MUST give users an honest statement of that consequence.
 
-Under the implemented v1 voice design ([Voice and realtime](../../voice-and-realtime.md), [ADR-077]), a voice room is pure client state (`CPVRV001` signed control events on a hash chain, fanned out over pairwise Double Ratchet envelopes) and the server holds no room, roster, or media key at all. Leaving sends a signed `remove member` event naming the leaving user; the remaining members keep the room, and rejoining requires a fresh invite. Inside an active call, removing a participant closes their DTLS-SRTP WebRTC peer connections (`server ADR-0021`), because no application-level media key exists to rotate.
+Under the implemented v1 voice design ([Voice and realtime](../../voice-and-realtime.md), [ADR-077]), a voice room is pure client state (`CPVRV001` signed control events on a hash chain, fanned out over pairwise Double Ratchet envelopes) and the server holds no room, roster, or media key at all. Leaving sends a signed `remove member` event naming the leaving user; the remaining members keep the room, and rejoining requires a fresh invite. Inside an active call, removing a participant closes their DTLS-SRTP WebRTC peer connections ([server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)), because no application-level media key exists to rotate.
 
 ## Rationale
 
@@ -25,10 +25,10 @@ Matches the capability-only / zero-room-state backend (`docs/client/CLIENT_CONTR
 
 ## Reversal Trigger
 
-Only if a future server change introduces server-managed rooms or a shared media-encryption layer, reversing server ADR-0021.
+Only if a future server change introduces server-managed rooms or a shared media-encryption layer, reversing [server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md).
 
 ## History, Amendments, and Supersession
 
 - **2026-07-24 (`1b321da1`):** Original decision recorded in the initial ADR register (`Accepted`).
-- **2026-09-20 (ADR-077):** Implemented v1 voice rooms on client-signed `CPVRV001` control events and DTLS-SRTP WebRTC mesh (`server ADR-0021`), refining "key removal" into closing endpoint DTLS-SRTP connections since no application media key exists.
+- **2026-09-20 (ADR-077):** Implemented v1 voice rooms on client-signed `CPVRV001` control events and DTLS-SRTP WebRTC mesh ([server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)), refining "key removal" into closing endpoint DTLS-SRTP connections since no application media key exists.
 - No supersession.

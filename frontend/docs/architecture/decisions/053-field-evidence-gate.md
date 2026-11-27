@@ -1,9 +1,9 @@
 # ADR-053: Field-evidence release gate for sustained delivery
 
-- **Status:** Accepted; superseded for `production` by ADR-094 (2026-10-18)
+- **Status:** Accepted; superseded for `production` by [ADR-094](094-best-effort-delivery.md) (2026-10-18)
 - **Date:** 2026-08-23 (explicitly recorded in register and full section; implemented in `b38aa328`; 2026-08-23 A56 hardware probe addendum recorded in `sustained-delivery-validation.md` §6.1)
 - **Amends:** [ADR-051](051-sustained-delivery.md) (restores [ADR-046](046-layered-delivery.md)'s pre-matrix distribution prohibition in an enforced compile-time form; corrects fleet figures and withdraws "within seconds" latency wording)
-- **Superseded in part by:** ADR-094 (2026-10-18, offering opt-in sustained delivery in `production` as `bestEffort` with unverified-OEM disclosure and no delivery-time promise while keeping the ledger empty and closed)
+- **Superseded in part by:** [ADR-094](094-best-effort-delivery.md) (2026-10-18, offering opt-in sustained delivery in `production` as `bestEffort` with unverified-OEM disclosure and no delivery-time promise while keeping the ledger empty and closed)
 - **Related:** [ADR-013](013-no-foreign-push.md), [ADR-044](044-private-deployment.md), [ADR-045](045-maturity-disclosure.md), [ADR-046](046-layered-delivery.md), [ADR-049](049-background-catch-up.md), [ADR-051](051-sustained-delivery.md), [ADR-052](052-accurate-capability-claims.md), [ADR-054](054-dependency-policy.md)
 
 ## Decision (Position)

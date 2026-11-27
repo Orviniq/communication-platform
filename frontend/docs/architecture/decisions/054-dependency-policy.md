@@ -1,8 +1,8 @@
 # ADR-054: Platform dependency policy, exact pinning, and Android supply-chain lock
 
-- **Status:** Accepted (subsequently extended with `emoji_picker_flutter` 4.5.3 and `kotlin.incremental=false` in ADR-059, and with `flutter_webrtc` 1.6.2+hotfix.3 / JitPack `audioswitch` / `libwebrtc` in ADR-078; closed-beta `beta` flavor configurations removed in ADR-075)
+- **Status:** Accepted (subsequently extended with `emoji_picker_flutter` 4.5.3 and `kotlin.incremental=false` in [ADR-059](059-emoji-surface.md), and with `flutter_webrtc` 1.6.2+hotfix.3 / JitPack `audioswitch` / `libwebrtc` in [ADR-078](078-media-package.md); closed-beta `beta` flavor configurations removed in [ADR-075](075-pairwise-groups.md))
 - **Date:** 2026-08-24 (explicitly recorded in register and full section; implemented in `3a8e90c5`)
-- **Supersedes:** [ADR-007](007-flyer-timeline.md) (Flyer Chat behind a timeline adapter — already replaced in implementation by piece 15's app-owned reversed sliver; later formally closed by ADR-066 on 2026-08-30)
+- **Supersedes:** [ADR-007](007-flyer-timeline.md) (Flyer Chat behind a timeline adapter — already replaced in implementation by piece 15's app-owned reversed sliver; later formally closed by [ADR-066](066-sliver-timeline.md) on 2026-08-30)
 - **Ratifies / Amends:** Platform integration choices made in [ADR-046](046-layered-delivery.md), [ADR-048](048-generic-notifications.md), [ADR-049](049-background-catch-up.md), and [ADR-051](051-sustained-delivery.md) (reverses caret ranges, unpinned Android transitive resolution, and unused packages)
 - **Related:** [ADR-006](006-forui-boundary.md), [ADR-013](013-no-foreign-push.md), [ADR-031](031-semantic-icons.md), [ADR-032](032-rust-ffi.md), [ADR-036](036-beta-mls-track.md), [ADR-040](040-beta-kem-divergence.md), [ADR-043](043-private-ca-transport.md), [ADR-044](044-private-deployment.md), [ADR-053](053-field-evidence-gate.md)
 
@@ -40,7 +40,7 @@ Enumerated every platform integration point of the delivery and notification pat
   - *F1:* Evaluate replacing `path_provider` (`jni`/`jni_flutter`/ReLinker) with `ProtectedStorageChannel` while guaranteeing the identical database directory path.
   - *F2:* Add an in-app third-party notices screen surfacing `assets/flutter_assets/NOTICES.Z` and Android attributions (handover-document discharge only scales to small private distribution).
   - *F3:* Aggregate licenses for the Rust crypto core and vendored C sources ([Cargo.toml](../../../native/crypto_core/Cargo.toml)) into [third-party-notices.md](../../third-party-notices.md).
-  - *F4 (historical):* Pre-existing formatting/web-literal issues noted at `3a8e90c5` (web target later removed under server ADR-0020).
+  - *F4 (historical):* Pre-existing formatting/web-literal issues noted at `3a8e90c5` (web target later removed under [server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md)).
 - **Pre-existing caveat:** A `targetSdk` increase can alter platform job/FGS/notification rules without failing source-reading Kotlin tests, and a future AGP configuration rename requires updating the asserted configuration list.
 
 ## Costs

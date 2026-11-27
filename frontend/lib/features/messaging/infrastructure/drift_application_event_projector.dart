@@ -499,7 +499,7 @@ final class DriftApplicationEventProjector {
   ///
   /// Neither read is a pass over the conversation. The newest message is one
   /// entry and one row through `messages_conversation_ordering`, whose column
-  /// order is this exact `ORDER BY` ([ADR-062](decisions.md)); the unread count
+  /// order is this exact `ORDER BY` ([ADR-062](../../../../docs/architecture/decisions/062-timeline-window.md)); the unread count
   /// reads `messages_unread_by_conversation`, which is partial and therefore
   /// holds only the rows being counted.
   Future<void> _refreshConversationAggregates(String conversationId) async {

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-27 (explicitly recorded in register and full section; implemented in `9aee093`, documented in `50b6655`)
-- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-060](060-delivery-latency.md), [ADR-061](061-durable-send.md), [ADR-062](062-timeline-window.md), [ADR-064](064-incremental-rebuild.md), ADR-089
+- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-060](060-delivery-latency.md), [ADR-061](061-durable-send.md), [ADR-062](062-timeline-window.md), [ADR-064](064-incremental-rebuild.md), [ADR-089](089-direct-attachments.md)
 
 ## Decision (Position)
 

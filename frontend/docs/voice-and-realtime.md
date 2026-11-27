@@ -7,7 +7,7 @@ audio and the call screens. One `SignalRouter` reads inbound `signal` frames and
 dispatches them to voice or presence. See the [frontend status matrix](STATUS.md#presence-voice-and-delivery)
 for the device evidence and release gaps.
 
-[ADR-077](decisions.md) superseded ADR-058's MLS, SFrame and LiveKit prerequisites
+[ADR-077](architecture/decisions/077-voice-mesh.md) superseded ADR-058's MLS, SFrame and LiveKit prerequisites
 after the project switched to pairwise groups and a DTLS-SRTP mesh. The
 [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md) requires version 2
 if voice ships. It adds owner/admin/member authority, upgrade negotiation and
@@ -215,4 +215,4 @@ for subsequent signed test builds.
 - [`pairwise-transport-v1.md`](pairwise-transport-v1.md) — the transport under both
 - [Live Voice Room Screen](ui-specification.md#10-live-voice-room-screen) and
   [Voice Rooms](ui-specification.md#13-voice-rooms--list-create--info) — UI states and actions
-- [ADR-077](decisions.md) — the decision record for this design
+- [ADR-077](architecture/decisions/077-voice-mesh.md) — the decision record for this design

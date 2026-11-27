@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-14 (explicitly recorded in register and full section; accepted on owner answers in `04317e36`, implemented across PR #56 / `7ececaa1`)
 - **Amends:** [ADR-042](042-beta-signing.md) and [ADR-067](067-serving-origin.md) (production unsigned clause), [ADR-045](045-maturity-disclosure.md) (D6 production disclosure and D1 designation rationale)
-- **Related:** [ADR-017](017-independent-crypto-review.md), [ADR-028](028-device-history-transfer.md), [ADR-030](030-recovery-key-material.md), [ADR-043](043-private-ca-transport.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-054](054-dependency-policy.md), [ADR-067](067-serving-origin.md), [ADR-075](075-pairwise-groups.md), ADR-094
+- **Related:** [ADR-017](017-independent-crypto-review.md), [ADR-028](028-device-history-transfer.md), [ADR-030](030-recovery-key-material.md), [ADR-043](043-private-ca-transport.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-054](054-dependency-policy.md), [ADR-067](067-serving-origin.md), [ADR-075](075-pairwise-groups.md), [ADR-094](094-best-effort-delivery.md)
 
 ## Decision (Position)
 

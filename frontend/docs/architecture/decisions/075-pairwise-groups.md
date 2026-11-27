@@ -1,9 +1,10 @@
 # ADR-075: Pairwise-session groups, piece 19 cancellation, and closing the beta MLS track
 
-- **Status:** Accepted; item 5 inline copy-count text withdrawn by ADR-088 (2026-10-09)
+- **Status:** Accepted; item 5 inline copy-count text withdrawn by [ADR-088](088-group-composer.md) (2026-10-09)
 - **Date:** 2026-09-13 (explicitly recorded in register and full section; implemented across PR #53 / `ade9172f`, documented in `cd36012f`)
 - **Closes:** [ADR-026](026-candidate-mls-suite.md), [ADR-036](036-beta-mls-track.md), [ADR-037](037-control-transcript.md), [ADR-039](039-two-phase-leave.md), [ADR-040](040-beta-kem-divergence.md), [ADR-041](041-fork-ordering.md), [ADR-044](044-private-deployment.md), [ADR-055](055-initial-artifact.md), [ADR-056](056-abi-evidence.md)
-- **Related:** [ADR-010](010-mls-groups.md), [ADR-011](011-pairwise-wrapping.md), [ADR-019](019-durable-fan-out.md), [ADR-025](025-hybrid-pqxdh.md), [ADR-071](071-published-limits.md), [ADR-076](076-production-signing.md), ADR-088, ADR-090, ADR-091, ADR-096, server [ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Amended by:** [ADR-088](088-group-composer.md) (2026-10-09, withdraws item 5 inline copy-count text)
+- **Related:** [ADR-010](010-mls-groups.md), [ADR-011](011-pairwise-wrapping.md), [ADR-019](019-durable-fan-out.md), [ADR-025](025-hybrid-pqxdh.md), [ADR-071](071-published-limits.md), [ADR-076](076-production-signing.md), [ADR-088](088-group-composer.md), [ADR-090](090-group-timeline.md), [ADR-091](091-group-receipts.md), [ADR-096](096-group-moderation.md), server [ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 
 ## Decision (Position)
 

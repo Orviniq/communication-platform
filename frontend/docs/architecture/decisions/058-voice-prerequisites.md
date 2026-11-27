@@ -1,9 +1,9 @@
 # ADR-058: Objective fail-closed prerequisites for Piece 20 (voice rooms)
 
-- **Status:** Superseded by ADR-077 (2026-09-20) — voice pivoted from MLS-keyed LiveKit SFU / SFrame to a pairwise-signalled, DTLS-SRTP relayed WebRTC mesh following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) and server ADR-0021
+- **Status:** Superseded by [ADR-077](077-voice-mesh.md) (2026-09-20; status gap: the legacy register row in [decisions.md](../../decisions.md) still listed `Accepted` — recorded in [index](README.md)) — voice pivoted from MLS-keyed LiveKit SFU / SFrame to a pairwise-signalled, DTLS-SRTP relayed WebRTC mesh following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) and [server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 - **Date:** 2026-08-25 (explicitly recorded in register and full section; committed in `fab01f48`; superseded `2026-09-20`)
-- **Amends:** [ADR-044](044-private-deployment.md) *Piece 20* section (replaces ADR-044's prose "make a decision about which MLS exporter" prerequisite with seven objectively checkable conditions)
-- **Superseded by:** ADR-077 (2026-09-20), recorded in [voice-and-realtime.md](../../voice-and-realtime.md#status)
+- **Amends:** [ADR-044](044-private-deployment.md) *Piece 20* section (replaces [ADR-044](044-private-deployment.md)'s prose "make a decision about which MLS exporter" prerequisite with seven objectively checkable conditions)
+- **Superseded by:** [ADR-077](077-voice-mesh.md) (2026-09-20), recorded in [voice-and-realtime.md](../../voice-and-realtime.md#status)
 - **Related:** [ADR-013](013-no-foreign-push.md), [ADR-017](017-independent-crypto-review.md), [ADR-023](023-voice-room-leave.md), [ADR-026](026-candidate-mls-suite.md), [ADR-036](036-beta-mls-track.md), [ADR-044](044-private-deployment.md), [ADR-051](051-sustained-delivery.md), [ADR-053](053-field-evidence-gate.md), [ADR-054](054-dependency-policy.md), [ADR-055](055-initial-artifact.md), [ADR-056](056-abi-evidence.md)
 
 ## Decision (Position)
@@ -24,7 +24,7 @@ Replaced [ADR-044](044-private-deployment.md)'s open-ended Piece 20 prerequisite
 3. **Open framing conflict reported without silent reconciliation (2026-08-25):**
    - Historical `docs/voice-and-realtime.md` named RFC 9605 SFrame as *the* target contract; `docs/cryptographic-protocol.md` allowed "RFC 9605 SFrame **or** the LiveKit E2EE implementation after wire-level validation"; `backend/SECURITY.md` (moved under [ADR 0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md) to `docs/security/SECURITY.md`; read-only) stated audio is SFrame-encrypted from a live MLS subgroup; while LiveKit's own documentation (read 2026-08-25) never mentioned RFC 9605 / SFrame and exposed `EncryptionType` as `kNone`, `kGcm`, `kCustom`.
 
-**Supersession (ADR-077, 2026-09-20):** Because [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) eliminated MLS groups and server ADR-0021 rejected an SFU in favor of a relayed WebRTC mesh keyed endpoint-to-endpoint by DTLS-SRTP (with no application-level media key), ADR-077 superseded ADR-058's MLS exporter, SFrame, and LiveKit prerequisites completely ([voice-and-realtime.md](../../voice-and-realtime.md#status), [cryptographic-protocol.md](../../cryptographic-protocol.md#protocol-suite)).
+**Supersession ([ADR-077](077-voice-mesh.md), 2026-09-20):** Because [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) eliminated MLS groups and [server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md) rejected an SFU in favor of a relayed WebRTC mesh keyed endpoint-to-endpoint by DTLS-SRTP (with no application-level media key), ADR-077 superseded ADR-058's MLS exporter, SFrame, and LiveKit prerequisites completely ([voice-and-realtime.md](../../voice-and-realtime.md#status), [cryptographic-protocol.md](../../cryptographic-protocol.md#protocol-suite)).
 
 ## Rationale
 

@@ -1,6 +1,6 @@
 # ADR-048: Sender-neutral aggregate message notifications reconciled from committed state
 
-- **Status:** Accepted (`settingsNotificationsOn` claim corrected by ADR-052 on 2026-08-23; mark-read-on-screen follow-up closed by ADR-073 on 2026-09-10; group unread/read receipts addressed by ADR-090 and ADR-091; background service permissions added under ADR-049, ADR-051, and ADR-078)
+- **Status:** Accepted (`settingsNotificationsOn` claim corrected by [ADR-052](052-accurate-capability-claims.md) on 2026-08-23; mark-read-on-screen follow-up closed by [ADR-073](073-visible-read.md) on 2026-09-10; group unread/read receipts addressed by [ADR-090](090-group-timeline.md) and [ADR-091](091-group-receipts.md); background service permissions added under [ADR-049](049-background-catch-up.md), [ADR-051](051-sustained-delivery.md), and [ADR-078](078-media-package.md))
 - **Date:** 2026-08-21 (explicitly recorded in register and full section; committed in `fac9013c`)
 - **Amends:** [ADR-046](046-layered-delivery.md) Layer 3 (follow-up step 2) and [ADR-045](045-maturity-disclosure.md) `foregroundDeliveryOnly` (disclosure revision 1 → 2)
 - **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-045](045-maturity-disclosure.md), [ADR-046](046-layered-delivery.md), [ADR-047](047-networking-composition.md)

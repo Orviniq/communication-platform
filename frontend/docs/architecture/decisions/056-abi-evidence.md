@@ -1,9 +1,9 @@
 # ADR-056: Per-ABI hardware-execution gate for closed-beta PQ MLS
 
-- **Status:** Closed by ADR-075 (2026-09-13)
+- **Status:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13)
 - **Date:** 2026-08-24 (explicitly recorded in register and full section; implemented in `f4507b1a`; closed `2026-09-13`)
 - **Amends:** [ADR-055](055-initial-artifact.md) (replaces global `GroupExperimentalGate.isOpen` with per-ABI `hasEvidenceFor`, opens `arm64-v8a` on measured hardware evidence, and moves disclosure revision 6 → 7)
-- **Closed by:** ADR-075 (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- **Closed by:** [ADR-075](075-pairwise-groups.md) (2026-09-13), following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
 - **Related:** [ADR-017](017-independent-crypto-review.md), [ADR-036](036-beta-mls-track.md), [ADR-040](040-beta-kem-divergence.md), [ADR-044](044-private-deployment.md), [ADR-053](053-field-evidence-gate.md), [ADR-054](054-dependency-policy.md), [ADR-055](055-initial-artifact.md), [ADR-058](058-voice-prerequisites.md)
 
 ## Decision (Position)
@@ -22,7 +22,7 @@ Executed [ADR-055](055-initial-artifact.md)'s closed-beta PQ MLS test binary on 
 3. **D5 — Disclosure revision 6 → 7 ([deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart)):**
    - Updated the `experimentalGroups` `DisclosurePoint` (`since: 7`) to state both [ADR-036](036-beta-mls-track.md)'s disposable-state rule where groups are active and that unmeasured-ABI devices have groups switched off, triggering re-presentation via `DisclosureChangeGate`.
 
-**Closure:** Closed by ADR-075 (2026-09-13) when MLS and the `beta` flavor were removed; groups now use pairwise Double Ratchet fan-out across all ABIs ([cryptographic-protocol.md](../../cryptographic-protocol.md#groups)), and the A56 measurement record is preserved in [archive/beta-mls-core/](../../archive/beta-mls-core/README.md).
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) when MLS and the `beta` flavor were removed; groups now use pairwise Double Ratchet fan-out across all ABIs ([cryptographic-protocol.md](../../cryptographic-protocol.md#groups)), and the A56 measurement record is preserved in [archive/beta-mls-core/](../../archive/beta-mls-core/README.md).
 
 ## Rationale
 

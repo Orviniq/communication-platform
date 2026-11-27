@@ -1,8 +1,8 @@
 # ADR-014: Explicit Android foreground connection mode
 
-- **Status:** Superseded by ADR-029 (2026-07-25); ADR-029 was subsequently superseded by ADR-046 (2026-08-21)
+- **Status:** Superseded by [ADR-029](029-background-polling.md) (2026-07-25); [ADR-029](029-background-polling.md) was subsequently superseded by [ADR-046](046-layered-delivery.md) (2026-08-21)
 - **Date:** Undocumented in the ADR register (introduced in commit `1b321da1`, 2026-07-24)
-- **Superseded by:** [ADR-029](029-background-polling.md) (2026-07-25), later superseded by ADR-046 (2026-08-21)
+- **Superseded by:** [ADR-029](029-background-polling.md) (2026-07-25), later superseded by [ADR-046](046-layered-delivery.md) (2026-08-21)
 - **Related:** [ADR-013](013-no-foreign-push.md), [ADR-029](029-background-polling.md)
 
 ## Decision (Position)

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** Undocumented in the ADR register (introduced in commit `7e4930f8`, 2026-07-25)
-- **Supersedes (with ADR-028):** [ADR-022](022-history-recovery.md)
+- **Supersedes (with [ADR-028](028-device-history-transfer.md)):** [ADR-022](022-history-recovery.md)
 - **Related:** [ADR-027](027-device-cross-signing.md), [ADR-028](028-device-history-transfer.md), [ADR-032](032-rust-ffi.md)
 
 ## Decision (Position)

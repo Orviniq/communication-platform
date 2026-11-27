@@ -165,7 +165,7 @@ package for Flutter, and it is what the design assumes.
 |---|---|
 | Android build | `compileSdkVersion 36`, `minSdkVersion 21` |
 | Native dependencies | `io.github.webrtc-sdk:android:150.7871.01`; `com.github.davidliu:audioswitch` at commit `039a35aefab7747c557242fa216c9ea11743b604`, **from JitPack**; `androidx.annotation:annotation:1.1.0` |
-| What it does **not** bring | No `androidx.core` dependency of its own, so the frozen `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of `frontend/docs/decisions.md` ADR-054 both hold |
+| What it does **not** bring | No `androidx.core` dependency of its own, so the frozen `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of [`frontend/docs/architecture/decisions/054-dependency-policy.md`](frontend/docs/architecture/decisions/054-dependency-policy.md) both hold |
 | The relay policy | Its Android plugin parses `iceTransportPolicy`, and `relay` is the value the design needs: every path crosses coturn, and no peer learns another peer's address |
 | The calls §N leans on | `RTCPeerConnection.setConfiguration` and `restartIce` are in the published API, so the ICE restart of rule 9 under a fresh credential is a library call and not a fork (pub.dev API reference, 1.6.1, read 2026-09-05) |
 
@@ -282,7 +282,7 @@ returns is now discarding a working one.
 
 ### Optional — the arbitration the rotation forced
 
-`frontend/docs/decisions.md` ADR-049 and ADR-050 and `frontend/docs/sync-engine.md`
+[`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and [`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md) and `frontend/docs/sync-engine.md`
 record why this exists: two owners in one process held one rotating refresh token, the
 loser of the race presented a retired token, and the server ended the session. That
 race is gone. Nothing retires a token, so two owners may renew concurrently and both
@@ -297,8 +297,8 @@ keep working tokens.
 
 If the arbitration is kept, keep it as a contention control and not as a correctness
 one, and say so where it is written down: the failure it was built to prevent cannot
-occur against this server. If it is removed, `frontend/docs/decisions.md` ADR-049 and
-ADR-050 and `frontend/docs/sync-engine.md` are the documents that then describe a
+occur against this server. If it is removed, [`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and
+[`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md) and `frontend/docs/sync-engine.md` are the documents that then describe a
 server that does not exist.
 
 ### What did not change
@@ -340,7 +340,7 @@ to tell the user which device this is has `label_blob`, `created_date` and
 
 ### Optional — one call for a fan-out, and a conditional identity read
 
-`frontend/docs/decisions.md` ADR-060 and ADR-065 and `frontend/docs/sync-engine.md`
+[`frontend/docs/architecture/decisions/060-delivery-latency.md`](frontend/docs/architecture/decisions/060-delivery-latency.md) and [`065-peer-read-cost.md`](frontend/docs/architecture/decisions/065-peer-read-cost.md) and `frontend/docs/sync-engine.md`
 record what verifying a send costs today: three reads for each recipient, 107 to
 137 ms a round trip, 150 round trips for a 50-member group, and a 30-second
 in-memory cache built to survive the rate limit. That cache is a correctness
@@ -616,7 +616,7 @@ the work lands, and the binding text wins where they differ.
 | `frontend/docs/platform-android.md` | "Why there is no `CAMERA` permission" no longer holds (§4.7). The scanner. The copy's removal of metadata (§8) |
 | `frontend/docs/local-data-model.md` | The contact, block, claim, carried-over and profile-key records |
 | `frontend/docs/threat-model.md` | The verification statements, against `docs/security/SECURITY.md` residual risk 7 |
-| `frontend/docs/decisions.md` | One new ADR recording this work on the client side — as ADR-068 to ADR-070 recorded server ADRs — that amends ADR-093 (the read of §5.3 beside D12; the row of D18 gains the claim; the hint of D19 is withdrawn), ADR-089 and ADR-097 (the neutral names and the removal of metadata) and ADR-098 (presence for a direct conversation in `MUTUAL` only), and records `com.google.zxing:core` under ADR-054's rules: the exact version, its licence, and the date and source it was read from |
+| [`frontend/docs/architecture/decisions/`](frontend/docs/architecture/decisions/README.md) | One new ADR recording this work on the client side — as ADR-068 to ADR-070 recorded server ADRs — that amends ADR-093 (the read of §5.3 beside D12; the row of D18 gains the claim; the hint of D19 is withdrawn), ADR-089 and ADR-097 (the neutral names and the removal of metadata) and ADR-098 (presence for a direct conversation in `MUTUAL` only), and records `com.google.zxing:core` under ADR-054's rules: the exact version, its licence, and the date and source it was read from |
 | `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
 
 
@@ -718,7 +718,7 @@ work lands, and the binding texts win where they differ.
 |---|---|
 | `frontend/docs/message-protocol.md` | § "Receipts and typing": every statement §2.2 of `CLIENT_PRESENCE_AND_RECEIPTS.md` lists — the list in "No claim the client cannot observe" loses "a group over 32 members" and gains "a peer outside your audience"; "Who may send and receive"; "Watching"; "The switch", replaced by the audience; and the opening sentence's "user privacy settings", which becomes the read-receipt setting. § "Event registry": `privacy.settings_set` as `CPCTV001` kind 7, and `room.control` with its version 2. § "Edits, reactions, pins, and deletion": who reacted. § "Blocking": presence refuses a blocked account. § "Voice rooms": "every active member has the same authority … There is no owner and no admin" holds for version-1 rooms only |
 | `frontend/docs/voice-signalling-v1.md` | `CLIENT_VOICE_ROLES.md` folded in as its version-2 part: in Part 1, § "The operations, and who may sign each", § "Applying an event", § "The payload" (kind 4) and § "Starting the sessions a call needs" (the announcement); in Part 2, § "The kinds" (9 to 12, leave reasons 4 and 5), § "Removal" and § "The call" (the in-call actions), and the allowance beside § "Volatile seal and open" |
-| `frontend/docs/decisions.md` | One new client ADR that amends ADR-098 — D4 (every group, the answer window), D5 (the goodbye's limit), D7 (sealing on release), D9 (the audience and the privacy record in place of the switch), D10 (revision 12) and D11 (the year) — records the read-receipt setting beside ADR-091, whose reader list it leaves as it is, and supersedes ADR-077's D1 for version-2 rooms, with the allowance of 16 beside D5's 32 frames. ADR-077's open question about room text stays open |
+| [`frontend/docs/architecture/decisions/`](frontend/docs/architecture/decisions/README.md) | One new client ADR that amends ADR-098 — D4 (every group, the answer window), D5 (the goodbye's limit), D7 (sealing on release), D9 (the audience and the privacy record in place of the switch), D10 (revision 12) and D11 (the year) — records the read-receipt setting beside ADR-091, whose reader list it leaves as it is, and supersedes ADR-077's D1 for version-2 rooms, with the allowance of 16 beside D5's 32 frames. ADR-077's open question about room text stays open |
 | `frontend/docs/ui-specification.md` | §15: item 5c becomes **Who can see my online status**, and a **Read receipts** row joins it. §8 and §9: the **Reactions** sheet. §13.2: role tags, the actions of each role and the removal confirmation, for version-2 rooms |
 | [Live Voice Room Screen](frontend/docs/ui-specification.md#10-live-voice-room-screen) | The required v2 states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
 | `frontend/docs/local-data-model.md` | The privacy record, the room version each peer device announced, and a room's version and roles |

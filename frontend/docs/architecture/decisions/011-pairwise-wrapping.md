@@ -1,6 +1,6 @@
 # ADR-011: Per-recipient pairwise transport wrapping
 
-- **Status:** Accepted in register (MLS motivation retired by ADR-075; per-recipient pairwise wrapping remains the sole transport for direct, group, and room payloads)
+- **Status:** Accepted in register (MLS motivation retired by [ADR-075](075-pairwise-groups.md); per-recipient pairwise wrapping remains the sole transport for direct, group, and room payloads)
 - **Date:** Undocumented in the ADR register (introduced in commit `1b321da1`, 2026-07-24)
 - **Related:** [ADR-010](010-mls-groups.md), [ADR-018](018-authenticated-padding.md), [ADR-019](019-durable-fan-out.md), [ADR-025](025-hybrid-pqxdh.md)
 
@@ -26,7 +26,7 @@ After MLS was retired by [server ADR-0001](../../../../docs/architecture/decisio
 
 ## Reversal Trigger
 
-If fan-out volume beyond ~50 group members requires a shared-ciphertext scheme such as sender keys (server ADR-0001).
+If fan-out volume beyond ~50 group members requires a shared-ciphertext scheme such as sender keys ([server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)).
 
 ## History, Amendments, and Supersession
 

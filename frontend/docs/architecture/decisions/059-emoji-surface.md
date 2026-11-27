@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-25 (explicitly recorded in register and full section; implemented in `c1ae5c8`)
-- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-006](006-forui-boundary.md), [ADR-013](013-no-foreign-push.md), [ADR-016](016-english-and-persian.md), [ADR-054](054-dependency-policy.md), [ADR-057](057-measured-settings.md), ADR-066
+- **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-006](006-forui-boundary.md), [ADR-013](013-no-foreign-push.md), [ADR-016](016-english-and-persian.md), [ADR-054](054-dependency-policy.md), [ADR-057](057-measured-settings.md), [ADR-066](066-sliver-timeline.md)
 
 ## Decision (Position)
 

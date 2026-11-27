@@ -4,6 +4,7 @@
 - **Date:** 2026-09-07 (explicitly recorded in register and full section; committed in `1a169534` after origin/docs updates `8125b339` and `886402af`)
 - **Supersedes:** [ADR-042](042-beta-signing.md)
 - **Amends:** [ADR-044](044-private-deployment.md)
+- **Amended by:** [ADR-075](075-pairwise-groups.md) (2026-09-13, removes Beta flavor and identity), [ADR-076](076-production-signing.md) (2026-09-14, establishes persistent Production signing and amends the production-unsigned clause of [ADR-042](042-beta-signing.md) and ADR-067)
 - **Related:** [ADR-028](028-device-history-transfer.md), [ADR-030](030-recovery-key-material.md), [ADR-043](043-private-ca-transport.md), [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md)
 
 ## Decision (Position)
