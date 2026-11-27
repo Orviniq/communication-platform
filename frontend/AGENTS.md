@@ -16,18 +16,53 @@ These instructions apply to everything under `frontend/`.
 
 Before changing code, read:
 
-1. `docs/README.md`;
-2. `docs/STATUS.md`;
-3. the frontend documents that own the behavior in scope; and
-4. the relevant backend `API.md` files indexed by `docs/contracts/BACKEND.md`, plus
-   `../docs/client/CLIENT_CONTRACT.md` and `../docs/security/SECURITY.md` when
-   security or protocol behavior is involved.
+1. the [frontend task index](docs/README.md);
+2. the [status matrix](docs/STATUS.md);
+3. the documents that own the behavior in scope; and
+4. the relevant [backend API documents](docs/contracts/BACKEND.md), plus the
+   [client contract](../docs/client/CLIENT_CONTRACT.md) and
+   [security contract](../docs/security/SECURITY.md) for security or protocol work.
 
-Backend documentation is authoritative for endpoints, scopes, limits, errors, and
-server guarantees. Frontend documentation is authoritative for client architecture,
-encrypted formats, UX, local state, and platform behavior within those guarantees. If
-they conflict, stop implementation, identify the exact conflict, and do not invent an
-endpoint, wire format, or weaker security behavior.
+Backend API documents own endpoints, scopes, limits, errors, and server guarantees.
+The root client and security contracts are binding within their scope. The
+[server design record](../docs/architecture/DESIGN-RECORD.md) owns server architecture.
+Frontend documents own client architecture, encrypted formats, UX, local state,
+and platform behavior within those boundaries. If they conflict, stop implementation,
+identify the exact conflict, and do not invent an endpoint, wire format, or weaker
+security behavior.
+
+## Documentation maintenance
+
+- Assign each fact one owning document. Update it there and link from indexes,
+  runbooks, and summaries. The [status matrix](docs/STATUS.md) owns current
+  implementation status and contract gaps. The [ADR register](docs/architecture/decisions/README.md)
+  indexes the decisions, which belong in their individual ADRs. Keep screen content,
+  actions, states, and navigation in [Screens](docs/ui/SCREENS.md), layout,
+  RTL/accessibility, and timeline boundaries in [Adaptive layout](docs/ui/ADAPTIVE-LAYOUT.md),
+  and tokens, font provenance, and visual rules in the [design system](docs/ui/DESIGN-SYSTEM.md).
+- For a wire claim, cite the implementing code and the matching test vectors in the
+  relevant [wire profile](docs/README.md). Verify both at the claimed revision and
+  record missing coverage explicitly. Use reviewed cryptographic libraries and
+  obtain the independent assessment required by the
+  [review scope](docs/security/REVIEW-SCOPE.md) before production release.
+- For a release claim, cite a [dated build record](docs/validation/README.md) with its
+  source revision, device class, result, and limits. Check acceptance against the
+  [release runbook](docs/runbooks/RELEASE.md). Preserve the raw evidence bytes and
+  resolve historical citations against their original revision.
+- When an ADR supersedes another, link both ways using `Supersedes` on the new
+  decision and `Superseded by` on the old decision. Update the register to agree
+  with both records.
+- When moving docs, check exact-case Markdown links, anchors, reference definitions,
+  and raw path mentions. Search code comments, ARB strings and generated localization,
+  scripts, and tests that read docs. Update the readers and run their checks from the
+  [verification runbook](docs/runbooks/VERIFY.md). Verify links against the staged
+  tree and resolve first-party frontend link failures before closing the phase.
+- Label an unresolved difference between the contract and implementation
+  **Contract gap** in the status matrix. Cite the binding requirement and what the
+  code or evidence shows. Keep the required behavior in its owning contract and
+  leave changes to it for an explicit decision.
+- Keep prompt dumps and session diaries out of live documentation. Record decisions
+  in ADRs and dated evidence in validation records.
 
 ## External source policy
 
@@ -66,8 +101,9 @@ endpoint, wire format, or weaker security behavior.
   database.
 - Dio owns REST transport through one reviewed client and token coordinator.
   `go_router` owns guarded/deep-linkable navigation.
-- Forui stays behind app-owned components. Flyer Chat stays behind a timeline adapter;
-  builders are presentation-only and never decrypt, call APIs, or write storage.
+- Forui stays behind app-owned components. The
+  [app-owned timeline](docs/architecture/decisions/066-sliver-timeline.md) keeps its
+  builders presentation-only. They never decrypt, call APIs, or write storage.
 - Use Forui's bundled `FLucideIcons` only through the app-owned semantic `AppIcons`
   mapping. Do not import general-purpose icon packages or reference package icons
   directly in feature screens without an accepted ADR.
