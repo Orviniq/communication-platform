@@ -168,7 +168,7 @@ require_production_provisioning() {
   [[ "${#missing[@]}" -eq 0 ]] ||
     fail "Missing production provisioning: ${missing[*]}.
        A build without complete provisioning stops at the \"App not provisioned\"
-       screen and tests nothing. docs/release-signing.md shows how to derive every
+       screen and tests nothing. docs/runbooks/SIGNING.md shows how to derive every
        value afresh."
 
   # An origin as ServerOrigin.parse accepts it: https, with no user info, path,

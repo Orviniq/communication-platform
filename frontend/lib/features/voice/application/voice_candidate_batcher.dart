@@ -14,7 +14,7 @@ typedef VoiceCandidateFlush =
     });
 
 /// Gathers one negotiation's ICE candidates into batches for one peer
-/// (`voice-signalling-v1.md`, "The socket limits").
+/// (`docs/contracts/VOICE-V1.md`, "The socket limits").
 ///
 /// A batch goes when gathering reaches `complete`, or 500 ms after the first
 /// candidate it holds, whichever comes first, and `end` is set on the last.

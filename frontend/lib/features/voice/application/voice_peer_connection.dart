@@ -18,7 +18,7 @@ import 'package:communication_platform/features/voice/domain/voice_signal_model.
 ///
 /// One for each join, shared by every connection of it, because the counter is
 /// monotonic within a join across all of its messages, whichever device they
-/// go to (`voice-signalling-v1.md`, The common body header). The call makes it
+/// go to (`docs/contracts/VOICE-V1.md`, The common body header). The call makes it
 /// when it joins and drops it when it leaves.
 final class VoiceLocalJoin {
   VoiceLocalJoin({

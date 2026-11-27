@@ -2,17 +2,17 @@
 
 What the initial deployment *was* - its audience, its maturity tiers, what may be
 claimed about it, and what must be disclosed - was decided by
-[ADR-044](architecture/decisions/044-private-deployment.md), which [ADR-075](architecture/decisions/075-pairwise-groups.md) closed: the `beta` flavor that
+[ADR-044](../architecture/decisions/044-private-deployment.md), which [ADR-075](../architecture/decisions/075-pairwise-groups.md) closed: the `beta` flavor that
 carried the deployment was deleted with the closed-beta MLS core, so no flavor builds its
 artifact now. What a build *says* to the people who receive it - the maturity vocabulary,
-the disclosure, and the one acknowledgement - is decided by [ADR-045](architecture/decisions/045-maturity-disclosure.md), and
-since [ADR-076](architecture/decisions/076-production-signing.md) the production flavor is the build that says it. The
+the disclosure, and the one acknowledgement - is decided by [ADR-045](../architecture/decisions/045-maturity-disclosure.md), and
+since [ADR-076](../architecture/decisions/076-production-signing.md) the production flavor is the build that says it. The
 release signing, key custody, and upgrade-continuity verification that `release-signing.md`
 specified under ADR-042 belonged to the same `beta` flavor. Since ADR-076 the production
 flavor signs its release build with a persistent key of its own, which is not the beta key,
-and [Production release signing and key continuity](release-signing.md) is the manual for
+and [Production release signing and key continuity](SIGNING.md) is the manual for
 that key, for the one script that makes a production artifact for a phone, and for how
-such an artifact is installed. The [status matrix](STATUS.md#artifact-and-release-acceptance)
+such an artifact is installed. The [status matrix](../STATUS.md#artifact-and-release-acceptance)
 records the signed build 2 and build 5 evidence and the open release gates. APK
 verification and an owner-device install establish facts about those artifacts.
 Production acceptance also requires the checks and handover below.
@@ -26,7 +26,7 @@ entry point and reads one provisioning prefix:
 | Flavor | Entry point | Purpose | Trust | Disclosure |
 |---|---|---|---|---|
 | development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner | None: never handed to anyone |
-| production | `lib/main_production.dart` | Builds handed to named people for testing ([ADR-076](architecture/decisions/076-production-signing.md)), and the future public release | production origin/private CA/primary+backup pins only, supplied afresh for every build as the five `PRODUCTION_*` defines by `tool/build_production_release.sh`, and never committed | `DeploymentDisclosure.distributed`, acknowledged once at the end of enrollment |
+| production | `lib/main_production.dart` | Builds handed to named people for testing ([ADR-076](../architecture/decisions/076-production-signing.md)), and the future public release | production origin/private CA/primary+backup pins only, supplied afresh for every build as the five `PRODUCTION_*` defines by `tool/build_production_release.sh`, and never committed | `DeploymentDisclosure.distributed`, acknowledged once at the end of enrollment |
 
 There is deliberately no staging flavor. A third environment would need a third
 application ID, a third provisioning prefix, and its own trust material, and
@@ -44,11 +44,11 @@ alone, so the Private Experimental artifact called itself "Communication Platfor
 `AppEnvironmentBanner` now owns both strings, and the Gradle flavor owns the
 launcher label they must match. Production carries no maturity designation in any of the
 three, although it is now handed to people: its launcher label and title read
-"Communication Platform", by the owner's answer recorded in [ADR-076](architecture/decisions/076-production-signing.md) D8.
+"Communication Platform", by the owner's answer recorded in [ADR-076](../architecture/decisions/076-production-signing.md) D8.
 
 The development and production flavors are separate, coexisting Android
 applications with different application IDs. Neither upgrades into the other. Only
-production has a release signing identity ([ADR-076](architecture/decisions/076-production-signing.md)): its release build is
+production has a release signing identity ([ADR-076](../architecture/decisions/076-production-signing.md)): its release build is
 signed with the persistent production key and fails closed without it, unless
 `CP_PRODUCTION_UNSIGNED_BUILD=1` asks for the unsigned package that CI builds and
 verifies, which no device can install.
@@ -77,23 +77,23 @@ by contract tests and conservative client behavior, not runtime version guessing
 
 - Pin Flutter and Dart SDKs for the team/CI.
 - Commit Flutter/Dart/Rust/Gradle lockfiles and checksum external artifacts. All four
-  exist as of [ADR-054](architecture/decisions/054-dependency-policy.md): `pubspec.lock` enforced by
+  exist as of [ADR-054](../architecture/decisions/054-dependency-policy.md): `pubspec.lock` enforced by
   `flutter pub get --enforce-lockfile`, `native/crypto_core/Cargo.lock`, and
   `android/app/gradle.lockfile` in `LockMode.STRICT` over the six configurations a built
   artifact resolves. Every direct Dart dependency is one exact version, never a range.
 - Mirror/cache all build dependencies so a clean release can build without international
-  internet. No mirror is set up yet. Since [ADR-078](architecture/decisions/078-media-package.md) the Gradle half reaches
+  internet. No mirror is set up yet. Since [ADR-078](../architecture/decisions/078-media-package.md) the Gradle half reaches
   one repository beyond Google's Maven, Maven Central and Flutter's engine repository:
   JitPack, for `com.github.davidliu:audioswitch` at commit
   `039a35aefab7747c557242fa216c9ea11743b604` and nothing else, so a mirror has to carry
   that coordinate too.
 - Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
   libraries. The Dart and Android/Gradle halves are the two lockfiles above plus
-  [third-party-notices.md](third-party-notices.md); the Rust, font and native halves are
+  [third-party-notices.md](../third-party-notices.md); the Rust, font and native halves are
   not yet aggregated anywhere (ADR-054 follow-up F3).
 - Review licenses, especially crypto libraries, before acceptance. What a distributed
   artifact carries, and the notices each licence requires, are recorded in
-  [third-party-notices.md](third-party-notices.md).
+  [third-party-notices.md](../third-party-notices.md).
 - Never let a plugin upgrade move an Android pin as a side effect. `connectivity_plus`
   7.1.0 and later would carry `androidx.core` from 1.16.0 to 1.18.0, and with it the
   required `compileSdk`; the Gradle lock is what turns that into a failed build instead of
@@ -110,7 +110,7 @@ by contract tests and conservative client behavior, not runtime version guessing
 4. Sign with an offline-controlled application signing key; keep backup/recovery process
    separate from source control. Production's release build is signed with its own
    persistent key, which Gradle takes only from outside the repository
-   ([ADR-076](architecture/decisions/076-production-signing.md) D5). That key is kept on the maintainer workstation for now,
+   ([ADR-076](../architecture/decisions/076-production-signing.md) D5). That key is kept on the maintainer workstation for now,
    a deviation from this step that ADR-076 D3 records. A production artifact for a phone
    is made only by `tool/build_production_release.sh --build-number N` (ADR-076 D7). It
    refuses to start without the recorded certificate, the signing material, all five
@@ -119,18 +119,18 @@ by contract tests and conservative client behavior, not runtime version guessing
    serve the provisioned primary pin. It then renders the Android trust resources,
    builds with the five `PRODUCTION_*` defines, and publishes the APK, its SHA-256 and a
    metadata file only after `tool/verify_release_apk.sh --production` has passed them.
-   [Production release signing and key continuity](release-signing.md) is the manual.
+   [Production release signing and key continuity](SIGNING.md) is the manual.
 5. Generate SHA-256 artifact hashes and signed update metadata.
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
    private-CA connectivity on representative devices. Upgrade continuity has to be
    proved on a device; a successful build is never sufficient evidence on its own.
-   [Release signing](release-signing.md) records historical beta checks.
-   [Voice build 5](validation/voice-mesh/2026-10-05/README.md) records in-place
+   [Release signing](SIGNING.md) records historical beta checks.
+   [Voice build 5](../validation/voice-mesh/2026-10-05/README.md) records in-place
    production installs on an A56 and emulator.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
 8. Deliver the written disclosure with every artifact handed to someone. This is
-   release-blocking, not a courtesy. Since [ADR-076](architecture/decisions/076-production-signing.md) that artifact is a
+   release-blocking, not a courtesy. Since [ADR-076](../architecture/decisions/076-production-signing.md) that artifact is a
    production build: `DeploymentDisclosure.distributed` is rendered for
    `AppEnvironment.production`, and development carries none.
 
@@ -138,11 +138,11 @@ by contract tests and conservative client behavior, not runtime version guessing
    and it is written from that list rather than from this paragraph, so the two cannot
    drift apart the way they had by revision 4 — this step previously claimed "the same
    seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
-   never mentioned the opt-in tier ADR-051 added ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)). At revision 11
-   ([ADR-094](architecture/decisions/094-best-effort-delivery.md) rewrote the delivery point at revision 10, which again offers the
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](../architecture/decisions/052-accurate-capability-claims.md)). At revision 11
+   ([ADR-094](../architecture/decisions/094-best-effort-delivery.md) rewrote the delivery point at revision 10, which again offers the
    Settings switch now that production offers it as best effort, and the unbuilt-surfaces
    point, which still called voice rooms and every file attachment unbuilt;
-   [ADR-098](architecture/decisions/098-presence-and-typing.md) added the online status point at revision 11) that is nine points:
+   [ADR-098](../architecture/decisions/098-presence-and-typing.md) added the online status point at revision 11) that is nine points:
 
    1. no part of the cryptography has been independently reviewed, and one person wrote
       and tested all of it;
@@ -164,13 +164,13 @@ by contract tests and conservative client behavior, not runtime version guessing
       each group message is one encrypted copy for each device of each member; and a
       group whose current state the phone loses comes back only when another member's
       app sends it, with sending in that group withheld until then
-      ([ADR-075](architecture/decisions/075-pairwise-groups.md), [ui-specification.md](ui-specification.md) §9);
+      ([ADR-075](../architecture/decisions/075-pairwise-groups.md), [Group Chat Screen](../ui/SCREENS.md#group-chat-screen));
    7. while the app is open on the screen, verified contacts a user shares a chat with can
       see that the user is online and typing and when they open a shared chat, and after the
       user leaves the app they see when the user was last online; the server cannot read any
       of it but can see short signals between phones while a chat is open; and the user can
       turn it off for one phone in Settings, which also hides everyone else's status from
-      that phone ([ADR-098](architecture/decisions/098-presence-and-typing.md));
+      that phone ([ADR-098](../architecture/decisions/098-presence-and-typing.md));
    8. group chats cannot send files, and the display name and photo are not published —
       contacts see the registered username;
    9. the build is for evaluation among people who already trust each other, and is not
@@ -187,13 +187,13 @@ by contract tests and conservative client behavior, not runtime version guessing
    existing recipient, not only to new ones. The revision moves when and only when what
    the build promises moves, so a changed revision is exactly the case where a person who
    already enrolled has been told something that is no longer true. Revision 11
-   ([ADR-098](architecture/decisions/098-presence-and-typing.md)) added the online status point, so every holder of a production
+   ([ADR-098](../architecture/decisions/098-presence-and-typing.md)) added the online status point, so every holder of a production
    build that carries revision 10 is owed the revision 11 written statement (revision 10,
-   [ADR-094](architecture/decisions/094-best-effort-delivery.md), moved the delivery and unbuilt-surfaces points, so a holder of
+   [ADR-094](../architecture/decisions/094-best-effort-delivery.md), moved the delivery and unbuilt-surfaces points, so a holder of
    revision 9 is owed both); a holder of the deleted `beta` flavor's application who is
    handed a production build receives the revision 11 statement under step 8.
 
-   Since [ADR-052](architecture/decisions/052-accurate-capability-claims.md) their install also re-presents the statement once, on the
+   Since [ADR-052](../architecture/decisions/052-accurate-capability-claims.md) their install also re-presents the statement once, on the
    first launch after the update, marking the points that moved — the accepted revision is
    recorded on the device, so the application can tell. That mechanism reaches only people
    who install the update, which is why this step is still release-blocking: somebody who
@@ -204,11 +204,11 @@ by contract tests and conservative client behavior, not runtime version guessing
    `DisclosurePoint.since` among the points, and `test/architecture/deployment_disclosure_test.dart`
    fails on any edit to a pinned string until that point's `since` is raised with it.
 
-10. Deliver [third-party-notices.md](third-party-notices.md) with the artifact, in the
+10. Deliver [third-party-notices.md](../third-party-notices.md) with the artifact, in the
     same handover as the written disclosure. Apache-2.0 §4 and the BSD 3-Clause licence
     both require that whoever receives the binary receives the licence text and the
     attribution notices, and a private handover is still distribution
-    ([ADR-054](architecture/decisions/054-dependency-policy.md)). The machine-generated half for the Dart packages and the
+    ([ADR-054](../architecture/decisions/054-dependency-policy.md)). The machine-generated half for the Dart packages and the
     engine is inside the APK at `assets/flutter_assets/NOTICES.Z`; nothing in the
     application displays it, so this document is currently the only copy a recipient can
     read. Unlike the step above this one is not release-blocking on a disclosure
@@ -275,20 +275,20 @@ downgrade.
 - [ ] Final application name, icon, Android ID, and production origin approved.
 - [ ] Documentation and ADR register match implementation.
 - [ ] Independent security review is complete and blocking findings are closed. Review
-  the [contract and TLS gaps](STATUS.md#platform-identity-and-content).
+  the [contract and TLS gaps](../STATUS.md#platform-identity-and-content).
 - [ ] Crypto/interoperability vectors pass on Android.
 - [ ] Database and crypto-state migrations pass from all supported Android versions.
 - [ ] Backend contract and multi-device E2E suites pass.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.
 - [ ] Sustained delivery: either every mandatory cell of the matrix in
-  [sustained-delivery-validation.md](sustained-delivery-validation.md) has an admissible
+  [SUSTAINED-DELIVERY.md](SUSTAINED-DELIVERY.md) has an admissible
   record in `SustainedDeliveryGate.releaseAssertion`, or the capability is offered as
-  best effort and says so ([ADR-094](architecture/decisions/094-best-effort-delivery.md), superseding ADR-053 for production).
+  best effort and says so ([ADR-094](../architecture/decisions/094-best-effort-delivery.md), superseding ADR-053 for production).
   **Currently best effort; the gate is CLOSED and no cell has been run.** A partially
   satisfied matrix opens nothing, an emulator record can never satisfy a cell, and no
   text of the artifact may promise a delivery time.
 - [ ] No forbidden network calls or sensitive logs/artifacts detected. This now includes
-  the user-initiated diagnostics export (§15.3): the report a recipient can be asked for
+  the user-initiated diagnostics export ([Diagnostics](../ui/SCREENS.md#diagnostics)): the report a recipient can be asked for
   is inspected on a real device with real content behind it, as well as by the
   adversarial host test that stuffs a canary into every table it reads.
 - [ ] SBOM, hashes, signatures, update metadata, and rollback plan archived.

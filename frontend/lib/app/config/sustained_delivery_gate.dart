@@ -43,7 +43,7 @@ import 'package:flutter/foundation.dart';
 /// anything; it is simply not counted.
 ///
 /// The criteria, the matrix, the measurement procedure and the current results
-/// are in `docs/sustained-delivery-validation.md`.
+/// are in `docs/runbooks/SUSTAINED-DELIVERY.md`.
 /// `test/architecture/sustained_delivery_gate_test.dart` fails if this gate
 /// opens without them.
 final class SustainedDeliveryGate {
@@ -53,7 +53,7 @@ final class SustainedDeliveryGate {
   ///
   /// The list is empty. Nothing about this capability has been observed on any
   /// hardware, on any platform version, on any date — see ADR-053 and
-  /// `docs/sustained-delivery-validation.md` for what was and was not run.
+  /// `docs/runbooks/SUSTAINED-DELIVERY.md` for what was and was not run.
   static const releaseAssertion = SustainedDeliveryGate._(
     evidence: <SustainedDeliveryFieldEvidence>[],
   );
@@ -158,7 +158,7 @@ enum SustainedDeliveryAvailability {
 ///
 /// Derived from Statcounter's Iranian fleet distribution for July 2026, read
 /// 2026-08-23; the derivation, the figures and what the matrix does not cover
-/// are in `docs/sustained-delivery-validation.md`. The axes are manufacturer
+/// are in `docs/runbooks/SUSTAINED-DELIVERY.md`. The axes are manufacturer
 /// and platform-version band, because those are the two things the evidence
 /// says the answer depends on: the manufacturer decides whether the process is
 /// allowed to live, and the platform version decides which of the freezer,
@@ -271,7 +271,7 @@ final class SustainedDeliveryFieldEvidence {
   /// `docs/validation/sustained-delivery/`, relative to `frontend/`.
   final String runRecord;
 
-  /// The thresholds from `docs/sustained-delivery-validation.md`, fixed on
+  /// The thresholds from `docs/runbooks/SUSTAINED-DELIVERY.md`, fixed on
   /// 2026-08-23 before any measurement, in the one place code can enforce them.
   static const minimumHoldingHours = 24;
   static const minimumDeliveries = 20;

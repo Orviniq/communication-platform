@@ -18,7 +18,7 @@ Centralizes authentication headers, sensitive-field redaction in logs/diagnostic
 
 ## Constraints and Open Gates
 
-- Defined in [Architecture](../../architecture.md) and [Synchronization engine](../../sync-engine.md).
+- Defined in [Architecture](../OVERVIEW.md) and [Synchronization engine](../SYNC.md).
 - On Android, `dart:io` does not consult `network_security_config.xml`, so `SecurityContext(withTrustedRoots: false)` plus the provisioned private CA enforces TLS trust (ADR-043).
 - Under [server ADR-0020](../../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md) and ADR-069, the `/ws` gateway authenticates solely via the `Authorization: Bearer` upgrade header.
 - Open gate: [Frontend status](../../STATUS.md#platform-identity-and-content) records an open owner decision on Dart runtime leaf SPKI pinning versus exclusive private-CA trust (ADR-076 D7).

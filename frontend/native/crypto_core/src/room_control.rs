@@ -3,7 +3,7 @@
 //! A voice room is client state exactly as a group is (`backend/CLIENT_CONTRACT.md`
 //! §N, server ADR-0021): the server holds no room, no roster and no name, so every
 //! change to a room is an event that one member's device signs and every other
-//! member checks (`docs/voice-signalling-v1.md`, Part 1). This module owns that
+//! member checks (`docs/contracts/VOICE-V1.md`, CPVRV001 room control). This module owns that
 //! event's deterministic-CBOR encoding, its Ed25519 signature under the device
 //! signing key, and the hash that chains one accepted event to the next. It is the
 //! group's construction under the room's own two domains, so that an event of one

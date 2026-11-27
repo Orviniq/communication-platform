@@ -7,7 +7,7 @@ validation evidence, and release gaps.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
 `assets/fonts/vazirmatn/`. The exact artifact and checksum provenance is recorded in
-`docs/visual-design-system.md`; no font or visual asset is fetched at runtime.
+`docs/ui/DESIGN-SYSTEM.md`; no font or visual asset is fetched at runtime.
 
 ## Toolchain
 
@@ -37,7 +37,7 @@ The two are separate, coexisting applications; neither upgrades into the other. 
 ([ADR-044](docs/architecture/decisions/044-private-deployment.md)) under the frozen application ID `com.orviniq.chat.beta`
 was deleted with the closed-beta MLS core, along with its signing and release tooling.
 No flavor builds that application ID now, so an existing install of it cannot be updated
-from this tree; [Production release signing and key continuity](docs/release-signing.md)
+from this tree; [Production release signing and key continuity](docs/runbooks/SIGNING.md)
 records what its retained signing key still controls.
 
 The Android `namespace` is still `com.example.communication_platform`. That is only
@@ -89,7 +89,7 @@ fails closed, unless `CP_PRODUCTION_UNSIGNED_BUILD=1` asks for an unsigned packa
 the command above and in CI; the OS refuses to install that package. Asking for both
 fails as well. `tool/verify_release_apk.sh --production` checks the signed artifact, including its
 recorded signer. `--production-unsigned` verifies the unsigned CI artifact. The
-[Android release checklist](docs/deployment-and-release.md#production-release-checklist)
+[Android release checklist](docs/runbooks/RELEASE.md#production-release-checklist)
 defines release acceptance.
 
 ## Generation and verification

@@ -19,7 +19,7 @@ Provides one coherent, locally bundled icon family with zero extra icon-package 
 ## Constraints and Open Gates
 
 - Enforced by [design_system_boundary_test.dart](../../../test/architecture/design_system_boundary_test.dart), which fails if any file in `lib/` outside `lib/app/design_system/app_icons.dart` references `FLucideIcons`.
-- Documented in [Visual design system](../../visual-design-system.md#iconography) and [Frontend instructions](../../../AGENTS.md).
+- Documented in [Visual design system](../../ui/DESIGN-SYSTEM.md#iconography) and [Frontend instructions](../../../AGENTS.md).
 - Open gates: None.
 
 ## Costs

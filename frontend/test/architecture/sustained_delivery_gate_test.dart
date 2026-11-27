@@ -26,7 +26,7 @@ void main() {
         isEmpty,
         reason:
             'nothing about this capability has been observed on any hardware; '
-            'see docs/sustained-delivery-validation.md',
+            'see docs/runbooks/SUSTAINED-DELIVERY.md',
       );
       expect(SustainedDeliveryGate.releaseAssertion.isOpen, isFalse);
       expect(
@@ -373,7 +373,7 @@ void main() {
 
   group('the gate is discoverable by somebody who does not know it exists', () {
     test('the validation document names every cell of the matrix', () {
-      final doc = File('docs/sustained-delivery-validation.md');
+      final doc = File('docs/runbooks/SUSTAINED-DELIVERY.md');
       expect(doc.existsSync(), isTrue);
       final text = doc.readAsStringSync();
       for (final cell in SustainedDeliveryFleetCell.values) {
@@ -401,16 +401,16 @@ void main() {
 
     test('the release checklist and the platform document point at it', () {
       expect(
-        File('docs/deployment-and-release.md').readAsStringSync(),
-        contains('sustained-delivery-validation.md'),
+        File('docs/runbooks/RELEASE.md').readAsStringSync(),
+        contains('SUSTAINED-DELIVERY.md'),
       );
       expect(
-        File('docs/platform-android.md').readAsStringSync(),
-        contains('sustained-delivery-validation.md'),
+        File('docs/architecture/ANDROID.md').readAsStringSync(),
+        contains('runbooks/SUSTAINED-DELIVERY.md'),
       );
       expect(
         File('docs/README.md').readAsStringSync(),
-        contains('sustained-delivery-validation.md'),
+        contains('runbooks/SUSTAINED-DELIVERY.md'),
       );
     });
   });

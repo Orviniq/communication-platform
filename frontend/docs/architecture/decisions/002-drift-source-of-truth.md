@@ -19,7 +19,7 @@ Prevents REST, WebSocket, and optimistic UI state from diverging in widgets and 
 
 ## Constraints and Open Gates
 
-- Defined in [Architecture](../../architecture.md) and [Local data model](../../local-data-model.md); implemented in [local_database.dart](../../../lib/features/local_storage/infrastructure/database/local_database.dart) (currently at `currentSchemaVersion = 26`).
+- Defined in [Architecture](../OVERVIEW.md) and [Local data model](../LOCAL-DATA.md); implemented in [local_database.dart](../../../lib/features/local_storage/infrastructure/database/local_database.dart) (currently at `currentSchemaVersion = 26`).
 - Open gates: None for the Drift choice itself; database schema/index performance and incremental projection behavior are refined in ADR-062 and ADR-063, and `allowBackup="false"` / non-exportable Keystore protection mean uninstalling or erasing data permanently deletes local history ([ADR-028](028-device-history-transfer.md)).
 
 ## Costs

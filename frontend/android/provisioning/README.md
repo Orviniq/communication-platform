@@ -12,13 +12,13 @@ private root PEM is placed at
 values. `tool/build_production_release.sh`, the only supported way to make a production
 artifact for a phone, runs it on every build, so the rendered resources cannot drift from
 the values compiled into Dart (ADR-076 D7), and `tool/verify_release_apk.sh --production`
-reads them back out of the packaged artifact. `docs/release-signing.md` is the manual.
+reads them back out of the packaged artifact. [`docs/runbooks/SIGNING.md`](../../docs/runbooks/SIGNING.md) is the manual.
 
 **These resources do not govern the app's own API traffic.** Android applies them
 to the platform's Java HTTP stacks and WebView; this client's REST and WebSocket
 transports both run on `dart:io`, which does not consult them. Trust for that
 traffic is installed in Dart from `<ENV>_PRIVATE_CA_PEM_BASE64`; see ADR-043 and
-`docs/platform-android.md`. What is rendered here is retained as defence in depth
+[`docs/architecture/ANDROID.md`](../../docs/architecture/ANDROID.md#network-trust). What is rendered here is retained as defence in depth
 for any future WebView or Java-side traffic.
 
 Those rendered resources are provisioning artifacts and are ignored by Git, and no pin,

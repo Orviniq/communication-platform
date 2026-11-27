@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-18); proposed 2026-10-17; supersedes [ADR-053](053-field-evidence-gate.md) for the `production` flavor only
 - **Date:** 2026-10-17 proposed, 2026-10-18 accepted (explicitly recorded in register and full section; implemented in `6f3b5516` and documented in `8e4a6ee3` on `frontend-offer-receiving-while-closed`, PR #86 `4091856e`)
 - **Supersedes in part:** [ADR-053](053-field-evidence-gate.md) (supersedes `production` withholding while keeping [ADR-053](053-field-evidence-gate.md) intact for its historical record and for the `development` flavor)
-- **Related:** [ADR-045](045-maturity-disclosure.md), [ADR-051](051-sustained-delivery.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-098](098-presence-and-typing.md), [sustained-delivery-validation.md](../../sustained-delivery-validation.md), [platform-android.md](../../platform-android.md), [deployment-and-release.md](../../deployment-and-release.md)
+- **Related:** [ADR-045](045-maturity-disclosure.md), [ADR-051](051-sustained-delivery.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-098](098-presence-and-typing.md), [SUSTAINED-DELIVERY.md](../../runbooks/SUSTAINED-DELIVERY.md), [ANDROID.md](../ANDROID.md), [RELEASE.md](../../runbooks/RELEASE.md)
 
 ## Decision (Position)
 
@@ -13,7 +13,7 @@ Enabled the opt-in "Receiving while closed" (`specialUse` foreground service) to
    - `SustainedDeliveryGate.availabilityIn(AppEnvironment.production)` returns `SustainedDeliveryAvailability.bestEffort` while the compiled evidence ledger (`SustainedDeliveryGate.releaseAssertion`) is incomplete, `measurementOnly` for `development`, and `evidenced` once the ledger is complete.
    - Because every availability now offers the switch in Settings and on the Sustained Delivery page, deleted `SustainedDeliveryAvailability.withheld`, `mayOffer`, `SustainedDeliveryStatus.withheld`, `SustainedDeliveryRefusal.withheld`, the withheld branch/stand-down of an earlier install's service, and strings `settingsSustainedWithheld`, `sustainedStatusWithheld`, and `sustainedRefusedWithheld`. The controller still stops the service whenever no user is signed in.
 2. **D2 — Preserve the seven-cell field-evidence ledger and admissibility rules:**
-   - Kept the seven mandatory matrix cells (Samsung Android 11–12, 13, 14+; Xiaomi Android 11–12, 13, 14+; platform reference), `SustainedDeliveryFieldEvidence.isAdmissible` (non-emulated, strict ISO date, committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3 repetitions), and `evidenced` promotion path in [sustained-delivery-validation.md](../../sustained-delivery-validation.md).
+   - Kept the seven mandatory matrix cells (Samsung Android 11–12, 13, 14+; Xiaomi Android 11–12, 13, 14+; platform reference), `SustainedDeliveryFieldEvidence.isAdmissible` (non-emulated, strict ISO date, committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3 repetitions), and `evidenced` promotion path in [SUSTAINED-DELIVERY.md](../../runbooks/SUSTAINED-DELIVERY.md).
 3. **D3 — No delivery-time claim:**
    - Retains `"How quickly it does on your phone has not been measured"` on the Sustained Delivery page; architecture/policy tests fail if copy claims `"within seconds"` or `"instantly"`.
 4. **D4 — Deployment disclosure revision 10 ([deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart)):**
@@ -32,7 +32,7 @@ Enabled the opt-in "Receiving while closed" (`specialUse` foreground service) to
 
 - **Scope:** Changed `SustainedDeliveryGate`, sustained-delivery controller/status/refusal types, Settings/page presentation, `DeploymentDisclosure` points and localized strings (`app_en.arb`, `app_fa.arb`); changed no Kotlin, manifest, wire format, schema, dependency, cryptographic construction, or `backend/` file.
 - **Verification:** Covered by host and widget tests including [sustained_delivery_gate_test.dart](../../../test/architecture/sustained_delivery_gate_test.dart) verifying `bestEffort` vs `evidenced` vs `measurementOnly`, revision 10 text and re-presentation for revision 8/9 readers, and production switch visibility.
-- **Left open:** No physical-device run of sustained delivery in a signed production build; the seven-cell validation matrix in [sustained-delivery-validation.md](../../sustained-delivery-validation.md) remains empty (`SustainedDeliveryGate.releaseAssertion`).
+- **Left open:** No physical-device run of sustained delivery in a signed production build; the seven-cell validation matrix in [SUSTAINED-DELIVERY.md](../../runbooks/SUSTAINED-DELIVERY.md) remains empty (`SustainedDeliveryGate.releaseAssertion`).
 
 ## Costs
 
@@ -40,7 +40,7 @@ Enabled the opt-in "Receiving while closed" (`specialUse` foreground service) to
 
 ## Reversal Trigger
 
-Reopen once all seven mandatory hardware cells in [sustained-delivery-validation.md](../../sustained-delivery-validation.md) hold admissible records (advancing `availabilityIn(production)` from `bestEffort` to `evidenced` and updating the disclosure), or if production must withdraw the capability again.
+Reopen once all seven mandatory hardware cells in [SUSTAINED-DELIVERY.md](../../runbooks/SUSTAINED-DELIVERY.md) hold admissible records (advancing `availabilityIn(production)` from `bestEffort` to `evidenced` and updating the disclosure), or if production must withdraw the capability again.
 
 ## History, Amendments, and Supersession
 

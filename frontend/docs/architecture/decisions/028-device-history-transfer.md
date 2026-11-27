@@ -10,7 +10,7 @@
 Message history exists **only on enrolled client devices** and transfers **device-to-device** from an existing online device (`history_transfers` manifests over pairwise encrypted envelopes), never from a server archive.
 
 1. Users MUST be honestly informed — both in the mandatory enrollment security notice (`DeploymentDisclosure.deviceOnlyHistory` and `DeploymentDisclosure.recoveryExcludesHistory` in [deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart)) and in device-linking UX — that erasing all devices or losing access to an existing online device permanently loses local history.
-2. History transfer moves message content only; it does not transfer ratchet session state or serve as a substitute for queue-gap group state recovery ([Synchronization engine](../../sync-engine.md#queue-gap-recovery)).
+2. History transfer moves message content only; it does not transfer ratchet session state or serve as a substitute for queue-gap group state recovery ([Synchronization engine](../SYNC.md#queue-gap-recovery)).
 
 ## Rationale
 
@@ -18,7 +18,7 @@ Matches the backend's removal of server-side history storage and communicates th
 
 ## Constraints and Open Gates
 
-- Defined in [Local data model](../../local-data-model.md) and [DeploymentDisclosure](../../../lib/app/config/deployment_disclosure.dart); Android `android:allowBackup="false"` and non-exportable AndroidKeyStore key wrapping prevent OS backup extraction.
+- Defined in [Local data model](../LOCAL-DATA.md) and [DeploymentDisclosure](../../../lib/app/config/deployment_disclosure.dart); Android `android:allowBackup="false"` and non-exportable AndroidKeyStore key wrapping prevent OS backup extraction.
 - Open gate: [Frontend status](../../STATUS.md#platform-identity-and-content) records that implementing the required encrypted contact, block, trust, and profile-key snapshot in device-to-device history transfer (`docs/client/CLIENT_CONTRACT.md`, `docs/client/CLIENT_CONTACTS_AND_TRUST.md`) remains an open contract gap.
 
 ## Costs

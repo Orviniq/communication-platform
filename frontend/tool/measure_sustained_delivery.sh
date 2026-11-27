@@ -2,7 +2,7 @@
 # Measure ADR-051's opt-in sustained delivery on a real Android device.
 #
 # This is the instrument for the validation matrix in
-# docs/sustained-delivery-validation.md, and it is the only thing that may
+# docs/runbooks/SUSTAINED-DELIVERY.md, and it is the only thing that may
 # produce a row for the evidence ledger in
 # lib/app/config/sustained_delivery_gate.dart.
 #
@@ -396,7 +396,7 @@ mark() {
 # verdict: apply the criteria, and refuse to guess
 # ---------------------------------------------------------------------------
 #
-# The thresholds are the ones in docs/sustained-delivery-validation.md, fixed
+# The thresholds are the ones in docs/runbooks/SUSTAINED-DELIVERY.md, fixed
 # on 2026-08-23 before anything was measured. This prints them alongside the
 # result so that a reader can see the criterion that was applied rather than
 # taking the word PASS on trust.
@@ -428,7 +428,7 @@ verdict() {
       printf "samples in deep Doze   : %d/%d\n", dozed, total
       print  ""
       print  "This is one run. A cell needs three, on the same hardware, each from a"
-      print  "fresh enable, plus 20 timed deliveries. See docs/sustained-delivery-validation.md."
+      print  "fresh enable, plus 20 timed deliveries. See docs/runbooks/SUSTAINED-DELIVERY.md."
     }
   ' "$samples"
 }

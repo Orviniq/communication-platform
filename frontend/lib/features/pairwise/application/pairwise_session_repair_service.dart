@@ -14,7 +14,7 @@ import 'package:communication_platform/features/pairwise/domain/pairwise_model.d
 /// Starts the authenticated repair of this device's sessions with one user.
 ///
 /// Each ready primary session gets one authenticated repair request, sent
-/// through its still-authenticated outgoing chain (`pairwise-transport-v1.md`,
+/// through its still-authenticated outgoing chain (`docs/contracts/PAIRWISE-V1.md`,
 /// "Replay, skipped keys, and repair"). The peer device answers the next time it
 /// sends to this device, with a fresh hybrid session that replaces the old one,
 /// so whatever a lost envelope did to the old session stops mattering.

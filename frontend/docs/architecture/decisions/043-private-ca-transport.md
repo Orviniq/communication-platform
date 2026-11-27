@@ -24,7 +24,7 @@ The client's own API and WebSocket traffic trusts the provisioned private certif
 
 ## Constraints and Open Gates
 
-- **Open owner decision (ADR-076 D7, [STATUS.md](../../STATUS.md#platform-identity-and-content), [platform-android.md](../../platform-android.md#network-trust)):** ADR-043 and the current code ([transport_security_native.dart](../../../lib/features/networking/infrastructure/tls/transport_security_native.dart)) enforce exclusive private-CA trust in `dart:io` without runtime leaf SPKI pinning, whereas ADR-067 D4, [server ADR-0027](../../../../docs/architecture/decisions/0027-the-serving-origin-moves-and-a-pin-moves-with-it.md), and [SECURITY.md](../../../../docs/security/SECURITY.md#trust-boundaries) describe or rely on runtime SPKI pinning. Build scripts still check `PRODUCTION_PRIMARY_SPKI_SHA256` against the live host and render `network_security_config.xml` with primary and backup pins ([platform-android.md](../../platform-android.md#network-trust)). Whether runtime SPKI pinning must also be enforced in Dart remains an open owner decision.
+- **Open owner decision (ADR-076 D7, [STATUS.md](../../STATUS.md#platform-identity-and-content), [ANDROID.md](../ANDROID.md#network-trust)):** ADR-043 and the current code ([transport_security_native.dart](../../../lib/features/networking/infrastructure/tls/transport_security_native.dart)) enforce exclusive private-CA trust in `dart:io` without runtime leaf SPKI pinning, whereas ADR-067 D4, [server ADR-0027](../../../../docs/architecture/decisions/0027-the-serving-origin-moves-and-a-pin-moves-with-it.md), and [SECURITY.md](../../../../docs/security/SECURITY.md#trust-boundaries) describe or rely on runtime SPKI pinning. Build scripts still check `PRODUCTION_PRIMARY_SPKI_SHA256` against the live host and render `network_security_config.xml` with primary and backup pins ([ANDROID.md](../ANDROID.md#network-trust)). Whether runtime SPKI pinning must also be enforced in Dart remains an open owner decision.
 - All background and foreground entry points must construct the provisioned context through `ApplicationRuntime` ([background_delivery_policy_test.dart](../../../test/architecture/background_delivery_policy_test.dart)).
 
 ## Costs
@@ -38,6 +38,6 @@ Reopen if the owner decides Dart runtime SPKI pinning must be enforced alongside
 
 ## History, Amendments, and Supersession
 
-- **2026-08-20 (`9515be30`):** Recorded ADR-043 (`Accepted`), correcting [platform-android.md](../../platform-android.md), [provisioning README](../../../android/provisioning/README.md), and [release-signing.md](../../release-signing.md).
+- **2026-08-20 (`9515be30`):** Recorded ADR-043 (`Accepted`), correcting [platform-android.md](https://github.com/Orviniq/communication-platform/blob/9515be300ffe62a6e80b3e6d96ff26ac31028f67/frontend/docs/platform-android.md), [provisioning README](../../../android/provisioning/README.md), and [SIGNING.md](../../runbooks/SIGNING.md).
 - **2026-09-07 (ADR-067):** Reused the private CA unchanged across the `chat.orviniq.com` origin move, while leaf regeneration moved `BETA_PRIMARY_SPKI_SHA256` in build-time pin config.
 - **2026-09-14 (ADR-076 D7):** Flagged the mismatch between exclusive private-CA trust in `dart:io` and SPKI-pinning expectations in server/security documentation as an open owner decision.

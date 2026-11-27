@@ -15,7 +15,7 @@ A custom or unaudited cryptographic implementation is not production-ready; isol
 
 ## Constraints and Open Gates
 
-- **Gate status: OPEN.** As recorded in [Frontend status](../../STATUS.md#platform-identity-and-content), [Pairwise review readiness](../../pairwise-review-readiness.md), [Independent review engagement](../../independent-review-engagement.md), and [DeploymentDisclosure.noIndependentReview](../../../lib/app/config/deployment_disclosure.dart), **no layer has been independently assessed** — including pairwise PQXDH/Double Ratchet, enrollment/cross-signing/device logs, signed pairwise group control (`CPGSV001`), voice room control (`CPVRV001`), and attachment streaming.
+- **Gate status: OPEN.** As recorded in [Frontend status](../../STATUS.md#platform-identity-and-content), [Independent review scope](../../security/REVIEW-SCOPE.md), and [DeploymentDisclosure.noIndependentReview](../../../lib/app/config/deployment_disclosure.dart), **no layer has been independently assessed** — including pairwise PQXDH/Double Ratchet, enrollment/cross-signing/device logs, signed pairwise group control (`CPGSV001`), voice room control (`CPVRV001`), and attachment streaming.
 - Every distributed artifact must disclose this lack of independent review (`noIndependentReview` in `DeploymentDisclosure`) and avoid calling any surface "supported", "stable", "verified", or "audited" (ADR-045).
 - Enforced at build/test boundaries by [crypto_core_boundary_test.dart](../../../test/architecture/crypto_core_boundary_test.dart) (forbidding Dart crypto packages `cryptography`, `pinenacl`, `pointycastle`) and [Cargo.toml](../../../native/crypto_core/Cargo.toml) (`mlkem-native` v1.2.0, RustCrypto crates, `libsodium-sys-stable` 1.24.0, `zeroize`).
 

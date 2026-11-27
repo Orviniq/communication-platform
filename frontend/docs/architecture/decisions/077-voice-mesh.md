@@ -13,17 +13,17 @@ Client-side record of server [ADR-0021](../../../../docs/architecture/decisions/
    - A room ID is 32 CSPRNG bytes; its name (up to 100 Unicode scalar values via `RoomNames`) travels inside signed control events ([room_model.dart](../../../lib/features/voice/domain/room_model.dart)).
    - `RoomControlEvent` mirrors `GroupControlEvent` field for field (version, event ID, room ID, revision, previous state hash, signer, `created_ms`, operation) with the same hash chain and six apply outcomes under distinct signing/hash domains (`"chat:v1:room-control"` and `"chat:v1:room-control-state"`).
    - Five operations: create, add members, remove member, rename, plus reserved operation value `5` so a future role operation cannot collide.
-   - Every active member has equal authority to add, remove, and rename (no owner/admin hierarchy in v1), matching [ui-specification.md](../../ui-specification.md#132-voice-room-info-screen) and the unauthenticated `/ws` `signal` relay in `backend/realtime/gateway.py` (where `core/tests/test_seizure_guard.py` forbids server-side membership tables). Any member can eject any other; the remedy for abuse or fork is quarantine and a new room.
+   - Every active member has equal authority to add, remove, and rename (no owner/admin hierarchy in v1), matching [Voice Room Info screen](../../ui/SCREENS.md#voice-room-info-screen) and the unauthenticated `/ws` `signal` relay in `backend/realtime/gateway.py` (where `core/tests/test_seizure_guard.py` forbids server-side membership tables). Any member can eject any other; the remedy for abuse or fork is quarantine and a new room.
 2. **D2 — Ten-device call ceiling (Owner answer A, 2026-09-20):**
    - Per [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) §N rule 10, the ceiling counts **joined devices** (10 max), not accounts, because uplink and coturn relay costs scale per device connection.
    - Enforced deterministically on both sender and receiver by sorting device IDs as lowercase strings (matching §N rule 3's polite-peer rule): participants keep the 10 lowest and offer nothing to the rest, so an 11th device exhausts retries and sees *Call full*.
 3. **D3 — Standalone rooms only (Owner answer A, 2026-09-20):**
-   - Neither groups nor direct chats host calls in this version (`ui-specification.md` §13.1), avoiding dual signed chains governing one roster. Creating a room as a snapshot from a group roster is left for a later decision.
-4. **D4 — Channel-split wire formats with cross-channel refusal ([voice-signalling-v1.md](../../voice-signalling-v1.md)):**
+   - Neither groups nor direct chats host calls in this version ([Create Voice Room flow](../../ui/SCREENS.md#create-voice-room-flow)), avoiding dual signed chains governing one roster. Creating a room as a snapshot from a group roster is left for a later decision.
+4. **D4 — Channel-split wire formats with cross-channel refusal ([VOICE-V1.md](../../contracts/VOICE-V1.md)):**
    - `CPVRV001` carries room control events over **durable** envelopes (`EnvelopeV1`); `CPVSV001` carries the eight call-signalling kinds (`join`, `leave`, `participants_query`, `offer`, `answer`, `candidates`, `room_text`, plus versioned header) over **volatile** `/ws` `signal` frames.
    - Each payload is refused if received on the other channel, preventing durable replay of stale offers and volatile writes to durable rosters.
 5. **D5 — Volatile frames share the durable pairwise Double Ratchet (Owner answer A, 2026-09-20):**
-   - Per [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) §N rule 6 and frozen [pairwise-transport-v1.md](../../pairwise-transport-v1.md), `CPVSV001` seals under the existing pairwise Double Ratchet (`PairwiseVolatileSealer` in [pairwise_volatile_sealer.dart](../../../lib/features/pairwise/application/pairwise_volatile_sealer.dart)) rather than a second session or signalling-only key schedule.
+   - Per [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) §N rule 6 and frozen [PAIRWISE-V1.md](../../contracts/PAIRWISE-V1.md), `CPVSV001` seals under the existing pairwise Double Ratchet (`PairwiseVolatileSealer` in [pairwise_volatile_sealer.dart](../../../lib/features/pairwise/application/pairwise_volatile_sealer.dart)) rather than a second session or signalling-only key schedule.
    - Committed session state advances before sending, with no outbox row written; retries re-seal on a new message number.
    - Dropped volatile frames leave retained skipped keys on the peer's next received message (against bounds of 2,000 skipped keys per device pair and 20,000 per account). Budgeted at **32 sealed volatile frames per peer per call** (`VoiceSignalTransport.volatileBudgetPerPeer` in [voice_signal_transport.dart](../../../lib/features/voice/application/voice_signal_transport.dart)) — 62 wholly dropped calls before reaching 2,000 — and nothing further is sealed to a peer marked unreachable until a fresh `join`.
 6. **D6 — Local schema replacement (schema 23 in `32c85dc7`):**
@@ -48,7 +48,7 @@ Client-side record of server [ADR-0021](../../../../docs/architecture/decisions/
 ## Rationale
 
 - Server [ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md) delegates all room membership and call signalling to client-encrypted channels while leaving wire design to the client ([CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) §N).
-- Separating durable membership (`CPVRV001`) from volatile call signalling (`CPVSV001`) matches persistence guarantees to semantics, reuses the reviewed group state-chain design, and lets durable room traffic establish pairwise sessions without altering the frozen [pairwise-transport-v1.md](../../pairwise-transport-v1.md) profile.
+- Separating durable membership (`CPVRV001`) from volatile call signalling (`CPVSV001`) matches persistence guarantees to semantics, reuses the reviewed group state-chain design, and lets durable room traffic establish pairwise sessions without altering the frozen [PAIRWISE-V1.md](../../contracts/PAIRWISE-V1.md) profile.
 
 ## Constraints and Open Gates
 

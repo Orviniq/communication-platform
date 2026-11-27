@@ -44,7 +44,7 @@ are not diagnostic builds: each carries a correction and nothing else.
 
 Accounts A and B are different accounts, each a verified contact of the other on its own
 device, which is what the room's invite step and the design's authenticated device lists
-require ([`voice-signalling-v1.md`](../../../voice-signalling-v1.md), Part 1). Both devices
+require ([`voice-signalling-v1.md`](https://github.com/Orviniq/communication-platform/blob/53ff38618e7e72103709e2f2787c5bb4017bd36d/frontend/docs/voice-signalling-v1.md#part-1--cpvrv001-the-rooms-control-events), Part 1). Both devices
 were already signed in on build 2.
 
 The host computer was connected to device A's Wi-Fi hotspot, so device B's traffic also left

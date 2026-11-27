@@ -99,7 +99,7 @@ Not verified on a phone (ADR-097).
 
 ## Remaining §8 file-name, metadata, and warning work
 
-Under [`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §8
+Under [`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §8
 (audited against `AttachmentChannel.kt` and `AttachmentPreviewSheet`), the following §8
 requirements remain unimplemented:
 
@@ -148,7 +148,8 @@ immediate server deletion of abandoned uploads.
 *Built 2026-10-10, prompt 3 of the phase.* `AttachmentUploads`
 (`lib/features/attachments/application/attachment_uploads.dart`) is the upload queue of one
 session, one for each `MessagingScope`, composed in `attachment_providers.dart`. The tray and
-the preview step are in [UI specification](ui-specification.md) §8 and §8.2.
+the preview step are in [DM Chat Screen](../ui/SCREENS.md#dm-chat-screen) and
+[Attachment sheet](../ui/SCREENS.md#attachment-sheet).
 
 1. **Pick.** The cache's first sweep runs before the picker opens, and no sweep runs while
    it is open (`AttachmentOutgoingHolds.pickOpen`): nothing holds the copy the picker is
@@ -225,8 +226,7 @@ dies drops its jobs, and the user sends again (ADR-089, Consequences).
 *Corrected 2026-10-07 (server ADR-0020):* this section said Web downloads used blob URLs,
 a download disposition, an allowlist of inline image and audio formats, and timely URL
 revocation. There is no Web client: the server serves no browser surface, and the
-client's web target was removed on 2026-09-08 (`implementation-checklist.md`, The web
-target).
+client's web target was removed on 2026-09-08 ([The web target](../STATUS.md#the-web-target)).
 
 1. Validate the descriptor and bucket before allocating.
 2. Download ciphertext as a stream; development direct-to-Daphne empty-body behavior is
@@ -245,7 +245,8 @@ through a scoped content URI, not a raw path.
 *Built 2026-10-11, prompt 4 of the phase.* `AttachmentDownloads`
 (`lib/features/attachments/application/attachment_downloads.dart`) is the download queue of
 one session, one for each `MessagingScope`, composed in `attachment_providers.dart`. The
-tiles and the details sheet are in [UI specification](ui-specification.md) §8 and §8.2.
+tiles and the details sheet are in [DM Chat Screen](../ui/SCREENS.md#dm-chat-screen) and
+[Attachment sheet](../ui/SCREENS.md#attachment-sheet).
 
 1. **Tap.** No download starts without a tap on a tile. A tap adds a job for that
    attachment id, and a second request for an id that has a job does nothing. Jobs live in
@@ -301,7 +302,7 @@ tiles and the details sheet are in [UI specification](ui-specification.md) §8 a
 ## Resuming a download
 
 Implemented 2026-10-07 (ADR-083), on the behaviour the
-[attachments API](../../backend/attachments/API.md) documents under **Resuming**. A
+[attachments API](../../../backend/attachments/API.md) documents under **Resuming**. A
 download of the two largest buckets, 16 MiB and 64 MiB, takes up where it stopped. Below
 them a download starts again from zero: the largest of the rest is 4 MiB, a quarter of the
 smallest bucket that resumes, and costs less to fetch again than the bookkeeping costs to
@@ -335,7 +336,7 @@ answers `200` with an empty body and does nothing with `Range`.
 ## Caching
 
 *Built 2026-10-10 (ADR-089 D8, D9, D10, prompt 2 of the phase). The table, the projection and
-the sweeps are in [Local data model](local-data-model.md#attachment-rows-and-decrypted-files).*
+the sweeps are in [Local data model](../architecture/LOCAL-DATA.md#attachment-rows-and-decrypted-files).*
 
 - **Where.** Every attachment file lives under `secure_attachment_cache` in the application's
   cache directory, never in shared external storage. The native wipe deletes that directory at
@@ -411,4 +412,4 @@ descriptors (ADR-089, Not verified).
 
 ## API reference
 
-- [Attachments API](../../backend/attachments/API.md)
+- [Attachments API](../../../backend/attachments/API.md)

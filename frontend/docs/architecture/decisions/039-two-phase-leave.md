@@ -22,7 +22,7 @@ Why closed: no MLS epoch or Commit exists in pairwise groups.
 ## Constraints and Open Gates
 
 - **Closed:** `mls_beta.rs` and `GroupPendingEvictionService` (`frontend/lib/features/groups/application/group_pending_eviction_service.dart`, introduced in `91ba0f8e`) were deleted when closing beta MLS.
-- Pairwise group leaving and moderation rules are now governed by ADR-075 and ADR-096 ([UI specification](../../ui-specification.md)).
+- Pairwise group leaving and moderation rules are now governed by ADR-075 and ADR-096 ([UI screens](../../ui/SCREENS.md#group-chat-screen)).
 
 ## Costs
 

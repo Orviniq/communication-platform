@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-11); proposed 2026-10-10; amended for video by [ADR-097](097-direct-video.md) (2026-10-19)
 - **Date:** 2026-10-11 accepted, 2026-10-10 proposed (PR #73 `c4e53bc3`, commits `a6bd1b79`–`ce24d5b0`; Rust descriptor codec tests and decoder fixes added 2026-10-12 in `1c2434f8`, `e4cab3c9`, `445cc513`, PR #74 `f3353959`)
 - **Amended by:** [ADR-097](097-direct-video.md) (2026-10-19, adds video sending/receiving in direct chats and Saved Messages)
-- **Related:** [ADR-045](045-maturity-disclosure.md), [ADR-075](075-pairwise-groups.md), [ADR-083](083-resumable-download.md), [ADR-097](097-direct-video.md), [attachments.md](../../attachments.md), [platform-android.md](../../platform-android.md), [ui-specification.md](../../ui-specification.md), [local-data-model.md](../../local-data-model.md), [deployment-and-release.md](../../deployment-and-release.md), [attachments API](../../../../backend/attachments/API.md)
+- **Related:** [ADR-045](045-maturity-disclosure.md), [ADR-075](075-pairwise-groups.md), [ADR-083](083-resumable-download.md), [ADR-097](097-direct-video.md), [ATTACHMENTS.md](../../contracts/ATTACHMENTS.md), [ANDROID.md](../ANDROID.md), [SCREENS.md](../../ui/SCREENS.md), [LOCAL-DATA.md](../LOCAL-DATA.md), [RELEASE.md](../../runbooks/RELEASE.md), [attachments API](../../../../backend/attachments/API.md)
 
 ## Decision (Position)
 

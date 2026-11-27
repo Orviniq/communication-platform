@@ -14,8 +14,8 @@ Prevents ambiguous, malleable, or unprotected trailing padding bytes and padding
 
 ## Constraints and Open Gates
 
-- Defined in [Application-message protocol](../../message-protocol.md#layering) and [Pairwise transport v1](../../pairwise-transport-v1.md).
-- Outer frame size must match allowed backend buckets; malformed or non-canonical inner padding fails closed during Rust core decryption ([Pairwise review readiness](../../pairwise-review-readiness.md)).
+- Defined in [Application-message protocol](../../contracts/MESSAGES.md#layering) and [Pairwise transport v1](../../contracts/PAIRWISE-V1.md).
+- Outer frame size must match allowed backend buckets; malformed or non-canonical inner padding fails closed during Rust core decryption ([Pairwise v1 review packet](../../security/REVIEW-SCOPE.md#pairwise-v1-review-packet)).
 - Open gate: Independent cryptographic review of `TransportPlaintextV1` and padding validation remains open under [ADR-017](017-independent-crypto-review.md).
 
 ## Costs
@@ -29,5 +29,5 @@ Only if a new transport protocol version changes framing/padding format with equ
 ## History, Amendments, and Supersession
 
 - **2026-07-24 (`1b321da1`):** Original decision recorded in the initial ADR register (`Accepted`).
-- **2026-07-29 (`d0092ee9`):** Implemented in `native/crypto_core/src/pairwise.rs` and frozen in [Pairwise transport v1](../../pairwise-transport-v1.md).
+- **2026-07-29 (`d0092ee9`):** Implemented in `native/crypto_core/src/pairwise.rs` and frozen in [Pairwise transport v1](https://github.com/Orviniq/communication-platform/blob/d0092ee97693276b28127e08443f45b9fa2dee9a/frontend/docs/pairwise-transport-v1.md).
 - No supersession.

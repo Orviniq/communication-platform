@@ -19,7 +19,7 @@ import 'package:go_router/go_router.dart';
 typedef CreateVoiceRoomCallback =
     Future<Result<String>> Function(String name, List<String> memberUserIds);
 
-/// Create Voice Room (`ui-specification.md` §13.1): room details, then who to
+/// Create Voice Room (`docs/ui/SCREENS.md`, Create Voice Room flow): room details, then who to
 /// invite, then create. Nothing here calls the server: the create event is
 /// signed on this device and fanned out as ordinary envelopes.
 class CreateVoiceRoomPage extends StatelessWidget {

@@ -7,7 +7,7 @@
 
 ## Decision (Position)
 
-*(Extracted from the ADR-047 register row, its introducing commit `1b181c75`, and verified current implementation in [sync-engine.md](../../sync-engine.md#composition-and-ownership) and [message_delivery.dart](../../../lib/app/dependencies/message_delivery.dart); no separate full section existed in `decisions.md`.)*
+*(Extracted from the ADR-047 register row, its introducing commit `1b181c75`, and verified current implementation in [SYNC.md](../SYNC.md#composition-and-ownership) and [message_delivery.dart](../../../lib/app/dependencies/message_delivery.dart); no separate full section existed in `decisions.md`.)*
 
 Composes [ADR-046](046-layered-delivery.md)'s Layer 0 delivery path at the application root on one shared networking foundation:
 
@@ -32,8 +32,8 @@ Composes [ADR-046](046-layered-delivery.md)'s Layer 0 delivery path at the appli
 - **Subsequent evolutions verified in current code:**
   - **ADR-049 (2026-08-21):** Replaced `UnscheduledBestEffortPolling` on Android with `PlatformDeferredDeliveryScheduler` behind `AndroidBestEffortPollingPort` ([message_delivery.dart](../../../lib/app/dependencies/message_delivery.dart)); non-Android targets compose a null scheduler.
   - **ADR-050 (2026-08-22):** Added `DeliveryOwnershipGate().awaitExclusiveOwnership()` to `bootstrap()` before `ApplicationRuntime.create()` so foreground startup arbitrates single-owner delivery before storage/session access.
-  - **ADR-068 / ADR-069 (2026-09-08):** Retired rotating refresh tokens and WebSocket close codes `4001` and `4403` (gateway auth moved to handshake upgrade; `4003` / `4008` remain; see [sync-engine.md](../../sync-engine.md#token-lifecycle)).
-  - **2026-10-05 correction ([sync-engine.md](../../sync-engine.md#composition-and-ownership)):** `outbox_depth` counts owed send preparations (including signed group/room control changes) as well as sealed target rows.
+  - **ADR-068 / ADR-069 (2026-09-08):** Retired rotating refresh tokens and WebSocket close codes `4001` and `4403` (gateway auth moved to handshake upgrade; `4003` / `4008` remain; see [SYNC.md](../SYNC.md#token-lifecycle)).
+  - **2026-10-05 correction ([SYNC.md](../SYNC.md#composition-and-ownership)):** `outbox_depth` counts owed send preparations (including signed group/room control changes) as well as sealed target rows.
 
 ## Costs
 
@@ -46,6 +46,6 @@ Reopen if the application moves away from single-root Riverpod composition or sp
 
 ## History, Amendments, and Supersession
 
-- **2026-08-21 (`1b181c75`):** Recorded ADR-047 (`Accepted`), composing [ADR-046](046-layered-delivery.md) Layer 0 and updating [sync-engine.md](../../sync-engine.md), `platform-android.md`, and `implementation-checklist.md`.
+- **2026-08-21 (`1b181c75`):** Recorded ADR-047 (`Accepted`), composing [ADR-046](046-layered-delivery.md) Layer 0 and updating [sync-engine.md](https://github.com/Orviniq/communication-platform/blob/1b181c75dbf65cd0485812623dbac742030bd73b/frontend/docs/sync-engine.md), [`platform-android.md`](https://github.com/Orviniq/communication-platform/blob/1b181c75dbf65cd0485812623dbac742030bd73b/frontend/docs/platform-android.md), and `implementation-checklist.md`.
 - **2026-08-21 – 2026-08-22 (ADR-049, ADR-050):** Composed `PlatformDeferredDeliveryScheduler` on Android and moved single-owner gating into `bootstrap()`.
 - **2026-09-08 & 2026-10-07 (ADR-068, ADR-069, ADR-083):** Retired close code `4001` and rotating-refresh-token failure premise while keeping one `NetworkingFoundation` and `TokenCoordinator`.

@@ -1,7 +1,7 @@
-# UI specification — Page-by-Page
+# UI screens
 
 > Android is the sole target. Wide layouts describe viewport sizes. The
-> [frontend status matrix](STATUS.md) records implementation and release gaps.
+> [frontend status matrix](../STATUS.md) records implementation and release gaps.
 >
 > **Backend authority note.** Backend `API.md` contracts take precedence wherever this
 > UI specification implies an unavailable endpoint, stronger server guarantee, or
@@ -18,11 +18,11 @@
 >   between screens.
 > - It does **NOT** duplicate visual styling. Colors, typography, spacing, theming,
 >   component treatment, and motion are defined by
->   [`visual-design-system.md`](visual-design-system.md).
+>   [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md).
 > - It does **NOT** duplicate cryptographic protocol detail (key exchange, ratchets,
 >   key-backup internals). Those rules live in
->   [`cryptographic-protocol.md`](cryptographic-protocol.md) and
->   [`message-protocol.md`](message-protocol.md). Where
+>   [`CRYPTO.md`](../contracts/CRYPTO.md) and
+>   [`MESSAGES.md`](../contracts/MESSAGES.md). Where
 >   the UI must respect a privacy or honesty rule, it is stated inline and flagged
 >   **[PRIVACY]** — you can build the screen correctly from that flag alone.
 >
@@ -35,7 +35,7 @@
 > or audio. It may run on a self-hosted server inside a country during an internet
 > shutdown, so the client uses **no foreign services** — no Google/Apple push, no CDNs, no
 > external fonts/JS, no third-party analytics. Telegram is an interaction reference; the
-> product's visual identity is defined in [`visual-design-system.md`](visual-design-system.md).
+> product's visual identity is defined in [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md).
 
 ---
 
@@ -52,11 +52,11 @@ These recur across screens. They are stated here so the individual screens can s
   normal chat app. Design for a small delay; don't treat them as instant.
 - **Chat and contact-list search are local.** The Chats search page matches names,
   usernames and one preview line per chat. In-conversation search reads that
-  conversation's local history (§6.5). Explicit exact-username discovery uses
-  the server lookup described in §7.
+  conversation's local history ([Search](#search-client-side-only)). Explicit exact-username discovery uses
+  the server lookup described in [Contacts / New Chat](#contacts--new-chat).
 - **Foreground delivery uses the app's own server; Android background delivery is
   best-effort — never Google/Apple push.** By default that is deferred polling; a user may
-  additionally opt into keeping the app connected while closed (§15). Production
+  additionally opt into keeping the app connected while closed ([Settings](#settings-settings-tab--home)). Production
   offers this as best effort with no delivery-time promise.
   Uncollected envelopes expire after the window published in `GET /api/v1/config`.
   An affected group shows that it awaits state. Direct-chat gap UI remains outstanding.
@@ -70,25 +70,29 @@ These recur across screens. They are stated here so the individual screens can s
   it). There is no badge meaning supported, stable, verified or audited, and none may be
   added: an unbadged surface is covered by the application-level label and by nothing
   stronger. Both words come from `SurfaceMaturity`; a screen that invents its own
-  maturity wording is a defect ([ADR-045](architecture/decisions/045-maturity-disclosure.md)).
+  maturity wording is a defect ([ADR-045](../architecture/decisions/045-maturity-disclosure.md)).
 - **A feature that does not work does not offer itself.** Where an action cannot
   succeed - no adapter is composed, no picker exists - the screen says so and disables
   the action. It never presents a control that fails into a generic error.
 - **Two separate secrets, never conflated.** A **login password** authenticates to the
   server; a **recovery secret** protects cross-signing private identity material. Neither
   recovers message history from the server because the server stores none.
+- **Logs and diagnostics never expose secrets or content.** Logs and diagnostics MUST
+  exclude plaintext, identifiers, tokens, keys, ciphertext bodies, URLs carrying
+  capabilities, and attachment metadata. Revoked devices lose tokens, queued content,
+  local session access, and future group access.
 - **Verification precedes messaging.** The implemented Safety Number flow verifies
   a contact's master key out of band on one side. The
-  [contacts and trust contract](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
+  [contacts and trust contract](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
   requires the contact code and `MUTUAL` before direct content. Unsigned devices,
   master-key changes, and device-log forks are blocking security states.
 
 ---
 
-## 0. Global Layout & Navigation Model
+## Global layout and navigation
 
-### 0.1 Adaptive shell
-One adaptive shell that changes structure by viewport width.
+### Adaptive shell
+One adaptive shell changes structure by viewport width; see [Adaptive layout](ADAPTIVE-LAYOUT.md#adaptive-shell) for width classes, insets, and resizing guarantees.
 
 - **Mobile (narrow):** a **bottom tab bar** with three tabs: **Chats**, **Voice Rooms**,
   **Settings**. Tapping a list item pushes a detail screen over the whole screen, the tab
@@ -100,8 +104,8 @@ One adaptive shell that changes structure by viewport width.
 
 The destination set is identical across form factors; only the container differs.
 
-**The tab bar and the rail belong to the three tab roots** — the Chats list (§6), the Voice
-Rooms list (§13.0) and Settings (§15) — and to no other screen. Every screen above a tab
+**The tab bar and the rail belong to the three tab roots** — the Chats list ([Chats List](#chats-list-home--chats-tab)), the Voice
+Rooms list ([Voice Rooms list](#voice-rooms-list-voice-rooms-tab)) and Settings ([Settings](#settings-settings-tab--home)) — and to no other screen. Every screen above a tab
 root is a **full-screen page**, at every width: a conversation, Saved Messages, a contact,
 a voice room and its call, each Settings screen, and each screen behind those. It covers
 the tab bar, or the rail at medium and wide width, and back returns to the screen below it
@@ -111,39 +115,39 @@ screen it opens covers the rail too. A full-screen page keeps its controls clear
 status bar, the gesture bar and the navigation buttons, and its colour still reaches every
 edge of the screen.
 
-### 0.2 Persistent elements
+### Persistent elements
 - **Active voice-room banner.** Whenever the user is in a call, a thin persistent banner
   shows the room name, a live mic-state icon, and a "return to room" tap target. It stays
   on every screen until the user leaves the call; tapping it opens the Live Voice Room
-  (§10). Membership of a room does not raise it — only a call in progress does. It has
+  ([Live Voice Room Screen](#live-voice-room-screen)). Membership of a room does not raise it — only a call in progress does. It has
   three places:
-  - on a tab root at narrow width (§0.1), above the bottom tab bar;
+  - on a tab root at narrow width ([Adaptive shell](#adaptive-shell)), above the bottom tab bar;
   - on a tab root at medium and wide width, at the top of the rail;
-  - on every full-screen page (§0.1), at the top of the page: below the status bar, whose
+  - on every full-screen page ([Adaptive shell](#adaptive-shell)), at the top of the page: below the status bar, whose
     inset it takes, and above the page's own top bar.
 
-  The call's own screen (§10) shows no banner, because there it would only point at
+  The call's own screen ([Live Voice Room Screen](#live-voice-room-screen)) shows no banner, because there it would only point at
   itself; the call screen of another room shows it. The bootstrap and sign-in screens —
-  Connection (§1), Login (§2), Register and Pending activation (§3), Encryption setup
-  (§4) and the session-restoring screen — show none. As built (2026-10-02), its
+  Connection ([Splash / Connection Screen](#splash--connection-screen)), Login ([Login Screen](#login-screen)), Register and Pending activation ([Register Screen](#register-screen--pending-activation-state)), Encryption setup
+  ([Encryption Setup](#encryption-setup-first-run-on-a-device)) and the session-restoring screen — show none. As built (2026-10-02), its
   microphone icon reads muted or on, in words for a screen reader as well. As built
   (2026-10-08, phase 8 prompt 2), a full-screen page keeps its state when a call starts
   or ends while it is open, a draft in the composer included.
 - **No connection strip.** The shell draws none. The connection and sync status is the
-  Chats title's (§6): it shows what the delivery engine is doing once the engine has been
+  Chats title's ([Chats List](#chats-list-home--chats-tab)): it shows what the delivery engine is doing once the engine has been
   unsettled for a second, and it clears when the engine settles. As built (2026-10-09,
-  phase 10 prompt 2), the strip of earlier builds is deleted ([ADR-087](architecture/decisions/087-chat-status.md)): it
+  phase 10 prompt 2), the strip of earlier builds is deleted ([ADR-087](../architecture/decisions/087-chat-status.md)): it
   showed on the Chats tab root only, after a start without the server, and nothing
   cleared it when the connection came back.
 
-### 0.3 Global "new" affordance
+### Global "new" affordance
 - **Mobile:** a floating compose button (FAB) on the Chats and Voice Rooms lists; its
-  action depends on the active tab (§7.3 recap).
+  action depends on the active tab ([Compose behavior recap](#compose-behavior-recap)).
 - **Desktop:** a compose "+" at the top of the left rail's list header.
 
 ---
 
-## 1. Splash / Connection Screen
+## Splash / Connection Screen
 
 **Purpose.** First screen on launch. Decides whether the app has a stored identity, whether
 it can reach the server, and where to route. Also loads the pre-installed server-trust
@@ -155,9 +159,9 @@ setup the app was provisioned with.
 - No top bar, no bottom bar — a standalone gate.
 
 **Boot logic & routing.**
-- Stored identity + reachable server → **Chats** (§6), already signed in.
-- Stored identity + expired credential → **Login** (§2), username pre-filled.
-- No stored identity → **Login** (§2) with a Register path.
+- Stored identity + reachable server → **Chats** ([Chats List](#chats-list-home--chats-tab)), already signed in.
+- Stored identity + expired credential → **Login** ([Login Screen](#login-screen)), username pre-filled.
+- No stored identity → **Login** ([Login Screen](#login-screen)) with a Register path.
 - Server unreachable with no usable local identity → stay here in the unreachable state.
 - Server unreachable with a usable Android identity → open cached Chats in offline mode;
   queued sends wait for reconnection.
@@ -172,7 +176,7 @@ setup the app was provisioned with.
 
 ---
 
-## 2. Login Screen
+## Login Screen
 
 **Purpose.** Sign an existing user in with username + password.
 
@@ -182,14 +186,14 @@ setup the app was provisioned with.
 3. **Username** field.
 4. **Password** field with show/hide toggle.
 5. **Log In** primary button.
-6. **Create account** link → Register (§3).
-7. Footer link **"Security & how this app protects you"** → Security Notice (§5), viewable
+6. **Create account** link → Register ([Register Screen](#register-screen--pending-activation-state)).
+7. Footer link **"Security & how this app protects you"** → Security Notice ([Security Notice](#security-notice-honest-safety-boundary)), viewable
    before login.
 
 **Actions.**
 - **Log In** → on success, if this device has no encryption identity yet, go to Encryption
-  Setup (§4); otherwise go to Chats (§6).
-- **Create account** → Register (§3).
+  Setup ([Encryption Setup](#encryption-setup-first-run-on-a-device)); otherwise go to Chats ([Chats List](#chats-list-home--chats-tab)).
+- **Create account** → Register ([Register Screen](#register-screen--pending-activation-state)).
 
 **States.**
 - *Idle* — Log In disabled until both fields filled.
@@ -197,7 +201,7 @@ setup the app was provisioned with.
 - *Invalid credentials* — generic inline error ("Username or password is incorrect").
   **[PRIVACY]** No hint which field was wrong or whether the username exists.
 - *Account inactive* — distinct message: the account exists but the owner hasn't activated
-  it yet (see §3's Pending-Activation).
+  it yet (see Pending-Activation under Register Screen).
 - *Server unreachable* — banner; Log In disabled.
 
 **[PRIVACY]** The password only signs the user in; it never protects or recovers message
@@ -205,7 +209,7 @@ content. Nothing here should imply otherwise.
 
 ---
 
-## 3. Register Screen (+ Pending-Activation state)
+## Register Screen (+ Pending-Activation state)
 
 **Purpose.** Create a new account with minimal personal info — **username + password
 only**.
@@ -218,7 +222,7 @@ only**.
 4. **Password** field with show/hide + strength hint.
 5. **Confirm password** field.
 6. **Create account** primary button.
-7. Footer link to Security Notice (§5).
+7. Footer link to Security Notice ([Security Notice](#security-notice-honest-safety-boundary)).
 
 **Actions.**
 - **Create account** → account is created **inactive** (the owner must manually approve
@@ -231,8 +235,8 @@ only**.
   **Check again** button, a **Back to login** link. Check Again returns to Login with the
   username prefilled and asks for the password again; the pending screen does not retain
   the password or call a nonexistent activation-status endpoint.
-- **States.** *Still pending* (unchanged on re-check) / *Now active* (route to Login §2 or
-  into Encryption Setup §4).
+- **States.** *Still pending* (unchanged on re-check) / *Now active* (route to Login Login Screen or
+  into Encryption Setup Encryption Setup).
 
 **States (Register form).**
 - *Idle / validating / submitting*.
@@ -242,7 +246,7 @@ only**.
 
 ---
 
-## 4. Encryption Setup (First Run on a Device)
+## Encryption Setup (First Run on a Device)
 
 **Purpose.** The first installation creates account cross-signing keys plus independent
 X25519 and ML-KEM-768 device material. No MLS device material is created: a group is a
@@ -258,14 +262,14 @@ after that response. While this second phase is pending, show "Finishing secure 
 setup", support safe retry/resume, and withhold messaging; never offer an unsigned or
 placeholder-key bypass.
 
-### 4.1 Step — Generating identity
+### Step — Generating identity
 - **Layout.** Centered status ("Setting up encryption on this device") + progress
   indicator.
 - **Behavior.** Device-private keys remain on this device. Cross-signing private keys may
   leave only inside the recovery-encrypted backup. Auto-advances when secure enrollment
   is possible; no user action.
 
-### 4.2 Step — Recovery
+### Step — Recovery
 
 **New-account branch — Your recovery secret.** Show the newly generated recovery secret
 **once** and make the user save it.
@@ -285,7 +289,7 @@ placeholder-key bypass.
 the opaque key backup, and decrypt cross-signing identity locally. Show wrong-secret,
 restoring, and Retry states. History remains a separate online-device transfer.
 
-### 4.3 Step — Confirm or restore
+### Step — Confirm or restore
 - **New-account purpose.** Stop users skipping the save.
 - **Layout.** Either re-enter part of the secret, or an explicit "Yes, I've stored my
   recovery secret somewhere safe" checkbox + **Confirm**, plus a **Back** link to view it
@@ -294,8 +298,8 @@ restoring, and Retry states. History remains a separate online-device transfer.
   completion; never display or persist the entered recovery secret after the backup is
   unwrapped.
 
-### 4.4 Step — Security notice handoff
-- On completing setup, route into the **Security Notice** (§5) as a mandatory full-screen
+### Step — Security notice handoff
+- On completing setup, route into the **Security Notice** ([Security Notice](#security-notice-honest-safety-boundary)) as a mandatory full-screen
   step before entering the app.
 
 **States across the flow.** Standard loading/error. If uploading the user's public setup
@@ -304,16 +308,16 @@ succeeded.
 
 ---
 
-## 5. Security Notice (Honest Safety Boundary)
+## Security Notice (Honest Safety Boundary)
 
 **Purpose.** Tell the user plainly what the app does and does not protect. **This screen is
 required and must be shown** — it is not optional marketing, and its "does NOT protect"
 section must not be softened or omitted.
 
 **When shown.**
-- As a **mandatory full-screen step** at the end of first-run onboarding (§4.4), with an
+- As a **mandatory full-screen step** at the end of first-run onboarding ([Step — Security notice handoff](#step--security-notice-handoff)), with an
   explicit acknowledge action to proceed.
-- **Re-viewable anytime** from Settings (§15) and from the pre-login footer links (§2, §3).
+- **Re-viewable anytime** from Settings ([Settings](#settings-settings-tab--home)) and from the pre-login footer links (Login, Register).
 
 **Layout (top → bottom).**
 1. Title, e.g. "What this app protects — and what it doesn't".
@@ -321,23 +325,23 @@ section must not be softened or omitted.
    leaves it, and is unreadable to the server, to anyone watching the network, and to
    anyone who seizes the server. **It must name no feature.** This section is permanent
    and outlives any feature list, so an enumeration goes stale by default: until
-   [ADR-052](architecture/decisions/052-accurate-capability-claims.md) it promised "messages, files, and voice audio" in an artifact
+   [ADR-052](../architecture/decisions/052-accurate-capability-claims.md) it promised "messages, files, and voice audio" in an artifact
    that could send no file and carry no audio, and a test now forbids feature words here.
 3. **What it does NOT protect** — stated plainly, and **in the reader's vocabulary rather
    than the project's**:
    - **when** the user connects, **from where**, **how much** they send, and **who they
      talk to** — whoever runs the server sees all of it, even though not *what* was said;
    - that a new contact is really who they say they are, until the two of them compare the
-     **safety number** — by the name the app's own screen uses for it (§10), not "SAS",
+     **safety number** — by the name the app's own screen uses for it ([Live Voice Room Screen](#live-voice-room-screen)), not "SAS",
      "fingerprint" or "out of band";
    - messages **already open on a phone somebody else has taken or broken into**.
    Wording must not imply the app makes communication "safe from the government"; it makes
    **content** unreadable — the rest is the user's informed risk. A limitation the reader
    cannot decode is a limitation that has not been disclosed (ADR-052).
 4. **What this build is** — the deployment disclosure required by
-   [ADR-045](architecture/decisions/045-maturity-disclosure.md), whose exact points and order are
+   [ADR-045](../architecture/decisions/045-maturity-disclosure.md), whose exact points and order are
    `DeploymentDisclosure.distributed`. Present **only** in a build that is handed to
-   someone: since [ADR-076](architecture/decisions/076-production-signing.md) that is the production flavor, and development
+   someone: since [ADR-076](../architecture/decisions/076-production-signing.md) that is the production flavor, and development
    carries none. At revision 9 that is eight short facts, ordered by consequence — no
    independent review; how and when messages arrive while the app is closed, and that none
    of it is guaranteed; that messages left waiting on the server are deleted unread and
@@ -345,22 +349,25 @@ section must not be softened or omitted.
    messages; group messages use the same encryption as direct messages, their signed
    membership changes are unreviewed, each is one encrypted copy for each device of each
    member, and a group whose state this phone loses waits for another member to send it
-   (§9); parts of the interface are not built; who the build is and is not for. Revision 9
+   ([Group Chat Screen](#group-chat-screen)); parts of the interface are not built; who the build is and is not for. Revision 9
    removed the opt-in delivery tier, which ADR-053's gate then withheld from production,
    and every claim of the closed-beta MLS track that revisions 6 and 7 had carried.
    Revision 10 (ADR-094) offers the tier again, with its battery cost, its permanent notice
    and the statement that it is untested, and narrows the unbuilt parts to what the code
-   still lacks: group chats cannot send files, and the profile is not published.
+   still lacks: group chats cannot send files, and the profile is not published. Revision 11
+   ([ADR-098](../architecture/decisions/098-presence-and-typing.md)) adds the ninth fact:
+   verified contacts can see online, typing, open-chat, and last-seen status (read by
+   no server, switchable off for one phone in Settings).
    **[PRIVACY]** No cryptographic identifiers, draft names, or registry state here — they
    are true and unreadable, and they would bury the facts that matter. Sections 2 and 3
    are permanent and stay true in a public release; this section describes a build handed
-   to named people, which is not one ([ADR-076](architecture/decisions/076-production-signing.md) D1), and a public release
+   to named people, which is not one ([ADR-076](../architecture/decisions/076-production-signing.md) D1), and a public release
    decides it again.
 5. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
    plain **Close/Back**. In the re-presentation (below): the same **"I understand"**.
 
-**One notice, three entry points.** The onboarding step, the Settings entry (§15) and
-the pre-login links (§2, §3) render the same sections in the same order. A shorter or
+**One notice, three entry points.** The onboarding step, the Settings entry ([Settings](#settings-settings-tab--home)) and
+the pre-login links (Login, Register) render the same sections in the same order. A shorter or
 differently-titled variant at any entry point is a defect: a user re-reading what they
 acknowledged must find the statement they acknowledged.
 
@@ -372,8 +379,8 @@ changing.
 
 **Shown again, once, when the content does change.** The revision the user accepted is
 recorded on the device, so a build whose disclosure revision is higher re-presents the
-statement on the first launch after the update ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)). It is a
-**full screen**, not a banner and not a notification: the app posts message alerts (§15)
+statement on the first launch after the update ([ADR-052](../architecture/decisions/052-accurate-capability-claims.md)). It is a
+**full screen**, not a banner and not a notification: the app posts message alerts ([Settings](#settings-settings-tab--home))
 and can post a permanent service notice, and habituation to routine notifications
 transfers to warnings that resemble them. It renders **the same sections in the same
 order** as every other entry point, adds a heading saying the statement has changed, and
@@ -386,7 +393,7 @@ read — an honesty mechanism must not lock somebody out of their messages.
 
 ---
 
-## 6. Chats List (Home / Chats tab)
+## Chats List (Home / Chats tab)
 
 **Purpose.** Telegram-style unified list of all DMs and group chats, plus any active voice
 rooms pinned at top. The primary hub.
@@ -394,7 +401,7 @@ rooms pinned at top. The primary hub.
 **Layout.**
 - **Top bar:** left — title "Chats" (or an avatar/menu affordance opening Settings on
   mobile); center/right — the **search** icon and, on desktop, the compose "+".
-- **Title status.** As built (2026-10-09, phase 10 prompt 2, [ADR-087](architecture/decisions/087-chat-status.md)), the
+- **Title status.** As built (2026-10-09, phase 10 prompt 2, [ADR-087](../architecture/decisions/087-chat-status.md)), the
   title carries the connection and sync status. It is "Chats" while the delivery engine is
   **settled**: online, or no state read yet. Once the engine has been in any other state
   for **one second** without a break, the title is that state in place of the name:
@@ -403,7 +410,7 @@ rooms pinned at top. The primary hub.
   `AppIcons.connecting` icon. The words are the same in English and Persian as the line
   they replace.
   - **Four states.** The nine phases of the engine collapse to settled, connecting,
-    syncing and waiting, as [ADR-060](architecture/decisions/060-delivery-latency.md) D11 decided: every terminal phase
+    syncing and waiting, as [ADR-060](../architecture/decisions/060-delivery-latency.md) D11 decided: every terminal phase
     — revoked, circuit open, origin rejected — reads as waiting, because the
     session-level surfaces own those. The status is content-free: no counts, identifiers
     or timings. The title reads the live phase only; how the session was opened does not
@@ -417,11 +424,11 @@ rooms pinned at top. The primary hub.
     longer than the title has room for, at 200 % text as well. The title stays a header
     in every state. Only the status is a live region, so a screen reader announces each
     change of it once and does not announce "Chats" again when the engine settles.
-- **Search:** tapping the search icon opens the search page (§6.5), a full-screen page
-  (§0.1). The icon is the only search entry: the body holds no search field.
+- **Search:** tapping the search icon opens the search page ([Search](#search-client-side-only)), a full-screen page
+  ([Adaptive shell](#adaptive-shell)). The icon is the only search entry: the body holds no search field.
 - **Body:** the scrollable list, and nothing above it. Order: pinned items first (including
   active voice rooms and pinned conversations), then the rest by most recent activity.
-- **A row for a sender whose messages are held until verified** ([ADR-093](architecture/decisions/093-held-first-message.md) D18).
+- **A row for a sender whose messages are held until verified** ([ADR-093](../architecture/decisions/093-held-first-message.md) D18).
   One row for each sender with held envelopes: "@username sent you N messages. Verify to read
   them." ("1 message. Verify to read it." for one; the short identity without the "@" when
   this phone has no contact row for the sender). It shows no preview, time, badge or menu,
@@ -429,10 +436,10 @@ rooms pinned at top. The primary hub.
   time, below the pinned ones. A tap opens that sender's safety number
   (`/contacts/:userId/safety`), whose out-of-band comparison is the verification. The row goes
   when the envelopes are released, expire or are evicted. A screen reader meets one button with
-  the line and the hint "Open the safety number". The search page (§6.5) lists no such row.
+  the line and the hint "Open the safety number". The search page ([Search](#search-client-side-only)) lists no such row.
 - **Bottom (mobile):** the tab bar (Chats / Voice Rooms / Settings) + FAB. Both belong to
-  this list: a screen it opens covers them (§0.1).
-- **Active voice-room banner** (§0.2) sits above the tab bar when applicable.
+  this list: a screen it opens covers them ([Adaptive shell](#adaptive-shell)).
+- **Active voice-room banner** ([Persistent elements](#persistent-elements)) sits above the tab bar when applicable.
 
 **Each conversation item shows:**
 - Avatar (contact photo for DMs; group photo for groups — decrypted locally).
@@ -441,45 +448,45 @@ rooms pinned at top. The primary hub.
 - Timestamp of last activity.
 - Unread count badge.
 - Mute icon if muted. A mute that expires while the list is on screen clears the icon at the
-  moment it expires ([ADR-064](architecture/decisions/064-incremental-rebuild.md)) — the row is not left claiming a mute that has
+  moment it expires ([ADR-064](../architecture/decisions/064-incremental-rebuild.md)) — the row is not left claiming a mute that has
   ended until something else happens to redraw it.
 - Pin marker if pinned.
 - Optional delivery/read state on the last outgoing message.
 
 **Item interactions.**
-- **Tap** → DM (§8), Group (§9) or Saved Messages (§14) chat screen, a full-screen page
-  (§0.1). Back returns to the list at the same place.
+- **Tap** → DM ([DM Chat Screen](#dm-chat-screen)), Group ([Group Chat Screen](#group-chat-screen)) or Saved Messages ([Saved Messages](#saved-messages)) chat screen, a full-screen page
+  ([Adaptive shell](#adaptive-shell)). Back returns to the list at the same place.
 - **Long-press (mobile) / right-click (desktop)** → context menu: **Pin/Unpin**,
-  **Mute/Unmute** (opens mute options §17), **Mark as read/unread**, **Delete chat**
+  **Mute/Unmute** (opens mute options Global Dialogs, Sheets & Menus), **Mark as read/unread**, **Delete chat**
   (→ confirm; for DMs this clears the conversation locally — honest wording).
 
-**FAB / compose (§0.3)** → **Contacts / New** (§7).
+**FAB / compose ([Global "new" affordance](#global-new-affordance))** → **Contacts / New** ([Contacts / New Chat](#contacts--new-chat)).
 
 **States.**
 - *Loading* — skeleton list while the local store loads and the connection comes up.
-- *Empty* — friendly empty state with "Start a chat" → Contacts (§7).
+- *Empty* — friendly empty state with "Start a chat" → Contacts ([Contacts / New Chat](#contacts--new-chat)).
 - *Offline* — the title shows it ("Connecting…" or "Waiting to reconnect…", after one
   second; see Title status above) and the list carries no notice of its own. Cached
   conversations still show and are fully readable (content is stored and decrypted
-  locally). New sends queue (§8 states).
+  locally). New sends queue (DM Chat states).
 
-### 6.5 Search (client-side only)
+### Search (client-side only)
 **Purpose.** Find the user's own conversations, contacts and messages. **[PRIVACY] The
 server never indexes or assists — nothing searchable ever leaves the device, and neither
 does the query.**
 
 Search is built, and it is **two separate surfaces with two different scopes**. Each must
-state its own scope; borrowing the other's is a false promise ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)).
+state its own scope; borrowing the other's is a false promise ([ADR-052](../architecture/decisions/052-accurate-capability-claims.md)).
 
 - **The search page (`/chats/search`).** As built (2026-10-09, phase 10 prompt 1), the
-  search icon in the Chats top bar (§6) opens it as a full-screen page (§0.1). It replaces
+  search icon in the Chats top bar ([Chats List](#chats-list-home--chats-tab)) opens it as a full-screen page ([Adaptive shell](#adaptive-shell)). It replaces
   the box that sat above the Chats list.
   - **Top bar:** back, and the query field as the title. The field takes the focus as the
     page opens, so the keyboard comes up; a clear control shows while the query is not
     empty. A screen reader names the field "Search chats and contacts".
   - **Scope:** **chat names, the latest message of each chat, and contact names and
     usernames**, without regard to case. A contact's display name counts only once the
-    contact is verified, the rule Contacts/New uses (§7). The hint and the scope statement
+    contact is verified, the rule Contacts/New uses ([Contacts / New Chat](#contacts--new-chat)). The hint and the scope statement
     say so, say that older messages are searched inside a conversation, and say that the
     search stays on the phone.
   - **Results:** a **Chats** section, then a **Contacts** section, each under a header. A
@@ -498,47 +505,47 @@ state its own scope; borrowing the other's is a false promise ([ADR-052](archite
   - **[PRIVACY]** It reads only the conversation summaries and the contact list already on
     the phone. It makes no network call and does not refresh the directory. It stores no
     query and keeps no search history, and it asks the keyboard not to learn the query.
-- **In-conversation search (§8, §9, §14).** One surface, opened from the overflow of
+- **In-conversation search (DM Chat Screen, Group Chat Screen, Saved Messages).** One surface, opened from the overflow of
   every conversation kind — direct, saved and group. It reads **that conversation's loaded
-  local history** — the message stream carries a window since [ADR-062](architecture/decisions/062-timeline-window.md), and
+  local history** — the message stream carries a window since [ADR-062](../architecture/decisions/062-timeline-window.md), and
   what is loaded grows as the reader pages backwards — and a matching result scrolls the
   timeline to the message, loading it first if it sits outside the window. Its notice says
   the search covers only messages stored on this phone, and that the server never sees them
   or the query. It shows at most 30 matches at a time and **says so** when it is showing
   that many, because a silently capped result set misdescribes the scope the notice just
-  promised ([ADR-057](architecture/decisions/057-measured-settings.md)).
+  promised ([ADR-057](../architecture/decisions/057-measured-settings.md)).
 - **States.** Empty query, no results, the match count, the truncation notice, and the
   scope note belonging to that surface.
 
-Contacts are also filtered where they are listed (§7), with the same contact rule as the
+Contacts are also filtered where they are listed ([Contacts / New Chat](#contacts--new-chat)), with the same contact rule as the
 search page, so the two cannot disagree. That is the third and last search surface.
 
 **[PRIVACY]** There is no separate search index. The encrypted database is the index:
 the decrypted message projection lives inside it, under the Keystore-wrapped key, and a
 search is a filter over rows that are already there. A second structure would hold a
-second copy of every message body ([ADR-057](architecture/decisions/057-measured-settings.md)).
+second copy of every message body ([ADR-057](../architecture/decisions/057-measured-settings.md)).
 
 ---
 
-## 7. Contacts / New Chat
+## Contacts / New Chat
 
 **Purpose.** Start a DM, create a group, or create a voice room. Reached via compose
-(§0.3) or the empty-state CTA.
+([Global "new" affordance](#global-new-affordance)) or the empty-state CTA.
 
 **Layout.**
 - **Top bar:** back/close; title "New".
-- **Action rows at top:** **New Group** → Create Group (§12.1); **New Voice Room** →
-  Create Voice Room (§13.1).
+- **Action rows at top:** **New Group** → Create Group ([Create Group flow](#create-group-flow)); **New Voice Room** →
+  Create Voice Room ([Create Voice Room flow](#create-voice-room-flow)).
 - **Contacts list:** the user's local contacts. Each row shows the authenticated
   profile avatar/display name when available. Before a profile key is received, it shows
   the backend username and a locally generated placeholder avatar, plus no verified-key
-  indicator. A verified indicator appears only after the safety number (§11.1) is
+  indicator. A verified indicator appears only after the safety number ([Safety Number screen](#safety-number-screen)) is
   verified; unverified cached profile content never replaces the fallback.
 
 **Interactions.**
-- **Tap a contact** → open/create a DM (§8).
+- **Tap a contact** → open/create a DM ([DM Chat Screen](#dm-chat-screen)).
 - **Search field** filters by username, and by display name once a contact is verified —
-  the contact rule of the search page (§6.5).
+  the contact rule of the search page ([Search](#search-client-side-only)).
 
 **States.** *Loading*, *empty* (no local contacts), *offline* (local contacts).
 
@@ -547,23 +554,23 @@ The required add-contact flow accepts a contact code or makes one explicit
 for missing, inactive and hidden accounts. A lookup result still requires
 identity verification. The implemented screen filters a local directory cache
 and still tries the retired `GET /api/v1/users`. See
-[discovery and contact status](STATUS.md#platform-identity-and-content).
+[discovery and contact status](../STATUS.md#platform-identity-and-content).
 
-### 7.3 Compose behavior recap (tab-dependent "+")
-- On **Chats**, compose opens **Contacts / New** (§7) → DM, or branch into New Group /
+### Compose behavior recap
+- On **Chats**, compose opens **Contacts / New** ([Contacts / New Chat](#contacts--new-chat)) → DM, or branch into New Group /
   New Voice Room.
-- On **Voice Rooms**, compose opens **Create Voice Room** (§13.1) directly.
+- On **Voice Rooms**, compose opens **Create Voice Room** ([Create Voice Room flow](#create-voice-room-flow)) directly.
 
 ---
 
-## 8. DM Chat Screen
+## DM Chat Screen
 
 **Purpose.** 1-on-1 encrypted conversation, text and attachments, with the full chat
 experience.
 
 **Layout (top → bottom).**
 1. **Top bar:**
-   - Left: back. The screen is a full-screen page at every width (§0.1): neither the tab
+   - Left: back. The screen is a full-screen page at every width ([Adaptive shell](#adaptive-shell)): neither the tab
      bar nor the rail shows on it.
    - Center: contact avatar + name + one status line (**[PRIVACY]** encrypted, volatile
      signal; a lower bound, may lag).
@@ -572,21 +579,21 @@ experience.
        "last seen today at 2:05 PM", "last seen yesterday at 11:30 PM" or "last seen Mon, Oct 12"
        by this phone's local days; else nothing, never "offline". It is one line, cut with an
        ellipsis, and it shows only for a verified peer and only while "Show my online status"
-       (§15, 5c) is on. Saved Messages has none. Built; not run on a phone.
-   - Tapping name/avatar → **Contact Profile** (§11).
-   - Right: overflow (**⋮**) → **Search in chat**, **Mute** (§17), **Verify safety number**
-     (§11.1), **Clear history** (→ confirm, honest wording), **Block/Unblock**.
+       ([Settings](#settings-settings-tab--home), *Show my online status*) is on. Saved Messages has none. Built; not run on a phone.
+   - Tapping name/avatar → **Contact Profile** ([Contact Profile](#contact-profile--safety-number-verification)).
+   - Right: overflow (**⋮**) → **Search in chat**, **Mute** ([Global Dialogs, Sheets & Menus](#global-dialogs-sheets--menus)), **Verify safety number**
+     ([Safety Number screen](#safety-number-screen)), **Clear history** (→ confirm, honest wording), **Block/Unblock**.
 2. **Message list (body):** scrollable oldest→newest, sticky date separators.
    - **Message bubble:** text (decrypted locally), timestamp, outgoing delivery/read state,
      an **edited** marker if edited, a reply-quote block if it's a reply, reaction chips
      beneath, a star marker if starred.
-   - **Attachment message** (a DM and Saved Messages, [ADR-089](architecture/decisions/089-direct-attachments.md) D7): one
+   - **Attachment message** (a DM and Saved Messages, [ADR-089](../architecture/decisions/089-direct-attachments.md) D7): one
      **tile** for each attachment the message carries, then the **caption** below them. The
      caption is the message's text, so an edit changes it; its direction follows its first
      strong character. A message deleted for everyone or for me shows no tile.
    - **Tile:** the kind's icon (a picture, a video or a file; a `file` with a video type draws
      the video icon and is announced as "Encrypted video", with no thumbnail and no inline
-     playback, [ADR-097](architecture/decisions/097-direct-video.md) V5), the name (at most two lines), the size in the locale's unit,
+     playback, [ADR-097](../architecture/decisions/097-direct-video.md) V5), the name (at most two lines), the size in the locale's unit,
      and the state, at most 260 logical px wide and never lower than the minimum touch
      target. The states and what a tap on the tile does:
 
@@ -596,7 +603,7 @@ experience.
      | waiting | *Waiting to download*, with a bar | cancels |
      | downloading | *Downloading, n%*, with a bar | cancels |
      | verifying | *Verifying, n%*, with a bar | cancels |
-     | ready | *Downloaded and verified* | opens the details sheet (§8.2) |
+     | ready | *Downloaded and verified* | opens the details sheet ([Attachment sheet](#attachment-sheet)) |
      | expired | *Expired: the server no longer keeps this file* | nothing |
      | damaged | *Damaged: this file did not pass the check, and nothing was kept* | nothing |
      | failed | *The download failed*, with a retry mark | downloads again |
@@ -617,9 +624,9 @@ experience.
      download*, *Try the download again*, *Show Open, Save and Share*), and an expired or
      damaged tile has none.
    - **Pinned banner** atop the list if any message is pinned; tap to jump; expand → all
-     pinned messages (§8.3).
+     pinned messages ([Pinned messages screen](#pinned-messages-screen)).
 3. **Upload tray** (a DM and Saved Messages), between the list and the input bar, while the
-   conversation has upload jobs ([ADR-089](architecture/decisions/089-direct-attachments.md) D5). One row for each job: the
+   conversation has upload jobs ([ADR-089](../architecture/decisions/089-direct-attachments.md) D5). One row for each job: the
    kind's icon, the file name, the state — *Waiting*, *Encrypting, n%*, *Uploading, n%*,
    *Sending* — a progress bar, and **Cancel**. A failed row names its reason instead: today's
    upload allowance is spent, with the local time it resets; the file is too large for the
@@ -639,7 +646,7 @@ experience.
      percent.
    - The tray takes at most 30% of the screen's height; more rows scroll.
 4. **Input bar (bottom):**
-   - **Attachment** button → attachment sheet (§8.2). Disabled when this device has no
+   - **Attachment** button → attachment sheet ([Attachment sheet](#attachment-sheet)). Disabled when this device has no
      private cache to keep attachment files in.
    - Text input (multiline, grows).
    - **Emoji** — always present; opens the full emoji picker and inserts the chosen
@@ -650,7 +657,7 @@ experience.
      message with a cancel (×).
    - **Draft.** An unsent draft is kept per conversation and restored when it is reopened.
      It is written down on a short trailing pause rather than on every character
-     ([ADR-064](architecture/decisions/064-incremental-rebuild.md)), and it is written down *immediately* on every way out of the
+     ([ADR-064](../architecture/decisions/064-incremental-rebuild.md)), and it is written down *immediately* on every way out of the
      composer: losing focus, leaving the screen, the application leaving the foreground, and
      sending. So a draft is never lost by backgrounding or by leaving, and sending never
      leaves the sent text behind as a draft. What is on screen is always the draft; the
@@ -667,13 +674,13 @@ long-press.
   an expand control at the trailing edge that opens the full emoji picker. Reactions are a
   set operation per `(message, user)`, so choosing a second one replaces the first.
   **[PRIVACY]** the reaction is encrypted, and the server never sees the emoji. No control
-  anywhere sends a fixed emoji ([ADR-059](architecture/decisions/059-emoji-surface.md)).
+  anywhere sends a fixed emoji ([ADR-059](../architecture/decisions/059-emoji-surface.md)).
 - **Reply** — sets the reply strip. A reply to an attachment message with no caption quotes
   the name of its first attachment.
 - **Edit** (own messages) — loads the message into the input with an edit strip.
-- **Forward** — Forward target picker (§8.4). An attachment message forwards its
+- **Forward** — Forward target picker ([Forward target picker](#forward-target-picker)). An attachment message forwards its
   attachments with their caption. The server's copy is not copied, so a forwarded
-  attachment expires on the date of the first send ([ADR-089](architecture/decisions/089-direct-attachments.md) D11).
+  attachment expires on the date of the first send ([ADR-089](../architecture/decisions/089-direct-attachments.md) D11).
 - **Copy** — local clipboard. An attachment message copies its caption, and one with no
   caption does not offer Copy.
 - **Star/Unstar** — client-side flag.
@@ -688,7 +695,7 @@ long-press.
 
 **States.**
 - *Loading* — history loads locally; older messages page in on scroll-up. The timeline holds
-  a window rather than the whole conversation ([ADR-062](architecture/decisions/062-timeline-window.md)): reaching the top of
+  a window rather than the whole conversation ([ADR-062](../architecture/decisions/062-timeline-window.md)): reaching the top of
   what is drawn widens the drawn range first and then asks local storage for an older page,
   the marker at the top shows loading and offers a retry when that page fails, and a message
   arriving joins the timeline without moving the line being read. A jump — from the pinned
@@ -702,12 +709,12 @@ long-press.
   next active connection or background poll; there is no foreign push.
 - *Not delivered yet* — a line under the newest own direct message that the relay accepted and
   that has no delivery receipt an hour after it was sent: "Not delivered yet. If @username has
-  not verified you, ask them to." ([ADR-093](architecture/decisions/093-held-first-message.md) D19). It is one line between the
+  not verified you, ask them to." ([ADR-093](../architecture/decisions/093-held-first-message.md) D19). It is one line between the
   timeline and the composer, and the screen holds a timer only for a qualifying message younger
   than an hour. Never in a group chat or Saved Messages, and never under a queued, sending or
   failed message.
 - *Failed send* — retry affordance on the message. An attachment message is retried with its
-  attachments and its caption, never with its caption alone ([ADR-089](architecture/decisions/089-direct-attachments.md) D11).
+  attachments and its caption, never with its caption alone ([ADR-089](../architecture/decisions/089-direct-attachments.md) D11).
 - *Uploading* — the upload tray (above) shows each attachment until its message is
   committed.
 - *Downloading* — a received attachment's tile shows its download (above); the download goes
@@ -715,19 +722,19 @@ long-press.
 - *Offline* — the composer says that a send waits in the queue; existing history fully
   readable; composing allowed, sends queued.
 
-### 8.2 Attachment sheet
+### Attachment sheet
 
-*As built 2026-10-10 and 2026-10-11 ([ADR-089](architecture/decisions/089-direct-attachments.md) D1, D5, D6, D7).* The sheet has
+*As built 2026-10-10 and 2026-10-11 ([ADR-089](../architecture/decisions/089-direct-attachments.md) D1, D5, D6, D7).* The sheet has
 three modes:
 
 - **Choose** — a DM and Saved Messages: **Photo or video**, **File** and **Camera**, then
-  Cancel. Photo or video offers pictures and videos ([ADR-097](architecture/decisions/097-direct-video.md) V2).
-- **Not built** — a group chat (§9): "Group chats cannot send files yet. Files can be sent in
+  Cancel. Photo or video offers pictures and videos ([ADR-097](../architecture/decisions/097-direct-video.md) V2).
+- **Not built** — a group chat ([Group Chat Screen](#group-chat-screen)): "Group chats cannot send files yet. Files can be sent in
   direct chats and in Saved Messages.", the *Not built yet* badge, and Cancel.
-- **Details** — a ready attachment, from a tap on its tile (§8): see *Details* below.
+- **Details** — a ready attachment, from a tap on its tile ([DM Chat Screen](#dm-chat-screen)): see *Details* below.
 
 **Choice.** A choice closes the sheet and opens the system photo picker, the file picker or
-the camera app ([ADR-089](architecture/decisions/089-direct-attachments.md) D2) under a byte limit: the largest file that fits
+the camera app ([ADR-089](../architecture/decisions/089-direct-attachments.md) D2) under a byte limit: the largest file that fits
 the largest upload size both the server publishes and the client holds (64 MB with the
 default sizes). Closing the picker says nothing. Every other outcome says why, in a snack
 bar: another picker is already open; the file is too large to send, with the largest size;
@@ -749,10 +756,10 @@ accept.
   caption — stay within 4,096 bytes: a caption that passes that is refused with the reason,
   and Send is disabled. A counter shows from 90% of each limit. The caption's direction
   follows its first strong character;
-- **Send**, which closes the step and adds an upload job (§8, upload tray), and **Cancel**,
+- **Send**, which closes the step and adds an upload job (DM Chat Screen, upload tray), and **Cancel**,
   which deletes the copy the pick made, as the barrier and Back do.
 
-**Details.** *As built 2026-10-11 ([ADR-089](architecture/decisions/089-direct-attachments.md) D7, D8).* The name, the type
+**Details.** *As built 2026-10-11 ([ADR-089](../architecture/decisions/089-direct-attachments.md) D7, D8).* The name, the type
 and the size; one sentence, "The server keeps the encrypted copy for up to N days after it
 was sent.", N being the server's `attachment_ttl_days`; then **Open**, **Save** and
 **Share**, and Cancel. Each action first opens the cached file, which moves its expiry to
@@ -773,11 +780,11 @@ are taller than their room. An attachment message carries no reply reference: a 
 input bar holds stays for the next text message. **[PRIVACY]** Files and images are encrypted
 on the device before upload; the server stores only ciphertext padded to one of six sizes.
 
-### 8.3 Pinned messages screen
+### Pinned messages screen
 - All pinned messages in the conversation. Each row: preview + jump-to + **Unpin**. In a group
-  **Unpin** is on the rows of the owner and the admins only ([ADR-096](architecture/decisions/096-group-moderation.md) D6).
+  **Unpin** is on the rows of the owner and the admins only ([ADR-096](../architecture/decisions/096-group-moderation.md) D6).
 
-### 8.4 Forward target picker
+### Forward target picker
 - **Purpose.** Choose where to forward a message. **[PRIVACY]** Forwarding re-encrypts the
   message for the new recipients — it is not a server-side copy.
 - **Layout.** Searchable list of DMs and groups (and Saved Messages). Multi-select; a
@@ -785,12 +792,12 @@ on the device before upload; the server stores only ciphertext padded to one of 
 
 ---
 
-## 9. Group Chat Screen
+## Group Chat Screen
 
 **Purpose.** Named, invite-only encrypted group chat, full chat experience. Persistent
 history; up to ~50 members; roles **owner → admins → members**.
 
-**Layout.** Same skeleton as the DM screen (§8), with group differences:
+**Layout.** Same skeleton as the DM screen ([DM Chat Screen](#dm-chat-screen)), with group differences:
 1. **Top bar:**
    - Header: the group avatar, the group name and the member count (decrypted locally), each
      name and count on one line, cut with an ellipsis when it does not fit.
@@ -802,39 +809,39 @@ history; up to ~50 members; roles **owner → admins → members**.
        this user has verified, never this account, so it is a lower bound; a group of more than 32
        members and a phone with the switch off show the count alone. Typing names replace both
        while members type. This is the implemented behavior. The
-       [presence contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+       [presence contract](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
        requires coverage through 50 members, subject to the account audience.
    - The whole bar between the back button and **Search** is one target for the header, as high
-     as the bar: a tap anywhere on it → **Group Info** (§12.2). To a screen reader it is one
+     as the bar: a tap anywhere on it → **Group Info** ([Group Info screen](#group-info-screen)). To a screen reader it is one
      button that reads the name and the count once and names Group Info as its result.
      There is no separate Info button.
    - **Search in chat** is the one action button; it opens the in-conversation search sheet.
    - Overflow (**⋮**) — **not built.** The entries once planned for it (**Mute**, **Leave
-     group**, **Add members**, **Edit group**) are all in Group Info (§12.2).
-2. **Message list:** as §8, read through the same projection ([ADR-090](architecture/decisions/090-group-timeline.md) D1).
+     group**, **Add members**, **Edit group**) are all in Group Info ([Group Info screen](#group-info-screen)).
+2. **Message list:** as [DM Chat Screen](#dm-chat-screen), read through the same projection ([ADR-090](../architecture/decisions/090-group-timeline.md) D1).
    The first bubble of each run from another member carries that member's display name from
    the roster, or a short form of the user id for a sender the roster does not name; there is
    no avatar beside a bubble. A reply quotes the name of the member who wrote the replied
-   message. The pinned banner of §8 shows above the list to every member: it counts the
+   message. The pinned banner of [DM Chat Screen](#dm-chat-screen) shows above the list to every member: it counts the
    group's pinned messages, a tap jumps to the first, and *View all* lists them, with *Unpin*
-   only for the owner and the admins ([ADR-096](architecture/decisions/096-group-moderation.md) D6).
+   only for the owner and the admins ([ADR-096](../architecture/decisions/096-group-moderation.md) D6).
    Inline system lines for membership changes ("X was added", "Y left") are **not built**.
-3. **Input bar:** as §8, with no upload tray: a group chat sends no attachment in this phase,
-   and its attachment button opens the sheet in its not-built mode (§8.2,
-   [ADR-089](architecture/decisions/089-direct-attachments.md) D1). By default all members can post; if you implement any
+3. **Input bar:** as [DM Chat Screen](#dm-chat-screen), with no upload tray: a group chat sends no attachment in this phase,
+   and its attachment button opens the sheet in its not-built mode (Attachment sheet,
+   [ADR-089](../architecture/decisions/089-direct-attachments.md) D1). By default all members can post; if you implement any
    posting restriction, disabled states must explain why. A send never replaces it: the bar
    keeps its focus, and the keyboard stays up, while a message is sent and between messages
-   ([ADR-088](architecture/decisions/088-group-composer.md)). A group keeps a draft on this phone, as a direct chat does: an
+   ([ADR-088](../architecture/decisions/088-group-composer.md)). A group keeps a draft on this phone, as a direct chat does: an
    unsent text is still in the bar when the group is opened again.
 
-**Message interactions** ([ADR-090](architecture/decisions/090-group-timeline.md)): **Reply**, **React**, **Forward**,
-**Copy**, **Star** and **Delete for me**, each as in §8. A reaction goes to each member, under
+**Message interactions** ([ADR-090](../architecture/decisions/090-group-timeline.md)): **Reply**, **React**, **Forward**,
+**Copy**, **Star** and **Delete for me**, each as in [DM Chat Screen](#dm-chat-screen). A reaction goes to each member, under
 the rule of a group send. Forward lists every other conversation and Saved Messages; a
 message forwarded into a group goes through the group's own send, and the picker of an
 attachment message lists no group, because a group sends no attachment. A forward to several
 conversations goes on past one that refuses it, and then says that the action failed.
-**Delete for everyone** is offered on an own message that is not deleted, as in §8, and goes
-to each member under the rule of a group send ([ADR-096](architecture/decisions/096-group-moderation.md) D4). It is offered on
+**Delete for everyone** is offered on an own message that is not deleted, as in [DM Chat Screen](#dm-chat-screen), and goes
+to each member under the rule of a group send ([ADR-096](../architecture/decisions/096-group-moderation.md) D4). It is offered on
 another member's message only where the roles of the roster allow it: the owner on any
 member's or admin's message, an admin on a member's, and nobody on the owner's (D5); for
 anyone else that message's delete dialog offers *Delete for me* only. **Pin** and **Unpin**
@@ -846,15 +853,15 @@ is not offered in a group (D8).
 chat does: when it becomes visible with the application in front, and when a message arrives
 while it is visible. Its unread count clears, and no alert sounds for the group on screen.
 While this account may send into the group, the read also sends one read receipt for each
-sender of the messages read, to that sender alone ([ADR-091](architecture/decisions/091-group-receipts.md)); a group this
+sender of the messages read, to that sender alone ([ADR-091](../architecture/decisions/091-group-receipts.md)); a group this
 account left, or one waiting for its state, is read on this phone alone.
 
 **Role-gated actions** (owner/admins only): the member actions appear on member rows within
-Group Info (§12.2); on a message, only Pin, Unpin and Delete for everyone of another
+Group Info ([Group Info screen](#group-info-screen)); on a message, only Pin, Unpin and Delete for everyone of another
 member's message depend on the role (above).
 
-**States.** As §8, plus: *left* and *removed*: the group is deleted from this phone with its
-history, and an open group chat or Group Info returns to Chats ([ADR-096](architecture/decisions/096-group-moderation.md) D1,
+**States.** As DM Chat Screen, plus: *left* and *removed*: the group is deleted from this phone with its
+history, and an open group chat or Group Info returns to Chats ([ADR-096](../architecture/decisions/096-group-moderation.md) D1,
 D3), on each device of the account; *waiting for group state*; and *forked* (members hold
 conflicting histories, so the group is quarantined). Waiting for group state follows a queue gap, or
 an event this device cannot yet place. It disables the composer and group changes until a
@@ -862,14 +869,14 @@ member confirms the group's current control state, and it never asks members to 
 re-add this device.
 
 **Copies.** A group message is one encrypted copy for each device of each member
-([ADR-075](architecture/decisions/075-pairwise-groups.md)). While any copy is still owed, the message shows the sending mark
+([ADR-075](../architecture/decisions/075-pairwise-groups.md)). While any copy is still owed, the message shows the sending mark
 and nothing beside it, so its bubble keeps one width from the send to the end
-([ADR-088](architecture/decisions/088-group-composer.md), which withdrew the count that ADR-075 had put there). It takes the
+([ADR-088](../architecture/decisions/088-group-composer.md), which withdrew the count that ADR-075 had put there). It takes the
 accepted mark only when none is still owed. A copy for a device the server reports as gone
 is no longer owed; a copy for a device whose mailbox is full stays owed until it is
 accepted. A failed send offers a retry of the same message.
 
-**Read ticks** ([ADR-091](architecture/decisions/091-group-receipts.md)). An own group message shows two ticks
+**Read ticks** ([ADR-091](../architecture/decisions/091-group-receipts.md)). An own group message shows two ticks
 (`AppIcons.read`) as soon as one member, other than its sender, has read it. It does not wait
 for the other members, and it does not wait for owed copies. A failed message keeps its failed
 mark and its **Retry**, because a retry is the only way to reach the members whose copy
@@ -877,7 +884,7 @@ failed. Without a read, the message shows the clock while a copy is owed, and on
 copy is owed. A group has no delivered mark: it sends no delivered receipt. Read receipts are
 always on, as in a direct chat, and there is no setting.
 
-**Reader list** ([ADR-091](architecture/decisions/091-group-receipts.md)). The message sheet of an own group message that is
+**Reader list** ([ADR-091](../architecture/decisions/091-group-receipts.md)). The message sheet of an own group message that is
 not deleted shows a row above its actions: **Seen by N**, where N is the number of members who
 read it, or **Not seen yet**. The row follows the database while the sheet is open, and it is
 one button with the count in its label. A tap on it closes the sheet and opens the reader list
@@ -897,11 +904,11 @@ message's time.
 
 ---
 
-## 10. Live Voice Room Screen
+## Live Voice Room Screen
 
 **Purpose.** The active audio call inside a **standalone, audio-only** voice room with an
 **ephemeral** alongside text chat. The implemented v1 room has equal active
-members. The [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md)
+members. The [voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md)
 requires owner/admin/member permissions and in-call moderation in v2 if voice ships.
 
 **As built, 2026-10-02** (phase 6 prompt 9): `VoiceCallPage` at
@@ -909,16 +916,16 @@ requires owner/admin/member permissions and in-call moderation in v2 if voice sh
 reads the call through `VoiceCallController`, which owns the join below, and asks for
 nothing when it opens.
 
-**As built, 2026-10-08** (phase 8 prompt 1): the call is a full-screen page (§0.1), and
+**As built, 2026-10-08** (phase 8 prompt 1): the call is a full-screen page ([Adaptive shell](#adaptive-shell)), and
 neither the tab bar nor the rail shows on it. Its top bar runs up under the status bar and
 its control bar down under the gesture bar or the navigation buttons; the controls of both
 stay clear of them.
 
 **Layout (top → bottom).**
 1. **Top bar:** a **minimize** control that keeps the call and returns to the previous
-   screen, where the persistent banner (§0.2) leads back; the room name; the **count of
+   screen, where the persistent banner ([Persistent elements](#persistent-elements)) leads back; the room name; the **count of
    devices this device knows in the call**, itself included ("3 in the call"); and a
-   **Room info** affordance (§13.2). The bar grows with the text rather than truncating the
+   **Room info** affordance ([Voice Room Info screen](#voice-room-info-screen)). The bar grows with the text rather than truncating the
    count.
 2. **Participants area (main):** this device's own tile first, then one tile for each other
    device of the call — avatar, name, and a status line that is always an icon and a word,
@@ -935,7 +942,7 @@ stay clear of them.
    and are never stored on the server; the panel says plainly that it is temporary and
    best-effort and that others may keep what they read. Simplified input (text + send); no
    pin, star, reply, edit or receipts. The draft survives a resize that moves the panel.
-4. **Bottom control bar:** **Mute/Unmute**, **Invite** (§13.3) and **Leave** (leaves the
+4. **Bottom control bar:** **Mute/Unmute**, **Invite** ([Voice Room invite picker](#voice-room-invite-picker)) and **Leave** (leaves the
    call; the room stays and anyone can start another). Each control is an icon and a word
    at one shared height, and the words wrap at a large text size rather than truncate, so
    Mute and Leave stay on screen.
@@ -962,7 +969,7 @@ call's foreground service, and it joins only once that service runs.
 **Interactions.**
 - Tapping a participant tile → a sheet on a narrow page and a dialog on a wider one, with
   the name, whether the safety number is verified, what the tile's state means, **Verify
-  safety number** (§11.1) when it is not verified or has changed, and *Try again* for a
+  safety number** ([Safety Number screen](#safety-number-screen)) when it is not verified or has changed, and *Try again* for a
   device that is not reachable.
 - **Leave** stops the call service and returns to the previous screen; the banner goes.
 - **Mute** silences this device's one capture, so every connection sends silence and nothing
@@ -1008,7 +1015,7 @@ so there is no shared key to rotate and no *negotiating encryption* step to show
   with the reason; a join whose credential could not be fetched says no connection to the
   server was reached, that nothing else will be tried in its place, and offers *Try again*.
 - *Waiting for its state*, *Joining is paused*, *You were removed*, *You left this room* —
-  the room cannot hold a call: no Join, and the room's own reason (§13.2).
+  the room cannot hold a call: no Join, and the room's own reason ([Voice Room Info screen](#voice-room-info-screen)).
 
 **Live regions.** Announced: a tile becoming not reachable, blocked by a changed safety
 number or on another version, and a tile's ICE restart; the socket-degraded line and the
@@ -1026,7 +1033,7 @@ stopping the service, and the user lands where the session's end sends them.
 
 ---
 
-## 11. Contact Profile (+ Safety-Number Verification)
+## Contact Profile (+ Safety-Number Verification)
 
 **Purpose.** View a contact, control per-contact settings, and verify their identity key.
 
@@ -1035,10 +1042,10 @@ stopping the service, and the user lands where the session's end sends them.
 2. **Header:** large avatar and display name. The specified presence/last-seen line
    remains unbuilt.
 3. **Action rows:**
-   - **Message** → DM (§8).
-   - **Mute** → mute options (§17).
-   - **Verify safety number** → Safety Number screen (§11.1).
-   - **Shared media/files** → a media grid from this DM, decrypted locally (§11.2). Not
+   - **Message** → DM ([DM Chat Screen](#dm-chat-screen)).
+   - **Mute** → mute options ([Global Dialogs, Sheets & Menus](#global-dialogs-sheets--menus)).
+   - **Verify safety number** → Safety Number screen ([Safety Number screen](#safety-number-screen)).
+   - **Shared media/files** → a media grid from this DM, decrypted locally ([Shared media screen](#shared-media-screen)). Not
      built: the row is drawn disabled.
    - **Clear history** → confirm, honest wording.
    - **Block/Unblock** → confirm. The current block row is disabled. The required
@@ -1047,11 +1054,11 @@ stopping the service, and the user lands where the session's end sends them.
      notifications from the contact, but cannot prevent the sender from submitting
      ciphertext to the backend; the client still safely drains and acknowledges it.
 
-### 11.1 Safety Number screen
+### Safety Number screen
 
 The following describes implemented one-sided verification. The release gap is
 `CP-CONTACT-V1` and mutual verification as required by
-[contacts and trust](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md).
+[contacts and trust](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md).
 
 - **Purpose.** Compare a contact's key fingerprint to make sure no one — not even a
   malicious server — is impersonating them or intercepting messages.
@@ -1063,54 +1070,54 @@ The following describes implemented one-sided verification. The release gap is
   **unsigned/invalid device**, and **device-log fork**. The latter states block sending;
   they are not dismissible warnings or automatic TOFU resets.
 
-### 11.2 Shared media screen
-*Not built ([ADR-089](architecture/decisions/089-direct-attachments.md) D1).* No route opens it: the *Shared media and files* row
-of Contact Profile (§11) is drawn disabled, and Group Info (§12.2) offers no entry to it. A
-received attachment is reached from its message (§8).
+### Shared media screen
+*Not built ([ADR-089](../architecture/decisions/089-direct-attachments.md) D1).* No route opens it: the *Shared media and files* row
+of Contact Profile ([Contact Profile](#contact-profile--safety-number-verification)) is drawn disabled, and Group Info ([Group Info screen](#group-info-screen)) offers no entry to it. A
+received attachment is reached from its message ([DM Chat Screen](#dm-chat-screen)).
 - A grid of images/files from the conversation, decrypted locally, with tap-to-open and
   jump-to-message.
 
 ---
 
-## 12. Groups — Create & Info
+## Groups — Create & Info
 
-### 12.1 Create Group flow
-Reached from Contacts (§7). Multi-step:
+### Create Group flow
+Reached from Contacts ([Contacts / New Chat](#contacts--new-chat)). Multi-step:
 1. **Pick members** — searchable contact list, multi-select, **Next**. (~50 cap guidance.)
 2. **Group details** — set **name** and optional **description**. **[PRIVACY]** Both are
    encrypted; the server stores only ciphertext. The step states what a group message
    costs: one encrypted copy for each device of each member, about 150 copies for 50
-   people with three devices each (§9, Copies).
-3. **Create** — the creator becomes **owner**; opens the Group chat (§9).
+   people with three devices each (Group Chat Screen, Copies).
+3. **Create** — the creator becomes **owner**; opens the Group chat ([Group Chat Screen](#group-chat-screen)).
 - **States.** validating name, creating, error/offline.
 
-### 12.2 Group Info screen
+### Group Info screen
 **Purpose.** View/manage a group. Some controls are visible only to owner/admins.
 
 **Layout (top → bottom).**
-1. **Top bar:** back; an **Edit** affordance for owner/admins → §12.3.
+1. **Top bar:** back; an **Edit** affordance for owner/admins → Edit Group screen.
 2. **Header:** group photo, name, description, member count.
 3. **Members section:** each row — avatar, name, a **role tag** (owner/admin/member), a
    verified-key indicator if verified.
-   - **Tap a member** → sheet with **Message** (DM), **Verify safety number** (§11.1), and
+   - **Tap a member** → sheet with **Message** (DM), **Verify safety number** ([Safety Number screen](#safety-number-screen)), and
      **owner/admin-only**: **Remove from group** (→ confirm). **[PRIVACY]** Removing a
      member cuts off their access to future messages.
-   - **Add members** (visible per the group's invite policy) → member picker (like §12.1
+   - **Add members** (visible per the group's invite policy) → member picker (like Create Group flow
      step 1).
-   - The same statement of what a group message costs as §12.1 step 2.
+   - The same statement of what a group message costs as [Create Group flow](#create-group-flow) step 2.
 4. **Leave group** (all members) → confirm. The confirmation says that the group and its
    history are deleted from this phone and that the other members keep their copies. A Leave
    that commits returns to Chats; a refused one stays here and says the action failed. Being
-   removed by an admin deletes the group the same way ([ADR-096](architecture/decisions/096-group-moderation.md) D1 to D3). If
+   removed by an admin deletes the group the same way ([ADR-096](../architecture/decisions/096-group-moderation.md) D1 to D3). If
    the account is added again, the group comes back to Chats with no old history (D2).
 
-Group Info has **no quick-action row**. **Mute** is set from the Chats list (§17), and
-**Search in chat** from the conversation's own app bar; **Shared media** (a grid like §11.2)
+Group Info has **no quick-action row**. **Mute** is set from the Chats list ([Global Dialogs, Sheets & Menus](#global-dialogs-sheets--menus)), and
+**Search in chat** from the conversation's own app bar; **Shared media** (a grid like Shared media screen)
 is not built. A button that is disabled for good, or that only returns to the screen it was
 opened from, is a control that can never succeed, which the core rules forbid, so none is
 drawn until its destination exists.
 
-### 12.3 Edit Group screen (owner/admin)
+### Edit Group screen (owner/admin)
 **Purpose.** Edit group identity and settings. These are owner/admin powers.
 
 **Controls.**
@@ -1128,7 +1135,7 @@ drawn until its destination exists.
 
 ---
 
-## 13. Voice Rooms — List, Create & Info
+## Voice Rooms — List, Create & Info
 
 **The server holds no room.** A room is client state — a name and a roster built by
 signed control events over ordinary envelopes, exactly as a group is. There is no room
@@ -1137,30 +1144,30 @@ calls a server room endpoint for create, rename, invite or leave. Each action
 produces a signed event that the client fans out through the envelope endpoint.
 
 The actions in this section describe v1. For v2 role-gated room actions and
-migration, follow the [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md).
+migration, follow the [voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md).
 
 **As built, 2026-10-02** (phase 6 prompt 9): `lib/features/voice/presentation/`. Every
 screen reads rooms through `RoomStateReadPort` and signs a change through the room use
 cases; none calls the server and none asks for the microphone. A room's route is
-`/voice-rooms/:roomId`, its 32-byte id in lowercase hex, with `/call` (§10) and `/invite`
-(§13.3) below it. The Chats list (§6) does not pin a room in a call: the banner (§0.2) is
+`/voice-rooms/:roomId`, its 32-byte id in lowercase hex, with `/call` ([Live Voice Room Screen](#live-voice-room-screen)) and `/invite`
+([Voice Room invite picker](#voice-room-invite-picker)) below it. The Chats list ([Chats List](#chats-list-home--chats-tab)) does not pin a room in a call: the banner ([Persistent elements](#persistent-elements)) is
 the way back to it.
 
-**As built, 2026-10-08** (phase 8 prompt 1): the list (§13.0) is the Voice Rooms tab root,
-with the tab bar and the compose button. Create (§13.1), Info (§13.2), the invite picker
-(§13.3) and the call (§10) are full-screen pages (§0.1).
+**As built, 2026-10-08** (phase 8 prompt 1): the list ([Voice Rooms list](#voice-rooms-list-voice-rooms-tab)) is the Voice Rooms tab root,
+with the tab bar and the compose button. Create ([Create Voice Room flow](#create-voice-room-flow)), Info ([Voice Room Info screen](#voice-room-info-screen)), the invite picker
+([Voice Room invite picker](#voice-room-invite-picker)) and the call ([Live Voice Room Screen](#live-voice-room-screen)) are full-screen pages ([Adaptive shell](#adaptive-shell)).
 
-### 13.0 Voice Rooms list (Voice Rooms tab)
+### Voice Rooms list (Voice Rooms tab)
 - **Layout.** A list of the rooms this device holds. Each row: avatar, room name (held
   locally) and a state line that is an icon and words — **Live now · N** for the room of
   the call this device is in, with the devices it counts in that call; **Empty** for any
   other room; *Asking a member for its state*; *Paused by conflicting changes*; *You left
   this room*; *You were removed from this room*. Any room the user is currently in also
-  drives the persistent banner (§0.2).
+  drives the persistent banner ([Persistent elements](#persistent-elements)).
 - **Ordering (new).** The call's room first, then the rooms this device may act in, then
   the paused ones, then the rooms it left or was removed from, each by name.
-- **Interactions.** Tap → Voice Room Info (§13.2), whatever the room's state: a tap never
-  joins, so only an explicit join ever asks for the microphone. Compose (§7.3) → Create
+- **Interactions.** Tap → Voice Room Info ([Voice Room Info screen](#voice-room-info-screen)), whatever the room's state: a tap never
+  joins, so only an explicit join ever asks for the microphone. Compose (Compose behavior recap) → Create
   Voice Room.
 - **States.** loading, empty ("No voice rooms yet", with **Create a room**), offline (the
   saved rooms, and a notice that a call waits for the server), a room *waiting for its
@@ -1173,8 +1180,8 @@ Nothing on the server counts participants, and a device that is not in a call is
 about none, so a row never claims more than the device knows: only the room of this
 device's own call can read as live.
 
-### 13.1 Create Voice Room flow
-Reached from Contacts (§7) or the Voice Rooms tab compose. Three steps, each marked
+### Create Voice Room flow
+Reached from Contacts ([Contacts / New Chat](#contacts--new-chat)) or the Voice Rooms tab compose. Three steps, each marked
 "Step N of 3":
 1. **Room details** — the **room name**, at most 100 Unicode scalar values; a longer name
    is refused in the field and **Continue** waits for a valid one. Voice rooms are
@@ -1189,7 +1196,7 @@ Reached from Contacts (§7) or the Voice Rooms tab compose. Three steps, each ma
 
 On a server with no voice the flow offers no room to create.
 
-### 13.2 Voice Room Info screen
+### Voice Room Info screen
 **Purpose.** View and manage a room outside a call.
 
 **Layout (top → bottom).**
@@ -1199,16 +1206,16 @@ On a server with no voice the flow offers no room to create.
 2. **Header:** avatar, room name, and a state line (**Live now · N** in this device's call,
    **Empty**, or the room's paused or ended state).
 3. **Primary action:** **Return to the call** in this room's call; otherwise **Start a
-   call**, which starts the join (§10) and opens the call. When a call cannot start here
+   call**, which starts the join ([Live Voice Room Screen](#live-voice-room-screen)) and opens the call. When a call cannot start here
    the button is disabled and the reason is stated beside it: the room is waiting for its
    state, the room is paused until it is settled, the session started offline, or a call
    runs in another room.
    With no voice on the server there is no button, only that statement.
 4. **Members list:** "N members", this account as *You*, then each member by name with
-   *Verified* or *Not verified* as an icon and a word; **Invite people** → picker (§13.3)
+   *Verified* or *Not verified* as an icon and a word; **Invite people** → picker ([Voice Room invite picker](#voice-room-invite-picker))
    while the room holds fewer than 50. No role tags: every active member may add a member,
    remove a member and rename the room. Tapping a member → a sheet or dialog with the
-   verification state, **Verify safety number** (§11.1) and **Remove from room**, whose
+   verification state, **Verify safety number** ([Safety Number screen](#safety-number-screen)) and **Remove from room**, whose
    confirmation states that removing is a signed change every member applies and that any
    member can remove any other, the only remedy for a removal being a new room.
 5. **Leave room** for an active member. The confirmation explains that leaving is a signed
@@ -1237,44 +1244,44 @@ not at the screen that signed it.
 stores neither and could not decrypt either. The alongside text chat exists only during a
 call and is dropped when the call ends.
 
-### 13.3 Voice Room invite picker
+### Voice Room invite picker
 - `/voice-rooms/:roomId/invite`: a searchable multi-select of **verified** contacts who
   are not members, and **Invite** confirm. Inviting signs one `add members` event and sends
   each new member the whole signed transcript, so a room holds at most 50 members, and a
   member whose transcript would not fit one payload is not added — the picker says that
   nobody was added and why. With nobody left to invite it routes to Contacts. Per-contact
-  delivery status is not built, for the reason §13.2 gives.
+  delivery status is not built, for the reason [Voice Room Info screen](#voice-room-info-screen) gives.
 
 ---
 
-## 14. Saved Messages
+## Saved Messages
 
 **Purpose.** A personal self-conversation to save/keep your own messages, encrypted to your
 own device keys.
 
-**Layout.** Same skeleton as the DM chat (§8), with the "contact" being the user
+**Layout.** Same skeleton as the DM chat ([DM Chat Screen](#dm-chat-screen)), with the "contact" being the user
 themselves. Supports the features that make sense solo: send text/files, star, pin, search,
 forward (into other chats), delete-for-me. No receipts/presence (no other participant).
 
-**Access.** From Settings (§15) and as a target in the Forward picker (§8.4). May also
+**Access.** From Settings ([Settings](#settings-settings-tab--home)) and as a target in the Forward picker ([Forward target picker](#forward-target-picker)). May also
 appear pinned in the Chats list.
 
 ---
 
-## 15. Settings (Settings tab / home)
+## Settings (Settings tab / home)
 
 **Purpose.** Account, security, devices, and app preferences hub.
 
 The list is the Settings tab root, with the tab bar. Every screen it opens, and each screen
-behind those, is a full-screen page (§0.1): Edit profile, Saved Messages, Linked Devices,
+behind those, is a full-screen page ([Adaptive shell](#adaptive-shell)): Edit profile, Saved Messages, Linked Devices,
 Security settings with the two screens behind it, Receiving while closed, Appearance, the
 Security notice, and About with Diagnostics behind it.
 
 **Layout (top → bottom list):**
-1. **Profile header** — the user's avatar + display name; tap → **Edit profile** (§15.1).
-2. **Saved Messages** → §14.
-3. **Linked Devices** → §16.
-4. **Security & recovery** → Security settings (§15.2).
+1. **Profile header** — the user's avatar + display name; tap → **Edit profile** ([Edit Profile](#edit-profile)).
+2. **Saved Messages** → Saved Messages.
+3. **Linked Devices** → Linked Devices.
+4. **Security & recovery** → Security settings ([Security settings](#security-settings)).
 5. **Notifications** — what the operating system will actually do, read from the operating
    system rather than from a stored preference (ADR-048). Three states: **on**, with a line
    stating that an alert says only that something arrived, never who sent it or what it
@@ -1303,7 +1310,7 @@ Security notice, and About with Diagnostics behind it.
    in this build. **Off is the default and a complete state**: nothing runs, nothing is
    requested, nothing appears anywhere, and the row says so. This surface is reached only
    from Settings and is never suggested, prompted or advertised elsewhere. See
-   [background delivery status](STATUS.md#presence-voice-and-delivery) for the
+   [background delivery status](../STATUS.md#presence-voice-and-delivery) for the
    current production offer and evidence.
 5c. **Show my online status** — one switch row after Receiving while closed, on by default,
    for this phone alone (ADR-098 D9). The line under the title says what it does in both
@@ -1314,7 +1321,7 @@ Security notice, and About with Diagnostics behind it.
    in a snackbar. The switch takes no tap until the stored choice has been read, and the row is left
    out where Settings is drawn without the providers. This is the implemented
    per-phone control. The
-   [presence and receipts contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+   [presence and receipts contract](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
    requires **Who can see my online status** with **Everyone I share a chat with**,
    **My contacts**, and **Nobody**, applied reciprocally across the account's devices.
 5d. **Read receipts** — required account-wide setting for direct chats, on by default.
@@ -1328,33 +1335,33 @@ Security notice, and About with Diagnostics behind it.
    integration is outstanding.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
-7. **Security notice** — re-open the honest boundary screen (§5).
+7. **Security notice** — re-open the honest boundary screen ([Security Notice](#security-notice-honest-safety-boundary)).
 8. **Log out** → confirm. **[PRIVACY]** The confirm clearly states whether local
    history/keys are wiped. The recovery secret can recover cross-signing identity, not
    messages; history returns only from another device that still has it.
 9. **About** — app/version info (all local; no external calls): the build's own name,
    the packaged version, which build it is, and the revision of the statement this
    build carries. It states that nothing on it was fetched. Behind it sits
-   **Diagnostics** (§15.3).
-10. **Erase this account** → confirm (§15.4). Last in the list, marked destructive, and
+   **Diagnostics** ([Diagnostics](#diagnostics)).
+10. **Erase this account** → confirm ([Erase this account](#erase-this-account)). Last in the list, marked destructive, and
    separated from log out by a gap of its own: the two are not a pair, and a thumb that
    missed the reversible one must not land on the irreversible one.
 
-### 15.1 Edit Profile
+### Edit Profile
 - Set display name and avatar. State clearly what is visible to contacts. (Keep personal
   info minimal.)
 
-### 15.2 Security settings
+### Security settings
 - **Recovery secret** — replacement guidance; an already-saved secret is never re-shown
   because the app does not retain it. An unlocked device may generate a fresh secret,
   rewrap the same cross-signing identity material, upload a higher backup version, show
   the new secret once, and invalidate the old secret. Honest note: the server holds only
   an **unreadable identity backup** and no message history.
-- **Safety numbers** — a shortcut to review verified contacts (§11.1): every known
+- **Safety numbers** — a shortcut to review verified contacts ([Safety Number screen](#safety-number-screen)): every known
   contact with the trust state the conversation screens gate on, tapping through to that
   contact's Safety Number screen. An unverified row never renders cached profile
   identity.
-- **Security notice** link (§5).
+- **Security notice** link ([Security Notice](#security-notice-honest-safety-boundary)).
 
 **Replacement flow states.** *Explain* (what it does, what it costs, and that a recovery
 secret restores identity and never history) → *working* → *shown once* → *done*, with a
@@ -1362,9 +1369,9 @@ single *failed* state. Screen capture is blocked in the whole app (ADR-092), and
 copy goes through the clipboard path that expires; a build without that path says copying
 is unavailable rather than using a clipboard that never clears. **The new secret is shown
 only after the server has accepted the higher backup version.** Every failure says the
-current secret still works, because it does ([ADR-057](architecture/decisions/057-measured-settings.md)).
+current secret still works, because it does ([ADR-057](../architecture/decisions/057-measured-settings.md)).
 
-### 15.3 Diagnostics
+### Diagnostics
 
 **Purpose.** A short technical report the user can copy and hand to whoever runs their
 server. Reached from About and from nowhere else.
@@ -1386,7 +1393,7 @@ while the chrome around it is translated.
 **States.** *Reading this device*, *report*, *copied*, *clipboard refused*, and a re-read
 action.
 
-### 15.4 Erase this account
+### Erase this account
 
 **Purpose.** Leave. `DELETE /api/v1/me` deletes the account and every row that depends
 on it — devices, prekeys, published identity, key backup, device-list log, profile
@@ -1443,7 +1450,7 @@ outcome and is never reported as a revoked session.
 
 ---
 
-## 16. Linked Devices
+## Linked Devices
 
 **Purpose.** Manage the user's Android devices. Add a device, authorize it, and
 optionally transfer locally held history.
@@ -1455,16 +1462,16 @@ optionally transfer locally held history.
    The server removed `last_active_date` and the client no longer displays it.
    Removal revokes the device. Removing *this* device has a separate confirmation
    because it also erases everything on this phone.
-4. **Add device** — an explanation, not a button. The flow in §16.1 starts on the *other*
+4. **Add device** — an explanation, not a button. The flow in [Add Device flow](#add-device-flow) starts on the *other*
    device, so this screen has nothing to start; what it says is what the other device
    needs, and that this one should stay online afterwards so it can send its history
-   across, because the server has none to send ([ADR-057](architecture/decisions/057-measured-settings.md)).
+   across, because the server has none to send ([ADR-057](../architecture/decisions/057-measured-settings.md)).
 
-### 16.1 Add Device flow
+### Add Device flow
 - **Purpose.** Bring a new device online, recover/cross-sign identity, then optionally
   transfer encrypted history from an existing online device.
 - **Steps.**
-  1. On the **new** device, login and enter Encryption Setup (§4).
+  1. On the **new** device, login and enter Encryption Setup ([Encryption Setup](#encryption-setup-first-run-on-a-device)).
   2. After unsigned registration returns full-scope tokens, restore cross-signing
      identity using the recovery secret and finish the device cross-signature through
      the prekey endpoint.
@@ -1480,73 +1487,73 @@ optionally transfer locally held history.
 
 ---
 
-## 17. Global Dialogs, Sheets & Menus (referenced above)
+## Global Dialogs, Sheets & Menus
 
 The recurring modal surfaces and their contents:
 
-- **Delete message dialog** (§8) — two labeled options, *Delete for me* / *Delete for
+- **Delete message dialog** ([DM Chat Screen](#dm-chat-screen)) — two labeled options, *Delete for me* / *Delete for
   everyone*, with the honest note that "for everyone" is best-effort. In a group, *Delete for
   everyone* is on an own message, and on another member's where the owner or an admin may
-  delete it ([ADR-096](architecture/decisions/096-group-moderation.md) D4, D5).
+  delete it ([ADR-096](../architecture/decisions/096-group-moderation.md) D4, D5).
 - **Confirm dialogs** — Leave group, Remove member, Remove device, Clear history, Log out:
   each states the consequence plainly, including irreversibility where true.
 - **Mute options sheet** — durations / until toggled.
-- **Emoji reactor** (§8) — the floating reaction selector, which opens with the message
+- **Emoji reactor** ([DM Chat Screen](#dm-chat-screen)) — the floating reaction selector, which opens with the message
   context menu and is drawn above it, plus the full emoji picker its expand control opens.
-  The same picker serves the composer's emoji button ([ADR-059](architecture/decisions/059-emoji-surface.md)).
-- **Attachment sheet** (§8.2).
-- **Context menus** — message long-press menu (§8/§9) and conversation-list item menu (§6).
-- **Forward target picker** (§8.4).
-- **Member/participant sheets** — group member sheet (§12.2), voice participant sheet
-  (§10).
+  The same picker serves the composer's emoji button ([ADR-059](../architecture/decisions/059-emoji-surface.md)).
+- **Attachment sheet** ([Attachment sheet](#attachment-sheet)).
+- **Context menus** — message long-press menu ([DM Chat Screen](#dm-chat-screen), [Group Chat Screen](#group-chat-screen)) and conversation-list item menu ([Chats List](#chats-list-home--chats-tab)).
+- **Forward target picker** ([Forward target picker](#forward-target-picker)).
+- **Member/participant sheets** — group member sheet ([Group Info screen](#group-info-screen)), voice participant sheet
+  ([Live Voice Room Screen](#live-voice-room-screen)).
 
 Every sheet keeps each control above the bottom system inset and above the keyboard, its
 surface reaches the screen edge, and its content scrolls when it does not fit; only
-`app_modals.dart` opens a sheet (`responsive-ui.md`, Sheets).
+`app_modals.dart` opens a sheet ([Adaptive layout](ADAPTIVE-LAYOUT.md#sheets)).
 
 Every dialog that performs an irreversible or best-effort action must carry honest wording
 — no dialog may imply a stronger guarantee than the app can keep.
 
 ---
 
-## Appendix A — Screen Inventory (flat list)
+## Screen Inventory
 
-1. Splash / Connection (§1)
-2. Login (§2)
-3. Register (§3)
-4. Pending-Activation (§3)
-5. Encryption Setup — Generating (§4.1)
-6. Encryption Setup — Recovery (§4.2)
-7. Encryption Setup — Confirm or restore (§4.3)
-8. Security Notice (§5)
-9. Chats List (§6)
-10. Search (§6.5)
-11. Contacts / New (§7)
-12. DM Chat (§8)
-13. Attachment sheet (§8.2)
-14. Pinned messages (§8.3)
-15. Forward target picker (§8.4)
-16. Group Chat (§9)
-17. Live Voice Room (§10)
-18. Contact Profile (§11)
-19. Safety Number (§11.1)
-20. Shared media (§11.2) — not built
-21. Create Group (§12.1)
-22. Group Info (§12.2)
-23. Edit Group (§12.3)
-24. Voice Rooms list (§13.0)
-25. Create Voice Room (§13.1)
-26. Voice Room Info (§13.2)
-27. Voice Room invite picker (§13.3)
-28. Saved Messages (§14)
-29. Settings home (§15)
-30. Edit Profile (§15.1)
-31. Security settings (§15.2)
-32. Appearance (§15, item 6)
-33. Recovery-secret replacement (§15.2)
-34. Safety-number review (§15.2)
-35. About (§15, item 9)
-36. Diagnostics (§15.3)
-37. Linked Devices (§16)
-38. Add Device (§16.1)
-39. Global dialogs/sheets/menus (§17)
+1. Splash / Connection ([Splash / Connection Screen](#splash--connection-screen))
+2. Login ([Login Screen](#login-screen))
+3. Register ([Register Screen](#register-screen--pending-activation-state))
+4. Pending-Activation ([Register Screen](#register-screen--pending-activation-state))
+5. Encryption Setup — Generating ([Step — Generating identity](#step--generating-identity))
+6. Encryption Setup — Recovery ([Step — Recovery](#step--recovery))
+7. Encryption Setup — Confirm or restore ([Step — Confirm or restore](#step--confirm-or-restore))
+8. Security Notice ([Security Notice](#security-notice-honest-safety-boundary))
+9. Chats List ([Chats List](#chats-list-home--chats-tab))
+10. Search ([Search](#search-client-side-only))
+11. Contacts / New ([Contacts / New Chat](#contacts--new-chat))
+12. DM Chat ([DM Chat Screen](#dm-chat-screen))
+13. Attachment sheet ([Attachment sheet](#attachment-sheet))
+14. Pinned messages ([Pinned messages screen](#pinned-messages-screen))
+15. Forward target picker ([Forward target picker](#forward-target-picker))
+16. Group Chat ([Group Chat Screen](#group-chat-screen))
+17. Live Voice Room ([Live Voice Room Screen](#live-voice-room-screen))
+18. Contact Profile ([Contact Profile](#contact-profile--safety-number-verification))
+19. Safety Number ([Safety Number screen](#safety-number-screen))
+20. Shared media ([Shared media screen](#shared-media-screen)) — not built
+21. Create Group ([Create Group flow](#create-group-flow))
+22. Group Info ([Group Info screen](#group-info-screen))
+23. Edit Group ([Edit Group screen](#edit-group-screen-owneradmin))
+24. Voice Rooms list ([Voice Rooms list](#voice-rooms-list-voice-rooms-tab))
+25. Create Voice Room ([Create Voice Room flow](#create-voice-room-flow))
+26. Voice Room Info ([Voice Room Info screen](#voice-room-info-screen))
+27. Voice Room invite picker ([Voice Room invite picker](#voice-room-invite-picker))
+28. Saved Messages ([Saved Messages](#saved-messages))
+29. Settings home ([Settings](#settings-settings-tab--home))
+30. Edit Profile ([Edit Profile](#edit-profile))
+31. Security settings ([Security settings](#security-settings))
+32. Appearance ([Settings](#settings-settings-tab--home))
+33. Recovery-secret replacement ([Security settings](#security-settings))
+34. Safety-number review ([Security settings](#security-settings))
+35. About ([Settings](#settings-settings-tab--home))
+36. Diagnostics ([Diagnostics](#diagnostics))
+37. Linked Devices ([Linked Devices](#linked-devices))
+38. Add Device ([Add Device flow](#add-device-flow))
+39. Global dialogs/sheets/menus ([Global Dialogs, Sheets & Menus](#global-dialogs-sheets--menus))

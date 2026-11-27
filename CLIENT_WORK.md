@@ -133,7 +133,7 @@ target the selector and the stub have one implementation to choose between.
 | `frontend/README.md` | "Flutter client for Android, with a preserved post-v1 Web foundation", "Android and Web targets only" under **Toolchain**, the `flutter build web` line, the Web CA-install paragraph, and the Web step in the local-CI description |
 | `frontend/pubspec.yaml` | `description: "Android and Web client foundation for Communication Platform."` |
 
-`frontend/docs/implementation-checklist.md` carries the same "preserved post-v1 Web
+[`frontend/docs/implementation-checklist.md`](https://github.com/Orviniq/communication-platform/blob/112691f316577c9593a2e0967dd48015b1632984/frontend/docs/implementation-checklist.md) carried the same "preserved post-v1 Web
 scaffold" status in several rows. It is the client's live status document, so its
 wording is the client developer's call — but it should stop describing a target the
 server no longer serves.
@@ -143,8 +143,7 @@ server no longer serves.
 The server half of the voice design is served
 ([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)):
 phase 6 removed the SFU and the room object, and phase 7 added the one route that
-mints a coturn credential. Android implements the v1 room and call. See the [current voice status](frontend/docs/voice-and-realtime.md#status)
-and [release gaps](frontend/docs/STATUS.md#presence-voice-and-delivery). The package
+mints a coturn credential. Android implements the v1 room and call. See the [current voice status and release gaps](frontend/docs/STATUS.md#presence-voice-and-delivery). The package
 and manifest notes below are from the 2026-09-05 handoff.
 
 **The client contract for voice is written.**
@@ -235,8 +234,8 @@ full statement of what moved.
 | `frontend/lib/features/networking/infrastructure/api/api_request.dart` | `maximumSignalCharacters = 16384` and `maximumPresenceTargets = 500`. The first is not the bound any more — the longest legal blob is 21848 characters, the base64 of the largest bucket — and the second bounds a frame that is gone |
 | `frontend/lib/app/dependencies/messaging_providers.dart` | `presenceProjectionProvider`, and the comment saying nothing should read it "until `subscribe_presence` is sent". It will not be sent: presence between conversation members is client protocol over `signal` frames now, per `docs/client/CLIENT_CONTRACT.md` §N rule 5 |
 | `frontend/lib/features/messaging/presentation/chat_conversation_view.dart` | The comment describing why presence is absent, which now has a different reason behind it |
-| [Voice signalling, socket limits](frontend/docs/voice-signalling-v1.md#the-socket-limits) | The current contract validates the encoded signal against the published buckets |
-| `frontend/docs/sync-engine.md`, `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |
+| [Voice signalling, socket limits](frontend/docs/contracts/VOICE-V1.md#the-socket-limits) | The current contract validates the encoded signal against the published buckets |
+| [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/ae3f0fd8f2c40e89f1e0c59d4d6a504ce14d66d3/frontend/docs/sync-engine.md), `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |
 
 ## One session token replaces the pair
 
@@ -282,7 +281,7 @@ returns is now discarding a working one.
 
 ### Optional — the arbitration the rotation forced
 
-[`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and [`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md) and `frontend/docs/sync-engine.md`
+[`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and [`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md) and [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/66bb9d1f986626d0b0c540953b55111ecfa3edcc/frontend/docs/sync-engine.md)
 record why this exists: two owners in one process held one rotating refresh token, the
 loser of the race presented a retired token, and the server ended the session. That
 race is gone. Nothing retires a token, so two owners may renew concurrently and both
@@ -298,7 +297,7 @@ keep working tokens.
 If the arbitration is kept, keep it as a contention control and not as a correctness
 one, and say so where it is written down: the failure it was built to prevent cannot
 occur against this server. If it is removed, [`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and
-[`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md) and `frontend/docs/sync-engine.md` are the documents that then describe a
+[`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md) and [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/66bb9d1f986626d0b0c540953b55111ecfa3edcc/frontend/docs/sync-engine.md) are the documents that then describe a
 server that does not exist.
 
 ### What did not change
@@ -340,7 +339,7 @@ to tell the user which device this is has `label_blob`, `created_date` and
 
 ### Optional — one call for a fan-out, and a conditional identity read
 
-[`frontend/docs/architecture/decisions/060-delivery-latency.md`](frontend/docs/architecture/decisions/060-delivery-latency.md) and [`065-peer-read-cost.md`](frontend/docs/architecture/decisions/065-peer-read-cost.md) and `frontend/docs/sync-engine.md`
+[`frontend/docs/architecture/decisions/060-delivery-latency.md`](frontend/docs/architecture/decisions/060-delivery-latency.md) and [`065-peer-read-cost.md`](frontend/docs/architecture/decisions/065-peer-read-cost.md) and [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/4c250c215c8d7948cde79f37afe5b19a042e3234/frontend/docs/sync-engine.md)
 record what verifying a send costs today: three reads for each recipient, 107 to
 137 ms a round trip, 150 round trips for a 50-member group, and a 30-second
 in-memory cache built to survive the rate limit. That cache is a correctness
@@ -364,7 +363,7 @@ built around their cost.
 `GET /api/v1/config` publishes the retention windows, the storage and device
 ceilings, the batch sizes, the padding bucket sets and whether this deployment
 serves voice. `envelope_ttl_days` is the one the client cannot get any other way:
-`frontend/docs/sync-engine.md` records that the retention window is an operator
+[`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/4c250c215c8d7948cde79f37afe5b19a042e3234/frontend/docs/sync-engine.md) records that the retention window is an operator
 setting the client cannot state, and the queue-gap disclosure of
 `docs/client/CLIENT_CONTRACT.md` §H needs it.
 
@@ -589,7 +588,7 @@ here is the client developer's to change until the owner decides.
 | Path | What is needed |
 |---|---|
 | `AttachmentChannel.kt`, the copy | The procedures of §8.2 on the outgoing copy, the proof of §8.3, the neutral names of §8.1 — a photo becomes `photo.jpg` in place of `jpegName`'s base of the original — and, in the answer to Dart, which of W1, W2 or none applies |
-| The preview step (`frontend/docs/ui-specification.md` §8.2) | The warnings of §8.4, above **Send**, which stays enabled |
+| The preview step ([Attachment sheet](frontend/docs/ui/SCREENS.md#attachment-sheet)) | The warnings of §8.4, above **Send**, which stays enabled |
 
 ### Required before profiles ship — the profile key
 
@@ -608,16 +607,16 @@ the work lands, and the binding text wins where they differ.
 
 | Document | What changes |
 |---|---|
-| `frontend/docs/message-protocol.md` | The registry: `contact.master_verify`, `contact.block_set`, `protocol.notice` and `profile.publish`, and the new `contact.entry_set`, are carried as `CPCTV001` payloads rather than application-event kinds, as `group.control` is carried as `CPGSV001`; `contact.master_verify` goes to the peer as well as to own devices. § "Blocking" against §3.3 and §5.6. A section for the admission of a direct conversation (§5.6). § "Receipts and typing" and the presence rules: a direct conversation in `MUTUAL` only. § "Own-device history": the snapshot |
-| `frontend/docs/cryptographic-protocol.md` | § "Safety numbers and cross-signing": the contact code replaces the `CP-SAFETY-V1` symbol, and verification is by both people. § "Recovery and device-to-device history": correct the sentence that says the backup includes user-signing signatures over verified peers' master keys — the `CPKBV001` plaintext is the three private keys and nothing else — and say that contacts and verifications travel in the snapshot. § "Profiles and labels": §7. § "Direct messages and per-device channels": the read of §5.3 |
-| `frontend/docs/pairwise-transport-v1.md` | § "Sender-hidden initial header", steps 2 to 4: the non-committing read of §5.3 as the one exception to "under the already confirmed master key" |
-| `frontend/docs/sync-engine.md` | Held envelopes: the read of §5.3. The history transfer: the snapshot of §3.5 |
-| `frontend/docs/ui-specification.md` | §6 (the rows and previews), §7 (the add sheet and the state words), §8 (the panel), §8.2 (the warnings), §11 and §11.1 (the safety-number page), §15 (My code, the discoverability sentence) |
-| `frontend/docs/platform-android.md` | "Why there is no `CAMERA` permission" no longer holds (§4.7). The scanner. The copy's removal of metadata (§8) |
-| `frontend/docs/local-data-model.md` | The contact, block, claim, carried-over and profile-key records |
-| `frontend/docs/threat-model.md` | The verification statements, against `docs/security/SECURITY.md` residual risk 7 |
+| `frontend/docs/contracts/MESSAGES.md` | The registry: `contact.master_verify`, `contact.block_set`, `protocol.notice` and `profile.publish`, and the new `contact.entry_set`, are carried as `CPCTV001` payloads rather than application-event kinds, as `group.control` is carried as `CPGSV001`; `contact.master_verify` goes to the peer as well as to own devices. § "Blocking" against §3.3 and §5.6. A section for the admission of a direct conversation (§5.6). § "Receipts and typing" and the presence rules: a direct conversation in `MUTUAL` only. § "Own-device history": the snapshot |
+| `frontend/docs/contracts/CRYPTO.md` | § "Safety numbers and cross-signing": the contact code replaces the `CP-SAFETY-V1` symbol, and verification is by both people. § "Recovery and device-to-device history": correct the sentence that says the backup includes user-signing signatures over verified peers' master keys — the `CPKBV001` plaintext is the three private keys and nothing else — and say that contacts and verifications travel in the snapshot. § "Profiles and labels": §7. § "Direct messages and per-device channels": the read of §5.3 |
+| `frontend/docs/contracts/PAIRWISE-V1.md` | § "Sender-hidden initial header", steps 2 to 4: the non-committing read of §5.3 as the one exception to "under the already confirmed master key" |
+| [`frontend/docs/architecture/SYNC.md`](frontend/docs/architecture/SYNC.md) | Held envelopes: the read of §5.3. The history transfer: the snapshot of §3.5 |
+| [`frontend/docs/ui/SCREENS.md`](frontend/docs/ui/SCREENS.md) | [Chats List](frontend/docs/ui/SCREENS.md#chats-list-home--chats-tab) (the rows and previews), [Contacts / New Chat](frontend/docs/ui/SCREENS.md#contacts--new-chat) (the add sheet and the state words), [DM Chat Screen](frontend/docs/ui/SCREENS.md#dm-chat-screen) (the panel), [Attachment sheet](frontend/docs/ui/SCREENS.md#attachment-sheet) (the warnings), [Contact Profile](frontend/docs/ui/SCREENS.md#contact-profile--safety-number-verification) and [Safety Number screen](frontend/docs/ui/SCREENS.md#safety-number-screen), [Settings](frontend/docs/ui/SCREENS.md#settings-settings-tab--home) (My code, the discoverability sentence) |
+| [`frontend/docs/architecture/ANDROID.md`](frontend/docs/architecture/ANDROID.md) | "Why there is no `CAMERA` permission" no longer holds (§4.7). The scanner. The copy's removal of metadata (§8) |
+| [`frontend/docs/architecture/LOCAL-DATA.md`](frontend/docs/architecture/LOCAL-DATA.md) | The contact, block, claim, carried-over and profile-key records |
+| [`frontend/docs/security/CLIENT-THREAT-MODEL.md`](frontend/docs/security/CLIENT-THREAT-MODEL.md) | The verification statements, against `docs/security/SECURITY.md` residual risk 7 |
 | [`frontend/docs/architecture/decisions/`](frontend/docs/architecture/decisions/README.md) | One new ADR recording this work on the client side — as ADR-068 to ADR-070 recorded server ADRs — that amends ADR-093 (the read of §5.3 beside D12; the row of D18 gains the claim; the hint of D19 is withdrawn), ADR-089 and ADR-097 (the neutral names and the removal of metadata) and ADR-098 (presence for a direct conversation in `MUTUAL` only), and records `com.google.zxing:core` under ADR-054's rules: the exact version, its licence, and the date and source it was read from |
-| `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
+| [`frontend/docs/STATUS.md`](frontend/docs/STATUS.md) | Only as each piece is done and verified |
 
 
 ## Recommended — the documents that moved
@@ -635,7 +634,7 @@ client contract and security model. Other frontend documents still use the point
 | `backend/CLIENT_CONTACTS_AND_TRUST.md` | [`docs/client/CLIENT_CONTACTS_AND_TRUST.md`](docs/client/CLIENT_CONTACTS_AND_TRUST.md) |
 
 On 2026-10-21, 53 files under `frontend/` linked these paths 146 times — 74 of them the
-contract, `frontend/AGENTS.md` and `frontend/docs/backend-api.md` among them — and none of
+contract, `frontend/AGENTS.md` and [`frontend/docs/backend-api.md`](https://github.com/Orviniq/communication-platform/blob/dc01871736f02fddff668a107d3d8676d92db89a/frontend/docs/backend-api.md) among them — and none of
 them names a section, so a search for the three old paths finds every link to change. The
 per-app `API.md` files did not move. Once no client document names an old path, the pointer
 files can go; say so here and the server side deletes them.
@@ -716,11 +715,11 @@ work lands, and the binding texts win where they differ.
 
 | Document | What changes |
 |---|---|
-| `frontend/docs/message-protocol.md` | § "Receipts and typing": every statement §2.2 of `CLIENT_PRESENCE_AND_RECEIPTS.md` lists — the list in "No claim the client cannot observe" loses "a group over 32 members" and gains "a peer outside your audience"; "Who may send and receive"; "Watching"; "The switch", replaced by the audience; and the opening sentence's "user privacy settings", which becomes the read-receipt setting. § "Event registry": `privacy.settings_set` as `CPCTV001` kind 7, and `room.control` with its version 2. § "Edits, reactions, pins, and deletion": who reacted. § "Blocking": presence refuses a blocked account. § "Voice rooms": "every active member has the same authority … There is no owner and no admin" holds for version-1 rooms only |
-| `frontend/docs/voice-signalling-v1.md` | `CLIENT_VOICE_ROLES.md` folded in as its version-2 part: in Part 1, § "The operations, and who may sign each", § "Applying an event", § "The payload" (kind 4) and § "Starting the sessions a call needs" (the announcement); in Part 2, § "The kinds" (9 to 12, leave reasons 4 and 5), § "Removal" and § "The call" (the in-call actions), and the allowance beside § "Volatile seal and open" |
+| `frontend/docs/contracts/MESSAGES.md` | § "Receipts and typing": every statement §2.2 of `CLIENT_PRESENCE_AND_RECEIPTS.md` lists — the list in "No claim the client cannot observe" loses "a group over 32 members" and gains "a peer outside your audience"; "Who may send and receive"; "Watching"; "The switch", replaced by the audience; and the opening sentence's "user privacy settings", which becomes the read-receipt setting. § "Event registry": `privacy.settings_set` as `CPCTV001` kind 7, and `room.control` with its version 2. § "Edits, reactions, pins, and deletion": who reacted. § "Blocking": presence refuses a blocked account. § "Voice rooms": "every active member has the same authority … There is no owner and no admin" holds for version-1 rooms only |
+| `frontend/docs/contracts/VOICE-V1.md` | `CLIENT_VOICE_ROLES.md` folded in as its version-2 part: in [CPVRV001 room control](frontend/docs/contracts/VOICE-V1.md#cpvrv001-room-control), § "The operations, and who may sign each", § "Applying an event", § "The payload" (kind 4) and § "Starting the sessions a call needs" (the announcement); in [CPVSV001 call signalling](frontend/docs/contracts/VOICE-V1.md#cpvsv001-call-signalling), § "The kinds" (9 to 12, leave reasons 4 and 5), § "Removal" and § "The call" (the in-call actions), and the allowance beside § "Volatile seal and open" |
 | [`frontend/docs/architecture/decisions/`](frontend/docs/architecture/decisions/README.md) | One new client ADR that amends ADR-098 — D4 (every group, the answer window), D5 (the goodbye's limit), D7 (sealing on release), D9 (the audience and the privacy record in place of the switch), D10 (revision 12) and D11 (the year) — records the read-receipt setting beside ADR-091, whose reader list it leaves as it is, and supersedes ADR-077's D1 for version-2 rooms, with the allowance of 16 beside D5's 32 frames. ADR-077's open question about room text stays open |
-| `frontend/docs/ui-specification.md` | §15: item 5c becomes **Who can see my online status**, and a **Read receipts** row joins it. §8 and §9: the **Reactions** sheet. §13.2: role tags, the actions of each role and the removal confirmation, for version-2 rooms |
-| [Live Voice Room Screen](frontend/docs/ui-specification.md#10-live-voice-room-screen) | The required v2 states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
-| `frontend/docs/local-data-model.md` | The privacy record, the room version each peer device announced, and a room's version and roles |
-| `frontend/docs/threat-model.md` | The reading activity presence shows (`docs/security/SECURITY.md` § "Residual risk") and what a mesh can enforce (`CLIENT_VOICE_ROLES.md` §6) |
-| `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
+| [`frontend/docs/ui/SCREENS.md`](frontend/docs/ui/SCREENS.md) | [Settings](frontend/docs/ui/SCREENS.md#settings-settings-tab--home): *Show my online status* becomes **Who can see my online status**, and a **Read receipts** row joins it. [DM Chat Screen](frontend/docs/ui/SCREENS.md#dm-chat-screen) and [Group Chat Screen](frontend/docs/ui/SCREENS.md#group-chat-screen): the **Reactions** sheet. [Voice Room Info screen](frontend/docs/ui/SCREENS.md#voice-room-info-screen): role tags, the actions of each role and the removal confirmation, for version-2 rooms |
+| [Live Voice Room Screen](frontend/docs/ui/SCREENS.md#live-voice-room-screen) | The required v2 states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
+| [`frontend/docs/architecture/LOCAL-DATA.md`](frontend/docs/architecture/LOCAL-DATA.md) | The privacy record, the room version each peer device announced, and a room's version and roles |
+| [`frontend/docs/security/CLIENT-THREAT-MODEL.md`](frontend/docs/security/CLIENT-THREAT-MODEL.md) | The reading activity presence shows (`docs/security/SECURITY.md` § "Residual risk") and what a mesh can enforce (`CLIENT_VOICE_ROLES.md` §6) |
+| [`frontend/docs/STATUS.md`](frontend/docs/STATUS.md) | Only as each piece is done and verified |

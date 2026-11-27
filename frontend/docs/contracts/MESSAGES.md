@@ -130,12 +130,12 @@ logical message.
   accepted only from the original sender or an explicitly authorized group moderator.
   It replaces local display with a tombstone and requests attachment-cache deletion; it
   cannot force a recipient to erase previously decrypted content.
-- **Who changes a group message** ([ADR-096](architecture/decisions/096-group-moderation.md) D4 to D7). Each member deletes an
+- **Who changes a group message** ([ADR-096](../architecture/decisions/096-group-moderation.md) D4 to D7). Each member deletes an
   own message for everyone. A `message.delete` from anyone else counts when the group's
   roster records its sender as the owner, or as an admin and the message's author as a
   member; a `message.pin_set` counts when the roster records its sender as the owner or an
   admin. An edit is accepted from the original sender only, and a group sends none. The
-  server holds no role ([client contract, §F](../../docs/client/CLIENT_CONTRACT.md#f-sessions-and-groups)), so the sending phone checks the
+  server holds no role ([client contract, §F](../../../docs/client/CLIENT_CONTRACT.md#f-sessions-and-groups)), so the sending phone checks the
   rule before it sends and each receiving phone checks it again when it folds the event,
   from its own `group_states` row.
 - **Order.** The roles are those of the roster this device holds now, not those at the
@@ -148,7 +148,7 @@ logical message.
   made while a member.
 
 The required local **who reacted** list uses the already-admitted reaction
-events and requires no wire change. See [presence and receipts, §7](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#7-who-reacted).
+events and requires no wire change. See [presence and receipts, §7](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#7-who-reacted).
 
 ## Receipts and typing
 
@@ -156,7 +156,7 @@ Delivery/read receipts name bounded explicit message-ID sets. A delivered receip
 sent after durable local application, not merely socket arrival. A read receipt is sent
 only after the conversation is visibly read and the conversation permits it.
 The current direct chat allows peer read receipts. The binding
-[presence and receipts contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#6-read-receipts-in-direct-conversations)
+[presence and receipts contract](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#6-read-receipts-in-direct-conversations)
 requires an account-wide direct receipt preference. Off suppresses peer sends and
 display while own-device read sync continues. The preference, and its
 `privacy.settings_set` record (`CPCTV001` kind 7), remain unimplemented.
@@ -186,7 +186,7 @@ already relays and drops when the target has no socket.
   active group of at most 32 members. Saved Messages and unverified peers are excluded.
   The binding contract requires `MUTUAL` for direct chats, blocking and audience
   enforcement on admission and send, and coverage for groups through 50 members.
-  See the [presence gaps](STATUS.md#presence-voice-and-delivery).
+  See the [presence gaps](../STATUS.md#presence-voice-and-delivery).
 - **Peer reads** (ADR-098 D7, amended by ADR-101). Presence learns a peer's verified devices from
   one `POST /api/v1/peers` for up to 64 accounts and keeps each answer. An answer under 10 s old is
   served as it is; one under 60 s old that verified the account is served at once and read again in
@@ -212,7 +212,7 @@ already relays and drops when the target has no socket.
   farewell) sends it, once. Until the app is in the foreground again nothing else is sealed, and a
   frame that arrives is committed and discarded unread. The socket closes once the `gone` has gone
   to it, or after 1,500 ms, and stays open if the app came back during that wait.
-  The [binding goodbye](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#36-online-and-the-goodbye)
+  The [binding goodbye](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#36-online-and-the-goodbye)
   limits this to 500 ms and to what the pacer can release in that window.
   Reconciliation is an owner decision.
 - **Typing** (ADR-098 D3, amended by ADR-099). `typing` goes only to devices whose watch of that
@@ -260,7 +260,7 @@ present because a connection to them is open, which is observed rather than asse
 ## Blocking
 
 The following is required behavior. Client-side blocking and its presence
-enforcement remain gaps. See [contacts and trust](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md#33-blocking).
+enforcement remain gaps. See [contacts and trust](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md#33-blocking).
 
 Blocking is private account state held by the client's own devices. `contact.block_set` contains the
 target user ID, blocked boolean, monotonic revision, and event ID and is encrypted only
@@ -276,7 +276,7 @@ ordinary content may be locally collapsed without corrupting group state.
 
 ## Groups
 
-A group is a set of pairwise sessions ([client contract, §F](../../docs/client/CLIENT_CONTRACT.md#f-sessions-and-groups), server ADR-0001).
+A group is a set of pairwise sessions ([client contract, §F](../../../docs/client/CLIENT_CONTRACT.md#f-sessions-and-groups), server ADR-0001).
 The server holds no group object, roster, epoch, or group key. The roster exists only in
 its members' clients, and every change to it is a control event that one member's device
 signs and every other member checks. No group key material is uploaded.
@@ -300,7 +300,7 @@ as gone leaves the count.
 
 Decided by ADR-091 (Accepted, 2026-10-14) and built. The read time is kept in
 `receipts.read_at_ms` (schema 24), and the sender sees it in the reader list of an own message
-(`ui-specification.md` §9).
+([Group Chat Screen](../ui/SCREENS.md#group-chat-screen)).
 
 - **Read receipts only.** A group sends `receipt.read` and never `receipt.delivered`. The
   second tick means read, and a delivered state has no mark of its own.
@@ -440,10 +440,10 @@ A voice room is client state exactly as a group is, and a call inside it is a fu
 of WebRTC audio keyed by DTLS-SRTP between each pair of devices. The server holds no
 room, no roster, no name and no participant list: it mints a relay credential at
 `POST /api/v1/me/relay` and relays `signal` frames, and that is the whole of its part
-([client contract, §N](../../docs/client/CLIENT_CONTRACT.md#n-voice), server ADR-0021).
+([client contract, §N](../../../docs/client/CLIENT_CONTRACT.md#n-voice), server ADR-0021).
 
 Two payload formats carry it, and both are specified in
-[v1 signalling](voice-signalling-v1.md). The [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md)
+[v1 signalling](VOICE-V1.md). The [voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md)
 requires v2 control events and signalling for a voice release:
 
 - **`CPVRV001`**, the room's signed control events, in ordinary **durable** envelopes.
@@ -463,7 +463,7 @@ requires v2 control events and signalling for a voice release:
 Without that rule the volatile channel is a way to write durable state, and the durable
 queue is a way to replay a call's signalling hours later.
 
-**A room starts the sessions its call needs** ([ADR-077](architecture/decisions/077-voice-mesh.md), decided B on
+**A room starts the sessions its call needs** ([ADR-077](../architecture/decisions/077-voice-mesh.md), decided B on
 2026-09-30). A volatile frame never starts a pairwise session, because a first frame the
 relay drops would leave a session only its sender holds. So a device sends a `CPVRV001`
 state request, sealed to one device alone, to each live device of each active member it
@@ -474,7 +474,7 @@ queue holds that first message until the device fetches it, and the answer is th
 session's second message. A request for a room a device does not hold, or naming a later
 revision than it holds, is answered with a request back, which is how a member's new
 device learns its rooms. The rule is in
-[voice-signalling-v1.md](voice-signalling-v1.md), Starting the sessions a call needs.
+[Starting the sessions a call needs](VOICE-V1.md#starting-the-sessions-a-call-needs).
 
 ## Multi-device rules
 

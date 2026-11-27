@@ -2,9 +2,17 @@
 
 ## Baseline
 
-Use the Flutter stable version pinned during scaffolding and target the current Android
-SDK required for distribution. The minimum SDK is chosen after crypto, Keystore, and
-WebRTC device testing; lowering it may not weaken required security controls silently.
+Android is the only supported target. The project pins Flutter 3.44.7 in
+[`pubspec.yaml`](../../pubspec.yaml). [Gradle](../../android/app/build.gradle.kts)
+takes the minimum, target and compile SDKs from Flutter. The pinned toolchain
+uses API 24 for the minimum and API 36 for the target and compile SDKs. The minimum
+SDK is chosen after crypto, Keystore and WebRTC device testing. Lowering it may
+not weaken required security controls silently.
+
+The [main manifest](../../android/app/src/main/AndroidManifest.xml) declares
+the deferred job and the two foreground services. See the [synchronization engine](SYNC.md)
+for delivery ownership and the [field runbook](../runbooks/SUSTAINED-DELIVERY.md)
+for what has been verified on devices.
 
 ## Key and data protection
 
@@ -120,7 +128,7 @@ Verification on 2026-07-28 passed:
 
 This Android scope does not implement PQXDH, Double Ratchet, application-message schemas,
 or a browser adapter. It also excluded MLS state and KeyPackages, which no
-piece builds now that a group is a set of pairwise sessions ([ADR-075](architecture/decisions/075-pairwise-groups.md)).
+piece builds now that a group is a set of pairwise sessions ([ADR-075](decisions/075-pairwise-groups.md)).
 The smoke covers the Android foundation. Browser interoperability would be a release
 gate if a browser target were approved.
 
@@ -164,12 +172,12 @@ non-production flavors.
 - **Android's network security configuration does not govern this app's API traffic.** It
   applies to the platform's Java HTTP stacks and WebView; `dart:io` does not consult it
   (verified against a live server for ADR-043). The resources that
-  [`android/provisioning/README.md`](../android/provisioning/README.md) describes are
+  [`android/provisioning/README.md`](../../android/provisioning/README.md) describes are
   retained as defence in depth for any future WebView or Java-side traffic.
 
 **Owner decision (ADR-076 D7):** Whether runtime SPKI pinning must also be enforced in
 Dart (or whether exclusive private-CA anchoring in `dart:io` suffices; see
-[release-signing.md](release-signing.md#what-the-trust-checks-prove) and ADR-043) remains
+[SIGNING.md](../runbooks/SIGNING.md#what-the-trust-checks-prove) and ADR-043) remains
 an open owner decision.
 
 ## Background delivery
@@ -199,9 +207,8 @@ Modes:
   service, asks for nothing the user can refuse, and is never advertised as instant or
   exact-periodic. Its honest tier is *eventual*; in the *rare* and *restricted* buckets it
   is nothing at all.
-- **Background near-real-time (Layer 2, opt-in, and offered as best effort in
-  production since 2026-10-18 — see [sustained-delivery-validation.md](sustained-delivery-validation.md),
-  ADR-053 and ADR-094):** a `specialUse`
+- **Sustained delivery (Layer 2, opt-in, offered as best effort in production
+  since 2026-10-18 under ADR-094, with an empty [field ledger](../runbooks/SUSTAINED-DELIVERY.md#the-gate)):** a `specialUse`
   foreground service that keeps the process non-cached so the composed socket survives,
   declared with a truthful `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE`. It hosts its own
   isolate and adds no second delivery implementation — the engine, the store, the inspector,
@@ -304,10 +311,9 @@ and not in the shade.
 Kotlin and in the manifest, because no device is available to exercise them. That no
 device is available is the whole finding of ADR-053: source shape is not behaviour, so
 nothing about this capability may be called measured until behaviour has been observed
-(ADR-094 offers it to users anyway, as best effort, and says so). The criteria, the
-matrix, the measurement procedure and the current results are in
-[sustained-delivery-validation.md](sustained-delivery-validation.md), and
-`tool/measure_sustained_delivery.sh` is the instrument.
+(ADR-094 offers it to users anyway, as best effort, and says so). The [sustained-delivery runbook](../runbooks/SUSTAINED-DELIVERY.md) holds the
+criteria, matrix, procedure and results. The
+[measurement script](../../tool/measure_sustained_delivery.sh) supplies the observations.
 
 ### Layer 1 as built (ADR-049)
 
@@ -389,7 +395,7 @@ The physical-device Doze, standby, reboot, force-stop and vendor-battery matrix 
 release validation gate for any *claim* about timeliness. Until 2026-08-23 that sentence
 was enforced by nothing, which is how Layer 2 came to ship with the matrix unrun; the
 gate now lives in `lib/app/config/sustained_delivery_gate.dart` and in
-[sustained-delivery-validation.md](sustained-delivery-validation.md), and
+[SUSTAINED-DELIVERY.md](../runbooks/SUSTAINED-DELIVERY.md), and
 `test/architecture/sustained_delivery_gate_test.dart` fails if the offer moves to
 evidenced without it.
 
@@ -477,7 +483,7 @@ sketch on evidence. What ships:
   (ADR-051) keeps it alive while the user has that capability on; neither makes an alert
   certain, and after a force-stop nothing arrives and nothing announces.
   **"Process alive" is not "app running", and user-facing text may not conflate them**
-  ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)): `_reconcileAlerts` in the deferred catch-up and
+  ([ADR-052](decisions/052-accurate-capability-claims.md)): `_reconcileAlerts` in the deferred catch-up and
   `_SustainedAlertReconciler` in the sustained run both post from isolates with no activity
   in the process, so an alert does reach a user whose application is closed. The Settings
   row said the opposite from ADR-048 until ADR-052 corrected it; the limit worth stating to
@@ -492,9 +498,10 @@ sketch on evidence. What ships:
 - A call's foreground-service entry is a third channel, `voice-call`, frozen the same way,
   with its own notification id (3). It says that a call is in progress and nothing else;
   where it differs from the sustained entry, and why, is in *A call's microphone* below.
-- **Group messages produce no alert**, because the piece-18 group projection writes neither
-  `messages.unread` nor `conversations.unread_count`. The alert path needs no change when
-  that is fixed; the group projection and `GroupChatPage` do.
+- The application-event projector records unread group messages and the
+  group page clears their unread state. The same committed-row alert query applies to
+  direct and group conversations. See the [event projector](../../lib/features/messaging/infrastructure/drift_application_event_projector.dart)
+  and [alert store](../../lib/features/notifications/infrastructure/drift_message_alert_store.dart).
 - `test/architecture/message_alert_policy_test.dart` pins the parts of this that live in
   Kotlin and in the manifest, because no device is available to exercise them.
 
@@ -532,7 +539,7 @@ Request only at point of use:
 - no camera permission in the current build (`AndroidManifest.xml`): a photo is taken by the
   system camera app through `ACTION_IMAGE_CAPTURE`, and `CAMERA` is currently not
   declared (ADR-089; see *Attachments* below). Under the binding contract
-  ([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4.7),
+  ([`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4.7),
   implementing the live `CP-CONTACT-V1` QR scanner will require declaring
   `android.permission.CAMERA` (with `uses-feature android.hardware.camera.any
   required="false"`) and requesting `CAMERA` before `ACTION_IMAGE_CAPTURE` to avoid a
@@ -556,10 +563,10 @@ application is not direct-boot aware it cannot run before the first unlock, whic
 correct outcome: the database key is credential-encrypted and nothing can be decrypted
 before then. The Dart path fails closed on top of that rather than relying on it.
 
-Vendor battery settings — Samsung's "put apps to sleep" and adaptive battery, Xiaomi's
-autostart and battery saver — govern roughly 77% of the target fleet and cannot be read or
-changed by the application. They are explained to the user once, as instructions, and never
-presented as something the app has verified.
+The app cannot read or change Samsung's or Xiaomi's vendor battery settings.
+It shows setup instructions without confirming the result. See the
+[dated fleet estimate](../runbooks/SUSTAINED-DELIVERY.md#how-the-fleet-was-derived)
+for the vendor coverage used to select the test matrix.
 
 Two first-party sources were established for ADR-051 and replace the community reporting
 ADR-046 recorded. Samsung
@@ -581,9 +588,8 @@ notifications; it publishes nothing about foreground services.
 
 The application opens the documented Samsung screen when it exists and this device's
 application-details screen otherwise, in one button, and reports **nothing** back: it cannot
-read either setting and must never appear to have confirmed it. Samsung's One UI 6.0
-statement covers Android 14 and above only, so roughly half this fleet by version share is
-covered by no vendor statement at all, and the manufacturer half stays **unresolved**.
+read either setting and must never appear to have confirmed it. Samsung's One UI 6.0 statement applies to Android 14 and above. OEM
+behavior remains an open field gap across the [mandatory cells](../runbooks/SUSTAINED-DELIVERY.md#the-matrix).
 
 Denial has a functional fallback and never blocks unrelated messaging.
 
@@ -676,7 +682,7 @@ catalogues; it names no participant and no room. Unlike the sustained entry it i
 screen being shared show it: whoever holds the phone learns that its microphone is live,
 which a live microphone owes them. Its status-bar icon is a plain microphone,
 `ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. Mute and leave are available in the
-[call screen](ui-specification.md#10-live-voice-room-screen). The notification has no
+[call screen](../ui/SCREENS.md#live-voice-room-screen). The notification has no
 action buttons.
 
 **Two foreground services.** ADR-046, ADR-048 and ADR-051 each asked for the interaction
@@ -733,7 +739,7 @@ picture, so the current application never opens the camera itself. Declaring `CA
 without requesting it first would break `ACTION_IMAGE_CAPTURE`: an app that targets API 23
 or later and declares `CAMERA` without holding it gets a `SecurityException` from
 `ACTION_IMAGE_CAPTURE`. Once the live `CP-CONTACT-V1` QR scanner of
-[`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4.7 is
+[`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4.7 is
 implemented, `AndroidManifest.xml` will declare `CAMERA` (and optional `camera.any`
 feature) and `AttachmentChannel.kt` will request `CAMERA` before starting
 `ACTION_IMAGE_CAPTURE`. The same reasoning keeps out `READ_MEDIA_*`, `READ_EXTERNAL_STORAGE` and
@@ -847,20 +853,23 @@ anything ADR-054 and ADR-078 did not record, or that voice did not add: the call
 joined its component set with prompt 8.
 
 Third-party licence obligations are listed in
-[third-party-notices.md](third-party-notices.md), which travels with the handover.
+[third-party-notices.md](../third-party-notices.md), which travels with the handover.
 
 ## Distribution
 
-Initial distribution is a reproducibly signed direct APK plus self-hosted update
-metadata, all usable on the local network. Update signatures are verified independently
-of TLS. A store channel may be added later but cannot become a runtime dependency.
+Initial distribution uses a signed direct APK over the local network.
+[Deployment and release](../runbooks/RELEASE.md) requires signed update
+metadata with signature verification independent of TLS. The APK build and
+verification scripts cover signing identity and the APK itself. Generating
+and verifying the update metadata remain release-checklist work. A store
+channel may be added later but cannot become a runtime dependency.
 
 Because distribution is a direct APK rather than an App Bundle through a store,
 Play App Signing does not apply: the application signing key is the distribution
 identity permanently, and there is no upload-key reset if it is lost. The deleted
 `beta` flavor carried a frozen application ID and a single persistent signing key for
 that reason (ADR-042), and its retained key still controls the beta installs. Production
-now carries the same pair under its own names ([ADR-076](architecture/decisions/076-production-signing.md)): the application
+now carries the same pair under its own names ([ADR-076](decisions/076-production-signing.md)): the application
 ID and the certificate fingerprint recorded in
 `android/production-release-identity.properties`, and one persistent key that signs
 `productionRelease` alone. Without that key the release build fails closed, unless it
@@ -870,11 +879,11 @@ A production artifact for a phone is made only by `tool/build_production_release
 (ADR-076 D7). It takes the five provisioning values afresh for every build, checks the CA
 certificate against its digest and its expiry and the primary pin against the one the
 live host serves, renders the Android trust resources that
-[`android/provisioning/README.md`](../android/provisioning/README.md) describes, builds with
+[`android/provisioning/README.md`](../../android/provisioning/README.md) describes, builds with
 the five defines, and publishes to `build/production-release/` only what
 `tool/verify_release_apk.sh --production` passed. An artifact reaches a device only through
 `adb install`, never with `-d`, and nothing is uninstalled.
-[Production release signing and key continuity](release-signing.md) is the manual for the
+[Production release signing and key continuity](../runbooks/SIGNING.md) is the manual for the
 key, the build, the install rule and the retained beta key.
 
 ## Primary references

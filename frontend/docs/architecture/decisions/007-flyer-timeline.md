@@ -20,7 +20,7 @@ Why superseded: Piece 15 discovered that Flyer 2.11.1 required a mutable, contro
 ## Constraints and Open Gates
 
 - `flutter_chat_core` (2.9.0) and `flutter_chat_ui` (2.11.1) are removed from [pubspec.yaml](../../../pubspec.yaml) and forbidden in core/feature policy layers by [architecture_boundary_test.dart](../../../test/architecture/architecture_boundary_test.dart).
-- [ChatTimelineAdapter](../../../lib/features/messaging/presentation/chat_timeline_adapter.dart) preserves the adapter boundary defined in [Architecture](../../architecture.md#ui-boundary).
+- [ChatTimelineAdapter](../../../lib/features/messaging/presentation/chat_timeline_adapter.dart) preserves the adapter boundary defined in [Architecture](../OVERVIEW.md#ui-boundary).
 - Note: [Frontend instructions](../../../AGENTS.md) still mentions Flyer Chat in its general boundary prose as a historical package name alongside the live app-owned adapter.
 
 ## Costs

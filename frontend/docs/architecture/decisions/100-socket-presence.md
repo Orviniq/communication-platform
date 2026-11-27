@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-13); proposed 2026-11-13
 - **Date:** 2026-11-13 (explicitly recorded in register and full section; implemented in `1060d7b1`, `95c8745e`, `68364720`, and documented in `9631890d` on `frontend-presence-connection`, PR #96 `bda6f4e3`)
 - **Amends:** [ADR-098](098-presence-and-typing.md) D4 (gates seals on open socket, re-watches/re-types on socket open, and sends an immediate reciprocal `watch` to newly watching targets)
-- **Related:** [ADR-098](098-presence-and-typing.md), [ADR-099](099-typing-sessions.md), [ADR-101](101-presence-goodbye.md), [message-protocol.md](../../message-protocol.md)
+- **Related:** [ADR-098](098-presence-and-typing.md), [ADR-099](099-typing-sessions.md), [ADR-101](101-presence-goodbye.md), [MESSAGES.md](../../contracts/MESSAGES.md)
 
 ## Decision (Position)
 
@@ -31,7 +31,7 @@ Aligned `PresenceChannel` ([presence_channel.dart](../../../lib/features/signals
 
 ## Constraints and Open Gates
 
-- **Scope:** Changed `SignalSocketPort`, `RealtimeGateway` / `DioWebSocketGateway`, `GatewayVoiceSignalSocket`, `PresenceChannel` (`_watchBack`, open gate, `opens` replay, `gone` state reset), and [message-protocol.md](../../message-protocol.md); changed no server route, wire format, database table, dependency, or Android permission.
+- **Scope:** Changed `SignalSocketPort`, `RealtimeGateway` / `DioWebSocketGateway`, `GatewayVoiceSignalSocket`, `PresenceChannel` (`_watchBack`, open gate, `opens` replay, `gone` state reset), and [MESSAGES.md](../../contracts/MESSAGES.md); changed no server route, wire format, database table, dependency, or Android permission.
 - **Verification:** Covered by [websocket_gateway_test.dart](../../../test/features/networking/infrastructure/websocket_gateway_test.dart), [gateway_voice_signal_socket_test.dart](../../../test/features/voice/gateway_voice_signal_socket_test.dart), [presence_connection_test.dart](../../../test/features/signals/presence_connection_test.dart), [presence_reciprocal_watch_test.dart](../../../test/features/signals/presence_reciprocal_watch_test.dart), and [presence_round_trip_test.dart](../../../test/features/signals/presence_round_trip_test.dart) (T1–T9 covering S4/S6, mutual open convergence, group-of-3 vs > 32, post-`gone` return, L1 bound, plus 5 mutation checks including unbounded-exchange guard).
 - **Left open / not verified:** No physical-device run; peer-read stalls and goodbye waits addressed in [ADR-101](101-presence-goodbye.md); `inactive` lifecycle mapping and Chats-list return announcements remain open options for the owner.
 

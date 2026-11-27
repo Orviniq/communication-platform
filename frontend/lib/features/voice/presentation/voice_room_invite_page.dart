@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// The invite picker (`ui-specification.md` §13.3): verified contacts who are
+/// The invite picker (`docs/ui/SCREENS.md`, Voice Room invite picker): verified contacts who are
 /// not members, chosen and invited in one signed `add members` event. Each new
 /// member is sent the whole signed transcript, so a room whose transcript no
 /// longer fits one payload adds nobody.

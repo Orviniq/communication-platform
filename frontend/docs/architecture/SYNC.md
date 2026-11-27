@@ -41,25 +41,28 @@ the socket surface this client retired with them.
 5. Open WebSocket with the session token in the upgrade's `Authorization` header.
 6. Drain `GET /api/v1/me/envelopes`; before processing a page, compare its
    `pruned_through` with the durable highest contiguous acked sequence.
-7. If `last_acked_seq < pruned_through`, start queue-gap recovery for every active
-   group; either way, drain until `has_more` is false. Nothing that arrives waits on it.
+7. If `last_acked_seq < pruned_through`, enqueue state recovery for active groups
+   and voice rooms. Keep draining available envelopes during recovery.
 8. Process persisted outbox work, cross-signing/device-log verification, and
    classical/PQ prekey maintenance.
-9. Subscribe to only the presence/rooms required by visible or active features.
+9. Visible or active features drive [volatile signals](#volatile-signals) over the
+   established socket.
 
 Socket events may arrive during drain. Inbox uniqueness and event IDs make ordering safe.
 
 ## Cycle order
 
-One cycle is: owed send preparations, then the outbox, then the inbox, then post-inbox
-work — which includes device-log gossip — then acknowledgements, then the authoritative
-drain loop (which runs the inbox, post-inbox work and acknowledgements again per page), then
-preparations and the outbox a second time, then stale-device refresh, then the
-successful-sync and `online` markers.
+[DurableSyncEngine](../../lib/features/synchronization/application/durable_sync_engine.dart)
+runs owed send preparations and the outbox first. It then expires or releases held
+envelopes, processes the persisted inbox, runs post-inbox work and acknowledges disposed
+envelopes. During the authoritative drain it repeats the inbox, post-inbox and
+acknowledgement steps for each page. If the cycle is healthy, it runs preparations and
+outbox a second time. After stale-device refresh it records a successful sync, marks the
+connection `online` and offers prekey maintenance its turn (ADR-095).
 
 Preparations go immediately before each outbox pass because a message the user has already
 sent is not in the outbox yet. Its event is committed and on their screen, and what it is
-waiting for is the fan-out that seals it ([ADR-061](architecture/decisions/061-durable-send.md)); running that here means
+waiting for is the fan-out that seals it ([ADR-061](decisions/061-durable-send.md)); running that here means
 one cycle carries a send from the composer to the wire. The second pass exists for the same
 reason the second outbox pass does — the inbound half commits sends of its own, and a
 delivered receipt is an application event like any other.
@@ -68,7 +71,7 @@ The outbox goes before the inbox because nothing a queued outbox row needs comes
 inbox: its per-recipient ciphertext is sealed and durable before the row exists, so the only
 thing the order decides is who waits for whom. It goes a second time because the inbound half queues
 rows of its own — delivery receipts, group Commits, eviction fan-out — and skips that
-second pass when the first already found the transport unwilling. [ADR-060](architecture/decisions/060-delivery-latency.md)
+second pass when the first already found the transport unwilling. [ADR-060](decisions/060-delivery-latency.md)
 records why: with the inbound half first and every stage returning its first failure, one
 envelope a device could not open stopped a message the user had already sent from ever
 leaving the process.
@@ -92,9 +95,9 @@ re-advertising sooner tells the peer nothing.
 
 Gossip is a *scheduled unit of work the cycle accounts for* rather than a detached future,
 because a delivery cycle can be a headless catch-up that disposes its container and closes its
-database the moment `synchronize()` returns ([ADR-049](architecture/decisions/049-background-catch-up.md),
-[ADR-050](architecture/decisions/050-delivery-ownership.md)). Everything gossip does begins and ends inside the cycle. See
-[ADR-065](architecture/decisions/065-peer-read-cost.md).
+database the moment `synchronize()` returns ([ADR-049](decisions/049-background-catch-up.md),
+[ADR-050](decisions/050-delivery-ownership.md)). Everything gossip does begins and ends inside the cycle. See
+[ADR-065](decisions/065-peer-read-cost.md).
 
 A cycle is asked for by an event — a socket hint, a growing durable outbox, a deferred
 platform wake-up — or by a *time*: the supervisor arms a wake-up on the projection's
@@ -130,7 +133,8 @@ For each envelope:
 5. In one transaction apply the event and mark the envelope `applied`.
 6. Queue any delivered receipt; local message history is already durable in Drift and is
    never uploaded to a history API.
-7. Ack via WebSocket or REST only after the transaction commits.
+7. Acknowledge by REST after the transaction commits. Record the acknowledgement locally
+   after the server responds. Retry an ambiguous response idempotently.
 
 Step 5 costs the event, not the conversation. Applying re-folds only the messages the event is
 a fact about — one for a create, an edit, a delete, a reaction or a pin, and one per named id
@@ -138,7 +142,7 @@ for a receipt — so receiving into a long conversation costs what it costs into
 full projection rebuild still exists and is still the definition of a correct projection; it is
 reached when a fact the projection already holds is *retired*, which is an event-id conflict, a
 sender-counter rollback or an unsupported-event collision, and it is the same transaction and
-the same dispositions either way ([ADR-063](architecture/decisions/063-event-projection.md)).
+the same dispositions either way ([ADR-063](decisions/063-event-projection.md)).
 
 An envelope that will not open is retired rather than retried forever. Causes are split in
 two: a transient one — offline, rate limited, out of storage, momentarily out of entropy —
@@ -151,7 +155,7 @@ makes it stop. `inbox_envelopes.inspection_failures` holds that budget, delibera
 separate from `attempt_count`, which counts every begun attempt and drives backoff and so
 rises while a device is merely offline.
 
-**Held envelopes from an unverified sender** ([ADR-093](architecture/decisions/093-held-first-message.md)). The refusal to open a
+**Held envelopes from an unverified sender** ([ADR-093](decisions/093-held-first-message.md)). The refusal to open a
 message from a peer this account has not verified stays (`CLIENT_CONTRACT.md` §C); the loss
 does not. When the probe of an initial envelope names a sender whose refresh succeeds in the
 trust state `unverified` (`resolveInboundSender`), and the sender block matches one of that
@@ -179,19 +183,19 @@ count no held row, and `held_inbound` counts them. Nothing names a sender, a ses
 time.
 
 What the recipient and the sender see is the presentation's, not the engine's
-([ADR-093](architecture/decisions/093-held-first-message.md) D18, D19). `watchHeldSenders` streams each claimed sender with its count
+([ADR-093](decisions/093-held-first-message.md) D18, D19). `watchHeldSenders` streams each claimed sender with its count
 of rows in state 2, 3 or 5 and its latest hold time; Chats draws one row for each, and the row
 goes the moment a release, an expiry or an eviction empties the count. Released rows are not
 counted. The sender's chat asks nothing of the engine: it reads the own message's transport and
 receipt state, which a delivery receipt from the recipient's released envelope changes
-(`ui-specification.md` §6, §8).
+([Chats List](../ui/SCREENS.md#chats-list-home--chats-tab),
+[DM Chat Screen](../ui/SCREENS.md#dm-chat-screen)).
 
 Envelopes are still handed out oldest-due-first. Two guards keep that from being a
 head-of-line block: an inspection retry carries a floor of one second, because the retry
 policy draws uniformly from zero and a zero backoff on the lowest-sequence row is a pass
 that inspects one envelope a thousand times; and a pass that is handed an envelope it has
 already deferred ends, leaving the drain, the acknowledgements and the outbox to run.
-8. Mark acked locally; an ambiguous ack is retried idempotently.
 
 Authentication failure, unknown session, a refused group control event, and unsupported
 version are different quarantine reasons. Recoverable dependency gaps trigger bounded
@@ -205,11 +209,12 @@ that value in disclosures once read and omit the number before then (ADR-071).
 `pruned_through` is the highest sequence pruned from this device mailbox. If the
 durable highest contiguous acked sequence is lower, at least one envelope is
 permanently missing. It may have carried a ratchet message or a group control event
-([client contract, §H](../../docs/client/CLIENT_CONTRACT.md#h-queue-gap-handling)). The client:
+([client contract, §H](../../../docs/client/CLIENT_CONTRACT.md#h-queue-gap-handling)).
+[DriftSyncStore.persistDrainPage](../../lib/features/synchronization/infrastructure/drift_sync_store.dart)
+records the gap and queues group and room requests in the same transaction as the
+drain page. In the group path, the client proceeds as follows.
 
-1. records the gap, and opens a state request for every group this device is an active
-   member of, in the transaction that persists the drained page. A group this device was
-   removed from, left, or holds in quarantine is not asked for: no answer could change it;
+1. opens a state request for every group this device follows as an active member.
 2. keeps inspecting and acknowledging everything that did arrive. Nothing is parked. A
    group control event that builds on state this device does not hold opens a request to
    its sender instead, sent at most three times, and an event from a group or a member
@@ -228,27 +233,33 @@ permanently missing. It may have carried a ratchet message or a group control ev
    answer that contradicts the chain this device holds moves the group to fork
    quarantine, and retires the request too, because no other answer could undo the fork;
    and
-6. closes the gap when the last group's request is retired, or at once if no group needed
-   asking. In that transaction the acknowledged baseline advances through the observed
-   `pruned_through`, so the permanent gap does not reopen on every drain, and envelopes
-   already acknowledged above it leave the inbox.
+6. closes the gap when the last group request opened for the gap is retired, or at once
+   if there are no such requests. In that transaction the acknowledged baseline advances
+   through `pruned_through` and any contiguous acknowledged rows above it. Ordinary
+   acknowledged rows through the new baseline leave the inbox. Acknowledged held rows
+   retain their ciphertext.
 
-A member answers only a device whose account is an active member, only from a state it
+A group member answers only a device whose account is an active member, only from a state it
 holds unquarantined as an active member itself, and only to the device that asked. The
 client never asks a member to remove this device and add it back: that was how a gap was
 repaired when a group was an MLS epoch, and a group is a set of pairwise sessions now.
 Device-to-device history transfer moves content, not ratchet or control state, and is not
 a substitute for this flow.
 
-**What the user is actually told, today.** The gap reaches the user **only for groups**:
-`DriftGroupRepository` reads a group with an open state request as
-`GroupLifecycle.stateRecoveryRequired`, shown with the `groupQueueGapState` string. For a
-one-to-one conversation the gap is shown nowhere, and on a device with no active group it
-closes on the drain that found it; `SyncProjection.isSecurityBlocked` still has **no
-consumer at all**. Direct messages lost to the retention prune are therefore silently
-absent. [ADR-052](architecture/decisions/052-accurate-capability-claims.md) discloses that silence in the deployment disclosure rather
-than papering over it, and surfacing the one-to-one gap is recorded there as follow-up
-work; until it is built, no user-facing text may imply the client will name what was lost.
+**Voice rooms.** [DriftRoomRepository](../../lib/features/voice/infrastructure/drift_room_repository.dart)
+queues a separate request for each active room. [RoomStateRecoveryService](../../lib/features/voice/application/room_state_recovery_service.dart)
+requests authenticated pairwise repair with a room member and queues a request for
+the signed room state. The room reads as `RoomLifecycle.stateRecoveryRequired`
+while its request is open, so calls, invites and renames wait. Room requests settle
+independently of the mailbox checkpoint.
+
+**User-visible state and direct-chat gap.** A waiting group shows `groupQueueGapState`
+and a waiting voice room shows its own recovery notice. The client surfaces
+no direct-chat recovery state and `SyncProjection.isSecurityBlocked` has no
+UI consumer. Mailbox-gap handling schedules authenticated repair through group and
+room requests. It lacks a direct-chat path to repair every affected pairwise session.
+Both differences from §H are tracked in [Frontend status](../STATUS.md#platform-identity-and-content).
+[ADR-052](decisions/052-accurate-capability-claims.md) records the disclosure requirement.
 
 ## Owed send preparations
 
@@ -256,7 +267,7 @@ A send arrives at the engine as a row in `pending_send_preparations`: its event 
 committed and projected, and its per-recipient ciphertext is owed. The engine decides when
 that work runs and what a failure costs; it owns none of what the work does, which is
 resolving every recipient's verified live devices from one `POST /api/v1/peers`
-([ADR-080](architecture/decisions/080-batched-peers.md)), claiming prekeys where a session must be started, and running
+([ADR-080](decisions/080-batched-peers.md)), claiming prekeys where a session must be started, and running
 the ratchet once per recipient device.
 
 - The oldest due row is handed out; nothing is marked in flight, because nothing is. A
@@ -375,14 +386,14 @@ by its next one.
   considered complete. A peer observing the narrow intermediate state waits for an
   extending log record; it does not convert an otherwise exact monotonic rotation into
   permanent fork evidence.
-- A held envelope keeps the signed prekeys it may need ([ADR-093](architecture/decisions/093-held-first-message.md) D17). With H
+- A held envelope keeps the signed prekeys it may need ([ADR-093](decisions/093-held-first-message.md) D17). With H
   the earliest UTC day a held-marked row was first held, maintenance prunes with the earlier
   of today and H, so no retired pair whose last day is H or later is erased; the check that
   the current pair is not from the future stays against today. Because the core's rotation
   prunes with today, a due rotation waits while H is no later than the last rotation day
   plus one, or while today is past that day plus eight and H is not; replenishment runs
   while it waits.
-- Maintenance runs as the last step of a healthy delivery cycle ([ADR-095](architecture/decisions/095-prekey-maintenance.md)), in
+- Maintenance runs as the last step of a healthy delivery cycle ([ADR-095](decisions/095-prekey-maintenance.md)), in
   whichever owner drives the engine: the foreground session, the deferred catch-up or the
   sustained run. It runs after the phase is online, never in a cycle that carried a failure or
   whose owner was asked to stand down, and its failure changes nothing about the cycle. The first
@@ -391,16 +402,16 @@ by its next one.
   failed run is retried later without spending its budget, not quarantined.
 - No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
   serves no MLS, and a group is a set of pairwise sessions
-  ([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §F).
+  ([`CLIENT_CONTRACT.md`](../../../docs/client/CLIENT_CONTRACT.md) §F).
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.
 - A send's fan-out verifies all its recipients with one `POST /api/v1/peers`, at most 64 to a
   call, which answers `unchanged` for each peer whose stored tag still holds
-  ([ADR-080](architecture/decisions/080-batched-peers.md)). Nothing remembers a peer's answers between resolutions
-  ([ADR-082](architecture/decisions/082-fresh-peer-resolution.md)): the single-peer paths read the per-user identity, device and
+  ([ADR-080](decisions/080-batched-peers.md)). Nothing remembers a peer's answers between resolutions
+  ([ADR-082](decisions/082-fresh-peer-resolution.md)): the single-peer paths read the per-user identity, device and
   device-log routes every time, the identity and the device list conditionally on the tag
-  stored beside them. See [authentication-and-devices.md](authentication-and-devices.md).
+  stored beside them. See [AUTH-AND-DEVICES.md](../contracts/AUTH-AND-DEVICES.md).
 - `stale_devices` responses immediately invalidate matching outbox targets and trigger one
   conditional refresh of that peer. Newly discovered eligible replacement devices receive independently
   encrypted target rows with the same logical event ID; already accepted targets do not.
@@ -414,7 +425,7 @@ transfer progress by event ID. The receiver authenticates, stores, and deduplica
 event before acknowledging it. Transfer is resumable, may be partial when the source
 device has partial history, and excludes ratchet private state. The contact list,
 block list, verification and profile-key snapshot required by
-[client contract §G](../../docs/client/CLIENT_CONTRACT.md#g-history-sync--changed-the-server-no-longer-stores-history)
+[client contract §G](../../../docs/client/CLIENT_CONTRACT.md#g-history-sync--changed-the-server-no-longer-stores-history)
 remains outstanding.
 
 No online existing device means no history transfer. The UI states that limitation and
@@ -429,8 +440,8 @@ a signal into durable message or membership state.
 The gateway holds no presence and only relays opaque signals. The client shows
 online, last seen and typing from encrypted `CPPSV001` watches and responses,
 subject to local verification and the per-phone switch. See
-[receipts and typing](message-protocol.md#receipts-and-typing) and the
-[presence contract gaps](STATUS.md#presence-voice-and-delivery).
+[receipts and typing](../contracts/MESSAGES.md#receipts-and-typing) and the
+[presence contract gaps](../STATUS.md#presence-voice-and-delivery).
 
 ## Android lifecycle
 
@@ -450,7 +461,7 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   transition, because registering a periodic job restarts its window.
 - **Sustained delivery, opt-in and offered as best effort in production**
   (ADR-051; withheld by ADR-053 until ADR-094 offered it on no field evidence, the device
-  matrix in [sustained-delivery-validation.md](sustained-delivery-validation.md) still
+  matrix in [SUSTAINED-DELIVERY.md](../runbooks/SUSTAINED-DELIVERY.md) still
   not having been run).
   A `specialUse`
   foreground service keeps the process out of the cached state so a socket survives — a
@@ -518,10 +529,19 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   strictly post-commit. Deduplication is a durable boolean marker, recovery is by query
   rather than replay, and no transport event can produce an alert.
 - A separate `microphone` foreground service supports the active voice call. The
-  [status matrix](STATUS.md#presence-voice-and-delivery) records evidence and limits
+  [status matrix](../STATUS.md#presence-voice-and-delivery) records evidence and limits
   for both foreground services.
 
 ## Composition and ownership
+
+`ApplicationRuntime` composes the store and networking foundation.
+`MessageDeliveryController` owns the signed-in activity's delivery session.
+Android's [BackgroundDelivery arbiter](../../android/app/src/main/kotlin/com/example/communication_platform/BackgroundDelivery.kt)
+prioritizes the activity, then the opt-in sustained service, then the deferred
+job. The lower-priority run yields at work boundaries. This is in-process
+coordination. Drift persists the inbox, outbox, held rows and checkpoints across
+process death. Recovery resumes from those writes, with idempotent retries for
+acknowledgements and reuse of recorded ciphertext for sends.
 
 ADR-046's Layer 0 was implemented on 2026-08-21 (ADR-047). Before that the supervisor, the
 socket gateway and the realtime adapter were constructed only in tests and
@@ -544,9 +564,9 @@ mailbox nor transmitted its outbox. What runs now:
   `offlineFullScope` and stops when logout *begins* rather than when it completes,
   because `TokenCoordinator.logout` wipes protected storage and closes the database
   before it emits the termination.
-- **Sending is a durable write, not a call.** A composer writes exact per-recipient
-  ciphertext rows and returns; the supervisor watches the durable projection and requests
-  a cycle when the outbox depth *increases*. That is what makes a queued message leave
+- **Sending first commits the local event and its owed preparation.** The delivery
+  cycle seals and persists per-recipient ciphertext before sending. The supervisor
+  watches the durable projection and requests a cycle when the outbox depth *increases*. That is what makes a queued message leave
   the device with no further stimulus, what drains rows queued before a restart, and what
   keeps a row waiting out its backoff from spinning the engine — only a new durable
   target grows the depth, while every engine run re-emits the projection. A signed group

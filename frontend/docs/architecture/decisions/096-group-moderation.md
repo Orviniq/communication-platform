@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-19); proposed 2026-10-19
 - **Date:** 2026-10-19 (explicitly recorded in register and full section; proposed in `8da64235`, built on `frontend-group-membership-moderation` in `67e17df6`–`2945e90d`, PR #88 `0398a460`)
 - **Supersedes in part:** [ADR-090](090-group-timeline.md) D4 (enables Pin and Delete for everyone in group chats under signed-roster roles; Edit stays off)
-- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-089](089-direct-attachments.md), [ADR-090](090-group-timeline.md), [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before [server ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
+- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-089](089-direct-attachments.md), [ADR-090](090-group-timeline.md), [SCREENS.md](../../ui/SCREENS.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before [server ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
 
 ## Decision (Position)
 

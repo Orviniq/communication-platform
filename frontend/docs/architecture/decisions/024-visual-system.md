@@ -19,7 +19,7 @@ Provides Forui wrappers and the app-owned timeline builders one reproducible, ac
 
 ## Constraints and Open Gates
 
-- Specified in [Visual design system](../../visual-design-system.md).
+- Specified in [Visual design system](../../ui/DESIGN-SYSTEM.md).
 - Enforced through `lib/app/design_system/` and `design_system_boundary_test.dart`.
 - Open gate: [Frontend status](../../STATUS.md#platform-identity-and-content) notes that core UI accessibility verification on representative device data remains open.
 

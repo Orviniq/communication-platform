@@ -46,7 +46,7 @@ final class PairwiseVolatileOpening {
 /// Opens the ciphertext of a `signal` frame exactly as a durable envelope is
 /// opened, and writes nothing until the caller commits.
 ///
-/// The frame carries no sender, and needs none (`voice-signalling-v1.md`,
+/// The frame carries no sender, and needs none (`docs/contracts/VOICE-V1.md`,
 /// "How an inbound blob finds its session"): a regular header names its
 /// session, and an initial header carries the sealed sender block that locates
 /// the private prekeys and names the sender, whose device is then checked
@@ -330,7 +330,7 @@ final class PairwiseVolatileOpener {
   }
 
   /// The authenticated repair request the durable path sends when its own
-  /// envelope crosses the bound (`pairwise-transport-v1.md`, "Replay, skipped
+  /// envelope crosses the bound (`docs/contracts/PAIRWISE-V1.md`, "Replay, skipped
   /// keys, and repair"), queued on the outbox like any other durable send. One
   /// per session: a request already queued, or a session already in repair, is
   /// left alone.

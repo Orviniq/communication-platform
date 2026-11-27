@@ -8,7 +8,7 @@
 
 Leaving a voice room is **client-side membership removal** (and, in the original framing, key removal) rather than a backend room deletion operation, and the UI MUST give users an honest statement of that consequence.
 
-Under the implemented v1 voice design ([Voice and realtime](../../voice-and-realtime.md), [ADR-077]), a voice room is pure client state (`CPVRV001` signed control events on a hash chain, fanned out over pairwise Double Ratchet envelopes) and the server holds no room, roster, or media key at all. Leaving sends a signed `remove member` event naming the leaving user; the remaining members keep the room, and rejoining requires a fresh invite. Inside an active call, removing a participant closes their DTLS-SRTP WebRTC peer connections ([server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)), because no application-level media key exists to rotate.
+Under the implemented v1 voice design ([Voice and realtime](../OVERVIEW.md#voice-and-realtime), [ADR-077]), a voice room is pure client state (`CPVRV001` signed control events on a hash chain, fanned out over pairwise Double Ratchet envelopes) and the server holds no room, roster, or media key at all. Leaving sends a signed `remove member` event naming the leaving user; the remaining members keep the room, and rejoining requires a fresh invite. Inside an active call, removing a participant closes their DTLS-SRTP WebRTC peer connections ([server ADR-0021](../../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)), because no application-level media key exists to rotate.
 
 ## Rationale
 
@@ -16,7 +16,7 @@ Matches the capability-only / zero-room-state backend (`docs/client/CLIENT_CONTR
 
 ## Constraints and Open Gates
 
-- Defined in [Voice and realtime](../../voice-and-realtime.md#the-room), [Voice signalling v1](../../voice-signalling-v1.md), and [room_model.dart](../../../lib/features/voice/domain/room_model.dart).
+- Defined in [Voice and realtime](../OVERVIEW.md#the-room), [Voice signalling v1](../../contracts/VOICE-V1.md), and [room_model.dart](../../../lib/features/voice/domain/room_model.dart).
 - Open gate: [Frontend status](../../STATUS.md#presence-voice-and-delivery) notes that v2 role authority (`owner`/`admin`/`member` in `docs/client/CLIENT_VOICE_ROLES.md`), upgrade negotiation, and multi-device / mid-call removal evidence remain open before voice can ship.
 
 ## Costs

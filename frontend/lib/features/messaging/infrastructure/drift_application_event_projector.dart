@@ -1481,7 +1481,7 @@ final class DriftApplicationEventProjector {
   /// Where one event sits in its conversation's total order.
   ///
   /// The sender's own clock, which is the only account of when an event was
-  /// written that anyone here has, and which `message-protocol.md` calls a
+  /// written that anyone here has, and which `docs/contracts/MESSAGES.md` calls a
   /// display value rather than an authority. An implausible one is refused
   /// outright, as it always was.
   ///

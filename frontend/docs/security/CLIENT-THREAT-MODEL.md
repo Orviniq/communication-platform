@@ -98,7 +98,7 @@ backing is preferred but not assumed on every device.
 ### Trust boundary if a browser target is approved
 
 Android is the sole target under
-[server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+[server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
 If a browser target is approved, the browser origin, browser implementation, and served
 application code would be trusted for the duration of a session: non-extractable WebCrypto keys reduce
 accidental extraction, they do not defend against malicious JavaScript executing in the
@@ -135,8 +135,8 @@ vectors.
 - Safety-number / contact-code verification and prominent identity-change state. Currently
   the client implements one-sided out-of-band verification (and `SafetyNumberPage` still
   displays `CP-SAFETY-V1`); under
-  [`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) and
-  [`SECURITY.md`](../../docs/security/SECURITY.md) (residual risk 7), direct
+  [`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) and
+  [`SECURITY.md`](../../../docs/security/SECURITY.md) (residual risk 7), direct
   conversations must require both people verified (`MUTUAL`) before carrying content,
   replacing `CP-SAFETY-V1` with `CP-CONTACT-V1`.
 - Cross-signing of the exact canonical device-bundle key bytes against an out-of-band
@@ -170,7 +170,7 @@ not protect routing metadata from a live operator. The client MUST not claim oth
 ### What a call costs
 
 A call hides its audio and hides nothing about who is in it. Both costs are server
-[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)'s
+[ADR-0021](../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)'s
 own, and the client states them rather than implying a mesh is anonymous.
 
 - **The relay sees the peer pairs, the packet sizes and the timing.** Every media path
@@ -188,7 +188,7 @@ own, and the client states them rather than implying a mesh is anonymous.
   security control, because a modified server would relay anything (server ADR-0022).
 - **A room's membership is not hidden either**, for the same reason a group's is not:
   control events are one envelope per member device, and the server sees each target. Under
-  [`CLIENT_VOICE_ROLES.md`](../../docs/client/CLIENT_VOICE_ROLES.md) §6, in-call role
+  [`CLIENT_VOICE_ROLES.md`](../../../docs/client/CLIENT_VOICE_ROLES.md) §6, in-call role
   actions (mute, remove, end call) are `signal`-frame requests enforced by each honest
   participant rather than by the server.
 - What is **not** exposed: the audio, the room's name, the roster's contents, the SDP,
@@ -197,12 +197,12 @@ own, and the client states them rather than implying a mesh is anonymous.
 
 ### Reading activity and presence signals
 
-As documented in [`SECURITY.md`](../../docs/security/SECURITY.md) § "Residual risk" and
+As documented in [`SECURITY.md`](../../../docs/security/SECURITY.md) § "Residual risk" and
 built under ADR-098, client-side online status and typing over `signal` frames
 (`CPPSV001`, 1024-byte frames) reveal reading activity when a conversation is open on
 screen (when, with which peer devices, and which devices are in the foreground answering
 watches), even when no durable message is sent. Under
-[`CLIENT_PRESENCE_AND_RECEIPTS.md`](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §4,
+[`CLIENT_PRESENCE_AND_RECEIPTS.md`](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §4,
 choosing an audience of `nobody` stops sending and answering these frames.
 
 ## Security release gates
@@ -228,8 +228,8 @@ build over under them acceptable.
 
 ## Primary references
 
-- [Backend security contract](../../docs/security/SECURITY.md)
-- [Binding client contract](../../docs/client/CLIENT_CONTRACT.md)
+- [Backend security contract](../../../docs/security/SECURITY.md)
+- [Binding client contract](../../../docs/client/CLIENT_CONTRACT.md)
 - [OWASP MASVS](https://mas.owasp.org/MASVS/)
 - [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
 - [Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/)

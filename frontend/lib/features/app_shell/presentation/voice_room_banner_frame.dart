@@ -2,8 +2,8 @@ import 'package:communication_platform/features/app_shell/presentation/app_shell
 import 'package:communication_platform/features/app_shell/presentation/live_shell_status.dart';
 import 'package:flutter/widgets.dart';
 
-/// A full-screen page with the call banner at its top (`ui-specification.md`
-/// §0.2). The page covers the shell and the shell's banner with it, so while
+/// A full-screen page with the call banner at its top (`docs/ui/SCREENS.md`,
+/// Persistent elements). The page covers the shell and the shell's banner with it, so while
 /// a call runs it carries the banner itself: below the status bar and above
 /// the page's app bar, on every page but the call's own.
 ///

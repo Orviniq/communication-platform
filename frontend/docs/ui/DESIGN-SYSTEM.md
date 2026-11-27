@@ -8,10 +8,10 @@ typographic hierarchy, selective indigo, carefully shaped message surfaces, and 
 that explains state without decoration.
 
 These tokens are the production baseline for app-owned Forui wrappers and the app-owned
-timeline builders. Widgets MUST consume semantic tokens rather than literal colors or dimensions.
-The future product name, logo, and reviewed brand artwork may replace brand assets and
-the accent family through an ADR; they do not silently change accessibility or component
-behavior.
+timeline builders (`lib/app/design_system/app_tokens.dart`). Widgets MUST consume
+semantic tokens rather than literal colors or dimensions. The future product name, logo,
+and reviewed brand artwork may replace brand assets and the accent family through an ADR;
+they do not silently change accessibility or component behavior.
 
 ## Color tokens
 
@@ -34,9 +34,10 @@ and message state always include shape, icon, or text and never rely on color al
 | `danger` | `#BD3E4F` | `#F07886` | Destructive/failure |
 | `scrim` | `#17191D99` | `#000000B3` | Modal overlay |
 
-High-contrast mode is a separate semantic-token mapping, not a runtime manipulation of
-the values above. Private content never appears beneath a translucent surface when the
-privacy mode requires obscuring it.
+High-contrast mode is a separate semantic-token mapping (`highContrastLight` and
+`highContrastDark` in `AppColorTokens`), not a runtime manipulation of the values above.
+Private content never appears beneath a translucent surface when the privacy mode requires
+obscuring it.
 
 ## Typography
 
@@ -48,12 +49,14 @@ privacy mode requires obscuring it.
   `17e355067c8284f47743a1ee3b1ef7ff684ff0601eda357f9353b10b3016ab31`). The artifact,
   Latin/Persian coverage, and license were verified from the
   [official repository](https://github.com/rastikerdar/vazirmatn/tree/v33.003) on
-  2026-07-27. It is bundled into Android version-1 artifacts; a future Web artifact
-  must also bundle it and make no font request at runtime.
+  2026-07-27. It is bundled into Android version-1 artifacts; Android is the sole
+  version-1 target ([frontend status](../STATUS.md#the-web-target)), and any future Web
+  artifact must also bundle it and make no font request at runtime.
 - Type scale: display 32/40, title 24/32, section 20/28, body 16/24, compact 14/20,
   label 12/16. Values are font size/line height in logical pixels at scale 1.0.
-- Body and message content use regular weight; actions use medium; unread/title emphasis
-  uses semibold. Full bold is reserved for exceptional hierarchy.
+- Body and message content use regular weight (`FontWeight.w400`); actions (`label`) use
+  medium (`FontWeight.w500`); display, title, and section headings use semibold
+  (`FontWeight.w600`). Full bold is reserved for exceptional hierarchy.
 - Text scaling is never clamped below the platform request. Layout changes before text is
   truncated, except for explicitly single-line list metadata with an accessible full
   label.
@@ -61,7 +64,7 @@ privacy mode requires obscuring it.
 ## Geometry and density
 
 - Base spacing unit is 4. Tokens are `4, 8, 12, 16, 24, 32, 48`.
-- Control height is 48 on Android touch layouts. A future pointer-dense Web layout may
+- Control height is 48 on Android touch layouts. A future pointer-dense layout may
   use a 40 px visual control while keeping touch hit regions at least 48 px;
   touch hit regions remain at least 48 even when the visible icon is smaller.
 - Radii are 8 for compact controls, 14 for cards/dialog internals, 18 for primary
@@ -102,11 +105,10 @@ privacy mode requires obscuring it.
   time; the final bubble alone receives the author-tail treatment.
 - Bubble width is at most 82% of the message column on narrow layouts and 70% on
   medium/wide layouts. The readable message column remains bounded by
-  `responsive-ui.md`.
+  [Adaptive layout](ADAPTIVE-LAYOUT.md#adaptive-shell).
 - Composer, reply strip, attachment progress, reactions, receipts, and failure actions
   are built through the app-owned timeline builders using the same tokens.
-  Package-default bubbles and
-  composers are prohibited in release builds.
+  Package-default bubbles and composers are prohibited in release builds.
 - Empty states use one concise title, one explanatory sentence, and at most one primary
   action. Security and connectivity states use honest text rather than decorative art.
 
@@ -116,18 +118,19 @@ privacy mode requires obscuring it.
   route/sheet transitions. Standard easing is emphasized deceleration on entry and
   acceleration on exit.
 - Message insertion preserves the reading anchor; it does not animate the entire list.
-  Receipt/reaction changes use local cross-fades only.
+  Receipt/reaction changes use local cross-fades only. Jump-to-message pulse keeps an
+  accent tint that fades over 1,500 ms (`AppMotion.pulse`), or stays steady for 1,000 ms
+  (`AppMotion.pulseReduced`) when reduced motion is enabled.
 - Reduced-motion mode removes spatial travel and repeated/pulsing animation while
   retaining immediate opacity/state feedback.
-- A future Web client exposes visible keyboard focus, hover only as enhancement,
-  platform-consistent selection, and right-click menus without disabling browser
+- Pointer/keyboard interaction exposes visible keyboard focus, hover only as enhancement,
+  platform-consistent selection, and right-click menus without disabling system
   accessibility shortcuts.
 
 ## Brand assets still expected
 
-The product name, wordmark, app icon, and final logo geometry remain inputs from the
-future brand/design phase. Until then, development uses a neutral non-shipping
-placeholder. Missing brand artwork does not block architecture, protocol, or component
-implementation, but the version-1 Android release build MUST replace the placeholder
-and pass Android asset, contrast, small-size, and dark-surface review. Web asset review
-is post-v1.
+Communication Platform is the working name, and the wordmark, app icon, and final logo
+geometry remain inputs from the future brand/design phase. Until then, development uses a
+neutral non-shipping placeholder. Missing brand artwork does not block architecture,
+protocol, or component implementation, but the version-1 Android release build MUST replace
+the placeholder and pass Android asset, contrast, small-size, and dark-surface review.

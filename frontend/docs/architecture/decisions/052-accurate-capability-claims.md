@@ -1,6 +1,6 @@
 # ADR-052: Truthful capability claims, derived disclosure revisions, and durable re-acknowledgement
 
-- **Status:** Accepted (disclosure scope and copy subsequently evolved through [ADR-055](055-initial-artifact.md), [ADR-056](056-abi-evidence.md), [ADR-071](071-published-limits.md), [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-094](094-best-effort-delivery.md), and [ADR-098](098-presence-and-typing.md) to revision 11; `chatsListSearchScopeNotice` was later replaced by the dedicated `/chats/search` page under [ADR-087](087-chat-status.md); `SyncProjection.isSecurityBlocked` remains unconsumed in UI per [STATUS.md](../../STATUS.md#platform-identity-and-content) and [sync-engine.md](../../sync-engine.md#queue-gap-recovery))
+- **Status:** Accepted (disclosure scope and copy subsequently evolved through [ADR-055](055-initial-artifact.md), [ADR-056](056-abi-evidence.md), [ADR-071](071-published-limits.md), [ADR-075](075-pairwise-groups.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-094](094-best-effort-delivery.md), and [ADR-098](098-presence-and-typing.md) to revision 11; `chatsListSearchScopeNotice` was later replaced by the dedicated `/chats/search` page under [ADR-087](087-chat-status.md); `SyncProjection.isSecurityBlocked` remains unconsumed in UI per [STATUS.md](../../STATUS.md#platform-identity-and-content) and [SYNC.md](../SYNC.md#queue-gap-recovery))
 - **Date:** 2026-08-23 (explicitly recorded in register and full section; committed in `a6106a8`)
 - **Amends:** [ADR-045](045-maturity-disclosure.md) (completes device-side durable tracking and mechanical revision derivation; disclosure revision 4 → 5), [ADR-048](048-generic-notifications.md) (`settingsNotificationsOn`), and [ADR-049](049-background-catch-up.md) / [ADR-051](051-sustained-delivery.md) (delivery disclosure: Data Saver and server envelope expiry)
 - **Related:** [ADR-016](016-english-and-persian.md), [ADR-017](017-independent-crypto-review.md), [ADR-045](045-maturity-disclosure.md), [ADR-048](048-generic-notifications.md), [ADR-049](049-background-catch-up.md), [ADR-051](051-sustained-delivery.md)
@@ -27,7 +27,7 @@ Audited every user-facing security and capability statement directly against the
    - Users with `acknowledgedRevision < revision` see one blocking full-screen `DisclosureChangePage` with changed points marked by a labelled badge (`disclosureChangedLabel`); users with no durable record (`0`, i.e. pre-ADR-052 installs) see the whole statement with nothing badged because nothing is known about what they previously read.
    - **Fail-open safety rule:** An unreadable preference row withholds the gate rather than locking the user out of messages; a failed write only costs one extra showing.
 4. **Written handover & full-catalogue localization parity:**
-   - Updated [deployment-and-release.md](../../deployment-and-release.md) to match `DisclosurePoint` (fixing the stale 6-of-7 list, missing unbuilt surfaces, and missing ADR-051 opt-in) while keeping written re-delivery release-blocking for recipients who have not updated.
+   - Updated [RELEASE.md](../../runbooks/RELEASE.md) to match `DisclosurePoint` (fixing the stale 6-of-7 list, missing unbuilt surfaces, and missing ADR-051 opt-in) while keeping written re-delivery release-blocking for recipients who have not updated.
    - Replaced three per-feature hand-maintained l10n key lists with catalogue-wide parity enforcement between `app_en.arb` and `app_fa.arb` (and checked overflow up to 160% text scale).
 
 ## Rationale
@@ -43,7 +43,7 @@ Audited every user-facing security and capability statement directly against the
 
 - **Pinned invariants:** [deployment_disclosure_test.dart](../../../test/architecture/deployment_disclosure_test.dart) pins all `DisclosurePoint` orderings, `since` / `revision` invariants, forbidden feature words in `enrollmentProtectsBody`, and catalogue-wide `app_en.arb` / `app_fa.arb` parity.
 - **Remaining limitations and open follow-ups:**
-  - *One-to-one mailbox gap UI (Follow-up 1):* `SyncProjection.isSecurityBlocked` still has no UI consumer ([STATUS.md](../../STATUS.md#platform-identity-and-content), [sync-engine.md](../../sync-engine.md#queue-gap-recovery)); direct message expiration remains unannounced in-app.
+  - *One-to-one mailbox gap UI (Follow-up 1):* `SyncProjection.isSecurityBlocked` still has no UI consumer ([STATUS.md](../../STATUS.md#platform-identity-and-content), [SYNC.md](../SYNC.md#queue-gap-recovery)); direct message expiration remains unannounced in-app.
   - *Persian comprehension & second-speaker review (Follow-up 2):* RTL layout, non-emptiness, and 160% scale non-overflow are tested, but neither second-speaker Persian review nor audience comprehension testing has been conducted.
   - *Device visual check (Follow-up 3):* `DisclosureChangeGate` is exercised in widget tests (`disclosure_change_gate_test.dart`), not yet photographed on physical hardware in both languages.
   - *Update reach:* Recipients who do not install the updated APK rely exclusively on out-of-band written handover re-delivery.

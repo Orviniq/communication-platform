@@ -24,7 +24,7 @@ Enumerated every platform integration point of the delivery and notification pat
    - Declared `ACCESS_NETWORK_STATE` explicitly in the source manifest with its justification rather than inheriting it silently from `connectivity_plus`.
    - Refused `androidx.profileinstaller.ProfileInstallReceiver` (`android:exported="true"`) via `tools:node="remove"`, keeping baseline profile writes through `ProfileInstallerInitializer` → `ProfileInstaller.writeProfile(Context)` (verified via `javap`).
    - Verified via bytecode scan of all 4,559 classes across the 51 release modules and inspection of `app-production-release.apk`'s R8-shrunk `classes.dex` (574 KB) that zero Java/Kotlin code can open a network connection; all network bytes traverse `dart:io` over the provisioned private-CA trust store.
-4. **License discharge ([third-party-notices.md](../../third-party-notices.md), [deployment-and-release.md](../../deployment-and-release.md)):**
+4. **License discharge ([third-party-notices.md](../../third-party-notices.md), [RELEASE.md](../../runbooks/RELEASE.md)):**
    - Recorded all distributed Android modules (Apache-2.0 and BSD-3-Clause) with full license texts and attribution in [third-party-notices.md](../../third-party-notices.md) to travel with the private handover, pinned by [dependency_policy_test.dart](../../../test/architecture/dependency_policy_test.dart) against `gradle.lockfile` so notices cannot drift from the linked set.
 
 ## Rationale

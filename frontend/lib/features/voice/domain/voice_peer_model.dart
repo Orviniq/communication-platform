@@ -27,7 +27,7 @@ bool isPoliteVoicePeer({
 ///
 /// A connection is keyed on the device and its `join_id`, because a device
 /// that leaves and joins again is a new incarnation with a new join id, and
-/// its old connection is not its new one (`voice-signalling-v1.md`, The common
+/// its old connection is not its new one (`docs/contracts/VOICE-V1.md`, The common
 /// body header).
 final class VoicePeerAddress {
   VoicePeerAddress({

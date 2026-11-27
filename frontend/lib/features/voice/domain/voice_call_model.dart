@@ -9,7 +9,7 @@ enum VoiceCallPhase {
 
   /// Asking the room's member devices who is in the call, before this device
   /// announces itself: the participants' answers decide whether the call is
-  /// already full (`voice-signalling-v1.md`, The ceiling).
+  /// already full (`docs/contracts/VOICE-V1.md`, The ceiling).
   announcing,
 
   /// This device's `join` has gone out. The call stays in this phase while
@@ -251,7 +251,7 @@ abstract final class VoiceCallCeiling {
   }
 }
 
-/// The bounded retry of §N rule 7, as `voice-signalling-v1.md` sets it: four
+/// The bounded retry of §N rule 7, as `docs/contracts/VOICE-V1.md` sets it: four
 /// attempts, the first at once, then waits of 2, 4 and 8 seconds, each within
 /// 25 % either way, and a 6-second answer window after the last. A peer that
 /// has answered nothing by then — about twenty seconds after the first

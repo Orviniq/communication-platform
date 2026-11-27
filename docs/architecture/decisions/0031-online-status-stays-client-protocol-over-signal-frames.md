@@ -124,7 +124,7 @@ Two new documents under `docs/client/`, as
 [0030](0030-the-security-model-and-the-client-contract-move-under-docs.md) placed every binding
 client text: `CLIENT_PRESENCE_AND_RECEIPTS.md`, routed from the contract's new §R, and
 `CLIENT_VOICE_ROLES.md`, routed from its §N rule 12 and written as a complete delta against the
-client's own `voice-signalling-v1.md`. `CLIENT_CONTACTS_AND_TRUST.md` admits the new `CPCTV001`
+client's own `frontend/docs/contracts/VOICE-V1.md`. `CLIENT_CONTACTS_AND_TRUST.md` admits the new `CPCTV001`
 kind 7.
 
 ## What this does not do

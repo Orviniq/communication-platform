@@ -88,7 +88,7 @@ the current material rather than inferred: the two primary pins differ, and the 
 key is the same file it was on 2026-08-19.
 
 Neither value is written here. This repository carries no real pin and no real CA
-digest — `frontend/docs/release-signing.md` keeps them as placeholders and calls them
+digest — [`frontend/docs/release-signing.md`](https://github.com/Orviniq/communication-platform/blob/1a169534464163afc8c1becb4b94ceda2e37f33d/frontend/docs/release-signing.md) keeps them as placeholders and calls them
 public values that stay out of the tree — and that convention is not broken to record a
 change to one of them.
 

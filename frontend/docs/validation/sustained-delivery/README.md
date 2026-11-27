@@ -2,7 +2,7 @@
 
 Each dated directory holds output from
 [`measure_sustained_delivery.sh`](../../../tool/measure_sustained_delivery.sh).
-The [field criteria](../../sustained-delivery-validation.md) define the records
+The [field criteria](../../runbooks/SUSTAINED-DELIVERY.md) define the records
 required by the compiled release ledger.
 
 **Gate state: CLOSED.** The three directories hold probes dated 2026-08-23: one

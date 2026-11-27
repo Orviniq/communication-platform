@@ -33,14 +33,14 @@ Originally defined the initial ~20–30 person private deployment as **one Priva
 Original rationale:
 - A 20–30 person private deployment needed one authoritative definition aligning code, strings, and security posture without waiting on externally blocked IETF/IANA/OpenMLS/audit gates or creating a separate product branch.
 - Shipping groups as a declared Experimental tier rather than completely unwiring them (Alternative E) avoided abandoning [ADR-036](036-beta-mls-track.md)–[ADR-041](041-fork-ordering.md) and enabled real-device testing against the packaged Rust core while protecting Production at the flavor/artifact boundary.
-- Reconciling [threat-model.md](../../threat-model.md)'s release gates explicitly: those public-release gates remained closed; private distribution was authorized solely under mandatory written disclosure to named trusted recipients.
+- Reconciling [CLIENT-THREAT-MODEL.md](../../security/CLIENT-THREAT-MODEL.md)'s release gates explicitly: those public-release gates remained closed; private distribution was authorized solely under mandatory written disclosure to named trusted recipients.
 
 Why closed: deleting MLS and the `beta` flavor eliminated the Private Experimental Beta artifact that ADR-044 defined.
 
 ## Constraints and Open Gates
 
 - **Closed:** `lib/main_beta.dart`, `GroupProductionGate`, `NativeBetaGroupMls`, `beta-pq-mls`, and `frontend/docs/mls-profile.md` have been removed.
-- **Still binding in the current `production` testing model (carried forward through ADR-045 and ADR-076):** Mandatory security invariants (untrusted relay, no Dart crypto, hybrid PQXDH, cross-signing, private-CA TLS, encrypted local storage, no telemetry/foreign calls), direct signed APK distribution ([deployment-and-release.md](../../deployment-and-release.md)), and open public-release gates ([ADR-017](017-independent-crypto-review.md), [threat-model.md](../../threat-model.md#security-release-gates)).
+- **Still binding in the current `production` testing model (carried forward through ADR-045 and ADR-076):** Mandatory security invariants (untrusted relay, no Dart crypto, hybrid PQXDH, cross-signing, private-CA TLS, encrypted local storage, no telemetry/foreign calls), direct signed APK distribution ([RELEASE.md](../../runbooks/RELEASE.md)), and open public-release gates ([ADR-017](017-independent-crypto-review.md), [CLIENT-THREAT-MODEL.md](../../security/CLIENT-THREAT-MODEL.md#security-release-gates)).
 
 ## Costs
 

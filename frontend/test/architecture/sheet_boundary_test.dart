@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// `showAppSheet` and `showAppAnchoredSheet` carry the rule that keeps a sheet's
 /// controls out of the status bar, the gesture bar and the keyboard
-/// (`responsive-ui.md`, Adaptive shell). A sheet opened any other way gets none
+/// (`docs/ui/ADAPTIVE-LAYOUT.md`, Sheets). A sheet opened any other way gets none
 /// of it, and its last button ends up under the gesture bar.
 const _opener = 'lib/app/design_system/components/app_modals.dart';
 

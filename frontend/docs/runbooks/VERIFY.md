@@ -1,4 +1,4 @@
-# Testing strategy
+# Testing strategy and verification
 
 ## Principles
 
@@ -9,6 +9,56 @@
 - Every production bug adds a regression test at the lowest useful layer plus an
   integration test when the failure crossed a boundary.
 - Real-secret fixtures are forbidden.
+
+## Verification commands
+
+Run from `frontend/` with the repository-pinned toolchains and lockfiles:
+
+### Local CI and code generation
+
+```powershell
+# Windows
+./tool/generate.ps1
+./tool/ci.ps1
+```
+
+```sh
+# POSIX
+sh ./tool/generate.sh
+sh ./tool/ci.sh
+```
+
+`tool/ci.ps1` and `tool/ci.sh` run locked dependency resolution (`flutter pub get --enforce-lockfile`),
+code generation with a clean `lib/` diff check, strict Dart formatting, `flutter analyze --fatal-infos --fatal-warnings`,
+`flutter test`, a `development` debug APK build, and an unsigned `production` release APK build verified by
+`tool/verify_release_apk.sh --production-unsigned`.
+
+### Rust crypto core and Android packaging
+
+```powershell
+cargo fmt --manifest-path native/crypto_core/Cargo.toml -- --check
+cargo test --locked --manifest-path native/crypto_core/Cargo.toml
+cargo clippy --locked --all-targets --all-features --manifest-path native/crypto_core/Cargo.toml -- -D warnings
+powershell -File tool/build_rust_android.ps1 all
+```
+
+```sh
+sh ./tool/build_rust_android.sh all
+sh ./tool/verify_release_apk.sh --production-unsigned build/app/outputs/flutter-apk/app-production-release.apk
+sh ./tool/verify_release_apk.sh --production build/production-release/<artifact>.apk
+```
+
+### Flutter formatting, analysis, and test suites
+
+```sh
+dart format --output=none --set-exit-if-changed lib test integration_test
+flutter analyze --fatal-infos --fatal-warnings
+flutter test
+flutter test test/architecture/sustained_delivery_gate_test.dart test/architecture/dependency_policy_test.dart
+```
+
+For physical-device sustained-delivery measurements, use `tool/measure_sustained_delivery.sh` per
+[SUSTAINED-DELIVERY.md](SUSTAINED-DELIVERY.md).
 
 ## Test layers
 
@@ -31,12 +81,13 @@
 
 ### Crypto-core tests
 
-Version 1 is Android-only. Piece 07's required target tests are the shared Rust primitive
-suite, native ABI boundary tests, Android cross-build/package checks, Dart wrapper and
-isolate tests, and a smoke call through the library packaged in an Android application.
-A host-native dynamic-library test alone is not the packaged Android smoke. The Web target
-was removed on 2026-09-08 under [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md). A browser release would require an
-explicit decision and compatible server support.
+Version 1 is Android-only. Required target tests for the Rust crypto core are the shared
+Rust primitive suite, native ABI boundary tests, Android cross-build/package checks, Dart
+wrapper and isolate tests, and a smoke call through the library packaged in an Android
+application. A host-native dynamic-library test alone is not the packaged Android smoke.
+The Web target was removed on 2026-09-08 under
+[server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+A browser release would require an explicit decision and compatible server support.
 
 - FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, Argon2id, CBOR, and secretstream vectors
   applicable to the selected implementation. Voice needs none of its own: DTLS-SRTP is
@@ -66,7 +117,7 @@ Some questions no test in this repository can answer, because they are questions
 what a manufacturer's Android build does to this application over hours and days. Those
 are measured on hardware, against criteria fixed before the measurement, and recorded as
 evidence that a release gate reads. The first such gate is sustained delivery
-([sustained-delivery-validation.md](sustained-delivery-validation.md), ADR-053): its
+([SUSTAINED-DELIVERY.md](SUSTAINED-DELIVERY.md), ADR-053): its
 criteria, its seven-cell matrix, its instrument (`tool/measure_sustained_delivery.sh`)
 and its current state — **closed, no cell run** — live there.
 

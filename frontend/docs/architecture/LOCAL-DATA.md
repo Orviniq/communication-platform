@@ -3,8 +3,10 @@
 ## Principle
 
 Drift is the durable source of truth. REST, WebSocket, user commands, crypto results, and
-background work may modify UI-visible state only through repositories that execute Drift
-transactions. Riverpod observes database queries and exposes immutable projections.
+background work may modify durable UI-visible state only through repositories that execute
+Drift transactions. Riverpod observes database queries and exposes immutable projections.
+The current database schema is [26](#schema-26). See [sync ownership](SYNC.md#composition-and-ownership)
+for the activity and headless isolates that use this store.
 
 ## Storage classes
 
@@ -17,11 +19,11 @@ inside the unlocked encrypted database and process memory, never in ordinary fil
 one exception, a decrypted attachment, which another application can open only as a file. It
 lives in the private cache directory the logout and revocation wipe deletes, inside the
 bounds of [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files)
-([ADR-089](architecture/decisions/089-direct-attachments.md) D8).
+([ADR-089](decisions/089-direct-attachments.md) D8).
 
 ### Storage requirements if a browser target is approved
 
-Android is the sole target under [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md). If a browser target is approved,
+Android is the sole target under [server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md). If a browser target is approved,
 persist device state and content only as encrypted records. Store a non-extractable
 WebCrypto wrapping key in IndexedDB when supported and wrap the local storage key. Drift
 Wasm may store ciphertext/index metadata, but decrypted message bodies and the search
@@ -44,27 +46,27 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `device_log` | Verified signed hash-chain records, last head/hash, fork state, gossip state |
 | `pairwise_sessions` | Opaque crypto-core Double Ratchet state per device pair |
 | `prekeys` | Local private prekey handles and upload/use state |
-| `group_states` | One group this device follows: its encrypted projection (name, description, policies, and every member with a role and membership state), the accepted control revision and state hash, and its lifecycle — active, removed, left, fork-quarantined, or control-quarantined. A group is client state; the server holds no roster ([ADR-075](architecture/decisions/075-pairwise-groups.md)) |
+| `group_states` | One group this device follows: its encrypted projection (name, description, policies, and every member with a role and membership state), the accepted control revision and state hash, and its lifecycle — active, removed, left, fork-quarantined, or control-quarantined. A group is client state; the server holds no roster ([ADR-075](decisions/075-pairwise-groups.md)) |
 | `group_control_events` | The accepted control transcript, one row per signed event in chain order: revision, previous and resulting state hash, signer user and device, operation kind, and the exact canonical bytes and signature, kept so that a member who needs the transcript can check every signature itself |
 | `group_outbound_objects` | Exact group payloads owed to other devices — a signed control event, a state request, a transcript, or the answer to a request — committed with the change that produced them and marked routed once they are in the pairwise outbox |
 | `group_state_requests` | Groups whose control state this device still has to ask a member for, after a mailbox gap or an event that builds on state it does not hold: the reason, the member asked, the attempts, and when |
 | `conversations` | DM/group/saved identity and list projection |
-| `messages` | Current logical message projection, plus the columns the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048), `delivered_receipt_sent` ([ADR-060](architecture/decisions/060-delivery-latency.md)), and `status` ([ADR-061](architecture/decisions/061-durable-send.md)) |
+| `messages` | Current logical message projection, plus the columns the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048), `delivered_receipt_sent` ([ADR-060](decisions/060-delivery-latency.md)), and `status` ([ADR-061](decisions/061-durable-send.md)) |
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
-| `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](architecture/decisions/063-event-projection.md)) |
-| `attachments` | One row per capability: the message, the encrypted descriptor, and what this device holds of the file — "not downloaded", "ready" with the cache id of its decrypted file and an expiry, or "expired". See [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files) ([ADR-089](architecture/decisions/089-direct-attachments.md)) |
-| `inbox_envelopes` | Backend envelope ID/seq, processing and ack state. A first message from a sender this account has not verified, and each follow-up of its session, stays here unopened in state 5, `held`, after its acknowledgement: `held_sender_user_id` (the claimed sender, lower case), `held_session_id` (16 bytes), `held_initial` and `held_at` mark it. A row carrying the sender is *held-marked*; held or released, it leaves the held set by an opened commit, a failed re-inspection, an eviction past 64 for one sender or 128 for the phone, or an expiry 7 days after `held_at` ([ADR-093](architecture/decisions/093-held-first-message.md) D11 to D15) |
+| `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](decisions/063-event-projection.md)) |
+| `attachments` | One row per capability: the message, the encrypted descriptor, and what this device holds of the file — "not downloaded", "ready" with the cache id of its decrypted file and an expiry, or "expired". See [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files) ([ADR-089](decisions/089-direct-attachments.md)) |
+| `inbox_envelopes` | Backend envelope ID/seq, processing and ack state. A first message from a sender this account has not verified, and each follow-up of its session, stays here unopened in state 5, `held`, after its acknowledgement: `held_sender_user_id` (the claimed sender, lower case), `held_session_id` (16 bytes), `held_initial` and `held_at` mark it. A row carrying the sender is *held-marked*; held or released, it leaves the held set by an opened commit, a failed re-inspection, an eviction past 64 for one sender or 128 for the phone, or an expiry 7 days after `held_at` ([ADR-093](decisions/093-held-first-message.md) D11 to D15) |
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
-| `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](architecture/decisions/061-durable-send.md)) |
-| `receipts` | Per-message/device/user delivered/read projection. `read_at_ms` (schema 24) is the read time of a read row: the `ordering_ms` of the earliest `receipt.read` from that device that names the message, skipping an `ordering_ms` of 0, which is a clock the projector could not place. It is null on a delivered row, on a read row whose every read had such a clock, and on a row from before schema 24. Both projection paths write it; a reaction, an edit, a delete or a pin does not rewrite it ([ADR-091](architecture/decisions/091-group-receipts.md) D8 and D9). The reader list of a message is one entry per user with a read row, at the earliest time over that user's devices, never earlier than the message's own `ordering_ms` |
-| `room_states` | One voice room this device holds: its encrypted projection (the name, and every member with a membership state), the accepted control revision and state hash, its lifecycle, and when this device last checked the room's member devices for a missing pairwise session. A room is client state exactly as a group is; the server holds no room ([ADR-077](architecture/decisions/077-voice-mesh.md)). Room version, role assignments, and per-device announced room protocol versions are planned under `CLIENT_VOICE_ROLES.md` |
+| `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions/061-durable-send.md)) |
+| `receipts` | Per-message/device/user delivered/read projection. `read_at_ms` (schema 24) is the read time of a read row: the `ordering_ms` of the earliest `receipt.read` from that device that names the message, skipping an `ordering_ms` of 0, which is a clock the projector could not place. It is null on a delivered row, on a read row whose every read had such a clock, and on a row from before schema 24. Both projection paths write it; a reaction, an edit, a delete or a pin does not rewrite it ([ADR-091](decisions/091-group-receipts.md) D8 and D9). The reader list of a message is one entry per user with a read row, at the earliest time over that user's devices, never earlier than the message's own `ordering_ms` |
+| `room_states` | One voice room this device holds: its encrypted projection (the name, and every member with a membership state), the accepted control revision and state hash, its lifecycle, and when this device last checked the room's member devices for a missing pairwise session. A room is client state exactly as a group is; the server holds no room ([ADR-077](decisions/077-voice-mesh.md)). Room version, role assignments, and per-device announced room protocol versions are planned under `CLIENT_VOICE_ROLES.md` |
 | `room_control_events` | A room's accepted control transcript, one row per signed event in chain order, with the exact canonical bytes and signature, kept so that this device can hand the transcript to a member it adds |
 | `room_outbound_objects` | Exact room payloads owed to other devices — a signed control event, a state request, a transcript, an answer, or a request that starts a missing session — committed with the change or the check that produced them and marked routed once they are in the pairwise outbox |
 | `room_state_requests` | Rooms whose control state this device still has to ask a member for, after a mailbox gap or something that named state it does not hold. A room with a row joins no call, invites nobody and renames nothing |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
 | `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
-| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, whether the notification permission prompt has ever been shown, and "Show my online status" (`presence.share.v1`, `on` or `off`; a missing or unreadable row reads as on, [ADR-098](architecture/decisions/098-presence-and-typing.md) D9; planned to migrate to `CPCTV001` kind 7 under `CLIENT_PRESENCE_AND_RECEIPTS.md` §5.4). Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
-| `presence_devices` | One row per peer device, keyed by `peer_device_id` (schema 26, [ADR-098](architecture/decisions/098-presence-and-typing.md) D6 and D8): the probe ledger that bounds the watches sent to a device that may be away (`probes_since_heard`, `tokens` from 0 to 4 as of `tokens_at_ms`, `last_probe_ms`) and `last_seen_ms`, this phone's own clock at the latest presence frame it accepted from the device. A row is written on a probe, on the first committed frame or durable envelope after a probe, and when an online state ends or at most once a minute while it lasts; a renewal, an answer or a typing frame writes nothing. Turning "Show my online status" off clears every `last_seen_ms`, and a `gone` with reason 2 clears its sender's. Never synced, and no row is ever sent anywhere |
+| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, whether the notification permission prompt has ever been shown, and "Show my online status" (`presence.share.v1`, `on` or `off`; a missing or unreadable row reads as on, [ADR-098](decisions/098-presence-and-typing.md) D9; planned to migrate to `CPCTV001` kind 7 under `CLIENT_PRESENCE_AND_RECEIPTS.md` §5.4). Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
+| `presence_devices` | One row per peer device, keyed by `peer_device_id` ([schema 26](#schema-26), [ADR-098](decisions/098-presence-and-typing.md) D6 and D8): the probe ledger that bounds the watches sent to a device that may be away (`probes_since_heard`, `tokens` from 0 to 4 as of `tokens_at_ms`, `last_probe_ms`) and `last_seen_ms`, this phone's own clock at the latest presence frame it accepted from the device. A row is written on a probe, on the first committed frame or durable envelope after a probe, and when an online state ends or at most once a minute while it lasts; a renewal, an answer or a typing frame writes nothing. Turning "Show my online status" off clears every `last_seen_ms`, and a `gone` with reason 2 clears its sender's. Never synced, and no row is ever sent anywhere |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
 ## Indexes
@@ -74,22 +76,22 @@ not the leading component of a primary key was a full table scan — under SQLCi
 page read is a decrypt. Each is chosen from `EXPLAIN QUERY PLAN` against a seeded database and
 asserted against the planner in
 `test/features/local_storage/infrastructure/local_database_index_plan_test.dart`, because an
-index the planner never chooses is write cost with no read benefit ([ADR-062](architecture/decisions/062-timeline-window.md)) —
+index the planner never chooses is write cost with no read benefit ([ADR-062](decisions/062-timeline-window.md)) —
 and because on a join the planner also chooses the *order*, which changes the cost by a factor
 of the conversation's length while changing neither the statement count nor the rows returned
-([ADR-063](architecture/decisions/063-event-projection.md)).
+([ADR-063](decisions/063-event-projection.md)).
 
 | Index | Columns | What it answers |
 |---|---|---|
 | `messages_conversation_ordering` | `messages (conversation_id, ordering_ms, ordering_event_id, message_id)` | Every read of one conversation. Column order follows the timeline's own ordering key, so the same index answers the `WHERE`, satisfies the `ORDER BY` in both directions without a temporary B-tree, and covers the keyset cursor probe |
 | `messages_pinned_by_conversation` | `messages (conversation_id, message_id) WHERE pinned` | The conversation's pins, and every conversation's pins in one query. Partial, so it holds a handful of entries; SQLite will only choose it for a query whose `WHERE` contains the bare term `pinned`, so both callers spell it unbound and neither sorts in SQL |
 | `attachments_by_message` | `attachments (message_id)` | A page's attachments — and, on the write path, the `ON DELETE CASCADE` foreign-key check SQLite runs on **every** write to a `messages` row. Without it that check is a full scan of `attachments` per parent row |
-| `application_events_conversation_apply_state` | `application_events (conversation_id, apply_state)` | The candidate events of one conversation, for a **projection rebuild**. Since [ADR-063](architecture/decisions/063-event-projection.md) that is the recovery path — an event-id conflict, a sender-counter rollback, an unsupported-event collision, a fork or a repair — and not the event path, which reads `application_event_targets` instead. It stays indexed because a fork is exactly when a device can least afford to read its whole log |
+| `application_events_conversation_apply_state` | `application_events (conversation_id, apply_state)` | The candidate events of one conversation, for a **projection rebuild**. Since [ADR-063](decisions/063-event-projection.md) that is the recovery path — an event-id conflict, a sender-counter rollback, an unsupported-event collision, a fork or a repair — and not the event path, which reads `application_event_targets` instead. It stays indexed because a fork is exactly when a device can least afford to read its whole log |
 | `application_events_sender_counter` | `application_events (sender_device_id, sender_counter)` | The sender-counter uniqueness check every applied event runs. It has no conversation to narrow it: a replayed counter is a fact about a device |
 | `outbox_operations_by_event` | `outbox_operations (event_id)` | A message's transport state |
-| `inbox_envelopes_held_by_sender` | `inbox_envelopes (held_sender_user_id, sequence) WHERE held_sender_user_id IS NOT NULL` | The held senders and their counts and latest hold times (the Chats row, `watchHeldSenders`), a sender's oldest row, a release in mailbox order, and — read whole and unordered, at most 128 entries — the phone's oldest row, the expiry and the earliest hold time. Unordered on purpose: ordered by `sequence`, the planner walks the inbox's own sequence index instead ([ADR-093](architecture/decisions/093-held-first-message.md) D11) |
-| `inbox_envelopes_held_by_session` | `inbox_envelopes (held_session_id) WHERE held_session_id IS NOT NULL` | Which held initial a follow-up belongs to, and the follow-ups that leave with their initial ([ADR-093](architecture/decisions/093-held-first-message.md) D13, D14) |
-| `messages_unread_by_conversation` | `messages (conversation_id, unread) WHERE unread` | `conversations.unread_count`, which both projection paths recompute from the message rows so that the incremental one cannot disagree with a rebuild. Partial, so it holds only unread rows; `unread` is a column as well as the predicate, which is what makes it covering — without it SQLite keeps the query's own `unread` term as a filter and visits every row to evaluate it. Like the pinned index it is only chosen for a query whose `WHERE` spells the bare term ([ADR-063](architecture/decisions/063-event-projection.md)) |
+| `inbox_envelopes_held_by_sender` | `inbox_envelopes (held_sender_user_id, sequence) WHERE held_sender_user_id IS NOT NULL` | The held senders and their counts and latest hold times (the Chats row, `watchHeldSenders`), a sender's oldest row, a release in mailbox order, and — read whole and unordered, at most 128 entries — the phone's oldest row, the expiry and the earliest hold time. Unordered on purpose: ordered by `sequence`, the planner walks the inbox's own sequence index instead ([ADR-093](decisions/093-held-first-message.md) D11) |
+| `inbox_envelopes_held_by_session` | `inbox_envelopes (held_session_id) WHERE held_session_id IS NOT NULL` | Which held initial a follow-up belongs to, and the follow-ups that leave with their initial ([ADR-093](decisions/093-held-first-message.md) D13, D14) |
+| `messages_unread_by_conversation` | `messages (conversation_id, unread) WHERE unread` | `conversations.unread_count`, which both projection paths recompute from the message rows so that the incremental one cannot disagree with a rebuild. Partial, so it holds only unread rows; `unread` is a column as well as the predicate, which is what makes it covering — without it SQLite keeps the query's own `unread` term as a filter and visits every row to evaluate it. Like the pinned index it is only chosen for a query whose `WHERE` spells the bare term ([ADR-063](decisions/063-event-projection.md)) |
 
 `message_reactions` and `receipts` are keyed by `(message_id, ...)`, so their implicit primary-key
 index already serves a lookup by message and no index is added for them.
@@ -121,7 +123,7 @@ the current protocol version, so it is deliberately left unindexed.
 
 ## Attachment rows and decrypted files
 
-*Since [ADR-089](architecture/decisions/089-direct-attachments.md) (prompt 2 of its phase, 2026-10-10). Schema 23 is unchanged.*
+*Since [ADR-089](decisions/089-direct-attachments.md) (prompt 2 of its phase, 2026-10-10). Schema 23 is unchanged.*
 
 **The row.** An `attachments` row is keyed by the capability and names its message. Of the
 values 0 to 8 the CHECK of `transfer_state` allows, the client writes three (D9):
@@ -232,7 +234,7 @@ at the speed of a local write. The second, run by the delivery cycle after it ha
 the recipient set and sealed one envelope per device, writes the outbox rows and deletes
 the preparation row *in the same transaction*. A process killed anywhere between them comes
 back to a send that is either owed or queued, never both and never neither
-([ADR-061](architecture/decisions/061-durable-send.md)).
+([ADR-061](decisions/061-durable-send.md)).
 
 Encryption and network execution still occur outside any database transaction, and the
 result is still committed in a second one; what changed is which side of the first
@@ -264,7 +266,7 @@ each message's own facts out of `application_event_targets` and writing back thr
 projection function a rebuild uses. The full rebuild remains the definition of a correct
 projection and remains the path for an event-id conflict, a sender-counter rollback, an
 unsupported-event collision, and any fork or repair; where the two disagree the incremental one
-is wrong ([ADR-063](architecture/decisions/063-event-projection.md)). Both are inside the same write transaction as the event
+is wrong ([ADR-063](decisions/063-event-projection.md)). Both are inside the same write transaction as the event
 insert they belong to, so a process killed mid-apply rolls back to a state from which
 re-presenting the event converges.
 
@@ -310,11 +312,16 @@ all. An open row in `room_state_requests` makes an active room read as waiting f
 state, which withholds joining a call, inviting, renaming and leaving until a member answers; a
 room's gap row does not hold the checkpoint's gap open. A change that gives this device a
 room or adds a member empties `room_states.sessions_checked_at`, which makes the room's
-check for missing pairwise sessions due ([`voice-signalling-v1.md`](voice-signalling-v1.md),
-Starting the sessions a call needs). Rejected room events are recorded in `quarantine`
+check for missing pairwise sessions due ([Starting the sessions a call needs](../contracts/VOICE-V1.md#starting-the-sessions-a-call-needs)). Rejected room events are recorded in `quarantine`
 under reason codes 48 to 51.
 
 ## Migrations
+
+[LocalDatabase](../../lib/features/local_storage/infrastructure/database/local_database.dart)
+runs upgrades with `MigrationStrategy.onUpgrade` inside a Drift transaction. Its
+`beforeOpen` enables foreign keys and checks an existing database with `PRAGMA quick_check`.
+The [migration fixture](../../test/features/local_storage/infrastructure/local_database_migration_test.dart)
+covers upgrades and the matching fresh schema.
 
 - Every schema change has forward and rollback/restore tests using representative
   encrypted databases.
@@ -330,7 +337,7 @@ under reason codes 48 to 51.
   must be recreated/rejoined; no opaque MLS state is silently rewritten.
 - Schema version 14 adds `inbox_envelopes.inspection_failures` and carries a one-shot,
   idempotent repair for the devices that ran the delivery engine before
-  [ADR-060](architecture/decisions/060-delivery-latency.md): non-terminal inbox and outbox rows are reset to a zero attempt
+  [ADR-060](decisions/060-delivery-latency.md): non-terminal inbox and outbox rows are reset to a zero attempt
   count with no due time, a conversation that has messages is un-tombstoned, and a
   conversation whose row is missing entirely is rebuilt minimally from `MAX(ordering_ms)`.
   It touches no message content, no envelope ciphertext and no projection ciphertext, and
@@ -339,17 +346,17 @@ under reason codes 48 to 51.
   style of `messages.alerted`. Whether a delivered receipt was owed used to be re-derived on
   every projection rebuild from properties of the message that never change, so every rebuild
   re-queued one for every message the conversation had received — and a receipt is an event
-  at the far end, so two devices sustained the loop indefinitely ([ADR-060](architecture/decisions/060-delivery-latency.md)).
+  at the far end, so two devices sustained the loop indefinitely ([ADR-060](decisions/060-delivery-latency.md)).
   The upgrade marks every existing message as already acknowledged and empties the pending
   queue, so it does not itself send one more round.
 
 - Schema version 16 adds `pending_send_preparations`, the durable request for a fan-out a
-  committed message is still owed ([ADR-061](architecture/decisions/061-durable-send.md)). Nothing is back-filled and
+  committed message is still owed ([ADR-061](decisions/061-durable-send.md)). Nothing is back-filled and
   nothing is repaired: every message already on a device either has its outbox rows or has
   reached a terminal state, so there is no send this table would have been holding.
 
 - Schema version 17 creates the first six indexes above and does nothing else
-  ([ADR-062](architecture/decisions/062-timeline-window.md)). It is additive: no table is created, dropped, re-keyed or
+  ([ADR-062](decisions/062-timeline-window.md)). It is additive: no table is created, dropped, re-keyed or
   rewritten, and no row moves. Each declaration carries `IF NOT EXISTS`, so the same statement
   serves `createAll` on a fresh install and the upgrade step on an existing one. It is **not
   free on a populated database**: `CREATE INDEX` reads its whole table once, so this is two
@@ -360,7 +367,7 @@ under reason codes 48 to 51.
 
 - Schema version 18 adds `application_event_targets` and
   `messages_unread_by_conversation`, and **back-fills the first from the events already
-  stored** ([ADR-063](architecture/decisions/063-event-projection.md)). The back-fill is not an optimisation: an empty target
+  stored** ([ADR-063](decisions/063-event-projection.md)). The back-fill is not an optimisation: an empty target
   table would not be a slower projection but a wrong one, because an edit landing on a message
   whose create has no row there would fold the edit alone and find no message to edit. The four
   single-target kinds are one set-based statement; creates and receipts carry their message ids
@@ -401,7 +408,7 @@ under reason codes 48 to 51.
 
 - Schema version 23 deletes `voice_rooms` and creates `room_states`,
   `room_control_events`, `room_outbound_objects` and `room_state_requests` empty
-  ([ADR-077](architecture/decisions/077-voice-mesh.md) D6). `voice_rooms` described a server room — a capability, a name
+  ([ADR-077](decisions/077-voice-mesh.md) D6). `voice_rooms` described a server room — a capability, a name
   the server stored, a live count it counted — and nothing ever wrote or read it. The drop
   runs with `secure_delete` on, so the table's pages are zeroed rather than left on the free
   list with their contents, and the connection's own setting is restored after it. A
@@ -409,13 +416,13 @@ under reason codes 48 to 51.
   and gets them back empty.
 
 - Schema version 24 adds the nullable `receipts.read_at_ms`, the read time of a read row
-  ([ADR-091](architecture/decisions/091-group-receipts.md) D9). Nothing is back-filled: a row written before the step keeps no
+  ([ADR-091](decisions/091-group-receipts.md) D9). Nothing is back-filled: a row written before the step keeps no
   time until a later receipt or a rebuild rewrites the receipts of its message. The step reads
   `PRAGMA table_info` before it adds the column, as the schema-12 step does, so a database whose
   recorded version is behind its real shape upgrades as well. No other table or column changes.
 
 - Schema version 25 holds a first message from a sender this account has not verified
-  ([ADR-093](architecture/decisions/093-held-first-message.md) D11). It first repeats the schema-22 step, returning every
+  ([ADR-093](decisions/093-held-first-message.md) D11). It first repeats the schema-22 step, returning every
   `inbox_envelopes` row in state 5 to 0, so no row reaches the new meaning of 5, `held`, from
   the old one, `blockedByQueueGap`, which nothing has written since. It then adds the four
   nullable columns `held_sender_user_id`, `held_session_id` (16 bytes by a column check),
@@ -424,10 +431,13 @@ under reason codes 48 to 51.
   `IF NOT EXISTS`. Nothing is back-filled, and no other table or column changes. The CHECK
   constraint on `processing_state` already allowed 5, so the table is not rebuilt.
 
-- Schema version 26 creates `presence_devices` empty ([ADR-098](architecture/decisions/098-presence-and-typing.md) D8): nothing
-  before it kept a probe ledger or a last seen. The statement is `CREATE TABLE IF NOT EXISTS`,
-  so a database this build made and something stamped back keeps its rows. No other table or
-  column changes.
+### Schema 26
+
+Schema 26 creates `presence_devices` for the peer-device probe ledger and local last-seen
+time ([ADR-098](decisions/098-presence-and-typing.md) D8). `LocalDatabase` calls
+`migrator.createTable(presenceDevices)` when `from < 26`. The table starts empty on a
+genuine upgrade. `CREATE TABLE IF NOT EXISTS` preserves rows if an existing schema 26
+database was stamped back. The migration fixture exercises both cases.
 
 ## Retention and deletion
 
@@ -435,7 +445,7 @@ under reason codes 48 to 51.
 - Retained pairwise metadata is pruned on a sixteen-day cutoff, **except** the opaque
   payload of a send whose preparation is still owed. Discarding those bytes would leave a
   message on screen that nothing can ever seal.
-- Ratchet skipped keys obey the bounds in [Pairwise transport version 1](pairwise-transport-v1.md).
+- Ratchet skipped keys obey the bounds in [Pairwise transport version 1](../contracts/PAIRWISE-V1.md).
 - Decrypted attachment files live in one bounded cache: 7 days after the last open, 256 MiB,
   least recently opened first ([Attachment rows and decrypted files](#attachment-rows-and-decrypted-files)).
   No thumbnail is made.
@@ -448,11 +458,11 @@ under reason codes 48 to 51.
 
 The encrypted database **is** the index. `messages` holds the decrypted message
 projection inside SQLCipher, under the Keystore-wrapped key, and a search is a filter
-over rows that are already there. Since [ADR-062](architecture/decisions/062-timeline-window.md) a conversation's stream
+over rows that are already there. Since [ADR-062](decisions/062-timeline-window.md) a conversation's stream
 carries a window, so an in-conversation search covers that conversation's **loaded** local
 history: the filter still reads every row it is given, and what it is given grows as the user
 pages backwards. A result outside the window is still reachable, because a jump to a message
 loads it first. No separate
 index structure is built: it would hold a second copy of every message body, enlarge what
-a wipe has to reach, and buy nothing at this scale ([ADR-057](architecture/decisions/057-measured-settings.md)). If a browser target is approved, it must index decrypted session content in memory. Search input and results
+a wipe has to reach, and buy nothing at this scale ([ADR-057](decisions/057-measured-settings.md)). If a browser target is approved, it must index decrypted session content in memory. Search input and results
 never leave the device. Each surface states its own scope.

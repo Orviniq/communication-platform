@@ -86,7 +86,7 @@ enum VoiceRoomRowState {
   live,
 
   /// This device has been told about no call in it, which is not to say
-  /// nobody is talking (`ui-specification.md` §13.0).
+  /// nobody is talking (`docs/ui/SCREENS.md`, Voice Rooms list).
   empty,
 
   /// It may be missing a control event, and a member has been asked.

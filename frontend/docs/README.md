@@ -13,42 +13,40 @@ The documents use three requirement words:
 
 ## Product and architecture
 
-- [Current implementation, evidence, and release gaps](STATUS.md)
-- [Product requirements](product-requirements.md)
-- [Complete page-by-page UI specification](ui-specification.md)
-- [Architecture](architecture.md)
+- [Current implementation, evidence, release gates, and web removal](STATUS.md)
+- [UI screens and flows](ui/SCREENS.md)
+- [Architecture](architecture/OVERVIEW.md), including [voice and realtime](architecture/OVERVIEW.md#voice-and-realtime)
 - [Architecture decisions](architecture/decisions/README.md)
-- [Responsive UI](responsive-ui.md)
-- [Visual design system](visual-design-system.md)
+- [Adaptive layout](ui/ADAPTIVE-LAYOUT.md)
+- [Visual design system](ui/DESIGN-SYSTEM.md)
 
 ## Security and protocols
 
-- [Threat model](threat-model.md)
-- [Cryptographic protocol](cryptographic-protocol.md)
-- [Pairwise transport version 1](pairwise-transport-v1.md)
-- [Pairwise independent-review packet](pairwise-review-readiness.md)
-- [Retaining an independent cryptographic reviewer](independent-review-engagement.md)
-- [Application-message protocol](message-protocol.md)
-- [Authentication and devices](authentication-and-devices.md)
-- [Attachments](attachments.md)
-- [Voice and realtime](voice-and-realtime.md)
-- [Live voice room](ui-specification.md#10-live-voice-room-screen) and
-  [voice room list, creation, and info](ui-specification.md#13-voice-rooms--list-create--info)
+- [Client threat model](security/CLIENT-THREAT-MODEL.md)
+- [Cryptographic protocol](contracts/CRYPTO.md)
+- [Pairwise transport version 1](contracts/PAIRWISE-V1.md)
+- [Independent cryptographic review scope and engagement](security/REVIEW-SCOPE.md) ([Pairwise v1 review packet](security/REVIEW-SCOPE.md#pairwise-v1-review-packet))
+- [Application-message protocol](contracts/MESSAGES.md)
+- [Authentication and devices](contracts/AUTH-AND-DEVICES.md)
+- [Attachments](contracts/ATTACHMENTS.md)
+- [Voice room control and signalling v1](contracts/VOICE-V1.md)
+- [Live voice room](ui/SCREENS.md#live-voice-room-screen) and
+  [voice room list, creation, and info](ui/SCREENS.md#voice-rooms--list-create--info)
 
 ## Data, synchronization, and platforms
 
-- [Local data model](local-data-model.md)
-- [Synchronization engine](sync-engine.md)
-- [Android platform](platform-android.md)
+- [Local data model](architecture/LOCAL-DATA.md)
+- [Synchronization engine](architecture/SYNC.md)
+- [Android platform](architecture/ANDROID.md)
 
 ## Delivery
 
-- [Backend API index](backend-api.md)
-- [Backend/Flutter implementation checklist](implementation-checklist.md)
-- [Testing strategy](testing-strategy.md)
-- [Sustained delivery: field validation and its gate](sustained-delivery-validation.md)
-- [Deployment and release](deployment-and-release.md)
-- [Production release signing and key continuity](release-signing.md)
+- [Backend API index](contracts/BACKEND.md)
+- [Release scope and gates](STATUS.md#release-scope-and-gates)
+- [Testing strategy and verification](runbooks/VERIFY.md)
+- [Sustained delivery: field validation and its gate](runbooks/SUSTAINED-DELIVERY.md)
+- [Deployment and release](runbooks/RELEASE.md)
+- [Production release signing and key continuity](runbooks/SIGNING.md)
 - [Third-party notices](third-party-notices.md)
 
 ## Authority and change control
@@ -64,12 +62,13 @@ frontend documentation MUST be corrected before implementation. A conflict is ne
 resolved by inventing an undocumented server capability or weakening a security
 invariant.
 
-For UI work, `ui-specification.md` is authoritative for screen inventory, content,
-actions, states, and navigation. `responsive-ui.md` is authoritative for adaptive layout,
-design-system integration, accessibility, and implementation rules.
-`visual-design-system.md` owns the initial production tokens and visual grammar. Product
-name, logo, and later reviewed brand assets may refine brand tokens without changing
-screen behavior.
+For UI work, [`ui/SCREENS.md`](ui/SCREENS.md) is authoritative for screen inventory,
+content, actions, states, and navigation. [`ui/ADAPTIVE-LAYOUT.md`](ui/ADAPTIVE-LAYOUT.md)
+is authoritative for adaptive layout, width rules, RTL/accessibility, design-system
+integration, and timeline boundaries. [`ui/DESIGN-SYSTEM.md`](ui/DESIGN-SYSTEM.md) owns
+the initial production tokens, semantic usage, font provenance, and visual grammar.
+Product name, logo, and later reviewed brand assets may refine brand tokens without
+changing screen behavior.
 
 The protocol documents describe a version-1 design, not a claim of a completed security
 audit. Cryptography MUST be implemented with reviewed libraries, verified against test

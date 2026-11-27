@@ -288,5 +288,5 @@ in [`licenses/WebRTC-LICENSE.txt`](licenses/WebRTC-LICENSE.txt).
   `LICENSE` file when there is none; a file named `NOTICE`, which is what
   `flutter_webrtc` ships, is never read. Attributions a plugin keeps there for code
   compiled into the artifact have to be copied here.
-- `docs/deployment-and-release.md` step 10 requires this document to be part of the
+- [`docs/runbooks/RELEASE.md`](runbooks/RELEASE.md#android-release) step 10 requires this document to be part of the
   handover. A release that skips it is a distribution without its notices.

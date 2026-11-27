@@ -4,8 +4,8 @@ import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// The bar that leads back to the call in progress (`ui-specification.md`
-/// §0.2): the room's name, its microphone, and a tap that opens the call.
+/// The bar that leads back to the call in progress (`docs/ui/SCREENS.md`,
+/// Persistent elements): the room's name, its microphone, and a tap that opens the call.
 ///
 /// The shell draws it on a tab root, and `VoiceRoomBannerFrame` at the top of
 /// each full-screen page. It takes the insets its place leaves to it: none in

@@ -25,7 +25,7 @@ token — that is the whole point of the rule — so it ends the session of a de
 that did nothing wrong.
 
 The client paid for it. `frontend/docs/decisions.md` ADR-049 and ADR-050 and
-`frontend/docs/sync-engine.md` record what it built: an in-process
+[`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/66bb9d1f986626d0b0c540953b55111ecfa3edcc/frontend/docs/sync-engine.md) record what it built: an in-process
 exclusive-ownership gate around the token, a bounded re-read repair path for the
 isolate that lost, and a three-owner arbitration so that only one of them may
 rotate. That is a distributed-consensus problem inside one process, and it exists
@@ -98,7 +98,7 @@ One device-bound session token. It is renewed on demand, and it never rotates.
   [`ACCEPTED_RISKS.md`](../../../ACCEPTED_RISKS.md) AR-18 carries the row.
 - **Evidence.** The client cost is recorded rather than predicted:
   `frontend/docs/decisions.md` ADR-049 and ADR-050 and
-  `frontend/docs/sync-engine.md` describe the ownership gate, the repair path and
+  [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/66bb9d1f986626d0b0c540953b55111ecfa3edcc/frontend/docs/sync-engine.md) describe the ownership gate, the repair path and
   the three-owner arbitration the rotation forced, and name the lost race as the
   reason each exists (read 2026-09-05). The rule this removes is
   [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) (BCP 240) §2.2.2, which

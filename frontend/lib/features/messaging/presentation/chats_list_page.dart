@@ -115,7 +115,7 @@ class _ChatsListPageState extends State<ChatsListPage> with ChatListMuteClock {
               )
             : const _ChatsTitle(key: ValueKey('chats-title')),
         actions: [
-          // Search is a page of its own (ui-specification.md §6.5): the list
+          // Search is a page of its own (docs/ui/SCREENS.md, Search): the list
           // keeps its whole height for the conversations.
           AppIconButton(
             key: const ValueKey('chats-search-action'),

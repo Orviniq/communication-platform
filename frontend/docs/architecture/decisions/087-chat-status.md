@@ -3,14 +3,14 @@
 - **Status:** Accepted (2026-10-09)
 - **Date:** 2026-10-09 (explicitly recorded in register and full section; phase 10 prompts 1–2 in `9eb335a8`–`e0bdcf83`, PR #71 `02c37bbc`)
 - **Amends:** [ADR-060](060-delivery-latency.md) D11 (moves delivery indicator from a list-top line to the Chats app-bar title with a 1-second delay) and [ADR-086](086-root-navigation.md) (deletes the shell connection strip named in [ADR-086](086-root-navigation.md)'s costs)
-- **Related:** [ADR-052](052-accurate-capability-claims.md), [ADR-057](057-measured-settings.md), [ADR-060](060-delivery-latency.md), [ADR-086](086-root-navigation.md), [ui-specification.md](../../ui-specification.md), [responsive-ui.md](../../responsive-ui.md)
+- **Related:** [ADR-052](052-accurate-capability-claims.md), [ADR-057](057-measured-settings.md), [ADR-060](060-delivery-latency.md), [ADR-086](086-root-navigation.md), [SCREENS.md](../../ui/SCREENS.md), [ADAPTIVE-LAYOUT.md](../../ui/ADAPTIVE-LAYOUT.md)
 
 ## Decision (Position)
 
 Replaced the inline search field and static/shifting status notices on the Chats list and shell with a dedicated search page, a live title status indicator, and removal of the shell connection strip:
 
 1. **D1 — Search is a full-screen page at `/chats/search` ([chats_search_page.dart](../../../lib/features/messaging/presentation/chats_search_page.dart)):**
-   - Adopted Owner Option 2: deleted the inline search field above the Chats list and wired the Chats top-bar search icon to open `/chats/search` as a full-screen root-navigator page ([ADR-086](086-root-navigation.md), [ui-specification.md §6](../../ui-specification.md#6-chats-list-home--chats-tab)). Rejected Option 1 (keeping only the inline field).
+   - Adopted Owner Option 2: deleted the inline search field above the Chats list and wired the Chats top-bar search icon to open `/chats/search` as a full-screen root-navigator page ([ADR-086](086-root-navigation.md), [Chats List](../../ui/SCREENS.md#chats-list-home--chats-tab)). Rejected Option 1 (keeping only the inline field).
    - Searches case-insensitively across chat names, each chat's latest message summary, and verified contact display names plus usernames via `contactMatchesSearch` ([contacts_new_page.dart](../../../lib/features/contacts/presentation/contacts_new_page.dart) / shared helper).
    - Displays **Chats** and **Contacts** sections, hides empty sections, and omits contacts already matched via a direct chat. Performs no network call or directory refresh, persists no query, and requests no keyboard learning; hint and scope copy are pinned in English and Persian by the [ADR-052](052-accurate-capability-claims.md) disclosure/claims tests.
    - **No all-message history section:** Chat summaries hold only the latest message; searching all `messages.projection_ciphertext` rows across conversations requires its own storage query, cap, and scope copy (older messages inside a chat remain searchable via in-conversation search).

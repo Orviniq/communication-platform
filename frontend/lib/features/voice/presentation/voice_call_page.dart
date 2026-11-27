@@ -23,7 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// The Live Voice Room (`docs/ui-specification.md` §10).
+/// The Live Voice Room (`docs/ui/SCREENS.md`, Live Voice Room Screen).
 ///
 /// Opening it asks for nothing. The microphone is asked for by a join the
 /// user starts - here, or from the room's info - and by nothing else.
@@ -276,7 +276,7 @@ class _VoiceCallViewState extends State<VoiceCallView> {
             roomId: widget.room == null ? null : widget.roomId,
             onMinimize: _minimize,
           ),
-          // The page covers the whole screen (ui-specification.md §0.1). The
+          // The page covers the whole screen (docs/ui/ADAPTIVE-LAYOUT.md, Adaptive shell). The
           // top bar takes the top inset, and the control bar the bottom one
           // when it shows; the body keeps clear of the rest.
           Expanded(

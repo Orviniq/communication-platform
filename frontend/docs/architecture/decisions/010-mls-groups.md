@@ -20,7 +20,7 @@ Why retired in practice: [server ADR-0001](../../../../docs/architecture/decisio
 
 - **Status discrepancy recorded as a gap:** ADR-075 explicitly closed ADR-026, ADR-036, ADR-037, ADR-039, ADR-040, ADR-041, ADR-044, ADR-055, and ADR-056, but did not update the `Accepted` status on `ADR-010` in the register table.
 - [crypto_core_boundary_test.dart](../../../test/architecture/crypto_core_boundary_test.dart) and `tool/verify_release_apk.sh` actively forbid the historical `cp_crypto_v1_beta_mls_operation` symbol from shipping.
-- Production group behavior is governed by [Cryptographic protocol](../../cryptographic-protocol.md#groups) and [Frontend status](../../STATUS.md#platform-identity-and-content), with independent review of the pairwise signed group-state construction still an open gate under [ADR-017](017-independent-crypto-review.md).
+- Production group behavior is governed by [Cryptographic protocol](../../contracts/CRYPTO.md#groups) and [Frontend status](../../STATUS.md#platform-identity-and-content), with independent review of the pairwise signed group-state construction still an open gate under [ADR-017](017-independent-crypto-review.md).
 
 ## Costs
 

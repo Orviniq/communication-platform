@@ -25,7 +25,7 @@ final voiceScopeProvider = FutureProvider<MessagingScope?>((ref) async {
 
 /// Whether a call may be offered at all: the deployment publishes
 /// `voice_configured` true, and no join has met `503 voice_unconfigured`
-/// since this process started (`voice-signalling-v1.md`, The credential).
+/// since this process started (`docs/contracts/VOICE-V1.md`, The credential).
 ///
 /// Until `GET /api/v1/config` has answered, the published value is the
 /// stored one or the fallback, and the fallback is false: no call control is
@@ -42,7 +42,7 @@ final voiceAvailabilityProvider = Provider<bool>(
 /// session reports it.
 ///
 /// While it is down the audio already flowing carries on, and room text,
-/// joins and leaves do not (`docs/ui-specification.md` §10). A phase not read
+/// joins and leaves do not (`docs/ui/SCREENS.md`, Live Voice Room Screen). A phase not read
 /// yet is taken as up: there is nothing to warn about before anything is
 /// known.
 final voiceSignallingConnectedProvider = Provider<bool>((ref) {

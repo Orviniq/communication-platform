@@ -23,7 +23,7 @@ Why closed: [server ADR-0001](../../../../docs/architecture/decisions/0001-pairw
 ## Constraints and Open Gates
 
 - **Closed:** Historical source artifacts — `frontend/native/crypto_core/src/mls_beta.rs`, `frontend/lib/main_beta.dart`, `frontend/lib/features/groups/infrastructure/native_beta_group_mls.dart`, `frontend/lib/app/config/group_production_gate.dart`, and `frontend/docs/mls-profile.md` (before commit `4525d3f` / snapshot `788453b430f34c52c2063ef67b8aa5e4f8fa935d`) — have been removed.
-- Historical on-device beta run records remain archived in [frontend/docs/archive/beta-mls-core/README.md](../../archive/beta-mls-core/README.md), and the defect report on `mls-rs` remains at [mls-rs-hybrid-kem-defect-report.md](../../upstream/mls-rs-hybrid-kem-defect-report.md).
+- Historical on-device beta run records remain archived in [frontend/docs/archive/beta-mls-core/README.md](../../archive/beta-mls-core/README.md), and the defect report on `mls-rs` remains at [mls-rs-hybrid-kem-defect-report.md](../../archive/beta-mls-core/mls-rs-hybrid-kem-defect-report.md).
 - [crypto_core_boundary_test.dart](../../../test/architecture/crypto_core_boundary_test.dart) asserts that `cp_crypto_v1_beta_mls_operation` and `beta-pq-mls` do not exist in release builds.
 
 ## Costs

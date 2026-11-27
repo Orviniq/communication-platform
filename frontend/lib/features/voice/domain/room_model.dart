@@ -329,7 +329,7 @@ final class RenameRoomOperation extends RoomControlOperation {
   RoomControlKind get kind => RoomControlKind.rename;
 }
 
-/// One room control event (`voice-signalling-v1.md`, The event).
+/// One room control event (`docs/contracts/VOICE-V1.md`, The event).
 ///
 /// It mirrors `GroupControlEvent` field for field. Its wire form is
 /// deterministic CBOR built by the shared native core, which also signs it with
@@ -790,7 +790,7 @@ final class RoomStateRequest {
 }
 
 /// A room whose member devices this device checks for a missing pairwise
-/// session (`voice-signalling-v1.md`, Starting the sessions a call needs).
+/// session (`docs/contracts/VOICE-V1.md`, Starting the sessions a call needs).
 final class RoomSessionCheck {
   RoomSessionCheck({
     required this.roomId,

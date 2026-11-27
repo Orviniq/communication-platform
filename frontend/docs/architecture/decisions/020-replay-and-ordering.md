@@ -15,8 +15,8 @@ Preserves legitimate out-of-order delivery across independent per-device paths, 
 
 ## Constraints and Open Gates
 
-- Defined in [Application-message protocol](../../message-protocol.md#common-logical-event-header) and [Cryptographic protocol](../../cryptographic-protocol.md#direct-messages-and-per-device-channels).
-- Indexed via `application_events_sender_counter` on `application_events (sender_device_id, sender_counter)` ([Local data model](../../local-data-model.md#indexes)).
+- Defined in [Application-message protocol](../../contracts/MESSAGES.md#common-logical-event-header) and [Cryptographic protocol](../../contracts/CRYPTO.md#direct-messages-and-per-device-channels).
+- Indexed via `application_events_sender_counter` on `application_events (sender_device_id, sender_counter)` ([Local data model](../LOCAL-DATA.md#indexes)).
 - Messages arriving beyond the 2,000/20,000 skipped-key bounds enter the authenticated session-repair path rather than allocating unbounded memory or relaxing replay checks.
 - Open gate: Independent cryptographic review under [ADR-017](017-independent-crypto-review.md).
 
@@ -32,5 +32,5 @@ If a protocol revision changes replay or rollback semantics or replaces bounded 
 ## History, Amendments, and Supersession
 
 - **2026-07-24 (`1b321da1`):** Original decision recorded in the initial ADR register (`Accepted`).
-- **2026-07-29 (`d0092ee9`):** Implemented in `native/crypto_core/src/pairwise.rs` and [Pairwise transport v1](../../pairwise-transport-v1.md).
+- **2026-07-29 (`d0092ee9`):** Implemented in `native/crypto_core/src/pairwise.rs` and [Pairwise transport v1](https://github.com/Orviniq/communication-platform/blob/d0092ee97693276b28127e08443f45b9fa2dee9a/frontend/docs/pairwise-transport-v1.md).
 - No supersession.

@@ -44,7 +44,7 @@ final class RoomSessionCheckReport {
 }
 
 /// Starts, on the durable path, every pairwise session a room's call will
-/// need (`voice-signalling-v1.md`, Starting the sessions a call needs; ADR-077,
+/// need (`docs/contracts/VOICE-V1.md`, Starting the sessions a call needs; ADR-077,
 /// decided B on 2026-09-30).
 ///
 /// A call's frames are volatile, and a volatile frame never starts a session,

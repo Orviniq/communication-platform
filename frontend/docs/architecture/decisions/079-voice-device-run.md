@@ -19,10 +19,10 @@ Closed phase 6 (voice mesh) on live two-device evidence using signed `production
      7. Rejoining reconnected in ~9 s with bidirectional audio; repeating the rapid leave → rejoin (0.68 s) → home screen race kept the call service and audio alive.
 2. **D2 — Outbox depth counts pending signed group and room control payloads (`52a117c3`):**
    - Build 3 revealed a >6-minute stall after signing a room: signed changes sat in `group_outbound_objects` and `room_outbound_objects` awaiting post-inbox dispatch inside a delivery cycle, which `SyncLifecycleSupervisor` only starts when watched `outbox_depth` grows ([ADR-047](047-networking-composition.md), [ADR-060](060-delivery-latency.md)).
-   - Fixed so `outbox_depth` counts pending entries in `group_outbound_objects` and `room_outbound_objects` until routed into the pairwise outbox, and its stream re-reads when either table changes (documented in [sync-engine.md](../../sync-engine.md#cycle-order); fixed in build 4, reducing room propagation from >6 min to 9.1 s on build 4 and 6.3 s on build 5). Cannot loop because supervisor reacts strictly to depth growth.
+   - Fixed so `outbox_depth` counts pending entries in `group_outbound_objects` and `room_outbound_objects` until routed into the pairwise outbox, and its stream re-reads when either table changes (documented in [SYNC.md](../SYNC.md#cycle-order); fixed in build 4, reducing room propagation from >6 min to 9.1 s on build 4 and 6.3 s on build 5). Cannot loop because supervisor reacts strictly to depth growth.
 3. **D3 — Call leave stops the foreground service only if no newer join started (`5b5cadbc`):**
    - Build 4 revealed a race on rapid rejoin (657 ms after leave began): `VoiceCallController.leave` ([voice_call_controller.dart](../../../lib/features/voice/application/voice_call_controller.dart)) ended the call immediately (stopping the service via guard), then waited ~2 s notifying peers before calling service stop a second time — stripping the `microphone` service from the newly started rejoin and causing Android to silence recording ~6 s after backgrounding and tear down sockets.
-   - Fixed so `VoiceCallController.leave` stops the call service only when no join has started since `leave` began (documented in [voice-signalling-v1.md](../../voice-signalling-v1.md) and [platform-android.md](../../platform-android.md); pinned by controller test).
+   - Fixed so `VoiceCallController.leave` stops the call service only when no join has started since `leave` began (documented in [VOICE-V1.md](../../contracts/VOICE-V1.md) and [ANDROID.md](../ANDROID.md); pinned by controller test).
 
 ## Rationale
 
@@ -37,7 +37,7 @@ Closed phase 6 (voice mesh) on live two-device evidence using signed `production
   - More than 2 devices, the 10-device ceiling, mid-call member removal, room rename/leave, 5-hour credential/ICE restart, and TCP relay transport were not exercised on devices (all connections selected UDP).
   - Network handoffs drop the connection (per *The call*, requiring a fresh join) rather than triggering automatic ICE restart; moving between networks remains a design question beside D10's unbuilt relay-unreachable state ([ADR-077](077-voice-mesh.md)).
   - At ADR-079, `DeploymentDisclosure` `unbuiltSurfaces` still said voice rooms "do nothing" (later updated in ADR-094 rev 10), and [ADR-077](077-voice-mesh.md)'s 2026-10-01 `room_text` budget question remained open.
-  - About and Diagnostics still display `0.1.0+1` (`pubspec.yaml` version) across builds `--build-number` 3–5; `dumpsys package` distinguishes installed `versionCode`s ([release-signing.md](../../release-signing.md)).
+  - About and Diagnostics still display `0.1.0+1` (`pubspec.yaml` version) across builds `--build-number` 3–5; `dumpsys package` distinguishes installed `versionCode`s ([SIGNING.md](../../runbooks/SIGNING.md)).
 
 ## Costs
 

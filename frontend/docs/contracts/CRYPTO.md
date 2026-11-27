@@ -38,7 +38,7 @@ ad-hoc cryptography. It does not block the Android-only version-1 release.
 
 Piece 07 establishes the shared Rust source and Android native FFI/isolate boundary only.
 Android is the sole target under
-[server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+[server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
 A browser release would require a new decision and compatible server support. A reviewed
 Web adapter MUST consume the same locked core source, provider choices, serialization,
 domain constants, and fixtures. Crypto-dependent features MUST fail closed until the
@@ -59,8 +59,8 @@ Android-only completion is not a protocol downgrade or an alternate suite.
 | Backup AEAD | XChaCha20-Poly1305 with random 192-bit nonces |
 | Password/recovery KDF | Argon2id v1: 64 MiB, 3 iterations, parallelism 4, 16-byte salt, 32-byte output |
 | File streaming | libsodium `secretstream_xchacha20poly1305` |
-| Voice media | DTLS-SRTP, negotiated by the two endpoints of each connection. There is **no application-level media key** and none is designed: a connection's keys exist on its two endpoints only, and they die with the connection (server ADR-0021, [voice-and-realtime.md](voice-and-realtime.md)) |
-| Voice signalling | The offer, the answer, the candidates and every announcement are pairwise Double Ratchet ciphertext on the ordinary session, padded to a `signal` bucket ([voice-signalling-v1.md](voice-signalling-v1.md)) |
+| Voice media | DTLS-SRTP, negotiated by the two endpoints of each connection. There is **no application-level media key** and none is designed: a connection's keys exist on its two endpoints only, and they die with the connection (server ADR-0021, [../architecture/OVERVIEW.md](../architecture/OVERVIEW.md#voice-and-realtime)) |
+| Voice signalling | The offer, the answer, the candidates and every announcement are pairwise Double Ratchet ciphertext on the ordinary session, padded to a `signal` bucket ([VOICE-V1.md](VOICE-V1.md)) |
 
 Every KDF and signature input uses the exact domain label defined by its binding
 contract. Labels are constants in the shared crypto core and covered by test vectors;
@@ -81,7 +81,7 @@ with the out-of-band-confirmed value.
 `master_sig` signs ASCII `chat:v1:cross-signing-keys`, followed by a four-byte
 big-endian length and bytes for `user_id` (16 raw UUID bytes), `self_signing_pub`, and
 `user_signing_pub`, in that order. `version` is not signed. The backend
-[golden vectors](../../backend/devices/vectors/README.md) are binding and MUST be
+[golden vectors](../../../backend/devices/vectors/README.md) are binding and MUST be
 reproduced before enrollment is enabled.
 
 ## Device identity
@@ -199,12 +199,12 @@ PQ prekeys rotate every seven days. Superseded private signed prekeys are retain
 eight days, matching the authoritative seven-day envelope TTL plus one day, then erased.
 The exception is a first message held, unopened, for a verification of its sender: it keeps
 every retired pair it may need until it expires, 7 days after it was held, and a rotation
-that would erase one waits ([ADR-093](architecture/decisions/093-held-first-message.md) D6, D17). In the current client
+that would erase one waits ([ADR-093](../architecture/decisions/093-held-first-message.md) D6, D17). In the current client
 implementation (`PairwiseOpaqueEnvelopeInspector._inspectInitial`), an initial envelope
 from an unverified sender stops after probing the sender block and is held unopened without
 running initial acceptance. Under the binding contract
-([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §C and
-[`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5.3),
+([`CLIENT_CONTRACT.md`](../../../docs/client/CLIENT_CONTRACT.md) §C and
+[`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5.3),
 the one permitted exception to "nothing past the sender block opens before the
 verification" is a **non-committing read** before holding: the inspector may run the core's
 acceptance in memory without committing any state (no session, no device-state transition,
@@ -233,14 +233,14 @@ learn the sender or conversation ID.
 
 The exact Android version-1 transcript, KDF/AEAD choices, sender-hidden initial header,
 ratchet encoding, replay/repair behavior, simultaneous-initiation rule, and transactional
-state boundaries are frozen in [Pairwise transport version 1](pairwise-transport-v1.md).
+state boundaries are frozen in [Pairwise transport version 1](PAIRWISE-V1.md).
 That profile always mixes the signed PQ prekey; the backend's unsigned PQ one-time key is
 only an additional contribution and can never replace the authenticated PQ layer.
 
 ## Groups
 
 A group is a set of pairwise sessions (`docs/client/CLIENT_CONTRACT.md` §F; server ADR-0001,
-recorded for the client in [ADR-075](architecture/decisions/075-pairwise-groups.md)). There is no group key agreement, no
+recorded for the client in [ADR-075](../architecture/decisions/075-pairwise-groups.md)). There is no group key agreement, no
 group key, no epoch, and no key package, and the client uploads no group key material.
 
 A group message is encrypted independently for every live device of every active member and
@@ -249,7 +249,7 @@ Ratchet a direct message uses. Starting any of those sessions from a bundle with
 material is refused exactly as it is for a direct message. Every copy is its own padded
 envelope, so the backend never receives identical ciphertext for two recipients and learns
 neither the group nor its members. The fan-out is specified in
-[Pairwise transport version 1](pairwise-transport-v1.md), Group fan-out.
+[Pairwise transport version 1](PAIRWISE-V1.md), Group fan-out.
 
 Membership, roles, policies, and metadata change only through signed control events. The
 shared crypto core encodes each event as deterministic CBOR and signs
@@ -267,7 +267,7 @@ signed device log vouch for, checks the chain link, and checks the signer's auth
 against the roster the event was built on. No server-supplied roster exists to consult.
 Two events at one revision are a fork, and the group is quarantined rather than resolved by
 arrival order. The events, their operations, and their acceptance rules are defined in
-[Application-message protocol](message-protocol.md), Groups.
+[Application-message protocol](MESSAGES.md), Groups.
 
 A removed member is sealed no copy of any message sealed after its removal is accepted.
 Content it already received cannot be remotely erased, and nothing is re-keyed, because
@@ -279,7 +279,7 @@ hash, so that no event of one kind verifies as the other. The shared core signs 
 room events through operations 20 and 21 of the pairwise multiplexer, beside the group's 18
 and 19, and adds no construction: the encoding, the signature, the hash chain and the
 receiver's checks are the group's
-([voice-signalling-v1.md](voice-signalling-v1.md), Part 1). A call inside a room has no
+([CPVRV001 room control](VOICE-V1.md#cpvrv001-room-control)). A call inside a room has no
 application-level key at all; each connection is keyed by DTLS-SRTP between its two
 endpoints, and its signalling rides the pairwise sessions above, which the room's durable
 payloads start before a call needs them.
@@ -311,7 +311,7 @@ state; first-seen keys never authorize messaging.
   fingerprint), and `ClientAuthenticationService.confirmOutOfBand` records one-sided
   verification without requiring the peer's attestation (`MUTUAL`).
 - Under the binding contract
-  ([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4–§6,
+  ([`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4–§6,
   §5.11), the display-only `CP-SAFETY-V1` QR symbol is dropped and replaced by the
   **contact code** `CP-CONTACT-V1:` (`"CP-CONTACT-V1:" || BASE32(user_id[16] ||
   fingerprint[32] || username)`, using
@@ -355,7 +355,7 @@ archive/history key, device ratchet state, group state, or message history. Cont
 peer verifications (attestations and claims), carried-over confirmations, and profile keys
 travel between an account's own devices only in device-to-device history-transfer
 snapshots and `CPCTV001` envelopes
-([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §3.4–§3.5).
+([`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §3.4–§3.5).
 
 Argon2id derives a wrapping key from the recovery secret and a random salt. Version 1 uses
 a 16-byte salt and 32-byte output, with a floor of 64 MiB memory, three iterations, and
@@ -400,7 +400,7 @@ non-production `ProfileProtectionPort` and `ProfileKeyDistributionPort` fake ada
 Production composition remains fail-closed. The fake envelope exists only to exercise
 profile versioning, cache authentication, presentation gating, and distribution hooks;
 it is not cryptographic acceptance evidence. Under the binding contract
-([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §7),
+([`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §7),
 every published profile version uses a fresh 32-byte key distributed via `CPCTV001` kind 5
 to the active audience (excluding blocked peers and removed contacts outside shared
 groups), and blocking a peer or removing a contact immediately publishes a new version.
@@ -449,12 +449,12 @@ interoperability fixtures, and an ADR; silent algorithm substitution is forbidde
 
 ## Primary references
 
-- [Binding backend client contract](../../docs/client/CLIENT_CONTRACT.md)
-- [Binding client contacts, trust, and file metadata contract](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
+- [Binding backend client contract](../../../docs/client/CLIENT_CONTRACT.md)
+- [Binding client contacts, trust, and file metadata contract](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
 - [Signal PQXDH specification](https://signal.org/docs/specifications/pqxdh/)
 - [Signal Double Ratchet specification](https://signal.org/docs/specifications/doubleratchet/)
-- [Server ADR-0001: pairwise Double Ratchet group fan-out](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
-- [Server ADR-0021: a relayed WebRTC mesh, and no server room](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+- [Server ADR-0001: pairwise Double Ratchet group fan-out](../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)
+- [Server ADR-0021: a relayed WebRTC mesh, and no server room](../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 - [RFC 8949: CBOR](https://www.rfc-editor.org/info/rfc8949/)
 - [RFC 9106: Argon2](https://www.rfc-editor.org/info/rfc9106/)
 - [libsodium secretstream](https://libsodium.gitbook.io/doc/secret-key_cryptography/secretstream)

@@ -1,6 +1,6 @@
 //! Version-1 hybrid PQXDH and X25519 Double Ratchet transport.
 //!
-//! The byte profile is frozen by `docs/pairwise-transport-v1.md`. The public C
+//! The byte profile is frozen by `docs/contracts/PAIRWISE-V1.md`. The public C
 //! ABI exposes this module only through one bounded operation multiplexer.
 
 #![allow(

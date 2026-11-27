@@ -20,7 +20,7 @@ Recovery preserves verifiable account cross-signing identity across device loss 
 
 ## Constraints and Open Gates
 
-- Defined in [Cryptographic protocol](../../cryptographic-protocol.md#version-1-enrollment-bindings) and implemented in Rust (`native/crypto_core/src/enrollment.rs`, `argon2 = "=0.5.3"`, `chacha20poly1305 = "=0.11.0"`).
+- Defined in [Cryptographic protocol](../../contracts/CRYPTO.md#version-1-enrollment-bindings) and implemented in Rust (`native/crypto_core/src/enrollment.rs`, `argon2 = "=0.5.3"`, `chacha20poly1305 = "=0.11.0"`).
 - Disclosed mandatorily at enrollment via `DeploymentDisclosure.recoveryExcludesHistory` ([deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart)).
 - Open gate: Independent cryptographic review of `CPKBV001` and key sanitization remains open under [ADR-017](017-independent-crypto-review.md).
 

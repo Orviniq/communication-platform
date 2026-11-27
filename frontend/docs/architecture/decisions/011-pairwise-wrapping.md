@@ -16,7 +16,7 @@ After MLS was retired by [server ADR-0001](../../../../docs/architecture/decisio
 
 ## Constraints and Open Gates
 
-- Specified in [Pairwise transport v1](../../pairwise-transport-v1.md) and [Application-message protocol](../../message-protocol.md).
+- Specified in [Pairwise transport v1](../../contracts/PAIRWISE-V1.md) and [Application-message protocol](../../contracts/MESSAGES.md).
 - Every envelope uses its own pairwise Double Ratchet session ([ADR-025](025-hybrid-pqxdh.md)) and its own authenticated padding ([ADR-018](018-authenticated-padding.md)).
 - Open gates: Independent review of the pairwise transport and group fan-out remains open under [ADR-017](017-independent-crypto-review.md).
 

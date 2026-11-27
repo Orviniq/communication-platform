@@ -3,7 +3,7 @@
 - **Status:** Proposed (2026-10-18); implementation and ADR record landed in `5eeace1b` / `b4934d9c` (PR #87 `b781646d`) while status cell remained `Proposed` in legacy `decisions.md` (recorded as an open status gap in [index](README.md))
 - **Date:** 2026-10-18 (explicitly recorded in register and full section; implemented on `frontend-prekey-maintenance-owner` in `5eeace1b`, documented in `b4934d9c`, PR #87 `b781646d`)
 - **Completes:** [ADR-093](093-held-first-message.md) ("Not done here" prekey maintenance wiring)
-- **Related:** [ADR-050](050-delivery-ownership.md), [ADR-087](087-chat-status.md), [ADR-093](093-held-first-message.md), [sync-engine.md](../../sync-engine.md), [pairwise-transport-v1.md](../../pairwise-transport-v1.md), [devices API](../../../../backend/devices/API.md)
+- **Related:** [ADR-050](050-delivery-ownership.md), [ADR-087](087-chat-status.md), [ADR-093](093-held-first-message.md), [SYNC.md](../SYNC.md), [PAIRWISE-V1.md](../../contracts/PAIRWISE-V1.md), [devices API](../../../../backend/devices/API.md)
 
 ## Decision (Position)
 
@@ -30,7 +30,7 @@ Wired `PrekeyMaintenanceService` into `DurableSyncEngine` so every delivery owne
 
 ## Rationale
 
-- Inspection of `4091856e` confirmed `prekeyMaintenanceServiceProvider` and `PrekeyMaintenanceService.maintain` had zero callers anywhere in `lib/`, leaving `sync-engine.md`'s description of active prekey rotation and replenishment untrue.
+- Inspection of `4091856e` confirmed `prekeyMaintenanceServiceProvider` and `PrekeyMaintenanceService.maintain` had zero callers anywhere in `lib/`, leaving [`sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/4091856e93ede348a739ce08aefcecdac5ea6148/frontend/docs/sync-engine.md)'s description of active prekey rotation and replenishment untrue.
 - Wiring maintenance inside `DurableSyncEngine` rather than a separate supervisor timer prevents inbox device-state transitions from racing between plan preparation and completion and covers background catch-up and sustained runs automatically.
 - Treating `_PairwiseDeviceStateHeld` as transient rather than `ValidationFailure(conflict)` avoids quarantining legitimate first messages on their first attempt if a prior maintenance plan was interrupted mid-upload.
 

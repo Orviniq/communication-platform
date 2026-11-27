@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-13); proposed 2026-11-13
 - **Date:** 2026-11-13 (explicitly recorded in register and full section; implemented in `cbf03900` and documented in `ed584148` on `frontend-typing-session-rules`, PR #95 `547bfe68`)
 - **Amends:** [ADR-098](098-presence-and-typing.md) D3 (typing session start, send, pace, retry, and first-repeat rules)
-- **Related:** [ADR-098](098-presence-and-typing.md), [ADR-100](100-socket-presence.md), [ADR-101](101-presence-goodbye.md), [message-protocol.md](../../message-protocol.md)
+- **Related:** [ADR-098](098-presence-and-typing.md), [ADR-100](100-socket-presence.md), [ADR-101](101-presence-goodbye.md), [MESSAGES.md](../../contracts/MESSAGES.md)
 
 ## Decision (Position)
 
@@ -29,7 +29,7 @@ Fixed typing-session state transitions in `PresenceChannel` ([presence_channel.d
 
 ## Constraints and Open Gates
 
-- **Scope:** Changed `PresenceChannel` (`_onActivity`, `_flushTyping`, `_sendTyping`, `_TypingOut`, `_onHeard`, `typingRaceWindow`, `typingFirstRefresh`, `typingRetry`) and protocol doc [message-protocol.md](../../message-protocol.md); changed no server route, wire format, database table, dependency, or Android permission.
+- **Scope:** Changed `PresenceChannel` (`_onActivity`, `_flushTyping`, `_sendTyping`, `_TypingOut`, `_onHeard`, `typingRaceWindow`, `typingFirstRefresh`, `typingRetry`) and protocol doc [MESSAGES.md](../../contracts/MESSAGES.md); changed no server route, wire format, database table, dependency, or Android permission.
 - **Verification:** Covered by [presence_channel_test.dart](../../../test/features/signals/presence_channel_test.dart) and [presence_round_trip_test.dart](../../../test/features/signals/presence_round_trip_test.dart) (S1–S3 before/after, no-lease/L1/refused-seal retry, 3 s post-send refresh, N7 24-frame bound, two-phone harness), plus 6 mutation checks (5 caught directly; keeping `lastSentAt` on send is equivalent because `lastSentAt` is read only for stops after a queued start overwrites it).
 - **Left open / not verified:** No physical-device run; C4's volatile-vs-durable race remains inferred from code rather than measured on two phones; socket handshake ([ADR-100](100-socket-presence.md)) and peer reads/goodbye ([ADR-101](101-presence-goodbye.md)) left to phases 2 and 3.
 

@@ -4,7 +4,7 @@ import 'package:communication_platform/core/application/ports/signal_ports.dart'
 import 'package:communication_platform/core/application/ports/time_source.dart';
 
 /// Paces outbound `signal` frames: by default a bucket of 32 that refills at
-/// 24 a second (`voice-signalling-v1.md`, "The socket limits").
+/// 24 a second (`docs/contracts/VOICE-V1.md`, "The socket limits").
 ///
 /// A ten-device join sends 27 frames, so it leaves at once. The worst second
 /// the default can produce is a full bucket and a second's refill, 56 frames.

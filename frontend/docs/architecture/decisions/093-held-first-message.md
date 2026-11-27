@@ -2,8 +2,8 @@
 
 - **Status:** Accepted (2026-10-18); proposed 2026-10-17; prekey-maintenance wiring completed by [ADR-095](095-prekey-maintenance.md) (2026-10-18)
 - **Date:** 2026-10-17 proposed, 2026-10-18 accepted (explicitly recorded in register and full section; proposed in `76cd553f`, implemented on `frontend-held-unverified-messages` in `f2d78018`–`938c4a1c`, PR #85 `0db432f1`)
-- **Amends:** [pairwise-transport-v1.md](../../pairwise-transport-v1.md) and [cryptographic-protocol.md](../../cryptographic-protocol.md) (adds exception keeping retired signed prekey pairs needed by held envelopes and postponing conflicting rotations)
-- **Related:** [ADR-021](021-profile-fallback.md), [ADR-060](060-delivery-latency.md), [ADR-095](095-prekey-maintenance.md), [sync-engine.md](../../sync-engine.md), [local-data-model.md](../../local-data-model.md), [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before [server ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md)), [messaging API](../../../../backend/messaging/API.md)
+- **Amends:** [PAIRWISE-V1.md](../../contracts/PAIRWISE-V1.md) and [CRYPTO.md](../../contracts/CRYPTO.md) (adds exception keeping retired signed prekey pairs needed by held envelopes and postponing conflicting rotations)
+- **Related:** [ADR-021](021-profile-fallback.md), [ADR-060](060-delivery-latency.md), [ADR-095](095-prekey-maintenance.md), [SYNC.md](../SYNC.md), [LOCAL-DATA.md](../LOCAL-DATA.md), [SCREENS.md](../../ui/SCREENS.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before [server ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md)), [messaging API](../../../../backend/messaging/API.md)
 
 ## Decision (Position)
 
@@ -69,10 +69,10 @@ Held unopened initial envelopes and their follow-ups from `unverified` senders i
 
 ## Reversal Trigger
 
-Reopen if the Rust core adds caller-supplied prune days to `prepare_rotation` (removing D17's rotation postponement), if follow-up matching is extended to transiently deferred initials, or when implementing mutual-verification / `CPCTV001` verification-notice handling ([cryptographic-protocol.md](../../cryptographic-protocol.md), [STATUS.md](../../STATUS.md)).
+Reopen if the Rust core adds caller-supplied prune days to `prepare_rotation` (removing D17's rotation postponement), if follow-up matching is extended to transiently deferred initials, or when implementing mutual-verification / `CPCTV001` verification-notice handling ([CRYPTO.md](../../contracts/CRYPTO.md), [STATUS.md](../../STATUS.md)).
 
 ## History, Amendments, and Supersession
 
 - **2026-10-17 (`76cd553f`):** Proposed ADR-093 design for holding unverified first messages and follow-ups.
-- **2026-10-17 – 2026-10-18 (`f2d78018`–`938c4a1c`, PR #85 `0db432f1`):** Implemented schema 25, hold/release/expiry/eviction, D17 key retention, Chats held-sender rows, and `ChatUndeliveredHint`; amended `pairwise-transport-v1.md` and `cryptographic-protocol.md`; accepted ADR-093.
+- **2026-10-17 – 2026-10-18 (`f2d78018`–`938c4a1c`, PR #85 `0db432f1`):** Implemented schema 25, hold/release/expiry/eviction, D17 key retention, Chats held-sender rows, and `ChatUndeliveredHint`; amended `contracts/PAIRWISE-V1.md` and `contracts/CRYPTO.md`; accepted ADR-093.
 - **2026-10-18 ([ADR-095](095-prekey-maintenance.md)):** Wired `PrekeyMaintenanceService` into `DurableSyncEngine` with D17 unchanged.

@@ -1012,7 +1012,7 @@ const int maximumReactionScalars = 64;
 
 /// Whether [value] may be sent as a reaction.
 ///
-/// `message-protocol.md` defines the value as "one normalized emoji grapheme or
+/// `docs/contracts/MESSAGES.md` defines the value as "one normalized emoji grapheme or
 /// null". Two of those words are decidable here, and both are decided before
 /// the encoder runs:
 ///

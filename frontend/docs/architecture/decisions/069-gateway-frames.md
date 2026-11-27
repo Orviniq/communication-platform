@@ -20,7 +20,7 @@ Client-side record aligning [DioWebSocketGateway](../../../lib/features/networki
    - `markStableConnection` remains on the synchronization gateway port as a documented no-op.
    - Left WebSocket close `1012` (server restart) unnamed in the reconnecting arm intentionally so restarts follow plain backoff without triggering a stop action or consuming a recovery budget.
 3. **Deleted dead presence projection and retired wire limits:**
-   - Deleted `presenceProjectionProvider` and corrected [ADR-060](060-delivery-latency.md) D10 and [sync-engine.md](../../sync-engine.md): `subscribe_presence` never existed on the current server, and the gateway announces no presence on connect or disconnect.
+   - Deleted `presenceProjectionProvider` and corrected [ADR-060](060-delivery-latency.md) D10 and [sync-engine.md](https://github.com/Orviniq/communication-platform/blob/78faa708231cf3aa0352b723c03dd4139f343656/frontend/docs/sync-engine.md): `subscribe_presence` never existed on the current server, and the gateway announces no presence on connect or disconnect.
    - Deleted `maximumPresenceTargets` and `maximumRoomSubscriptions` from `ApiContractLimits` ([api_request.dart](../../../lib/features/networking/infrastructure/api/api_request.dart)). Retained `maximumSignalCharacters` temporarily until the voice phase replaced character ceilings with published `signal_buckets` (1024, 4096, 16384 bytes; see [ADR-071](071-published-limits.md), ADR-077).
 
 ## Rationale

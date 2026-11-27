@@ -25,7 +25,7 @@ Originally decided not to change the closed-beta hybrid KEM, to record the compl
 3. **No custom extension-point implementation:** Although `mls_rs::CryptoProvider`, `CipherSuiteProvider`, `CombinedKem::new_custom`, and `SharedSecretHashInput` are public, `AwsLcCipherSuite` and `AwsLcHpke` are private and hard-code `CombinedKem::new_xwing`, so implementing `0x647a` locally would require authoring a ~25-method `CipherSuiteProvider`, the combiner, raw-X25519 KEM, SHAKE-256 expansion via project-local `unsafe` FFI against `aws-lc-sys`, `(d || z)` split, and encapsulation-key check in project code. Authoring those algorithm steps locally crosses the line from composing maintained primitives into an unreviewed, unmaintained custom implementation prohibited by [ADR-017](017-independent-crypto-review.md), [ADR-036](036-beta-mls-track.md), and production gate 3.
 4. **No production gate opened:** Beta groups remained non-`TBD2`-conformant and were prohibited from being offered as `TBD2` interoperability evidence. All seven production gates remained closed and `UnsupportedGroupMls` remained active in production.
 
-**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) removed MLS from the system. Closed-beta MLS code and `beta` flavor were deleted; groups now use pairwise Double Ratchet fan-out ([Cryptographic protocol](../../cryptographic-protocol.md#groups)).
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) after [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md) removed MLS from the system. Closed-beta MLS code and `beta` flavor were deleted; groups now use pairwise Double Ratchet fan-out ([Cryptographic protocol](../../contracts/CRYPTO.md#groups)).
 
 ## Rationale
 
@@ -39,7 +39,7 @@ Why closed: [server ADR-0001](../../../../docs/architecture/decisions/0001-pairw
 ## Constraints and Open Gates
 
 - **Closed:** `frontend/docs/mls-profile.md` (which held the normative D1–D10 evidence table) and `frontend/native/crypto_core/src/mls_beta.rs` were deleted when beta MLS was retired (historical snapshot preserved at commit `788453b430f34c52c2063ef67b8aa5e4f8fa935d`).
-- The prepared upstream defect report remains archived at [mls-rs-hybrid-kem-defect-report.md](../../upstream/mls-rs-hybrid-kem-defect-report.md), and on-device beta run records remain at [archive/beta-mls-core/README.md](../../archive/beta-mls-core/README.md).
+- The prepared upstream defect report remains archived at [mls-rs-hybrid-kem-defect-report.md](../../archive/beta-mls-core/mls-rs-hybrid-kem-defect-report.md), and on-device beta run records remain at [archive/beta-mls-core/README.md](../../archive/beta-mls-core/README.md).
 - Any future KEM or ciphersuite migration on an active track would have required explicit state-format version rejection because `Npk` and `Nenc` were identical (`BETA_STATE_FORMAT_VERSION`, transport v3, schema v11).
 
 ## Costs

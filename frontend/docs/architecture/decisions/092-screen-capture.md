@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-17)
 - **Date:** 2026-10-17 (explicitly recorded in register and full section; implemented in `b4654d94` and documented in `fbc225d6`)
 - **Amends:** [ADR-057](057-measured-settings.md) (widens `FLAG_SECURE` from recovery/enrollment screens only to the entire application window)
-- **Related:** [ADR-049](049-background-catch-up.md), [ADR-057](057-measured-settings.md), [threat-model.md](../../threat-model.md), [platform-android.md](../../platform-android.md)
+- **Related:** [ADR-049](049-background-catch-up.md), [ADR-057](057-measured-settings.md), [CLIENT-THREAT-MODEL.md](../../security/CLIENT-THREAT-MODEL.md), [ANDROID.md](../ANDROID.md)
 
 ## Decision (Position)
 
@@ -22,7 +22,7 @@ Following the 2026-10-17 field test, blocked screenshots, screen recording, unse
 ## Constraints and Open Gates
 
 - **Scope:** Changed `MainActivity.kt` (`onCreate` and `setSensitiveScreen`), plus [screen_capture_policy_test.dart](../../../test/architecture/screen_capture_policy_test.dart); changed no wire format, local table, protocol, dependency, Android permission, or `backend/` file.
-- **What `FLAG_SECURE` does not cover:** Notification text (protected separately by sender-neutral private previews per [ADR-048](048-generic-notifications.md) and [threat-model.md](../../threat-model.md)), external cameras/shoulder surfing, external system windows (system photo/file pickers and camera app), rooted phones or user-granted accessibility services, and windowless headless background engines.
+- **What `FLAG_SECURE` does not cover:** Notification text (protected separately by sender-neutral private previews per [ADR-048](048-generic-notifications.md) and [CLIENT-THREAT-MODEL.md](../../security/CLIENT-THREAT-MODEL.md)), external cameras/shoulder surfing, external system windows (system photo/file pickers and camera app), rooted phones or user-granted accessibility services, and windowless headless background engines.
 - **Verification:** Covered by source-level assertions in [screen_capture_policy_test.dart](../../../test/architecture/screen_capture_policy_test.dart) checking that `MainActivity.onCreate` adds `FLAG_SECURE` before `super.onCreate`, no `.kt` file clears it, and `setSensitiveScreen` keeps it on. Not yet verified by attempting a screenshot on a physical phone.
 
 ## Costs
