@@ -199,13 +199,13 @@ repair; forged or malformed input never triggers an unbounded network loop.
 
 ## Queue-gap recovery
 
-The backend retains undelivered envelopes for `ENVELOPE_TTL_DAYS`, **seven by default and
-an operator setting the client is never told** (`backend/messaging/API.md`). A client may
-therefore state that waiting messages are eventually deleted, but may never state how long
-the window is. `pruned_through` is the highest sequence pruned from this device mailbox. If
-the durable highest contiguous acked sequence is lower, at least one envelope is
+The backend retains undelivered envelopes for `ENVELOPE_TTL_DAYS`, seven days by
+default. `GET /api/v1/config` publishes the deployment's `envelope_ttl_days`. Use
+that value in disclosures once read and omit the number before then (ADR-071).
+`pruned_through` is the highest sequence pruned from this device mailbox. If the
+durable highest contiguous acked sequence is lower, at least one envelope is
 permanently missing. It may have carried a ratchet message or a group control event
-(`backend/CLIENT_CONTRACT.md` §H). The client:
+([client contract, §H](../../docs/client/CLIENT_CONTRACT.md#h-queue-gap-handling)). The client:
 
 1. records the gap, and opens a state request for every group this device is an active
    member of, in the transaction that persists the drained page. A group this device was
@@ -318,7 +318,9 @@ with the backend/proxy configuration and a REST health probe only when necessary
 
 ## Token lifecycle
 
-One device-bound session token, and nothing retires it (server ADR-0023, ADR-068).
+One device-bound session token (server ADR-0023, ADR-068). Renewal uses the full-scope
+token in the `Authorization` header with an empty body and leaves the previous
+token valid until normal expiry or revocation.
 *Corrected 2026-10-07 (ADR-083):* this section described a rotating refresh token, a repair
 for losing its race, and ADR-050's ownership gate as what kept two coordinators from racing
 it. None of the three is true of this server. *Corrected 2026-10-07 (ADR-085):* renewal began
@@ -389,7 +391,7 @@ by its next one.
   failed run is retried later without spending its budget, not quarantined.
 - No MLS KeyPackage is generated, replenished, or kept as a last resort: the server
   serves no MLS, and a group is a set of pairwise sessions
-  ([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F).
+  ([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §F).
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.
@@ -410,7 +412,10 @@ existing online device snapshots locally held history into bounded transfer even
 encrypts each to the new device through ordinary hybrid pairwise envelopes, and records
 transfer progress by event ID. The receiver authenticates, stores, and deduplicates each
 event before acknowledging it. Transfer is resumable, may be partial when the source
-device has partial history, and never includes ratchet private state or MLS epoch secrets.
+device has partial history, and excludes ratchet private state. The contact list,
+block list, verification and profile-key snapshot required by
+[client contract §G](../../docs/client/CLIENT_CONTRACT.md#g-history-sync--changed-the-server-no-longer-stores-history)
+remains outstanding.
 
 No online existing device means no history transfer. The UI states that limitation and
 does not imply that the recovery secret or server can reconstruct content.
@@ -421,18 +426,13 @@ Typing, presence, and ephemeral room signals do not enter the durable inbox. The
 strict expiry, bounded maps, and are cleared on disconnect. UI never converts absence of
 a signal into durable message or membership state.
 
-**The server holds no presence, so none is shown.** `subscribe_presence` is not a frame:
-the gateway never announces who is connected, on a subscription or on a disconnect, and it
-composes nothing out of its own knowledge — it relays an envelope from a mailbox and a
-signal from another device, and that is all (server ADR-0022). `onlineDeviceCount` was
-therefore zero by construction, and the chat header rendered "offline" for every peer
-forever because of it. [ADR-060](decisions.md) withdrew the claim and
-[ADR-069](decisions.md) removes the machinery: the projection and the frame validation are
-gone, because what was missing was never a subscription this client could send. Presence
-between the members of a conversation is client protocol over `signal` frames, like every
-other announcement, if it is ever built.
+The gateway holds no presence and only relays opaque signals. The client shows
+online, last seen and typing from encrypted `CPPSV001` watches and responses,
+subject to local verification and the per-phone switch. See
+[receipts and typing](message-protocol.md#receipts-and-typing) and the
+[presence contract gaps](STATUS.md#presence-voice-and-delivery).
 
-## Android lifecycle and post-v1 Web direction
+## Android lifecycle
 
 ADR-046 makes delivery layered, and every layer drives this same engine.
 
@@ -448,7 +448,7 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   application into *restricted* after eight days without user interaction. The job is
   armed once for the life of a signed-in session rather than on each background
   transition, because registering a periodic job restarts its window.
-- **Background near-real-time, opt-in, and offered as best effort in production**
+- **Sustained delivery, opt-in and offered as best effort in production**
   (ADR-051; withheld by ADR-053 until ADR-094 offered it on no field evidence, the device
   matrix in [sustained-delivery-validation.md](sustained-delivery-validation.md) still
   not having been run).
@@ -517,12 +517,9 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   hook observes. Drift dispatches table updates only after `COMMIT`, so the signal is
   strictly post-commit. Deduplication is a durable boolean marker, recovery is by query
   rather than replay, and no transport event can produce an alert.
-- An active voice session alone uses the required microphone/communication foreground
-  service.
-- A future Web client listens while the page is active. Visibility resume and network
-  recovery refresh auth, reconnect, and drain.
-- A future browser service-worker background sync is optional enhancement only; limited
-  cross-browser availability means correctness never depends on it.
+- A separate `microphone` foreground service supports the active voice call. The
+  [status matrix](STATUS.md#presence-voice-and-delivery) records evidence and limits
+  for both foreground services.
 
 ## Composition and ownership
 

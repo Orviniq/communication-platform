@@ -12,7 +12,10 @@ specified under ADR-042 belonged to the same `beta` flavor. Since ADR-076 the pr
 flavor signs its release build with a persistent key of its own, which is not the beta key,
 and [Production release signing and key continuity](release-signing.md) is the manual for
 that key, for the one script that makes a production artifact for a phone, and for how
-such an artifact is installed. This document covers the surrounding release process.
+such an artifact is installed. The [status matrix](STATUS.md#artifact-and-release-acceptance)
+records the signed build 2 and build 5 evidence and the open release gates. APK
+verification and an owner-device install establish facts about those artifacts.
+Production acceptance also requires the checks and handover below.
 
 ## Environments
 
@@ -62,7 +65,6 @@ Track independently:
   so that the About screen and the diagnostics export name the artifact the user
   actually installed; an architecture test fails if the two drift apart;
 - monotonically increasing Android version code;
-- future Web artifact/build ID (post-v1);
 - local database schema version;
 - application-message protocol major/minor;
 - crypto-state format version;
@@ -86,8 +88,7 @@ by contract tests and conservative client behavior, not runtime version guessing
   `039a35aefab7747c557242fa216c9ea11743b604` and nothing else, so a mirror has to carry
   that coordinate too.
 - Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
-  libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened. The
-  Dart and Android/Gradle halves are the two lockfiles above plus
+  libraries. The Dart and Android/Gradle halves are the two lockfiles above plus
   [third-party-notices.md](third-party-notices.md); the Rust, font and native halves are
   not yet aggregated anywhere (ADR-054 follow-up F3).
 - Review licenses, especially crypto libraries, before acceptance. What a distributed
@@ -123,8 +124,9 @@ by contract tests and conservative client behavior, not runtime version guessing
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
    private-CA connectivity on representative devices. Upgrade continuity has to be
    proved on a device; a successful build is never sufficient evidence on its own.
-   [release-signing.md](release-signing.md) records how the deleted Beta channel
-   proved it.
+   [Release signing](release-signing.md) records historical beta checks.
+   [Voice build 5](validation/voice-mesh/2026-10-05/README.md) records in-place
+   production installs on an A56 and emulator.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
 8. Deliver the written disclosure with every artifact handed to someone. This is
@@ -152,9 +154,9 @@ by contract tests and conservative client behavior, not runtime version guessing
       background, uses more battery, puts a permanent notice on the phone, has not been
       tested on phones like the reader's, and can be stopped by some phones without a
       word; and that none of it is guaranteed;
-   3. a message waits on the server only until the phone collects it, after which the
-      operator's retention timer deletes it unread and it never arrives, with no
-      indication of which messages were lost;
+   3. a message waits on the server until the phone collects it or the deployment's
+      retention window expires. Expired messages never arrive. The client cannot name
+      which messages were lost;
    4. history exists only on the device and uninstalling destroys it permanently;
    5. a recovery secret restores identity on a new device and never restores messages;
    6. group messages use the same encryption as direct messages; the signed membership
@@ -215,25 +217,11 @@ by contract tests and conservative client behavior, not runtime version guessing
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.
 
-## Post-v1 Web release
+## Platform scope
 
-Web is not shipped in version 1. The following is a future release procedure and is not
-part of the Android release gate:
-
-1. Build and test the Flutter web bundle and the shared crypto Wasm from the same
-   reviewed tag.
-2. Generate a content-hash manifest/SRI metadata for every static artifact.
-3. Verify the strict CSP and security headers against the exact compiled output.
-4. Serve immutable hashed assets and a no-store/revalidated root document from the
-   self-hosted origin; no service worker may pin an incompatible protocol bundle forever.
-5. Run browser compatibility, storage migration, multi-tab, WebSocket origin, and voice
-   E2EE tests against the deployed staging artifact.
-6. Publish the production artifact hash through an independent operator channel where
-   users can verify it.
-
-Recommended response posture includes HSTS, `nosniff`, strict referrer/permissions
-policies, restrictive CSP, frame denial, correct Wasm MIME, and cache rules. Exact header
-values belong in version-controlled server configuration and automated deployment tests.
+Android is the only release target. Server ADR-0020 removed the browser surface
+and the corresponding client target was removed. Reopening a browser release
+requires a separate decision and server support.
 
 ## Rollout order
 
@@ -250,8 +238,6 @@ self-hosted configuration or compile-time decisions and cannot weaken cryptograp
 
 ## Rollback
 
-- A future Web rollback is permitted only if the older bundle can read the migrated local
-  DB and crypto formats.
 - Android downgrades are not assumed safe. Roll forward with a fixed build unless a tested
   compatibility path exists.
 - Never restore old ratchet or group control state over newer state.
@@ -268,17 +254,18 @@ Before every production release, isolate the environment from foreign networks a
 - version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx, and
   the coturn relay are local/self-hosted, and no STUN server and no foreign ICE server is
   configured anywhere (`CLIENT_CONTRACT.md` §N rule 2);
-- Android installation/update works. Web loading is post-v1.
+- Android installation/update works.
 - two-phase enrollment, cross-signing/SAS, PQXDH and pairwise group fan-out, device-log
   gossip, register/login/message/attachment/voice/identity-recovery flows work;
-- seven-day queue gaps trigger group state recovery from a member, and history transfers
+- mailbox gaps after the deployed retention window trigger authenticated peer repair,
+  signed group-state recovery and a user-visible recovery state, and history transfers
   succeed only device-to-device with no server-history dependency;
 - DNS and connectivity checks do not contact foreign services.
 
 ## Incident response
 
-Maintain runbooks for compromised signing key, compromised TLS/JWT/backend host, leaked
-web bundle, vulnerable dependency, protocol flaw, corrupted migration, and lost update
+Maintain runbooks for compromised signing key, compromised TLS/JWT/backend host,
+vulnerable dependency, protocol flaw, corrupted migration, and lost update
 channel. A protocol/crypto incident may require device/session invalidation and a new
 major version; availability pressure never authorizes silent plaintext or encryption
 downgrade.
@@ -287,9 +274,9 @@ downgrade.
 
 - [ ] Final application name, icon, Android ID, and production origin approved.
 - [ ] Documentation and ADR register match implementation.
-- [ ] Security review findings closed or explicitly release-blocking.
-- [ ] Crypto/interoperability vectors pass on Android. Supported-browser vectors are
-  post-v1.
+- [ ] Independent security review is complete and blocking findings are closed. Review
+  the [contract and TLS gaps](STATUS.md#platform-identity-and-content).
+- [ ] Crypto/interoperability vectors pass on Android.
 - [ ] Database and crypto-state migrations pass from all supported Android versions.
 - [ ] Backend contract and multi-device E2E suites pass.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.

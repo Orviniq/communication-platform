@@ -9,19 +9,21 @@ This document defines two wire formats and nothing else:
 - **`CPVSV001`**, the call's signalling payloads, carried in **volatile** `/ws` `signal`
   frames.
 
-It is the binding client contract for both, written by phase 6 prompt 1 and read by every
-later prompt of the phase. The architecture it implements is
-[`voice-and-realtime.md`](voice-and-realtime.md); the decision record is
-[ADR-077](decisions.md). Where this document and
-[`backend/CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §N or server
+This document specifies the implemented v1 formats. The
+[voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md) defines required
+v2 behavior for a voice release, including migration, role checks and in-call actions.
+The architecture is in [voice and realtime](voice-and-realtime.md) and ADR-077.
+[Client contract §N](../../docs/client/CLIENT_CONTRACT.md#n-voice) and server
 [ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
-disagree, those win.
+are binding.
 
 **The credential, the signalling transport, one peer connection, the room, the call and
-its screens are built, and a call ran between two devices on 2026-10-05**
-([ADR-079](decisions.md)). `lib/features/voice/` fetches, holds
-and refreshes the relay
-credential and builds the ICE configuration from it (*The credential*, below, phase 6
+its screens are built.** Signed build 5 at `53ff386` passed the two-device UDP relay
+run on an A56 and emulator. See the [run record](validation/voice-mesh/2026-10-05/README.md)
+and [status matrix](STATUS.md#presence-voice-and-delivery) for its limits.
+
+`lib/features/voice/` fetches, holds and refreshes the relay credential and builds
+the ICE configuration from it (*The credential*, below, phase 6
 prompt 3). Phase 6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the
 volatile seal and open on the pairwise session, the pacing, the candidate batching and the
 bounded inbound queue — carried on the delivery session's own socket. Prompt 5 built the
@@ -139,7 +141,7 @@ the group's domain never opens a room event, and a room event never opens as a g
 | rename | `4` | Name | Any active member |
 | — | `5` | Reserved, so that a later role operation cannot reuse a value | — |
 
-**Every active member has the same authority (D1).** There is no owner, no admin and no
+**Every active member has the same authority in v1 (D1).** There is no owner, no admin and no
 role tag, which is what §13.2 of [`ui-specification.md`](ui-specification.md) and the
 design canvas both already say, and it is the honest reading of "all peers are equal": a
 room whose members can each invite anyone is a room whose members can each remove anyone.
@@ -764,7 +766,7 @@ were in the call, and the room text goes.
 - **`turn:` URLs only.** The whole answer is refused, and the mint reported as failed,
   when `urls` is empty, holds more than 16 entries, or holds anything but `turn:`, a host,
   an optional port and an optional `?transport=udp` or `?transport=tcp`. `turns:` is
-  refused with the rest. The relay has no TLS listener (`backend/SECURITY.md`, "Voice"),
+  refused with the rest. The relay has no TLS listener ([Security, Voice](../../docs/security/SECURITY.md#voice)),
   and libwebrtc would check a TLS relay against its compiled-in roots and the platform
   store, user-installed authorities included, never against the provisioned CA
   ([ADR-078](decisions.md)). A TLS relay would be a contract change and a trust decision of

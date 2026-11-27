@@ -10,8 +10,9 @@ placeholders and do not block engineering.
 ## Supported platforms
 
 - Android is the only version-1 production target.
-- A Web client remains a post-v1 product direction; its existing design and foundation
-  are retained for later work but are not shipped, tested, or release-gated in version 1.
+- The Web target was removed under
+  [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+  A browser release would require an explicit decision and compatible server support.
 - iOS, Windows, macOS, and Linux applications are out of scope.
 - The interface supports English and Persian from the first release, including RTL,
   mixed-direction message text, and localized dates.
@@ -24,7 +25,8 @@ list, search, contacts, DMs, groups, voice rooms, profiles and safety numbers, S
 Messages, settings, linked devices, recovery, and all referenced dialogs and states.
 
 The implementation may be delivered in vertical milestones, but an incomplete milestone
-is not called the production release.
+is not called the production release. [Frontend status](STATUS.md) records the
+implementation and evidence against this scope.
 
 ## Privacy invariants
 
@@ -32,9 +34,11 @@ is not called the production release.
   plaintext or a content-encryption key.
 - The client MUST NOT use FCM, APNs, foreign analytics, CDNs, remote fonts, remote
   scripts, or public connectivity probes.
-- Search is local only.
+- Conversation and contact-list search stays local. Explicitly finding a person by exact
+  username uses [the lookup contract](../../docs/client/CLIENT_CONTRACT.md#p-finding-a-contact).
 - Login passwords and recovery secrets are distinct in storage, behavior, and wording.
-- Cross-signing master keys are verified out of band before messaging; unsigned devices,
+- Verify cross-signing master keys out of band before messaging. Direct content requires
+  [mutual verification](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md). Unsigned devices,
   master-key changes, and device-log forks fail closed.
 - New direct-message and group sessions use hybrid X25519 + ML-KEM-768 without silent
   classical downgrade; a group is a set of pairwise sessions.
@@ -47,17 +51,15 @@ is not called the production release.
 
 - The local database is the UI source of truth.
 - Cached Android conversations remain readable offline; sends enter a durable outbox.
-- A future Web client is primarily an online session. A suspended or closed tab is not
-  presented as capable of reliable message delivery.
 - A message received from REST and WebSocket is displayed once.
 - Multi-device delivery includes every live peer device and the sender's other devices.
 - The server stores no history. Message history remains on client devices and a new
   device receives it only through an encrypted transfer from an existing online device.
 - The recovery backup restores cross-signing identity material, not message history,
   ratchets, group control state, or authorization.
-- A mailbox `pruned_through` gap is a blocking recovery state; each active group waits
-  until a member confirms its current control state, and recovery never removes and
-  re-adds the device ([sync-engine.md](sync-engine.md)).
+- Surface a mailbox `pruned_through` gap as recoverable loss. Affected groups withhold sends
+  and changes until a member confirms their signed control state. The Android client has
+  no direct-chat gap UI yet. See [queue-gap recovery](sync-engine.md#queue-gap-recovery).
 - Revoked devices lose tokens, queued content, local session access, and future group
   access.
 - Voice is audio-only: a full mesh of WebRTC connections between devices, each keyed by
@@ -97,7 +99,8 @@ is not called the production release.
   check and never claims to have checked. Delayed delivery is expected under Doze, standby,
   Data Saver, or OEM restrictions, and a force-stopped application is silent until it is
   opened again.
-  A microphone foreground service is used only while voice audio is actively connected.
+  A separate microphone foreground service starts on an explicit call join and ends
+  when the call ends.
 - Notifications are a projection of committed local state, never of a transport event, and
   reveal nothing but that something arrived. One alert, sender-neutral, announced when
   something unread and unannounced survives mute and the conversation on screen, and
@@ -108,8 +111,3 @@ is not called the production release.
   *process*, and what the user is told must be a statement about their experience: alerts
   do reach a closed application, and the limit worth disclosing is that the phone decides
   when the application may next look (ADR-052).
-- A future closed browser cannot maintain the application WebSocket. Messages remain in
-  the backend's durable device queue until the user returns.
-- A server able to replace a future web bundle can attack browser sessions. CSP and
-  reproducible artifacts reduce risk but cannot give a future Web client the same trust
-  boundary as a pinned native binary.

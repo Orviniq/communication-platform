@@ -2,14 +2,8 @@
 
 Flutter client for Android. There is no browser target: the server serves no browser
 surface, so a web build cannot connect. The product name and all brand assets remain
-provisional. Registration, login, device enrollment and cross-signing, contacts, direct
-messaging, Saved Messages, local search, linked devices, history transfer,
-notifications, background delivery, the settings surfaces, the user-initiated
-diagnostics export, voice rooms, and file attachments in direct chats and Saved Messages
-are implemented ([ADR-089](docs/decisions.md)); attachments in group chats, shared media
-and profile publishing are not, and every surface that is routed without an
-implementation behind it says so ([ADR-045](docs/decisions.md)).
-`docs/implementation-checklist.md` is the live status.
+provisional. The [frontend status matrix](docs/STATUS.md) records current behavior,
+validation evidence, and release gaps.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
 `assets/fonts/vazirmatn/`. The exact artifact and checksum provenance is recorded in
@@ -93,9 +87,10 @@ the key from outside the repository: from the untracked properties file that
 `CP_PRODUCTION_KEY_ALIAS` and `CP_PRODUCTION_KEY_PASSWORD`. Without the key the build
 fails closed, unless `CP_PRODUCTION_UNSIGNED_BUILD=1` asks for an unsigned package, as in
 the command above and in CI; the OS refuses to install that package. Asking for both
-fails as well. `tool/verify_release_apk.sh --production` is the gate for a distributable
-artifact and checks its signer against the recorded certificate, and
-`--production-unsigned` verifies the unsigned CI artifact.
+fails as well. `tool/verify_release_apk.sh --production` checks the signed artifact, including its
+recorded signer. `--production-unsigned` verifies the unsigned CI artifact. The
+[Android release checklist](docs/deployment-and-release.md#production-release-checklist)
+defines release acceptance.
 
 ## Generation and verification
 

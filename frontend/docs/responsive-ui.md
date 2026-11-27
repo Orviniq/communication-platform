@@ -152,7 +152,9 @@ anchor path is shared by every row builder.
   Chats and a Contacts section and no message section; the shared in-conversation sheet
   (direct, saved and group) with jump to message and a stated result cap; and the contact
   filter of Contacts/New, which uses the search page's contact rule.
-- **Contacts/New:** New Group, New Voice Room, verified indicator, cached offline state.
+- **Contacts/New:** New Group, New Voice Room, local contacts and a verified indicator.
+  See [UI specification §7](ui-specification.md#7-contacts--new-chat) for the
+  required exact-name and contact-code entry points and their current gaps.
 - **Profile bootstrap:** use backend username and deterministic local avatar until an
   authenticated profile key/payload arrives; never render unverified cached identity.
 - **DM Chat:** profile header, local/volatile presence, paged timeline, pinned banner,
@@ -171,8 +173,9 @@ anchor path is shared by every row builder.
 
 ### Profiles and groups
 
-- **Contact Profile:** message, mute, safety verification, shared media, clear, and honest
-  client-side Block/Unblock.
+- **Contact Profile:** message, mute, safety verification, shared media, clear, and
+  client-side Block/Unblock. See [UI specification §11](ui-specification.md#11-contact-profile--safety-number-verification)
+  for the disabled actions and required verification changes.
 - **Safety Number:** master-key SAS and QR, cross-sign confirmation, messaging-withheld
   unverified state, master-key change, invalid device, and device-log-fork blocking states.
 - **Shared Media:** local decrypted index, open and jump, safe file handling. Not built
@@ -205,7 +208,7 @@ anchor path is shared by every row builder.
 - **Security Settings:** identity-recovery guidance and replacement, verified-contact
   review, notice. The whole app blocks screen capture (ADR-092), and the replacement screen copies through the
   expiring clipboard path.
-- **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
+- **Linked Devices:** this/other devices, labels and revocation.
 - **Add Device/Restore:** two-phase registration, recovery-secret identity restore,
   wrong secret, finishing secure setup, waiting for an existing online history source,
   partial transfer, queue-gap recovery, groups arriving from their members, done, and
@@ -227,10 +230,8 @@ that have different guarantees.
 
 ## Accessibility and internationalization gates
 
-*Corrected 2026-10-07 (server ADR-0020):* this list held a gate that keyboard-only
-navigation works on web, including context menus and dialogs. There is no Web client: the
-server serves no browser surface, and the client's web target was removed on 2026-09-08
-(`implementation-checklist.md`, The web target).
+Validate input on Android across its supported viewport sizes. See
+[platform status](STATUS.md#platform-identity-and-content) for target scope.
 
 - Screen-reader traversal, labels, live regions, and focus restoration pass on all core
   flows.

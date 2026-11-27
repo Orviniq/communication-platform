@@ -1,23 +1,16 @@
 # Sustained delivery: field validation, and the gate that depends on it
 
-**Gate state: CLOSED.** No cell of the matrix below has been run. Nothing about
-this capability has been observed on any phone, on any date, by anybody. The
-evidence ledger in `lib/app/config/sustained_delivery_gate.dart` is empty, and
-that is what makes this statement true rather than intended.
+**Gate state: CLOSED.** The compiled `SustainedDeliveryGate.releaseAssertion`
+ledger is empty. The [three 2026-08-23 probes](validation/sustained-delivery/README.md)
+cover the Samsung Galaxy A56 and the API 30 and API 35 emulators. They recorded
+device conditions and exercised observation tooling. No capability trial filled a
+matrix cell.
 
-**Updated 2026-10-18 ([ADR-094](decisions.md)):** the gate no longer decides
-whether the artifact that reaches a user offers the capability. It decides what
-the offer rests on. Production offers "Receiving while closed" as **best
-effort**, on no field evidence, with its battery cost, its permanent notice and
-the plain statement that nobody has tested it on the user's phone; it promises
-no delivery time. A complete ledger would move that offer from `bestEffort` to
-`evidenced`. ADR-094 supersedes ADR-053 for production only.
-
-**Updated 2026-08-23:** one physical device — a Samsung Galaxy A56 on Android 16
-and One UI 8.5 — became available and was **probed**, not run. It establishes
-that the procedure works on retail Samsung hardware, corrects a timing this
-document had only from an emulator, and found two defects in the instrument
-itself. It opens no cell and moves the gate not at all: a probe is not a run.
+Under [ADR-094](decisions.md), production offers **Receiving while closed** as
+`bestEffort` while the ledger is incomplete. The offer discloses battery use,
+the persistent notice and the absence of a delivery-time promise. Development
+uses `measurementOnly`. A complete ledger would move the offer to `evidenced`.
+See [frontend status](STATUS.md#presence-voice-and-delivery).
 
 Decided by [ADR-053](decisions.md), which amends ADR-051's distribution clause,
 and superseded for production by [ADR-094](decisions.md).
@@ -778,10 +771,8 @@ freezer behaviour, Doze survival, restart recovery, vendor deviation.
 
 It does **not** transfer for: anything touching the provisioned origin's TLS path
 or its certificate authority, and the behaviour of the frozen signing identity
-across an upgrade. And it can never measure the production artifact's *gate*, only
-its mechanics — a build with the gate open is by construction not the build users
-get. Those limits are the price of being able to measure at all, and they are
-stated rather than papered over.
+across an upgrade. Measurement of the development build covers its mechanics.
+Production reads the same compiled ledger and applies its own offer state (§7).
 
 ---
 

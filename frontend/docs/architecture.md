@@ -149,16 +149,15 @@ and emit typed intents; they cannot reach cryptography, APIs, Drift, or synchron
 
 ## Platform boundary
 
-Version 1 implements the application ports on Android. The preserved Web adapter is
-post-v1 and may later implement the same ports with different guarantees:
+Android is the only target. The Web shell, adapters and CI build were removed under
+[server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+See [platform status](STATUS.md#platform-identity-and-content).
 
 - Android uses encrypted SQLite and Android Keystore wrapping.
-- A future Web client stores only ciphertext records persistently and keeps decrypted
-  content in memory.
-- Android uses active-page/socket delivery plus best-effort background polling for
-  messaging; only an active voice session owns a foreground service.
-- A future Web client synchronizes while a page is alive and drains the durable queue
-  after resume.
+- Active-app messaging uses the socket and authoritative REST drain. The persisted
+  `JobScheduler` job supplies deferred catch-up. The opt-in messaging service uses
+  `specialUse`, and an active voice call uses a separate `microphone` foreground service.
+  See [delivery status](STATUS.md#presence-voice-and-delivery).
 
 No platform-specific conditional is allowed inside domain or protocol logic.
 
@@ -168,8 +167,9 @@ No platform-specific conditional is allowed inside domain or protocol logic.
 - Malformed or unauthenticated protocol input is quarantined and never partially applied.
 - Unknown future event kinds are retained as unsupported records without crashing.
 - Security failures fail closed.
-- A queue `pruned_through` gap blocks potentially affected group sending until the
-  device is removed and re-added with a fresh MLS Welcome.
+- A mailbox `pruned_through` gap starts authenticated peer repair and signed group-state
+  requests. The client keeps draining and withholds affected group sends while waiting.
+  Direct gaps still lack a user-facing state. See [queue-gap recovery](sync-engine.md#queue-gap-recovery).
 - Network failures preserve outbox work and surface honest connection state.
 
 ## Source references
