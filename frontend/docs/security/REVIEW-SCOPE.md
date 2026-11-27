@@ -14,12 +14,15 @@ where this document records an MLS gate or prerequisite as open or blocked, that
 state it was in when the track was cancelled. Files marked deleted in work packages WP1,
 WP2, WP5, WP6 and WP7 were deleted with the MLS track. The signed group control events
 that replaced the MLS group construction ([MESSAGES.md](../contracts/MESSAGES.md))
-have no work package of their own, and ADR-075 leaves their review open.
+and the voice room control and signalling formats ([VOICE-V1.md](../contracts/VOICE-V1.md))
+are consolidated into the active v1 review scope below; ADR-075 and ADR-077 leave their
+independent review open.
 
 This document prepares the *engagement* that ADR-017 requires, and that production gate 7
 in the deleted MLS profile also required, together with the surviving
-[Pairwise v1 review packet](#pairwise-v1-review-packet). **It retains nobody, names nobody as retained,
-and closes nothing.**
+[Pairwise v1 review packet](#pairwise-v1-review-packet) and the
+[Consolidated active v1 review scope](#consolidated-active-v1-review-scope). **It retains
+nobody, names nobody as retained, and closes nothing.**
 
 - No reviewer, firm, or individual named below has been approached, contacted, solicited,
   or engaged. Nobody has agreed to anything. Availability, willingness, price, and
@@ -33,14 +36,16 @@ and closes nothing.**
   implementation" remains **Blocked**. This document does not change its result. It
   supplies the "scope of work" half of what that row says is missing; the "named, retained
   reviewer" and "review schedule" halves are external and stay missing.
-- The pairwise track is in the same position: production pairwise messaging stays gated
-  until an independent assessor records a disposition for every blocking finding in the
+- The active v1 client stays gated until an independent assessor records a disposition for
+  every blocking finding across the
+  [Consolidated active v1 review scope](#consolidated-active-v1-review-scope) and
   [Pairwise v1 review packet](#pairwise-v1-review-packet).
 
 The review packet material for this engagement:
 
 - Closed-beta PQ MLS independent-review packet (deleted)
 - [Pairwise v1 review packet](#pairwise-v1-review-packet)
+- [Consolidated active v1 review scope](#consolidated-active-v1-review-scope)
 
 Everything in the [Qualification bar](#qualification-bar), [Scope of work](#scope-of-work),
 and [Deliverables required before the review gate can close](#deliverables-required-before-the-review-gate-can-close)
@@ -48,6 +53,27 @@ sections below is complete locally and needs no external party. Everything in
 [Candidate evaluation](#candidate-evaluation), [Funding routes](#funding-routes), and
 [What remains externally blocked](#what-remains-externally-blocked) is a *proposal for evaluation*,
 not an action taken.
+
+---
+
+## Consolidated active v1 review scope
+
+Live source code and test fixtures were inspected at `bcc64eba` (the Phase 1 step 1
+baseline recorded in [STATUS.md](../STATUS.md)); subsequent Phase 3 documentation
+restructuring (`6c04d4e`) changed no runtime code, native crate, Kotlin file, or build
+script (`git diff --stat bcc64eba..HEAD -- frontend/lib/ frontend/native/ frontend/android/ frontend/tool/`
+contains only doc-path comments and l10n text). The exact full commit hash under review
+must be fixed at engagement start in `D1` and `D2`.
+
+| Review area | Primary specifications & evidence paths | Inspected revision | Outstanding assessments | Responsible acceptance role |
+|---|---|---|---|---|
+| **Pairwise transport v1 (hybrid PQXDH & Double Ratchet)** | [PAIRWISE-V1.md](../contracts/PAIRWISE-V1.md), [CRYPTO.md](../contracts/CRYPTO.md), [pairwise.rs](../../native/crypto_core/src/pairwise.rs), [prekey_state.rs](../../native/crypto_core/src/prekey_state.rs), [provider.rs](../../native/crypto_core/src/provider.rs), [device_signatures.rs](../../native/crypto_core/src/device_signatures.rs), [enrollment.rs](../../native/crypto_core/src/enrollment.rs), [vectors/README.md](../../native/crypto_core/vectors/README.md), [pairwise-v1.json](../../native/crypto_core/vectors/pairwise-v1.json), [mlkem768-acvp-fips203.json](../../native/crypto_core/vectors/mlkem768-acvp-fips203.json), [pairwise_opaque_envelope_inspector.dart](../../lib/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart), [pairwise_session_crypto.dart](../../lib/shared/infrastructure/crypto/native/pairwise_session_crypto.dart), [pairwise tests](../../test/features/pairwise) | `bcc64eba` (fix exact commit in `D2` at engagement start) | Independent assessment of mandatory `pq_spk` + optional unsigned `pq_otpk` composition, Double Ratchet state machine, 2,000/20,000 skipped-key bounds, simultaneous initiation, authenticated repair (`CPRRV001`), 7d/8d rotation overlap, held first-message probe & non-committing `CPCTV001` kind-3 read exception ([ADR-093](../architecture/decisions/093-held-first-message.md)), and missing parser/state-machine fuzzing on the pinned stable Rust toolchain ([VERIFY.md](../runbooks/VERIFY.md#crypto-core-tests)). | **Independent Cryptographic Reviewer** (`D3`, `D5`, `D6`) + **Project Owner** (`D1` scope, `D4` fixes/vectors, `D7` itemised residual-risk acceptance) |
+| **Signed group control (`CPGSV001`) & voice room control/signalling (`CPVRV001` / `CPVSV001`)** | [MESSAGES.md](../contracts/MESSAGES.md#groups), [VOICE-V1.md](../contracts/VOICE-V1.md), [ADR-075](../architecture/decisions/075-pairwise-groups.md), [ADR-077](../architecture/decisions/077-voice-mesh.md), [ADR-096](../architecture/decisions/096-group-moderation.md), [group_control.rs](../../native/crypto_core/src/group_control.rs), [room_control.rs](../../native/crypto_core/src/room_control.rs), [application.rs](../../native/crypto_core/src/application.rs), [cbor.rs](../../native/crypto_core/src/cbor.rs), [drift_group_repository.dart](../../lib/features/groups/infrastructure/drift_group_repository.dart), [native_group_control_crypto.dart](../../lib/features/groups/infrastructure/native_group_control_crypto.dart), [drift_room_repository.dart](../../lib/features/voice/infrastructure/drift_room_repository.dart), [native_room_control_crypto.dart](../../lib/features/voice/infrastructure/native_room_control_crypto.dart), [pairwise_voice_signal_crypto.dart](../../lib/features/voice/infrastructure/pairwise_voice_signal_crypto.dart), [room_inbound_coordinator.dart](../../lib/features/voice/application/room_inbound_coordinator.dart), [room_session_starter.dart](../../lib/features/voice/application/room_session_starter.dart), [voice_call_engine.dart](../../lib/features/voice/application/voice_call_engine.dart), [group tests](../../test/features/groups), [voice tests](../../test/features/voice) | `bcc64eba` (voice build 5 run at `53ff386`) | No independent review has examined `group_control.rs` (`chat:v1:group-control`), `room_control.rs` (`chat:v1:room-control`), hash-chain fork quarantine & `CPGSV001`/`CPVRV001` state recovery, channel separation (`CPVRV001` durable vs `CPVSV001` volatile), moderation re-folding (`ADR-096`), `VoiceCallEngine` post-commit removal timing gap ([STATUS.md](../STATUS.md#voice-implementation-gaps)), or planned v2 room roles ([CLIENT_VOICE_ROLES.md](../../../docs/client/CLIENT_VOICE_ROLES.md)). | **Independent Cryptographic Reviewer** (`D3`, `D5`, `D6`) + **Project Owner** (`D4`/`D7` and v2/removal-gap resolution) |
+| **Android key storage & platform boundaries** | [ANDROID.md](../architecture/ANDROID.md#key-and-data-protection), [CLIENT-THREAT-MODEL.md](CLIENT-THREAT-MODEL.md), [SIGNING.md](../runbooks/SIGNING.md), [ProtectedStorageChannel.kt](../../android/app/src/main/kotlin/com/example/communication_platform/ProtectedStorageChannel.kt), [MainActivity.kt](../../android/app/src/main/kotlin/com/example/communication_platform/MainActivity.kt), [BackgroundDelivery.kt](../../android/app/src/main/kotlin/com/example/communication_platform/BackgroundDelivery.kt), [SustainedDelivery.kt](../../android/app/src/main/kotlin/com/example/communication_platform/SustainedDelivery.kt), [VoiceCall.kt](../../android/app/src/main/kotlin/com/example/communication_platform/VoiceCall.kt), [MessageAlertChannel.kt](../../android/app/src/main/kotlin/com/example/communication_platform/MessageAlertChannel.kt), [AttachmentChannel.kt](../../android/app/src/main/kotlin/com/example/communication_platform/AttachmentChannel.kt), [AndroidManifest.xml](../../android/app/src/main/AndroidManifest.xml), [build.gradle.kts](../../android/app/build.gradle.kts), [production-release-identity.properties](../../android/production-release-identity.properties), [render_production_trust.sh](../../tool/render_production_trust.sh), [verify_release_apk.sh](../../tool/verify_release_apk.sh), [secure_local_storage_platform_test.dart](../../test/architecture/secure_local_storage_platform_test.dart), [screen_capture_policy_test.dart](../../test/architecture/screen_capture_policy_test.dart), [production_release_packaging_test.dart](../../test/architecture/production_release_packaging_test.dart) | `bcc64eba` (`f85196de` build 2, `53ff386` build 5, `973e6eb8` probes) | Independent sign-off on `AndroidKeyStore` AES-256-GCM wrapping (`ProtectedStorageChannel.kt`: StrongBox preference with TEE/software fallback, `noBackupFilesDir/storage_key_v1.bin`, `allowBackup="false"`, `FLAG_SECURE`, wipe on logout/revocation/key-loss); hardware-backed Keystore physical-device verification; open owner policy decision on Dart runtime SPKI pinning vs exclusive private-CA anchoring ([ADR-076](../architecture/decisions/076-production-signing.md) D7); closed sustained-delivery matrix ([SUSTAINED-DELIVERY.md](../runbooks/SUSTAINED-DELIVERY.md#the-gate)). | **Independent Security / Mobile Reviewer** (`D3`, `D5`, `D6`) + **Project Owner** (`ADR-076` D7 policy decision, physical-device matrix, `D7` acceptance) |
+| **Persistence & concurrency (Drift / SQLCipher)** | [LOCAL-DATA.md](../architecture/LOCAL-DATA.md), [SYNC.md](../architecture/SYNC.md), [local_database.dart](../../lib/features/local_storage/infrastructure/database/local_database.dart) (schema **26**), [drift_pairwise_transport_store.dart](../../lib/features/pairwise/infrastructure/drift_pairwise_transport_store.dart), [drift_sync_store.dart](../../lib/features/synchronization/infrastructure/drift_sync_store.dart), [drift_group_repository.dart](../../lib/features/groups/infrastructure/drift_group_repository.dart), [drift_room_repository.dart](../../lib/features/voice/infrastructure/drift_room_repository.dart), [drift_application_event_projector.dart](../../lib/features/messaging/infrastructure/drift_application_event_projector.dart), [local_database_migration_test.dart](../../test/features/local_storage/infrastructure/local_database_migration_test.dart), [local_database_index_plan_test.dart](../../test/features/local_storage/infrastructure/local_database_index_plan_test.dart), [sync tests](../../test/features/synchronization) | `bcc64eba` | Independent assessment of compare-and-swap under control revision/hash and pairwise session revisions, two-transaction send/prepare boundary (`pending_send_preparations` vs `outbox_operations`), crash-safe receive/ack and exact-ciphertext retry, 20,000-key account bound under concurrent writes, held-envelope limits/expiry (`ADR-093`), `IsolateNameServer` shared SQLCipher access (`shareAcrossIsolates`) across Activity / Sustained / Deferred owners, and schema-26 migration/interrupted-upgrade fixtures on real Android hardware. | **Independent Reviewer** (`D3`, `D5`) + **Project Owner** (`D4`/`D7` and device migration/crash tests) |
+| **FFI, native core & packaging boundary** | [ANDROID.md](../architecture/ANDROID.md#piece-07-crypto-core-delivery-scope), [lib.rs](../../native/crypto_core/src/lib.rs) (`#![forbid(unsafe_op_in_unsafe_fn)]`, 16 exported symbols, status codes 0–14), [bounds.rs](../../native/crypto_core/src/bounds.rs) (1 MiB `MAX_INPUT_BYTES`), [error.rs](../../native/crypto_core/src/error.rs), [secret.rs](../../native/crypto_core/src/secret.rs), [communication_crypto.h](../../native/crypto_core/include/communication_crypto.h) (2 MiB `CP_CRYPTO_V1_PAIRWISE_MAX_IO_BYTES`), [isolate_crypto_core_worker.dart](../../lib/shared/infrastructure/crypto/native/isolate_crypto_core_worker.dart), [crypto_core_ffi.dart](../../lib/shared/infrastructure/crypto/native/crypto_core_ffi.dart), [pairwise_crypto_ffi.dart](../../lib/shared/infrastructure/crypto/native/pairwise_crypto_ffi.dart), [enrollment_crypto_ffi.dart](../../lib/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart), [build_rust_android.sh](../../tool/build_rust_android.sh), [build_libsodium_android.sh](../../tool/build_libsodium_android.sh), [verify_release_apk.sh](../../tool/verify_release_apk.sh), [crypto_core_boundary_test.dart](../../test/architecture/crypto_core_boundary_test.dart), [crypto_core_android_smoke_test.dart](../../integration_test/crypto_core_android_smoke_test.dart) | `bcc64eba` | Independent audit of every `unsafe` block and C FFI wrapper in `lib.rs` and `provider.rs`, Dart `dart:ffi` allocation/bounds/buffer zeroing (`_clear` before `calloc.free`), single-isolate ownership (`IsolateCryptoCoreWorker`), payload-free error discipline, static libsodium 1.0.22 + `mlkem-native` v1.2.0 3-ABI packaging, absence of `cp_crypto_v1_beta_mls_operation`, and representative connected-device smoke execution. | **Independent Reviewer** (`D3`, `D5`) + **Project Owner** (`D4`/`D7` and packaged Android smoke execution) |
+
+**Unfilled review decisions remain open:** No reviewer is retained, `D1`–`D7` have not been produced, `Appendix A` and `Appendix B` are empty, and the `ADR-076` D7 runtime SPKI pinning policy decision remains open for the owner.
 
 ---
 
@@ -115,10 +141,13 @@ Review the following boundaries:
 
 - Rust provider and secret wrappers under `native/crypto_core/src/`;
 - pairwise/prekey state machines and their strict binary decoders;
-- the single C ABI pairwise operation and `communication_crypto.h` declaration;
-- Android export allowlist and three-ABI packaging script;
-- Dart FFI allocation, bounds, zeroing, isolate ownership, and typed-result decoding;
-- Drift schema/migration and compare-and-swap transaction code;
+- the pairwise C ABI operations (`cp_crypto_v1_pairwise_operation`,
+  `cp_crypto_v1_identity_operation`, enrollment exports) and `communication_crypto.h`
+  declarations;
+- Android export allowlist (16 `foundation` symbols) and three-ABI packaging script;
+- Dart FFI allocation, bounds (1 MiB standard / 2 MiB pairwise mux), zeroing, isolate
+  ownership (`IsolateCryptoCoreWorker`), and typed-result decoding;
+- Drift schema/migration (currently schema 26) and compare-and-swap transaction code;
 - REST DTO strictness and replay-safety settings for count, replenish, claim, and send;
 - recipient resolution for peer devices and the sender's other devices; and
 - sync receive/ack and stale/revoked-device invalidation paths.
@@ -174,7 +203,9 @@ implementation cannot validate a construction solely against bytes it generated 
 
 ### Reproduction commands
 
-Run from `frontend/` with the repository-pinned toolchains and offline cache:
+Run from `frontend/` with the repository-pinned toolchains and offline cache (see
+[VERIFY.md](../runbooks/VERIFY.md) for prerequisites and separation between unsigned CI
+and signed distribution):
 
 ```powershell
 cargo fmt --manifest-path native/crypto_core/Cargo.toml -- --check
@@ -185,24 +216,28 @@ flutter analyze --fatal-infos --fatal-warnings
 flutter test
 powershell -File tool/build_rust_android.ps1 all
 flutter build apk --debug --flavor development --target lib/main_development.dart
-flutter build apk --release --flavor production --target lib/main_production.dart
+sh ./tool/ci.sh
 git diff --check
 git diff --name-only -- ../backend
 ```
 
-The packaged Android smoke test additionally requires a connected supported Android
-device or emulator. Web byte equality is deliberately absent from this packet and
-remains a post-v1 gate.
+For a signed, provisioned distribution build, run `tool/build_production_release.sh` as
+documented in [SIGNING.md](../runbooks/SIGNING.md#2-build) and
+[VERIFY.md](../runbooks/VERIFY.md#4-signed-distribution-build-and-verification---production).
+The packaged Android smoke test (`integration_test/crypto_core_android_smoke_test.dart`)
+additionally requires a connected supported Android device or emulator (`--flavor development`).
+Web byte equality is deliberately absent from this packet and remains a post-v1 gate.
 
 ### Review disposition template
 
 | Area | Reviewer | Revision/hash | Finding | Severity | Required action | Closed by |
 |---|---|---|---|---|---|---|
-| Composition/transcript | | | | | | |
+| Composition/transcript (pairwise) | | | | | | |
 | Ratchet/state machine | | | | | | |
-| Persistence/concurrency | | | | | | |
-| FFI/memory handling | | | | | | |
-| Android packaging | | | | | | |
+| Signed group & room control (`CPGSV001`/`CPVRV001`/`CPVSV001`) | | | | | | |
+| Android key storage & trust boundaries | | | | | | |
+| Persistence/concurrency (Drift/SQLCipher) | | | | | | |
+| FFI/memory handling & packaging | | | | | | |
 | Adversarial tests/fuzzing | | | | | | |
 
 Approval requires all blocking/high findings closed, exact reviewed source hashes
@@ -220,6 +255,7 @@ of any residual risk. Empty rows never imply approval.
 | Production gate 7 | MLS profile (deleted) | "An independent cryptographic review closes all blocking findings" |
 | Phase-A prerequisite 5 | MLS profile (deleted) | A qualified independent reviewer must be *available and retained*, with a recorded scope of work and schedule |
 | Pairwise production gate | [pairwise transport v1](../contracts/PAIRWISE-V1.md), [Pairwise v1 review packet](#pairwise-v1-review-packet) | An independent assessor records a disposition for every blocking finding, with reviewed source hashes and residual-risk acceptance |
+| Group & voice control review | [ADR-075](../architecture/decisions/075-pairwise-groups.md), [ADR-077](../architecture/decisions/077-voice-mesh.md), [MESSAGES.md](../contracts/MESSAGES.md), [VOICE-V1.md](../contracts/VOICE-V1.md) | Independent assessment of signed group (`CPGSV001`) and room (`CPVRV001`/`CPVSV001`) control chains, recovery, and channel separation |
 | Threat-model sign-off | [client threat model](CLIENT-THREAT-MODEL.md) | An independent reviewer signs off the protocol, implementation boundary, and Android key handling |
 
 Note what gate 7 does **not** do. Closing it opens nothing on its own: gates 1, 2, and 3
@@ -240,15 +276,15 @@ mandatory item does not meet the bar, regardless of standing.
 
 | # | Requirement | Evidence that satisfies it | Why this implementation needs it |
 |---|---|---|---|
-| **Q1** | **Demonstrated MLS competence** | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | Written when the group construction was MLS. It is not any more: a group is a set of pairwise sessions and the MLS core is deleted ([ADR-075](../architecture/decisions/075-pairwise-groups.md)), so no material now in scope is MLS |
+| **Q1** | **Demonstrated MLS competence** *(superseded for active v1 scope by pairwise & signed hash-chain control competence)* | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | Written when the group construction was MLS. It is not any more: a group is a set of pairwise sessions and the MLS core is deleted ([ADR-075](../architecture/decisions/075-pairwise-groups.md)), so no material now in scope is MLS |
 | **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The pairwise track is hybrid PQXDH. The beta's *non-standard* hybrid KEM, which diverged from `TBD2` in ten recorded ways (rows D1-D10 of the deleted MLS profile) and posed the hardest question in the MLS packet, was deleted with the MLS core ([ADR-075](../architecture/decisions/075-pairwise-groups.md)) |
-| **Q3** | **Implementation-level review, not design-only** | At least one published engagement that read source and reported source-anchored findings, not solely a design/architecture opinion | The two packets are implementation packets. A design review of the profile documents would leave the entire inventory unread |
-| **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with 46 `unsafe` blocks in the shared C ABI and one 1 MiB-bounded `dart:ffi` allocation path. `mls_beta.rs`, which had no `unsafe` of its own, was deleted with the MLS core ([ADR-075](../architecture/decisions/075-pairwise-groups.md)) |
-| **Q5** | **Protocol-invention review capability** | Evidence of reviewing bespoke state machines, concurrency, and persistence — not only primitive or parameter checking | The ten project inventions in the packet are the highest-value targets *precisely because* no external specification or vector can validate them: credential binding, control transcript, fork convergence, leave/eviction, queue-gap re-admission, the transactional commit boundary, state sealing, per-recipient re-wrapping, the FFI boundary, and redaction |
+| **Q3** | **Implementation-level review, not design-only** | At least one published engagement that read source and reported source-anchored findings, not solely a design/architecture opinion | The active scope is implementation-anchored. A design review of the profile documents alone would leave the Rust, Dart, and Kotlin inventory unread |
+| **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with `unsafe` FFI and C-wrapper blocks in `lib.rs` and `provider.rs`, 1 MiB/2 MiB `dart:ffi` allocation paths with explicit zeroing, and a dedicated worker isolate (`IsolateCryptoCoreWorker`). `mls_beta.rs`, which had no `unsafe` of its own, was deleted with the MLS core ([ADR-075](../architecture/decisions/075-pairwise-groups.md)) |
+| **Q5** | **Protocol-invention review capability** | Evidence of reviewing bespoke state machines, concurrency, and persistence — not only primitive or parameter checking | Project-specific state machines and hash chains (`CPGSV001`, `CPVRV001`, `CPVSV001`, `CPRRV001` repair, held first-message state, two-transaction send/commit, FFI boundary, Android Keystore wrap, and redaction) have no external specification or conformance vector |
 | **Q6** | **A published report of the required shape** | At least one publicly readable report containing, per finding: an identifier, a severity, a source location, and a disposition; plus a statement of what was and was not in scope | [Deliverables required before the review gate can close](#deliverables-required-before-the-review-gate-can-close) requires exactly this shape. A candidate who has never produced it is being asked to invent their deliverable format on this engagement |
 | **Q7** | **Named assessors** | The individuals who will do the work are named, with their own attributable prior work | A firm brand is not evidence that the people assigned to this engagement have Q1-Q5. Reports that name their assessors are the norm in this field, including in the closest comparable engagements |
 | **Q8** | **Fix verification, in writing, as part of the engagement** | A prior engagement where the assessor verified remediation and said so, or a written commitment to do so here | D5 (retest confirmation) cannot be produced by the owner. If the candidate will not retest, the gate cannot close |
-| **Q9** | **Willingness to work under a stated out-of-scope list and to record residual risk** | Acceptance of the packets' "explicitly out of scope" sections as engagement boundaries, and willingness to record what was *not* assessed | The MLS packet's out-of-scope list is long and deliberate (no sanitizer/Miri/coverage-guided fuzzing on a stable pin, no physical-device crash matrix, no state-format migration fuzzing). A reviewer who silently treats these as covered would produce a report that overstates assurance |
+| **Q9** | **Willingness to work under a stated out-of-scope list and to record residual risk** | Acceptance of the packets' "explicitly out of scope" sections as engagement boundaries, and willingness to record what was *not* assessed | The out-of-scope list is deliberate (no sanitizer/Miri/coverage-guided fuzzing on the pinned stable Rust toolchain, no physical-device crash matrix, no state-format migration fuzzing). A reviewer who silently treats these as covered would produce a report that overstates assurance |
 
 ### Independence requirements
 
@@ -274,40 +310,40 @@ A candidate is out, regardless of other evidence, if any of these hold:
    review and cannot close gate 7.
 5. They require that findings be delivered only as a summary or a pass/fail conclusion,
    without a per-finding register.
-6. They would treat the project's ten inventions as out of scope, or would scope the
-   engagement to "conformance with RFC 9420" only. Conformance is not the risk here; the
-   inventions are, as the recorded KEM divergence was until the MLS core was deleted.
+6. They would treat the project's bespoke state machines and protocol constructions as out
+   of scope, or would scope the engagement to primitive conformance only.
 7. They offer to review against `TBD2` as a conformance target. The beta was not `TBD2` and
    never had been; such an engagement would have produced wrong conclusions by construction
    (see the deleted packet's "The one thing to read first").
 
 ### How the bar is applied
 
-Q1-Q9 and I1-I5 are all mandatory. There is no scoring, no weighting, and no
-"strong overall" path past a missing item. Where a single candidate cannot evidence
-everything, the bar is met by a **combination** — for example an implementation-review
-practice for Q3/Q4/Q6/Q8 plus a named specialist for Q1/Q2 — provided the combination is
-contracted as one engagement with one findings register and one retest, and each named
-assessor individually satisfies I1-I5. Two disconnected reviews that never reconcile their
-findings do not satisfy the bar, because no single party ever states what was and was not
-covered overall.
+Q2-Q9 and I1-I5 are mandatory for the active v1 engagement (with Q1 historical since MLS
+removal). There is no scoring, no weighting, and no "strong overall" path past a missing
+item. Where a single candidate cannot evidence everything, the bar is met by a
+**combination** — for example an implementation-review practice for Q3/Q4/Q6/Q8 plus a
+named specialist for Q2 — provided the combination is contracted as one engagement with
+one findings register and one retest, and each named assessor individually satisfies I1-I5.
+Two disconnected reviews that never reconcile their findings do not satisfy the bar,
+because no single party ever states what was and was not covered overall.
 
 ---
 
 ## Scope of work
 
-Bounded to this implementation, at a pinned revision, using the surviving review packet as
-the reviewer's entry point.
+Bounded to this implementation, at a pinned revision, using the
+[Consolidated active v1 review scope](#consolidated-active-v1-review-scope) and
+[Pairwise v1 review packet](#pairwise-v1-review-packet) as the reviewer's entry point.
 
 ### Engagement source baseline
 
 | | |
 |---|---|
-| Repository | this repository, `frontend/` and `native/` only |
+| Repository | this repository, `frontend/` (`lib/`, `native/`, `android/`, `tool/`) only |
 | Revision under review | to be fixed at engagement start and recorded verbatim in D1 and D2 |
-| The packets' historical baseline (2026-08-18) | `4e65eaf4f0e4a017a42b48b49a444570f47cbffb` (branch `frontend`, committed 2026-08-18) |
-| Recorded `HEAD` at engagement preparation (2026-08-18) | `76056597d34987d615d1616cdfa2cc7adb036725` — verified on 2026-08-18 to differ from `4e65eaf` in documentation only (`docs/README.md`, `docs/implementation-checklist.md`, `docs/mls-beta-review-readiness.md`); no source, test, vector, or backend file differs |
-| Toolchain | Rust 1.97.1 stable, Flutter 3.44.7, Dart 3.12.2, exactly as pinned and recorded in the repository |
+| Current live code inspection baseline | `bcc64eba` (Phase 1 step 1; Phase 3 docs PR merged at `6c04d4e` with zero functional/native/Android/tool code changes since `bcc64eba`) |
+| Historical MLS engagement baseline (2026-08-18) | `4e65eaf4f0e4a017a42b48b49a444570f47cbffb` (branch `frontend`, committed 2026-08-18); `HEAD` then `76056597d34987d615d1616cdfa2cc7adb036725` (docs-only delta) |
+| Toolchain | Rust 1.97.1 stable, Flutter 3.44.7, Dart 3.12.2, Android NDK 28.2.13676358, exactly as pinned and recorded in the repository |
 | Backend | **read-only**. `backend/` is not modifiable from this track and is not part of this scope |
 
 The reviewer works from a fixed revision. If the owner lands changes during the
@@ -317,26 +353,23 @@ engagement, they become a *second* recorded revision in D2, or they wait.
 
 | WP | Subject | Primary material | Deliverable contribution |
 |---|---|---|---|
-| **WP0** | Scope agreement and threat-model reconciliation. Confirm the claims in scope, confirm the out-of-scope list is understood and accepted, and reconcile against [the client threat model](CLIENT-THREAT-MODEL.md) | [Security claims in scope](#security-claims-in-scope) (and deleted MLS packet claims); [the client threat model](CLIENT-THREAT-MODEL.md) | D1 |
-| **WP1** | **The ten project inventions.** Credential binding to the Authentication Service; the control transcript and later-member admission (ADR-037); fork convergence (ADR-041); leave and eviction (ADR-039); queue-gap re-admission; the transactional commit boundary; state sealing and versioning; per-recipient envelope re-wrapping (ADR-011); the FFI boundary; redaction and the error surface | Deleted MLS packet, "The project's own protocol inventions"; `group_model.dart`, `native_beta_group_mls.dart` (deleted), `drift_group_repository.dart`, `mls_beta.rs` (deleted) | D3 |
-| **WP2** | **Suite assembly and the recorded KEM divergence.** Whether rows D1-D10 are complete and correctly characterised; whether the divergence has consequences beyond the loss of `TBD2` interoperability that ADR-040 asserts; whether an unassigned HPKE `kem_id` reaching every key schedule is confined as claimed | MLS profile (deleted) rows D1-D10; [mls-rs-hybrid-kem-defect-report.md](../archive/beta-mls-core/mls-rs-hybrid-kem-defect-report.md); `mls_beta.rs` (deleted); `beta_kem_vectors.rs` (deleted) | D3 |
-| **WP3** | **Pairwise transport v1.** Hybrid PQXDH composition and transcript, the ratchet state machine, skipped-key bounds, repair, rotation overlap, revocation | [pairwise transport v1](../contracts/PAIRWISE-V1.md); [Pairwise v1 review packet](#pairwise-v1-review-packet) | D3 |
-| **WP4** | **Persistence, concurrency, and the commit boundary.** Compare-and-swap under control revision and hash; crash between commit and fan-out; exact-ciphertext retry; the 20,000-key account bound under concurrent transactions | `drift_group_repository.dart`, `drift_pairwise_transport_store.dart`, `drift_sync_store.dart`, `local_database.dart` (schema 11) | D3 |
-| **WP5** | **The boundary.** The single C ABI operation, the 46 `unsafe` blocks in `lib.rs`, the 1 MiB-bounded `dart:ffi` allocation and its zero-and-free path, isolate ownership, typed-response decoding | `lib.rs`, `beta_mls_ffi.dart` (deleted), `beta_mls_native_session.dart` (deleted), `isolate_crypto_core_worker.dart` | D3 |
-| **WP6** | **Isolation and packaging.** That the production release artifact contains no beta code path — not a disabled one, not a dead one — and that the source-only production gate cannot be flipped by accident | `tool/build_rust_android.sh/.ps1`, `android/app/build.gradle.kts`, `group_production_gate.dart` (deleted), `unsupported_group_mls.dart` (deleted); the 15-vs-16 symbol allowlists (the beta list was deleted) | D3 |
-| **WP7** | **Evidence adequacy.** Whether the vector split (official primitive vectors vs project-generated regression pins), the 12-target fuzz campaign (deleted with the MLS core), and the fault-injection matrix support the claims made — and whether the packets' stated limits are stated *honestly and completely* | `native/crypto_core/vectors/README.md`, `fuzz/README.md` (deleted), validation tables | D3, D7 |
+| **WP0** | Scope agreement and threat-model reconciliation. Confirm the claims in scope, confirm the out-of-scope list is understood and accepted, and reconcile against [the client threat model](CLIENT-THREAT-MODEL.md) | [Consolidated active v1 review scope](#consolidated-active-v1-review-scope), [Security claims in scope](#security-claims-in-scope), [the client threat model](CLIENT-THREAT-MODEL.md) | D1 |
+| **WP1** | **Historical (deleted with MLS): the ten MLS project inventions.** | Deleted MLS packet; `native_beta_group_mls.dart` (deleted), `mls_beta.rs` (deleted) | Historical only |
+| **WP2** | **Historical (deleted with MLS): suite assembly and the recorded KEM divergence.** | MLS profile (deleted) rows D1-D10; [mls-rs-hybrid-kem-defect-report.md](../archive/beta-mls-core/mls-rs-hybrid-kem-defect-report.md); `mls_beta.rs` (deleted); `beta_kem_vectors.rs` (deleted) | Historical only |
+| **WP3** | **Pairwise transport v1.** Hybrid PQXDH composition and transcript, the ratchet state machine, skipped-key bounds, repair, rotation overlap, revocation, held first messages | [pairwise transport v1](../contracts/PAIRWISE-V1.md); [Pairwise v1 review packet](#pairwise-v1-review-packet) | D3 |
+| **WP3b** | **Signed group control & voice room control/signalling.** `CPGSV001` and `CPVRV001` hash chains, fork quarantine, state recovery, `CPVSV001` volatile signalling, channel separation, moderation re-folding, removal timing | [MESSAGES.md](../contracts/MESSAGES.md#groups), [VOICE-V1.md](../contracts/VOICE-V1.md), `group_control.rs`, `room_control.rs`, `application.rs`, `drift_group_repository.dart`, `drift_room_repository.dart`, `voice_call_engine.dart` | D3 |
+| **WP4** | **Persistence, concurrency, and the commit boundary.** Compare-and-swap under control revision and hash; crash between commit and fan-out; exact-ciphertext retry; the 20,000-key account bound under concurrent transactions; shared SQLCipher across isolates | `drift_group_repository.dart`, `drift_room_repository.dart`, `drift_pairwise_transport_store.dart`, `drift_sync_store.dart`, `drift_application_event_projector.dart`, `local_database.dart` (schema 26) | D3 |
+| **WP5** | **The FFI and Android key-storage boundary.** The 16 C ABI exports (`lib.rs`, `communication_crypto.h`), `unsafe` blocks in `lib.rs` and `provider.rs`, 1 MiB / 2 MiB `dart:ffi` allocations and zero-and-free paths, isolate ownership, typed-response decoding, Android Keystore AES-256-GCM wrapping, `FLAG_SECURE`, and wipe boundaries | `lib.rs`, `provider.rs`, `isolate_crypto_core_worker.dart`, `*_ffi.dart`, `ProtectedStorageChannel.kt`, `MainActivity.kt` | D3 |
+| **WP6** | **Isolation and packaging.** That the production release artifact contains no beta code path, uses pinned `libsodium` + `mlkem-native` across all three ABIs, checks live SPKI/CA provisioning, and enforces the 16-symbol export allowlist and manifest component/permission bounds | `tool/build_rust_android.sh/.ps1`, `tool/build_libsodium_android.sh`, `tool/render_production_trust.sh`, `tool/verify_release_apk.sh`, `android/app/build.gradle.kts`, `AndroidManifest.xml` | D3 |
+| **WP7** | **Evidence adequacy.** Whether the vector split (official primitive vectors vs project-generated regression pins), the missing parser fuzz coverage, and the fault-injection matrix support the claims made — and whether stated limits are stated *honestly and completely* | `native/crypto_core/vectors/README.md`, `test/architecture/`, `integration_test/crypto_core_android_smoke_test.dart`, [VERIFY.md](../runbooks/VERIFY.md) | D3, D7 |
 | **WP8** | **Retest.** Re-examine every finding the owner claims to have fixed, at a new recorded revision, and state per finding whether the fix resolves it | the fixes produced under D4 | D5 |
-
-WP1 was the centre of gravity when MLS was active. The deleted MLS packet said so directly:
-external specifications and vectors cover the primitives, and nothing external covers the
-inventions.
 
 ### Explicitly out of scope
 
 The reviewer must accept and restate these, so the report cannot be read as covering them.
 
 - **Everything listed as out of scope**, including: `TBD2` conformance;
-  interoperability with any other MLS implementation; post-quantum *authentication* (the
+  interoperability with any MLS implementation; post-quantum *authentication* (the
   signature is Ed25519 throughout — the claim is PQ confidentiality only); sanitizer, Miri,
   and coverage-guided fuzzing (the stable Rust pin forecloses them); the physical-device
   crash matrix; state-format migration fuzzing; Web/Wasm; traffic analysis and fan-out
@@ -344,20 +377,9 @@ The reviewer must accept and restate these, so the report cannot be read as cove
 - **`backend/`.** Read-only here, governed by its own contract, and not assessable from
   this track.
 - **The internals of pinned upstream dependencies**, beyond how this implementation uses
-  them. The one deliberate exception, WP2's reading of the pinned `mls-rs` crypto crates to
-  confirm or refute rows D1-D10, went with `mls-rs` and the MLS core
-  ([ADR-075](../architecture/decisions/075-pairwise-groups.md)).
-- **Any claim about production readiness of the beta track.** The beta was Private Use
-  `0xFE4C` with disposable state, and it was deleted. A favourable review could not have
-  made it a production deployment, and no report may be worded so that it could be read
-  that way.
-
-One dependency fact belonged in the residual-risk record rather than in scope: the upstream
-`mls-rs` project states in its own README that it "has been validated for conformance to
-the RFC 9420 specification but has not yet received a full security audit by a 3rd party"
-(verified 2026-08-18), so the MLS core's assurance rested on an unaudited protocol engine.
-`mls-rs` left the tree with that core ([ADR-075](../architecture/decisions/075-pairwise-groups.md)), so D7 no longer has it to
-accept.
+  them.
+- **Any claim about production readiness of the deleted beta track.** The beta was
+  Private Use `0xFE4C` with disposable state, and it was deleted.
 
 ### Effort benchmarks
 
@@ -373,14 +395,12 @@ and no candidate has been asked what this would cost.
 | Go cryptographic libraries security review | 12 engineer-weeks, Mar 2025 | Trail of Bits publications index |
 | OpenMLS security assurance assessment | 4 named assessors; code reviewed to a commit dated 22 October 2025; report v1.2 dated 11 March 2026; biweekly meetings throughout | SRLabs report, obtained from the OpenMLS blog |
 
-On 2026-08-18 this implementation's reviewable surface was larger than DAVE's: the group
-feature alone was 22 files and 9,779 lines of Dart, `mls_beta.rs` was 5,363 lines, and WP3
-added the whole pairwise transport. A DAVE-shaped engagement (design + implementation, 8
-engineer-weeks) was the floor, not the target. **The planning figure then for WP0-WP8
-across both packets was 10-16 engineer-weeks, plus a separate retest pass for WP8.** Treat
-it as an order of magnitude for deciding whether a funding route is viable at all, not as a
-number to negotiate against. It predates [ADR-075](../architecture/decisions/075-pairwise-groups.md): `mls_beta.rs` and the MLS
-packet are deleted, the group feature was rebuilt on pairwise sessions, and nothing has
+On 2026-08-18 the planning figure for WP0-WP8 across the MLS and pairwise packets was
+**10-16 engineer-weeks, plus a separate retest pass for WP8.** Treat it as an order of
+magnitude for deciding whether a funding route is viable at all, not as a number to
+negotiate against. It predates [ADR-075](../architecture/decisions/075-pairwise-groups.md)
+and [ADR-077](../architecture/decisions/077-voice-mesh.md): `mls_beta.rs` and the MLS
+packet were deleted, pairwise groups and voice rooms (`WP3b`) were added, and nothing has
 been re-estimated since.
 
 ---
@@ -393,7 +413,7 @@ or high finding — not before, and not partially.
 | # | Deliverable | Acceptance criteria |
 |---|---|---|
 | **D1** | **Agreed scope statement** | Written and signed by both parties *before* work starts. Names the work packages included and excluded; restates the packets' out-of-scope list as engagement boundaries; states the threat model and adversary assumed; states what a "blocking" finding means for this project. Later scope changes are amendments to D1, dated, not silent |
-| **D2** | **Exact reviewed source hashes** | The full commit hash of every revision reviewed, plus the hashes or pinned versions of the dependency set (`Cargo.lock`, `pubspec.lock`) and the vendored C sources. If the retest ran against a later revision, both revisions appear. A report that identifies its subject as "the repository" or by branch name does not satisfy D2 |
+| **D2** | **Exact reviewed source hashes** | The full commit hash of every revision reviewed, plus the hashes or pinned versions of the dependency set (`Cargo.lock`, `pubspec.lock`, `android/app/gradle.lockfile`) and the vendored C sources (`libsodium`, `mlkem-native`). If the retest ran against a later revision, both revisions appear. A report that identifies its subject as "the repository" or by branch name does not satisfy D2 |
 | **D3** | **Findings register with a disposition for every finding** | One row per finding, with: identifier, title, severity, the exact file and line reviewed, reproduction or argument, recommended action, **and a disposition**. Permitted dispositions: *fixed*, *mitigated*, *risk accepted*, *not a defect*. **Every finding carries one — none may be blank.** *Risk accepted* and *not a defect* each require a written justification, by the owner and the reviewer respectively. Zero findings is a valid register only if the reviewer states positively that they looked and found none in each area |
 | **D4** | **Remediation evidence** | For every finding disposed *fixed* or *mitigated*: the commit that changed it, the test or vector that now covers it, and a note where the fix changes a documented behaviour (which then updates the owning document). Fixes without a regression test are incomplete |
 | **D5** | **Explicit retest confirmation** | A written statement **by the reviewer**, at a named revision, that they re-examined each fix and whether it resolves the finding — including any fix that does not. This cannot be produced by the owner, and no amount of owner-side testing substitutes for it. Absent D5, gate 7 stays open even if every finding is marked fixed |
@@ -401,17 +421,15 @@ or high finding — not before, and not partially.
 | **D7** | **Recorded owner acceptance of residual risk** | Signed and dated by the owner, itemising each accepted residual risk individually — every *risk accepted* disposition from D3, plus each item on the packets' out-of-scope lists that remains unexercised at release. A blanket "residual risks accepted" sentence does not satisfy D7; the owner must be able to show they knew what they were accepting, one item at a time |
 
 Where the outputs land: D1, D2, D3, D5, and D6 populate the
-[Review disposition template](#review-disposition-template) above, which is currently empty;
-the MLS packet's table was deleted with it. D4 lands as commits and tests. D7 lands in
+[Review disposition template](#review-disposition-template) above, which is currently empty.
+D4 lands as commits and tests. D7 lands in
 [Appendix A: owner acceptance of residual risk (D7)](#appendix-a-owner-acceptance-of-residual-risk-d7),
 when — and only when — the owner actually signs it.
 
 **What these deliverables do not do.** All seven complete, with a clean register, closes
 gate 7 alone. Gates 1, 2, and 3 are registry, specification, and upstream-provider
 conditions outside this repository; gates 4, 5, and 6 need the packaged Android artifact,
-the bucket evidence, and the full multi-device matrix respectively. The deleted MLS packet
-stated this and it is repeated here so a reader of this document alone cannot mistake a
-completed review for a production authorisation.
+the bucket evidence, and the full multi-device matrix respectively.
 
 ---
 
@@ -455,18 +473,15 @@ assessor-verified remediation — and both have published work on an MLS codebas
 MLS-based deployment. Trail of Bits additionally evidences Q2 through the `liboqs` review;
 SRLabs' published PQ KEM work was not found, which is the one mandatory item it does not
 clearly evidence alone. Cryspen evidences Q1 and Q2 more deeply than anyone else and is the
-strongest match for WP2 (the KEM divergence) and WP1's protocol questions, but its
-published output is verification artifacts and papers rather than findings registers, so
-Q6 and Q8 would have to be established by agreement rather than by precedent. Phoenix R&D
-has the deepest MLS competence available anywhere, and is the clearest **I3 disclosure
-case**: they author OpenMLS, an alternative implementation to the `mls-rs` this project
-pins, and they operate in the same product space as this project. That is a disclosure and
-a commercial-conflict question for the owner to weigh, not an automatic disqualification —
-I1 is untouched, since they wrote none of this code.
+strongest match for PQ KEM / PQXDH protocol questions, but its published output is
+verification artifacts and papers rather than findings registers, so Q6 and Q8 would have
+to be established by agreement rather than by precedent. Phoenix R&D has deep messaging
+competence and is an **I3 disclosure case** (they author OpenMLS and operate in the same
+product space).
 
 The realistic shape of a compliant engagement is therefore **a combination under one
 contract**: an implementation-review practice carrying Q3/Q4/Q6/Q8 and the findings
-register, plus a named hybrid-PQ-KEM specialist carrying Q2 for WP2. [How the bar is applied](#how-the-bar-is-applied) permits
+register, plus a named hybrid-PQ-KEM specialist carrying Q2. [How the bar is applied](#how-the-bar-is-applied) permits
 this and states the condition — one register, one retest, one statement of coverage.
 
 ### Individuals
@@ -477,10 +492,10 @@ should be drawn from inclusion here.
 
 | Candidate | Published position (verified 2026-08-18) | Where they would fit | Conflict note |
 |---|---|---|---|
-| **Rohan Mahy**; **Richard Barnes** (Cisco) | Authors of `draft-ietf-mls-pq-ciphersuites`, revision 06, 21 July 2026, expiring 22 January 2027, MLS WG, state "Waiting for WG Chair Go-Ahead / Revised I-D Needed - Issue raised by WG". Barnes is additionally co-author of `draft-ietf-hpke-pq-05` (with Connolly) and `draft-irtf-cfrg-concrete-hybrid-kems-04`, and is listed by IANA as a designated expert for the MLS Cipher Suites registry | WP2: authoritative on what `TBD2` requires and what the divergence costs | Barnes' registry-expert role makes him the wrong person to position as *the* independent assessor of a Private Use deployment that diverges from his own draft. A targeted consultation is a different thing from the gate-7 review, and mixing them would weaken both |
-| **Deirdre Connolly** (Selkie Cryptography); **Peter Schwabe** (MPI-SP & Radboud); **Bas Westerbaan** (Cloudflare) | Authors of `draft-connolly-cfrg-xwing-kem`, revision 10, 2 March 2026, **expiring 2026-09-03**, Independent Submission stream. X-Wing is the construction IANA records as the reference for HPKE KEM `0x647A` — the identifier `TBD2` uses and the beta does not | WP2, precisely: whether the pre-standard variant shipped by the pinned provider is sound in its own right, independent of its non-conformance | Reviewing a divergence *from* their own construction is a strength, not a conflict, provided I3 disclosure is made |
-| **Théophile Wallez** (Inria Paris); **Jonathan Protzenko** (Microsoft Azure Research) | With Bhargavan, authors of *TreeKEM* (ePrint 2025/410) — "the first machine-checked security proof for TreeKEM" — and of *TreeSync* (USENIX Security '23), whose analysis "identified a new attack" and produced changes adopted into the MLS draft | WP1's protocol-level questions, especially transcript authentication and roster integrity — the closest published analogue to this project's ADR-037 invention | Institutional consulting constraints likely; no published engagement of the D1-D7 shape |
-| **Konrad Kohbrok**, **Raphael Robert** (Phoenix R&D) | OpenMLS maintainers; Robert is also listed by IANA as a designated expert for the MLS Cipher Suites registry and authored the audit-results post | WP1, WP7 | Same I3 disclosure and commercial-conflict considerations as Phoenix R&D above; plus, for Robert, the same registry-expert consideration as Barnes |
+| **Rohan Mahy**; **Richard Barnes** (Cisco) | Authors of `draft-ietf-mls-pq-ciphersuites`, revision 06, 21 July 2026, expiring 22 January 2027, MLS WG, state "Waiting for WG Chair Go-Ahead / Revised I-D Needed - Issue raised by WG". Barnes is additionally co-author of `draft-ietf-hpke-pq-05` (with Connolly) and `draft-irtf-cfrg-concrete-hybrid-kems-04`, and is listed by IANA as a designated expert for the MLS Cipher Suites registry | Historical WP2 (`TBD2` context) | Barnes' registry-expert role made him the wrong person to position as *the* independent assessor of a Private Use deployment that diverged from his own draft |
+| **Deirdre Connolly** (Selkie Cryptography); **Peter Schwabe** (MPI-SP & Radboud); **Bas Westerbaan** (Cloudflare) | Authors of `draft-connolly-cfrg-xwing-kem`, revision 10, 2 March 2026, **expiring 2026-09-03**, Independent Submission stream. X-Wing is the construction IANA records as the reference for HPKE KEM `0x647A` | Q2 hybrid PQ KEM specialist | Reviewing hybrid PQ KEM constructions requires I3 disclosure |
+| **Théophile Wallez** (Inria Paris); **Jonathan Protzenko** (Microsoft Azure Research) | With Bhargavan, authors of *TreeKEM* (ePrint 2025/410) — "the first machine-checked security proof for TreeKEM" — and of *TreeSync* (USENIX Security '23), whose analysis "identified a new attack" and produced changes adopted into the MLS draft | Protocol-level transcript & state-machine questions | Institutional consulting constraints likely; no published engagement of the D1-D7 shape |
+| **Konrad Kohbrok**, **Raphael Robert** (Phoenix R&D) | OpenMLS maintainers; Robert is also listed by IANA as a designated expert for the MLS Cipher Suites registry and authored the audit-results post | Protocol / evidence review | Same I3 disclosure and commercial-conflict considerations as Phoenix R&D above |
 
 ---
 
@@ -517,8 +532,8 @@ for an upstream-shaped component rather than for the client application.
 Complete locally, in this document, needing nobody outside the repository:
 
 - the qualification bar ([Qualification bar](#qualification-bar));
-- the scope of work and its baseline, work packages, exclusions, and effort benchmarks
-  ([Scope of work](#scope-of-work));
+- the consolidated active v1 scope, work packages, exclusions, and effort benchmarks
+  ([Consolidated active v1 review scope](#consolidated-active-v1-review-scope), [Scope of work](#scope-of-work));
 - the definition and acceptance criteria of all seven required deliverables
   ([Deliverables required before the review gate can close](#deliverables-required-before-the-review-gate-can-close));
 - the candidate evaluation against the bar, from primary sources
@@ -534,13 +549,12 @@ Externally blocked, and not satisfiable by any work in this repository:
 | **Funding** | Requires either the owner committing money or applying to a body — and every grant route evaluated is blocked by the absent open-source licence | Owner funds directly, or makes the separate decision to publish under an OSI-approved licence and then applies |
 | **The review itself** | An independent party must read the code. Assembling material is not review; this document is not review; the packets are not review | The engagement runs |
 | **Closure of the review's findings** | D3-D5 need a reviewer to raise findings, the owner to fix them, and **the reviewer** to retest and confirm. D5 is structurally impossible for the owner to produce | Findings raised, fixed, retested, confirmed in writing |
-| **Gates 1, 2, 3** | Registry assignment, a final MLS specification with an IANA-assigned suite value, and a maintained provider implementing the final mapping. ADR-026 forbids assigning an identifier locally | Action by IANA, the MLS working group, and upstream providers |
-| **Upstream interoperability vectors** | The MLS WG publishes none for any PQ suite. Project-generated vectors explicitly do not advance this | The working group publishes them |
-| **Gates 4, 5, 6** | Need the packaged Android artifact on hardware, the bucket evidence, and the full multi-device crash matrix — implementation work, not review work, and not part of this task | Separate implementation and device-matrix work |
+| **Gates 1, 2, 3** *(historical MLS)* | Registry assignment, a final MLS specification with an IANA-assigned suite value, and a maintained provider implementing the final mapping. ADR-026 forbids assigning an identifier locally | Superseded by [ADR-075](../architecture/decisions/075-pairwise-groups.md) for active v1 |
+| **Upstream interoperability vectors** *(historical MLS)* | The MLS WG publishes none for any PQ suite. Project-generated vectors explicitly do not advance this | Superseded by [ADR-075](../architecture/decisions/075-pairwise-groups.md) for active v1 |
+| **Gates 4, 5, 6 & device matrices** | Need the packaged Android artifact on hardware, sustained-delivery physical-device matrix, multi-device E2E, and voice acceptance — implementation and device-matrix work, not review work | Separate implementation and device-matrix work |
 
-The gate list is unchanged by this document. All seven production gates in
-the deleted MLS profile remain open (and historical since cancellation). The Phase-A
-preflight still shows five of five prerequisites blocked.
+The gate list is unchanged by this document. All active review gates and open owner policy
+decisions remain open.
 
 ---
 
@@ -584,16 +598,15 @@ retrieved and read on **2026-08-18** unless stated otherwise.
 
 | Check | Result |
 |---|---|
-| Gate list unchanged | **Pass.** No gate is marked satisfied, partially satisfied, or advanced by this document. All seven remain open |
+| Gate list unchanged | **Pass.** No gate is marked satisfied, partially satisfied, or advanced by this document. Active review gates and historical MLS gates remain open |
 | Phase-A prerequisite 5 | **Pass.** Still recorded as Blocked. This document supplies the scope-of-work half only, and says so |
 | No reviewer named as retained | **Pass.** Every candidate is marked not approached and not retained, in [Method and its limits](#method-and-its-limits) and in [Review status](#review-status) |
-| Consistent with the deleted MLS packet's review-status section | **Pass.** Both state that assembling material is not review, that gates 1-3 cannot be moved from this repository, and that gate 7 needs an external party |
-| Consistent with the deleted MLS packet's closure conditions | **Pass.** D1-D7 are a superset of the packet's stated closure requirements (blocking/high findings resolved, exact reviewed source hashes recorded, vector reproduction on the packaged artifact, physical-device crash matrix, explicit written acceptance of residual risk). Vector reproduction and the device matrix are recorded here as gates 4 and 6 rather than as review deliverables, which matches the profile's own division |
+| Consolidated v1 scope covers all active domains | **Pass.** Pairwise, signed group and room control (`CPGSV001`, `CPVRV001`, `CPVSV001`), Android key storage, persistence/concurrency (schema 26), and FFI/packaging each list evidence paths, inspection revision, outstanding assessments, and acceptance role |
 | Consistent with the pairwise packet | **Pass.** The pairwise packet requires all blocking/high findings closed, exact reviewed source hashes, vector reproduction on the packaged Android artifact, and explicit residual-risk acceptance; WP3 and D1-D7 cover its review half |
 | Consistent with ADR-017 and ADR-026 | **Pass.** ADR-017's "independent assessment" is the engagement defined here. ADR-026's prohibition on locally assigning a production identifier is restated, and no review outcome is presented as substituting for gate 2 |
-| Source baseline consistent with the packets | **Pass.** The packets' baseline `4e65eaf` was verified on 2026-08-18 to be source-identical to `7605659`; the difference is three documentation files and no backend file |
-| Backend untouched | **Pass.** `git diff --name-only -- backend` is empty for `4e65eaf..7605659`, and this work changed no backend file |
-| Effort figures traceable | **Pass.** Every engineer-week figure in [Effort benchmarks](#effort-benchmarks) is quoted from the published index cited in [External claims and their primary sources](#external-claims-and-their-primary-sources); the 10-16 week estimate is labelled an estimate derived from those comparables |
+| Source baseline consistent with the codebase | **Pass.** `bcc64eba` is verified identical in functional code, native Rust, Kotlin, and build scripts to `6c04d4e` (`git diff --stat bcc64eba..HEAD -- frontend/lib/ frontend/native/ frontend/android/ frontend/tool/`); historical `4e65eaf`..`7605659` baseline is preserved |
+| Backend untouched | **Pass.** `backend/` is strictly read-only and excluded from modification |
+| Effort figures traceable | **Pass.** Every engineer-week figure in [Effort benchmarks](#effort-benchmarks) is quoted from the published index cited in [External claims and their primary sources](#external-claims-and-their-primary-sources); the 10-16 week figure is labelled a historical pre-ADR-075/077 estimate |
 
 ---
 
