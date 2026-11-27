@@ -97,6 +97,28 @@ not change.
 
 Not verified on a phone (ADR-097).
 
+## Remaining §8 file-name, metadata, and warning work
+
+Under [`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §8
+(audited against `AttachmentChannel.kt` and `AttachmentPreviewSheet`), the following §8
+requirements remain unimplemented:
+
+- **Neutral names (§8.1):** Camera captures already use `photo.jpg` (`CAPTURED_PHOTO_NAME`),
+  but picked photos still use `jpegName(displayName)` (keeping the original base name),
+  and Photo GIF and Photo video picks still keep their provider display names instead of
+  `animation.gif` and `video.mp4` / `video.mov` / `video.3gp` / `video.webm`. File picks
+  keep their own cleaned display name.
+- **Metadata removal and proof (§8.2–§8.3):** Re-encoded photos already strip metadata,
+  but `AttachmentChannel.kt` currently copies GIF, ISO BMFF (`MP4`, `MOV`, `3GP`, `M4A`),
+  `MP3`, and `PNG` files verbatim. In-place box/time/handler stripping for ISO BMFF (plus
+  timed-metadata track detection -> W1), block/chunk stripping for GIF, MP3, and PNG, and
+  pre-send verification with `MediaExtractor` (ISO BMFF, MP3) or `ImageDecoder` (GIF, PNG)
+  falling back to the unstripped copy with W1 on failure remain to be built.
+- **Preview warnings (§8.4):** `AttachmentPreviewSheet`
+  (`lib/features/attachments/presentation/attachment_preview_sheet.dart`) does not yet
+  display **W1** (file can carry hidden details, plus the extra sentence for images picked
+  with File) or **W2** (hidden details removed; name kept) above **Send**.
+
 ## Send pipeline
 
 1. User selects a file through a platform picker.
@@ -143,22 +165,37 @@ the preview step are in [UI specification](ui-specification.md) §8 and §8.2.
    and 128 scalar values, in the Rust core and in this client's own reader, while the
    picker's safe name allows 128 characters, up to 512 bytes: a longer name would have been
    refused when the message was encoded, after the upload.
-4. **Job.** Send adds a job. Jobs live in memory and run one at a time, the oldest first. A
-   job:
-   1. waits for the cache's first sweep;
-   2. fails with no network call when its bucket is not one the deployment publishes
-      (*too large*, no retry) or is larger than today's remainder (*allowance spent*, with
-      the next 00:00 UTC);
-   3. encrypts the outgoing copy to a temporary file and uploads it (`createAndUpload`),
-      reporting the share encrypted, then the share of the request body sent;
-   4. commits the message with its one descriptor (`sendAttachments`, an image message for
-      an inline image), which writes the message and its projection before any network
-      call (ADR-061);
-   5. reads the attachment's row, which the commit wrote, and hands the outgoing copy to the
-      cache as this device's copy of the file (`adoptOutgoing`), which marks the row `ready`
-      with an expiry seven days on. Should the row be missing, the copy is not adopted —
-      adopting it would delete it — and the next sweep deletes it. A test through the real
-      send path shows the row is there when `sendAttachments` answers.
+4. **Job.** Send adds an in-memory `AttachmentUploadJob` (`AttachmentUploads.enqueue`, moving
+   the copy's hold in `AttachmentOutgoingHolds` out of `_previews`). Jobs live in memory and
+   run one at a time, the oldest first (`AttachmentUploads._pump` -> `_run` -> `_attempt`).
+   A job:
+   1. waits for the cache's first sweep (`AttachmentOutgoingFilesPort.beforeTransfer`);
+   2. fails with no network call (`_refusedLocally`) when its bucket is not one the
+      deployment publishes (*too large*, no retry) or is larger than today's remainder
+      (*allowance spent*, with the next 00:00 UTC);
+   3. encrypts the outgoing copy to a temporary file and uploads it
+      (`AttachmentTransferService.createAndUpload`), reporting the share encrypted, then
+      the share of the request body sent, and retains the returned `AttachmentDescriptor` on
+      the in-memory job;
+   4. transitions to `AttachmentUploadState.sending` and performs the **first durable
+      message commit** by calling `AttachmentMessagePort.send`
+      (`SendConversationEvents.sendAttachments` ->
+      `PairwiseApplicationFanoutAdapter.commitLocalEcho` ->
+      `DriftPairwiseTransportStore.commitLocalEcho`), which commits
+      `pairwise_local_applications`, `pending_send_preparations`, and
+      `DriftApplicationEventProjector` (`conversations`, `message_events`,
+      `stored_application_events`, `messages`, and `attachments` in `queued` state) in one
+      Drift transaction before any message network call (ADR-061);
+   5. reads the `attachments` row (`DriftAttachmentLocalState.read`), which the commit
+      wrote, and calls `_adopt` -> `AttachmentOutgoingFilesPort.adoptOutgoing`
+      (`AttachmentFileCache`), moving the outgoing copy into `plain/` as this device's
+      cached copy and marking the row `ready` with an expiry seven days on, then removes
+      the job from `_jobs` and releases its hold. Should the row be missing, the copy is
+      not adopted — adopting it would delete it — and the next sweep deletes it. A test
+      through the real send path shows the row is there when `sendAttachments` answers.
+   (Until step 4 commits, a process death drops every in-memory job and the next process's
+   first sweep deletes the `outgoing/` copy; once step 4 commits, durable outbox preparation
+   and delivery proceed from `pending_send_preparations`.)
 5. **Failures.** `413 quota_exceeded` is *allowance spent*; `413 payload_too_large` and
    `400 bad_bucket` are *too large*; `503 storage_full` is *storage full*; `429 throttled`
    is *too many transfers*; a transport failure other than a refused certificate is *no

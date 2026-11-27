@@ -125,13 +125,8 @@ The backend exposes a versioned `v1` API. CI checks the generated
 [OpenAPI contract](backend/openapi.json), and [API_CHANGES.md](API_CHANGES.md) records
 changes that affect clients.
 
-**Client.** The Android app implements registration, sign-in, device enrollment,
-cross-signing, and contact verification. Direct and group chats, Saved Messages, local
-search, linked devices, history transfer, notifications, best-effort background delivery,
-and user-initiated diagnostics are implemented. Group attachments, the shared-media
-view, and profile publishing remain pending. See the
-[implementation checklist](frontend/docs/implementation-checklist.md) for delivery and
-verification status.
+**Client.** See the [frontend status matrix](frontend/docs/STATUS.md) for implemented
+behavior, validation evidence, and release gaps.
 
 The [client contract](docs/client/CLIENT_CONTRACT.md) defines the requirements a client
 must meet for the security properties to hold.

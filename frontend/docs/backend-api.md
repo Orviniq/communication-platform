@@ -6,8 +6,11 @@ The following backend-wide documents are authoritative before the per-app endpoi
 references:
 
 - [Backend overview](../../backend/README.md)
-- [Binding client security contract](../../backend/CLIENT_CONTRACT.md)
-- [Backend threat model and residual risk](../../backend/SECURITY.md)
+- [Binding client security contract](../../docs/client/CLIENT_CONTRACT.md)
+- [Binding client contacts, trust, and file metadata contract](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
+- [Binding client presence and read-receipts contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+- [Binding client voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md)
+- [Backend threat model and residual risk](../../docs/security/SECURITY.md)
 
 These files define transport only. Encrypted content formats and client synchronization
 rules are defined by [cryptographic-protocol.md](cryptographic-protocol.md),
@@ -68,7 +71,9 @@ Four codes were deleted from the client because no route answers them: `bad_requ
 
 The former device-enrollment circularity is resolved. The binding flow is now
 two-phase: register without `cross_sig`/`bundle_version`, receive the backend-assigned
-`device_id` and full-scope tokens, then submit the valid signature and version through
+`device_id` and one full-scope session token with `expires_in` (and renew via
+`POST /api/v1/auth/renew`, as `POST /api/v1/auth/refresh` is retired), then submit the
+valid signature and version through
 `PUT /me/devices/{device_id}/prekeys`. A later device retrieves the recovery backup only
 after registration gives it full scope. Until the follow-up succeeds, peers see
 `cross_sig: null` and withhold messages.
@@ -81,5 +86,9 @@ release.
 
 The backend serves no MLS. The three KeyPackage routes answer `404`, and a group is a set
 of pairwise sessions with no group endpoint and no group key material
-([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F,
+([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §F,
 [server ADR-0001](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)).
+Note also that `GET /api/v1/users` has been replaced by `POST /api/v1/users/lookup`
+(ADR-0028) and `last_active_date` is no longer returned by `GET /api/v1/me/devices`
+(ADR-0024); remaining client updates against the current backend OpenAPI surface are
+tracked in [`CLIENT_WORK.md`](../../CLIENT_WORK.md).

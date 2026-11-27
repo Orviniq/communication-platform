@@ -10,8 +10,7 @@ These instructions apply to everything under `frontend/`.
   one, or a `kIsWeb` branch.
 - Treat every file under `backend/` as read-only. Backend code and documentation may be
   inspected, but MUST NOT be edited from a frontend implementation task.
-- Work on one numbered piece from `docs/implementation-prompts.md` at a time. Do not
-  begin later pieces merely because their interfaces are visible.
+- Work on one scoped task at a time.
 
 ## Authority and required reading
 
@@ -19,10 +18,10 @@ Before changing code, read:
 
 1. `docs/README.md`;
 2. `docs/implementation-checklist.md`;
-3. the documents named by the selected implementation prompt; and
-4. the backend `API.md` files referenced by `docs/backend-api.md`, plus
-   `backend/CLIENT_CONTRACT.md` and `backend/SECURITY.md` when security or protocol
-   behavior is involved.
+3. the frontend documents that own the behavior in scope; and
+4. the relevant backend `API.md` files indexed by `docs/backend-api.md`, plus
+   `../docs/client/CLIENT_CONTRACT.md` and `../docs/security/SECURITY.md` when
+   security or protocol behavior is involved.
 
 Backend documentation is authoritative for endpoints, scopes, limits, errors, and
 server guarantees. Frontend documentation is authoritative for client architecture,
@@ -88,7 +87,7 @@ endpoint, wire format, or weaker security behavior.
   private-use production ciphersuite identifiers, TOFU messaging, TLS bypasses, or
   arbitrary server selection.
 - A group is a set of pairwise sessions, and the client uploads no group key material
-  (`backend/CLIENT_CONTRACT.md` §F).
+  (`../docs/client/CLIENT_CONTRACT.md` §F).
 - Never log plaintext, credentials, stable identifiers, keys, recovery secrets,
   ciphertext, attachment capabilities, or decoded tokens. Test redaction.
 - Android and future Web protection are different threat boundaries. Do not claim

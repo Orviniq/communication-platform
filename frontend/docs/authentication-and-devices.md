@@ -2,10 +2,26 @@
 
 ## Trust configuration
 
-The application ships with one provisioned server origin, private-CA trust anchor, and
-native primary/backup SPKI pins. Users cannot bypass trust failures or enter arbitrary
-servers. Development configuration is separate, visibly branded, and cannot be built as
-a production artifact accidentally.
+The application ships with one provisioned server origin and a private-CA trust anchor.
+Users cannot bypass trust failures or enter arbitrary servers. Development configuration is
+separate, visibly branded, and cannot be built as a production artifact accidentally.
+
+- **Runtime transport trust (`dart:io`):** At runtime, all REST, attachment, and
+  WebSocket traffic runs on `dart:io`, anchored exclusively to the provisioned private CA
+  (`SecurityContext(withTrustedRoots: false)..setTrustedCertificatesBytes(certificateAuthority)`
+  in `TransportSecurity.provisioned`). Both `DioRestClient` / `DioAttachmentTransport` (via
+  `IOHttpClientAdapter`) and `PlatformSocketConnector` (via
+  `IOWebSocketChannel.connect(customClient: ...)`) share this `HttpClient` factory with
+  `badCertificateCallback` returning `false`. Dart does **not** perform runtime leaf SPKI
+  pin verification (`app_configuration.dart` checks pin syntax at startup only).
+- **Build-time pin checks and Android XML:** `tool/build_production_release.sh` checks the
+  primary SPKI pin against the live host before building, and
+  `tool/render_production_trust.sh` embeds the private CA and primary/backup SPKI pins into
+  Android's `network_security_config.xml`, which governs Android's Java HTTP stacks and
+  WebView (defence in depth) rather than `dart:io`.
+- **Owner decision (ADR-076 D7):** Whether runtime SPKI pinning must also be enforced in
+  Dart (or whether exclusive private-CA anchoring in `dart:io` suffices) remains an open
+  owner decision.
 
 ## Bootstrap routing
 
@@ -41,7 +57,7 @@ Login without a known live device ID returns register scope. Before registration
 client generates the device Ed25519/X25519 identity and classical and ML-KEM-768
 prekeys. It generates no MLS KeyPackage: a group is a set of pairwise sessions with no
 group key material to upload
-([`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F). It calls
+([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §F). It calls
 `POST /api/v1/me/devices` without `cross_sig` or `bundle_version`, and without
 `keypackages`: `RegisterDeviceIn` has no such field and refuses an extra one. The `201`
 response supplies the assigned `device_id` and one full-scope session token with its
@@ -72,8 +88,10 @@ state.
 
 ## Token handling
 
-There is one token. Login and device registration each answer a session token and the
-`expires_in` beside it, and `POST /api/v1/auth/renew` answers another of the same kind.
+There is one token. Login (`POST /api/v1/auth/login`) and device registration
+(`POST /api/v1/me/devices`) each answer a session token (`token` and `expires_in`), and
+`POST /api/v1/auth/renew` answers another of the same kind when called with a full-scope
+session token in the `Authorization` header and no body.
 The server issues no second credential to hold, so there is no pair to keep in step, no
 rotation, and no route named `refresh` — server-side ADR-0023 retired all three, and
 `frontend/docs/decisions.md` ADR-068 records what that costs this client.
@@ -158,7 +176,10 @@ fetched from `/api/v1/users/{user_id}/identity`, and the paged
 cross-signed addition does not invalidate master-key verification. Invalid/unsigned
 devices are withheld; master-key change or log fork blocks sensitive operations.
 Unknown/foreign/revoked IDs are treated identically in UI to avoid exposing server
-existence distinctions.
+existence distinctions. (Currently `ClientAuthenticationService.confirmOutOfBand` records
+one-sided peer verification and `SafetyNumberPage` displays `CP-SAFETY-V1`; under
+[`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4–§5,
+`CP-CONTACT-V1` and mutual verification (`MUTUAL`) are required for direct conversations.)
 
 A device that has not cross-signed itself is listed as `cross_sig: null` beside
 `bundle_version: 0`, the version the server stores until the follow-up `PUT` names one. That
@@ -271,8 +292,10 @@ out-of-band resolution.
 
 Recovery requires the server key-backup blob and user-held recovery secret. The client
 performs Argon2id and authenticated decryption locally. A wrong secret produces a generic
-local failure. The blob restores cross-signing private keys and identity material only;
-there is no history key or server history. There is no server check/reset and the UI
+local failure. The `CPKBV001` blob restores the account UUID and the three cross-signing
+private keys (`master`, `self_signing`, `user_signing`) only (`encrypt_backup` in
+`native/crypto_core/src/enrollment.rs`); it carries no peer attestations, no contact
+list, and no history key or server history. There is no server check/reset and the UI
 never suggests one.
 
 Message history arrives only from an existing online, cross-signing-authorized device

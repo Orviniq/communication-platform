@@ -34,9 +34,9 @@
 Version 1 is Android-only. Piece 07's required target tests are the shared Rust primitive
 suite, native ABI boundary tests, Android cross-build/package checks, Dart wrapper and
 isolate tests, and a smoke call through the library packaged in an Android application.
-A host-native dynamic-library test alone is not the packaged Android smoke. The
-preserved Web build may exercise only an explicit fail-closed unavailable adapter; it is
-not a version-1 target or release gate.
+A host-native dynamic-library test alone is not the packaged Android smoke. The Web target
+was removed on 2026-09-08 under [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md). A browser release would require an
+explicit decision and compatible server support.
 
 - FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, Argon2id, CBOR, and secretstream vectors
   applicable to the selected implementation. Voice needs none of its own: DTLS-SRTP is
@@ -91,7 +91,8 @@ Run against the real Django development stack, PostgreSQL, Redis, the nginx atta
 path, and coturn where applicable:
 
 - every documented status/error and auth scope;
-- session renewal and concurrent single-flight requests;
+- session renewal (`POST /api/v1/auth/renew`, which does not retire presented tokens) and
+  concurrent single-flight requests (contention control, ADR-083);
 - device registration/revocation and 4003 close;
 - first- and later-device two-phase enrollment, including rejection of registration-time
   `cross_sig`, null/withheld intermediate state, full-scope backup retrieval, idempotent
@@ -151,14 +152,14 @@ Use at least two accounts and multiple Android devices for version 1:
   11 to 16; and whether a persisted job survives an in-place upgrade, which the platform
   documentation does not specify.
 
-Patrol may drive Android native flows. Browser E2E is post-v1 and is not required for the
-Android release.
+Patrol may drive Android native flows. Browser E2E applies if a browser target is approved.
 
 ## Adverse-environment matrix
 
 - No network, local-only server, high latency, packet loss, reordering, duplicate frames,
   proxy reset, TLS/pin failure, Redis/backend restart.
-- Expired access during REST/WS, refresh response loss, revoked refresh, clock skew.
+- Expired session token during REST/WS, renewal response loss (`POST /api/v1/auth/renew`),
+  revoked session token (`401 token_revoked` / WS `4003`), clock skew.
 - Android Doze/standby/force-stop/reboot/permission changes/background-poll delay and
   active-voice foreground-service stop.
 - Future Web release: tab sleep/reload/multiple tabs/storage eviction/private mode/browser
@@ -191,5 +192,4 @@ Version-1 release budgets are measured on representative low/mid Android devices
 Pull requests require formatting, analysis, affected unit/widget tests, and documentation
 updates. Version-1 release additionally requires the Android build, crypto vectors,
 migrations, backend contracts, Android E2E matrix, accessibility, performance, offline
-rehearsal, and security review to pass. Web target gates are post-v1. Coverage percentage
-alone cannot waive an invariant test.
+rehearsal, and security review to pass. Coverage percentage alone cannot waive an invariant test.

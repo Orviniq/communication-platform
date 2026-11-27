@@ -1,9 +1,7 @@
 # UI specification — Page-by-Page
 
-> **Repository scope note.** The original specification refers to web, mobile, and
-> desktop layout modes. Version 1 ships Android only. The responsive web layout remains
-> a post-v1 design direction; “desktop” below means a future wide-browser layout and
-> does not add Windows, macOS, or Linux application targets.
+> Android is the sole target. Wide layouts describe viewport sizes. The
+> [frontend status matrix](STATUS.md) records implementation and release gaps.
 >
 > **Backend authority note.** Backend `API.md` contracts take precedence wherever this
 > UI specification implies an unavailable endpoint, stronger server guarantee, or
@@ -11,10 +9,8 @@
 > opaque transport model.
 
 > **Purpose.** This is a **layout and screen-flow specification** for the Flutter client
-> (Android, with a post-v1 responsive Web direction). It describes **every screen, sub-screen, sheet, dialog, and
-> menu**: what each contains, where each element sits, what every button/action does,
-> where each action leads, and what states each screen can be in. It is **self-contained**
-> — you do not need any other document to lay out and build these screens.
+> on Android. It describes screen layout, actions and states. The binding contacts,
+> presence, receipts and voice contracts linked below also apply.
 >
 > **Scope boundary — read this.**
 > - This document specifies **layout structure and screen content**: the arrangement of
@@ -54,17 +50,16 @@ These recur across screens. They are stated here so the individual screens can s
 - **Presence, typing, and read/delivery receipts are private, encrypted signals.** They
   travel inside the encrypted channel. Accepted tradeoff: they may **lag slightly** vs. a
   normal chat app. Design for a small delay; don't treat them as instant.
-- **Search is client-side only.** The server never indexes or helps search, and never sees
-  the query. Search covers only history stored and decrypted on **this device** — and each
-  search surface states its own narrower scope, because the Chats search page matches names,
-  usernames and one preview line per chat while in-conversation search reads that
-  conversation's whole local history (§6.5).
+- **Chat and contact-list search are local.** The Chats search page matches names,
+  usernames and one preview line per chat. In-conversation search reads that
+  conversation's local history (§6.5). Explicit exact-username discovery uses
+  the server lookup described in §7.
 - **Foreground delivery uses the app's own server; Android background delivery is
   best-effort — never Google/Apple push.** By default that is deferred polling; a user may
-  additionally turn on keeping the app connected while it is closed (§15), which is faster
-  and still not a guarantee. Do not offer FCM/APNs-style options.
-  Uncollected envelopes expire after seven days; a detected queue gap shows each affected
-  group as waiting for its state.
+  additionally opt into keeping the app connected while closed (§15). Production
+  offers this as best effort with no delivery-time promise.
+  Uncollected envelopes expire after the window published in `GET /api/v1/config`.
+  An affected group shows that it awaits state. Direct-chat gap UI remains outstanding.
 - **Honesty over false comfort.** Several actions are **best-effort, not guarantees**, and
   the UI must say so plainly (detailed at each spot): *Delete for everyone*, voice-room
   *ephemeral* text, and history recovery. Never word a dialog to imply a stronger promise
@@ -82,9 +77,11 @@ These recur across screens. They are stated here so the individual screens can s
 - **Two separate secrets, never conflated.** A **login password** authenticates to the
   server; a **recovery secret** protects cross-signing private identity material. Neither
   recovers message history from the server because the server stores none.
-- **Verification precedes messaging.** SAS/QR verifies a contact's master key out of
-  band. Until verified, Message/Invite actions are blocked. Unsigned devices, master-key
-  changes, and device-log forks are blocking security states.
+- **Verification precedes messaging.** The implemented Safety Number flow verifies
+  a contact's master key out of band on one side. The
+  [contacts and trust contract](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
+  requires the contact code and `MUTUAL` before direct content. Unsigned devices,
+  master-key changes, and device-log forks are blocking security states.
 
 ---
 
@@ -96,7 +93,7 @@ One adaptive shell that changes structure by viewport width.
 - **Mobile (narrow):** a **bottom tab bar** with three tabs: **Chats**, **Voice Rooms**,
   **Settings**. Tapping a list item pushes a detail screen over the whole screen, the tab
   bar included; back gesture/button pops it.
-- **Post-v1 desktop / web (wide):** a **two-pane layout**. A **left rail** holds the same three
+- **Expanded Android viewport (wide):** a **two-pane layout**. A **left rail** holds the same three
   destinations plus the list for the selected one; the **right pane** shows the open
   conversation/room/detail. Selecting a list item swaps the right pane in place.
 - **Tablet / medium:** two panes when wide enough, otherwise mobile behavior.
@@ -163,8 +160,7 @@ setup the app was provisioned with.
 - No stored identity → **Login** (§2) with a Register path.
 - Server unreachable with no usable local identity → stay here in the unreachable state.
 - Server unreachable with a usable Android identity → open cached Chats in offline mode;
-  queued sends wait for reconnection. A future online-session-first Web client stays on
-  the unreachable state until its configured server returns.
+  queued sends wait for reconnection.
 
 **States.**
 - *Loading* — "Starting…" while local keys/trust load.
@@ -533,7 +529,7 @@ second copy of every message body ([ADR-057](decisions.md)).
 - **Top bar:** back/close; title "New".
 - **Action rows at top:** **New Group** → Create Group (§12.1); **New Voice Room** →
   Create Voice Room (§13.1).
-- **Contacts list:** the users this client knows about. Each row shows the authenticated
+- **Contacts list:** the user's local contacts. Each row shows the authenticated
   profile avatar/display name when available. Before a profile key is received, it shows
   the backend username and a locally generated placeholder avatar, plus no verified-key
   indicator. A verified indicator appears only after the safety number (§11.1) is
@@ -544,7 +540,14 @@ second copy of every message body ([ADR-057](decisions.md)).
 - **Search field** filters by username, and by display name once a contact is verified —
   the contact rule of the search page (§6.5).
 
-**States.** *Loading*, *empty* (no other users known yet), *offline* (cached contacts).
+**States.** *Loading*, *empty* (no local contacts), *offline* (local contacts).
+
+The required add-contact flow accepts a contact code or makes one explicit
+`POST /api/v1/users/lookup` for an exact username. Use the same no-match message
+for missing, inactive and hidden accounts. A lookup result still requires
+identity verification. The implemented screen filters a local directory cache
+and still tries the retired `GET /api/v1/users`. See
+[discovery and contact status](STATUS.md#platform-identity-and-content).
 
 ### 7.3 Compose behavior recap (tab-dependent "+")
 - On **Chats**, compose opens **Contacts / New** (§7) → DM, or branch into New Group /
@@ -798,7 +801,9 @@ history; up to ~50 members; roles **owner → admins → members**.
        member is online (ADR-098 D4, D11). N counts the other members with an online device whom
        this user has verified, never this account, so it is a lower bound; a group of more than 32
        members and a phone with the switch off show the count alone. Typing names replace both
-       while members type. Built; not run on a phone.
+       while members type. This is the implemented behavior. The
+       [presence contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+       requires coverage through 50 members, subject to the account audience.
    - The whole bar between the back button and **Search** is one target for the header, as high
      as the bar: a tap anywhere on it → **Group Info** (§12.2). To a screen reader it is one
      button that reads the name and the count once and names Group Info as its result.
@@ -895,7 +900,9 @@ message's time.
 ## 10. Live Voice Room Screen
 
 **Purpose.** The active audio call inside a **standalone, audio-only** voice room with an
-**ephemeral** alongside text chat. All members are equal peers — no admin hierarchy.
+**ephemeral** alongside text chat. The implemented v1 room has equal active
+members. The [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md)
+requires owner/admin/member permissions and in-call moderation in v2 if voice ships.
 
 **As built, 2026-10-02** (phase 6 prompt 9): `VoiceCallPage` at
 `/voice-rooms/:roomId/call`, where `:roomId` is the room's 32-byte id in lowercase hex. It
@@ -990,7 +997,8 @@ so there is no shared key to rotate and no *negotiating encryption* step to show
   updating and takes no line.
 - *Everyone has left* — the alone state; the call's text goes when the call ends.
 - *Call full* — ten joined devices already, or this device sorted outside the ten: the
-  ceiling, its reason, and *Try again*.
+  ceiling, its reason, and *Try again*. The current message says *ten people* even
+  though the call counts devices.
 - *Voice not set up on this server* — `voice_configured` false, or `503
   voice_unconfigured`. Honest and **not retryable**: no call control is offered at all, and
   no foreign fallback is substituted.
@@ -1009,15 +1017,12 @@ and the count, which change too often for a screen reader to stay usable. Speaki
 shown, so it is not announced either.
 
 **Not built.** Speaking indicators, because nothing measures a stream's audio level; a
-peer's mute, which no frame carries; output selection (`voice-room-states.md` §5.7);
+peer's mute, which no frame carries; audio output selection;
 *Relay not answering*, which the call does not report (it reports each peer instead);
-controls in the call's notification (§5.8); the notification permission request at the
-join; and a screen of its own for a device revoked mid-call (§5.4). A call ends with its
+controls in the call's notification; the notification permission request at the
+join; and a screen of its own for a device revoked mid-call. A call ends with its
 session: a logout, an erasure or a revocation leaves the call, closing every connection and
 stopping the service, and the user lands where the session's end sends them.
-
-Every state above is drawn in [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md)
-§5, which is the tie-breaker for these screens.
 
 ---
 
@@ -1027,7 +1032,8 @@ Every state above is drawn in [`design-handoff/voice-room-states.md`](design-han
 
 **Layout (top → bottom).**
 1. **Top bar:** back; overflow if needed.
-2. **Header:** large avatar, display name, presence/last-seen line (encrypted, volatile).
+2. **Header:** large avatar and display name. The specified presence/last-seen line
+   remains unbuilt.
 3. **Action rows:**
    - **Message** → DM (§8).
    - **Mute** → mute options (§17).
@@ -1035,12 +1041,18 @@ Every state above is drawn in [`design-handoff/voice-room-states.md`](design-han
    - **Shared media/files** → a media grid from this DM, decrypted locally (§11.2). Not
      built: the row is drawn disabled.
    - **Clear history** → confirm, honest wording.
-   - **Block/Unblock** → confirm. Blocking is private client state synchronized only to
+   - **Block/Unblock** → confirm. The current block row is disabled. The required
+     behavior keeps private block state synchronized only to
      the user's own devices. It suppresses display, receipts, presence, typing, and
      notifications from the contact, but cannot prevent the sender from submitting
      ciphertext to the backend; the client still safely drains and acknowledges it.
 
 ### 11.1 Safety Number screen
+
+The following describes implemented one-sided verification. The release gap is
+`CP-CONTACT-V1` and mutual verification as required by
+[contacts and trust](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md).
+
 - **Purpose.** Compare a contact's key fingerprint to make sure no one — not even a
   malicious server — is impersonating them or intercepting messages.
 - **Layout.** SAS emoji/number text derived from both users' exact master keys, a QR code
@@ -1121,9 +1133,11 @@ drawn until its destination exists.
 **The server holds no room.** A room is client state — a name and a roster built by
 signed control events over ordinary envelopes, exactly as a group is. There is no room
 row, no capability, no join token and no live count, so none of the three screens below
-makes a server call to create, rename, invite or leave. Each of those is a signed event
-fanned out as envelopes, and the only server answer any of them can produce is a `429`
-on the fan-out.
+calls a server room endpoint for create, rename, invite or leave. Each action
+produces a signed event that the client fans out through the envelope endpoint.
+
+The actions in this section describe v1. For v2 role-gated room actions and
+migration, follow the [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md).
 
 **As built, 2026-10-02** (phase 6 prompt 9): `lib/features/voice/presentation/`. Every
 screen reads rooms through `RoomStateReadPort` and signs a change through the room use
@@ -1264,7 +1278,7 @@ Security notice, and About with Diagnostics behind it.
 5. **Notifications** — what the operating system will actually do, read from the operating
    system rather than from a stored preference (ADR-048). Three states: **on**, with a line
    stating that an alert says only that something arrived, never who sent it or what it
-   says, and that it can only reach the user while the app is running; **off**, with one
+   says. Alerts can follow a foreground or background drain. **Off**, with one
    action that asks Android and falls through to this app's system notification settings
    when asking changes nothing, because a second refusal is permanent and the app can no
    longer prompt; and **not available in this build**, on any target with no alert
@@ -1288,7 +1302,9 @@ Security notice, and About with Diagnostics behind it.
    withdrawn (which can happen by itself after a phone update), not running, not available
    in this build. **Off is the default and a complete state**: nothing runs, nothing is
    requested, nothing appears anywhere, and the row says so. This surface is reached only
-   from Settings and is never suggested, prompted or advertised elsewhere.
+   from Settings and is never suggested, prompted or advertised elsewhere. See
+   [background delivery status](STATUS.md#presence-voice-and-delivery) for the
+   current production offer and evidence.
 5c. **Show my online status** — one switch row after Receiving while closed, on by default,
    for this phone alone (ADR-098 D9). The line under the title says what it does in both
    directions: "Off on this phone: nobody sees when you are online or typing, and you do not see
@@ -1296,7 +1312,20 @@ Security notice, and About with Diagnostics behind it.
    typing of anyone, and deletes the last seen it holds; typing goes with it. A screen reader reads
    the title and the line as one switch with its state. A choice that cannot be stored is reported
    in a snackbar. The switch takes no tap until the stored choice has been read, and the row is left
-   out where Settings is drawn without the providers. Built; not run on a phone.
+   out where Settings is drawn without the providers. This is the implemented
+   per-phone control. The
+   [presence and receipts contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+   requires **Who can see my online status** with **Everyone I share a chat with**,
+   **My contacts**, and **Nobody**, applied reciprocally across the account's devices.
+5d. **Read receipts** — required account-wide setting for direct chats, on by default.
+   Off suppresses sends to the peer and hides peer seen state across the account's
+   devices. Own-device read sync, delivered receipts and group reader lists keep their
+   existing roles. This setting is outstanding.
+5e. **Let people find me by my username** — required default-on account setting.
+   Turning it off hides the account from exact-username lookup. Contacts who already
+   hold its user ID can still reach it, and registration still reports the username
+   as taken. The server provides `GET`/`PUT /api/v1/me/discoverability`. Client
+   integration is outstanding.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).
@@ -1416,17 +1445,16 @@ outcome and is never reported as a revoked session.
 
 ## 16. Linked Devices
 
-**Purpose.** Manage the user's Android device. A future Web profile will be independently
-keyed and cross-signed by the account identity. Add a device, authorize it, and optionally
-transfer locally held history.
+**Purpose.** Manage the user's Android devices. Add a device, authorize it, and
+optionally transfer locally held history.
 
 **Layout (top → bottom).**
 1. **Top bar:** back; title "Linked Devices".
 2. **This device** row — current device, marked.
-3. **Other devices** list — each row: device label, last-active (as available, at the
-   day-level coarseness the backend reports and **not** shifted into local time), and
-   **Remove device** (→ confirm). Removing revokes it. Removing *this* device is a
-   distinct confirmation, because it also erases everything on this phone.
+3. **Other devices** list — each row: device label and **Remove device** (→ confirm).
+   The server removed `last_active_date` and the client no longer displays it.
+   Removal revokes the device. Removing *this* device has a separate confirmation
+   because it also erases everything on this phone.
 4. **Add device** — an explanation, not a button. The flow in §16.1 starts on the *other*
    device, so this screen has nothing to start; what it says is what the other device
    needs, and that this one should stay online afterwards so it can send its history

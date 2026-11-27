@@ -17,17 +17,20 @@ work.
 Release necessity, not arrival. **Required** means a release without it is broken or
 misleading to a user; **recommended** means the client works without it and costs the
 user something; **optional** is an improvement with no obligation behind it. Each row
-names the `backend/` document that binds the obligation — that document is
+names the repository document that binds the obligation — that document is
 authoritative and this one never restates it.
+
+See the [frontend status matrix](frontend/docs/STATUS.md) for current behavior and
+release gaps. Dated migration notes below retain the original server handoff.
 
 ### Required before release
 
 | Work | Section | Bound by |
 |---|---|---|
-| The `/ws` handshake takes the token in the `Authorization` header; the query-parameter form is gone | [The `/ws` handshake](#the-ws-handshake--this-is-the-breaking-one) | [`backend/realtime/API.md`](backend/realtime/API.md) |
-| One session token replaces the access/refresh pair: the response bodies of register, login and renew moved, and `POST /api/v1/auth/refresh` is gone | [Required — the response bodies moved](#required--the-response-bodies-moved) | [`backend/accounts/API.md`](backend/accounts/API.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §B |
-| The linked-devices screen must stop reading `last_active_date`, which no route serves | [Required — the linked-devices screen loses the last-active value](#required--the-linked-devices-screen-loses-the-last-active-value) | [`backend/devices/API.md`](backend/devices/API.md) |
-| The gateway handles `ack` and `signal` and emits `envelope` and `signal` and nothing else; the frames that left must go from the client | [The gateway frames that left](#the-gateway-frames-that-left-and-the-one-that-changed-shape) | [`backend/realtime/API.md`](backend/realtime/API.md) |
+| The `/ws` handshake takes the token in the `Authorization` header (**implemented**) | [The `/ws` handshake](#the-ws-handshake--this-is-the-breaking-one) | [`backend/realtime/API.md`](backend/realtime/API.md) |
+| One session token for register, login and renew (**implemented**). Production-equivalent verification is open | [Required — the response bodies moved](#required--the-response-bodies-moved) | [`backend/accounts/API.md`](backend/accounts/API.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §B |
+| Remove `last_active_date` from linked devices (**implemented**) | [Required — the linked-devices screen loses the last-active value](#required--the-linked-devices-screen-loses-the-last-active-value) | [`backend/devices/API.md`](backend/devices/API.md) |
+| The gateway handles `ack` and `signal` and emits `envelope` and `signal` and the Android client removed the retired frames (**implemented**) | [The gateway frames that left](#the-gateway-frames-that-left-and-the-one-that-changed-shape) | [`backend/realtime/API.md`](backend/realtime/API.md) |
 | The account-erasure action, so a user who wants to leave has a way to | [Required before release — the erase-account action](#required-before-release--the-erase-account-action) | [`backend/accounts/API.md`](backend/accounts/API.md) |
 | `GET /api/v1/users` is gone: find people by exact name, one lookup at a time, and keep the contact list on the client | [Required before release — find people by exact name](#required-before-release--find-people-by-exact-name) | [`backend/accounts/API.md`](backend/accounts/API.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §P |
 | The "find me by username" toggle, worded so it does not promise more than it hides | [Required before release — the discoverability toggle](#required-before-release--the-discoverability-toggle) | [`backend/accounts/API.md`](backend/accounts/API.md) |
@@ -39,8 +42,8 @@ authoritative and this one never restates it.
 | Who can see my online status — everyone I share a chat with, my contacts or nobody, for the whole account — with presence in every group of up to 50 members, both people verified, blocks refused, three sending rules tightened, and the switch migrated | [Required before release — who can see my online status](#required-before-release--who-can-see-my-online-status) | [`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §2 to §5, §8 |
 | The read-receipt setting for direct conversations: on by default, for the whole account, reciprocal; groups always send read receipts | [Required before release — the read-receipt setting](#required-before-release--the-read-receipt-setting) | [`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §5, §6 |
 | Roles in voice rooms, if voice ships: room protocol version 2, the upgrade of every existing room, version negotiation and the in-call actions | [Required if voice ships — roles in voice rooms](#required-if-voice-ships--roles-in-voice-rooms) | [`docs/client/CLIENT_VOICE_ROLES.md`](docs/client/CLIENT_VOICE_ROLES.md), [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N rule 12 |
-| The web platform files, the conditional-import stubs and the web build step the removed web target left behind | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
-| Voice, if voice ships in the release: the media package, the manifest permissions, and the eleven rules of the contract | [Voice](#voice) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
+| Remove the Web shell, adapters and build step (**implemented**) | [The web platform files](#the-web-platform-files), [The conditional-import stubs](#the-conditional-import-stubs), [The build](#the-build) | [`backend/README.md`](backend/README.md) |
+| Voice, if shipped: Android v1 is implemented. Representative device acceptance and required v2 roles remain open | [Voice](#voice) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N, [`backend/realtime/API.md`](backend/realtime/API.md) |
 
 ### Recommended
 
@@ -48,8 +51,8 @@ authoritative and this one never restates it.
 |---|---|---|
 | Read the published limits from `GET /api/v1/config` rather than hard-coding them | [Recommended — read the limits rather than hard-coding them](#recommended--read-the-limits-rather-than-hard-coding-them) | [`backend/core/API.md`](backend/core/API.md) |
 | Say what the day's upload allowance is before the refusal, rather than after it | [Recommended — say what the day's allowance is, before the refusal](#recommended--say-what-the-days-allowance-is-before-the-refusal) | [`backend/attachments/API.md`](backend/attachments/API.md) |
-| The user-facing wording the removed web target left in the client | [The wording](#the-wording) | [`backend/README.md`](backend/README.md) |
-| Point the client's documents at the three documents that moved under `docs/` | [Recommended — the documents that moved](#recommended--the-documents-that-moved) | [ADR-0030](docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md) |
+| Update platform wording to Android only (**implemented**) | [The wording](#the-wording) | [`backend/README.md`](backend/README.md) |
+| Point the client's documents at the three documents that moved under `docs/` (**frontend index updated**. Other references remain) | [Recommended — the documents that moved](#recommended--the-documents-that-moved) | [ADR-0030](docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md) |
 | Who reacted: a list for each emoji and each person, built from the reactions already held | [Recommended — who reacted](#recommended--who-reacted) | [`docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md`](docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md) §7 |
 
 ### Optional
@@ -58,9 +61,13 @@ authoritative and this one never restates it.
 |---|---|---|
 | One call for a fan-out, and a conditional identity read under `ETag` | [Optional — one call for a fan-out, and a conditional identity read](#optional--one-call-for-a-fan-out-and-a-conditional-identity-read) | [`backend/devices/API.md`](backend/devices/API.md) |
 | Resume an interrupted attachment download with a `Range` request | [Optional — resume an attachment download](#optional--resume-an-attachment-download) | [`backend/attachments/API.md`](backend/attachments/API.md) |
-| The arbitration the token rotation forced, where two devices race | [Optional — the arbitration the rotation forced](#optional--the-arbitration-the-rotation-forced) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §B |
+| Remove rotating-token arbitration (**implemented**) | [Optional — the arbitration the rotation forced](#optional--the-arbitration-the-rotation-forced) | [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §B |
 
 ## Remove the web target
+
+**Implemented in the Android client.** The sections below describe the pre-migration
+state. Commits `8236ca5b`, `ff95a674`, `7231169e`, `581a197b`, `112691f3`,
+and `43fecd70` record the shell, adapter, build, wording and socket changes.
 
 The product is one Flutter application for Android
 ([ADR-0020](docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md)).
@@ -136,9 +143,9 @@ server no longer serves.
 The server half of the voice design is served
 ([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)):
 phase 6 removed the SFU and the room object, and phase 7 added the one route that
-mints a coturn credential. Nothing under `frontend/` implements voice today, so none
-of this is a removal: it is what the client now owes, and the evidence behind the
-package facts below was gathered on 2026-09-05.
+mints a coturn credential. Android implements the v1 room and call. See the [current voice status](frontend/docs/voice-and-realtime.md#status)
+and [release gaps](frontend/docs/STATUS.md#presence-voice-and-delivery). The package
+and manifest notes below are from the 2026-09-05 handoff.
 
 **The client contract for voice is written.**
 [`docs/client/CLIENT_CONTRACT.md`](docs/client/CLIENT_CONTRACT.md) §N is the binding text, the
@@ -211,6 +218,10 @@ by DTLS between its two endpoints and its keys die with it.
 
 ### The gateway frames that left, and the one that changed shape
 
+**Implemented.** The table records the pre-migration state. The client removed the
+retired frames in `43fecd70`, removed the obsolete presence projection in `a6ec90a6`
+and validates signal buckets in `9b7ffa77`.
+
 The gateway now handles `ack` and `signal` and emits `envelope` and `signal`, and
 nothing else ([ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
 The client never sent `subscribe_presence`, so nothing it does today breaks — but the
@@ -224,10 +235,15 @@ full statement of what moved.
 | `frontend/lib/features/networking/infrastructure/api/api_request.dart` | `maximumSignalCharacters = 16384` and `maximumPresenceTargets = 500`. The first is not the bound any more — the longest legal blob is 21848 characters, the base64 of the largest bucket — and the second bounds a frame that is gone |
 | `frontend/lib/app/dependencies/messaging_providers.dart` | `presenceProjectionProvider`, and the comment saying nothing should read it "until `subscribe_presence` is sent". It will not be sent: presence between conversation members is client protocol over `signal` frames now, per `docs/client/CLIENT_CONTRACT.md` §N rule 5 |
 | `frontend/lib/features/messaging/presentation/chat_conversation_view.dart` | The comment describing why presence is absent, which now has a different reason behind it |
-| `frontend/docs/design-handoff/voice-room-states.md` | The "Too large" row reads `Blob over SIGNAL_MAX, 16384 chars`. `SIGNAL_MAX` is gone as a setting and as an environment variable, and a blob is dropped for being off-bucket rather than for being over a maximum — a 1500-character blob is dropped too |
+| [Voice signalling, socket limits](frontend/docs/voice-signalling-v1.md#the-socket-limits) | The current contract validates the encoded signal against the published buckets |
 | `frontend/docs/sync-engine.md`, `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |
 
 ## One session token replaces the pair
+
+**Implemented.** Commit `d58f4d90` replaced rotation with renewal, and `01028e72`
+removed the unused durable token read. The migration notes below describe the
+previous client. Production-equivalent enrollment, renewal and revocation evidence
+is tracked in the [status matrix](frontend/docs/STATUS.md#platform-identity-and-content).
 
 The access and refresh pair is gone
 ([ADR-0023](docs/architecture/decisions/0023-one-device-bound-session-token.md), which
@@ -305,6 +321,8 @@ The observable changes, each with its old and new behaviour, are in
 [`API_CHANGES.md`](API_CHANGES.md) § "The client stops paying for the contract".
 
 ### Required — the linked-devices screen loses the last-active value
+
+**Implemented** in `b546946` and `8cb5e1a`. The notes below describe the retired field.
 
 `GET /api/v1/me/devices` no longer carries `last_active_date` on a device item. A
 DTO that requires the field will fail to parse the response.
@@ -606,8 +624,9 @@ the work lands, and the binding text wins where they differ.
 
 [ADR-0030](docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md)
 moves three documents under the root `docs/` directory. Nothing the client does changes,
-and nothing breaks: each old path keeps a pointer file that links the new one. What is left
-is the client's own documents, which still name the old paths.
+and each old path keeps a pointer file that links the new one. The
+[frontend index](frontend/docs/README.md#authority-and-change-control) links directly to the
+client contract and security model. Other frontend documents still use the pointer paths.
 
 | Old path | New path |
 |---|---|
@@ -701,7 +720,7 @@ work lands, and the binding texts win where they differ.
 | `frontend/docs/voice-signalling-v1.md` | `CLIENT_VOICE_ROLES.md` folded in as its version-2 part: in Part 1, § "The operations, and who may sign each", § "Applying an event", § "The payload" (kind 4) and § "Starting the sessions a call needs" (the announcement); in Part 2, § "The kinds" (9 to 12, leave reasons 4 and 5), § "Removal" and § "The call" (the in-call actions), and the allowance beside § "Volatile seal and open" |
 | `frontend/docs/decisions.md` | One new client ADR that amends ADR-098 — D4 (every group, the answer window), D5 (the goodbye's limit), D7 (sealing on release), D9 (the audience and the privacy record in place of the switch), D10 (revision 12) and D11 (the year) — records the read-receipt setting beside ADR-091, whose reader list it leaves as it is, and supersedes ADR-077's D1 for version-2 rooms, with the allowance of 16 beside D5's 32 frames. ADR-077's open question about room text stays open |
 | `frontend/docs/ui-specification.md` | §15: item 5c becomes **Who can see my online status**, and a **Read receipts** row joins it. §8 and §9: the **Reactions** sheet. §13.2: role tags, the actions of each role and the removal confirmation, for version-2 rooms |
-| `frontend/docs/design-handoff/voice-room-states.md` | The new states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
+| [Live Voice Room Screen](frontend/docs/ui-specification.md#10-live-voice-room-screen) | The required v2 states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
 | `frontend/docs/local-data-model.md` | The privacy record, the room version each peer device announced, and a room's version and roles |
 | `frontend/docs/threat-model.md` | The reading activity presence shows (`docs/security/SECURITY.md` § "Residual risk") and what a mesh can enforce (`CLIENT_VOICE_ROLES.md` §6) |
 | `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |

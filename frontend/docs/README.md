@@ -13,6 +13,7 @@ The documents use three requirement words:
 
 ## Product and architecture
 
+- [Current implementation, evidence, and release gaps](STATUS.md)
 - [Product requirements](product-requirements.md)
 - [Complete page-by-page UI specification](ui-specification.md)
 - [Architecture](architecture.md)
@@ -31,6 +32,8 @@ The documents use three requirement words:
 - [Authentication and devices](authentication-and-devices.md)
 - [Attachments](attachments.md)
 - [Voice and realtime](voice-and-realtime.md)
+- [Live voice room](ui-specification.md#10-live-voice-room-screen) and
+  [voice room list, creation, and info](ui-specification.md#13-voice-rooms--list-create--info)
 
 ## Data, synchronization, and platforms
 
@@ -41,7 +44,6 @@ The documents use three requirement words:
 ## Delivery
 
 - [Backend API index](backend-api.md)
-- [Ordered Codex implementation prompts](implementation-prompts.md)
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
 - [Sustained delivery: field validation and its gate](sustained-delivery-validation.md)
@@ -49,24 +51,12 @@ The documents use three requirement words:
 - [Production release signing and key continuity](release-signing.md)
 - [Third-party notices](third-party-notices.md)
 
-## Derived exports
-
-Not part of the engineering contract. Generated from the documents above for
-consumption by external tools, and regenerated rather than edited when their sources
-change.
-
-- [External design-tool brief](design-handoff/DESIGN.md) — design system, from
-  `visual-design-system.md` and `app_tokens.dart`
-- [Voice-room screen and state inventory](design-handoff/voice-room-states.md) — from
-  `ui-specification.md` §10/§13, `voice-and-realtime.md`, `voice-signalling-v1.md`, and
-  `CLIENT_CONTRACT.md` §N
-
 ## Authority and change control
 
 The backend `API.md` files are authoritative for available endpoints, HTTP/WebSocket
-behavior, scopes, limits, and server guarantees. The backend
-[`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) is additionally binding for
-client-side security behavior, and [`SECURITY.md`](../../backend/SECURITY.md) is binding
+behavior, scopes, limits, and server guarantees. The
+[`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) is additionally binding for
+client-side security behavior, and [`SECURITY.md`](../../docs/security/SECURITY.md) is binding
 for protected properties and residual risk. Frontend documents define client-owned
 encrypted content and UX only within those guarantees. If a UI/product statement
 conflicts with backend documentation, the backend contract takes precedence and the

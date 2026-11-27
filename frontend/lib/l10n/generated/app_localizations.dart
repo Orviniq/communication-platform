@@ -3965,7 +3965,7 @@ abstract class AppLocalizations {
   /// **'Leave this room?'**
   String get voiceRoomLeaveTitle;
 
-  /// Honest wording is a release rule (voice-room-states.md §4): a signed event the others apply, no deletion, and a fresh invitation to return.
+  /// Honest wording is a release rule (docs/ui-specification.md §13.2): a signed event the others apply, no deletion, and a fresh invitation to return.
   ///
   /// In en, this message translates to:
   /// **'Leaving is a signed change that the other members apply. It ends your membership and your access to this room\'s calls. It does not delete the room: the others keep it, and the server holds nothing to delete. Coming back needs a fresh invitation from one of them.'**
@@ -4379,13 +4379,13 @@ abstract class AppLocalizations {
   /// **'Your audio crosses this server\'s relay rather than going straight between phones, so its path is longer than a direct one. The relay passes it on and cannot hear it.'**
   String get voiceCallRelayNote;
 
-  /// Deliberately calm: the audio is unaffected (voice-room-states.md §5.4).
+  /// Deliberately calm: the audio is unaffected (docs/ui-specification.md §10).
   ///
   /// In en, this message translates to:
   /// **'Audio is fine. Room chat, joins and leaves are not updating until the connection to the server returns.'**
   String get voiceCallSocketDegraded;
 
-  /// A stated outcome, never a retry loop (voice-room-states.md §5.1).
+  /// A stated outcome, never a retry loop (docs/ui-specification.md §10).
   ///
   /// In en, this message translates to:
   /// **'Notifications are off for this app, so the call\'s notice is not in your notifications. Android still lists the call among the active apps in quick settings.'**
@@ -4565,7 +4565,7 @@ abstract class AppLocalizations {
   /// **'The relay connection to {name} is being renewed. The audio keeps its old path meanwhile.'**
   String voiceTileRestartingIceBody(String name);
 
-  /// Ephemeral text is best-effort; copy never says it disappears forever (voice-room-states.md §1).
+  /// Ephemeral text is best-effort; copy never says it disappears forever (docs/voice-and-realtime.md, Ephemeral room text).
   ///
   /// In en, this message translates to:
   /// **'Temporary and best-effort. Cleared when the call ends; others may keep what they read.'**

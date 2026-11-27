@@ -387,20 +387,25 @@ A check that cannot run is an error, never a pass.
 
 ### What the trust checks prove
 
-The trust config governs the platform's Java HTTP stacks and WebView. The app's own REST
-and WebSocket traffic runs on `dart:io`, which does not consult it, and trusts the CA
-compiled in from `PRODUCTION_PRIVATE_CA_PEM_BASE64` and no other authority (ADR-043);
+The trust config (`network_security_config.xml`) governs the platform's Java HTTP stacks and
+WebView. The app's own REST (`DioRestClient`, `DioAttachmentTransport` via
+`IOHttpClientAdapter`) and WebSocket (`PlatformSocketConnector` via
+`IOWebSocketChannel.connect`) traffic runs on `dart:io`, which does not consult it, and
+trusts only the CA compiled in from `PRODUCTION_PRIVATE_CA_PEM_BASE64` via
+`TransportSecurity.provisioned` (`SecurityContext(withTrustedRoots: false)`,
+`badCertificateCallback` returning `false`; ADR-043);
 `test/features/networking/transport_security_test.dart` covers that against a real TLS
 handshake. The trust checks therefore confirm that the declarative Android configuration is
 correct and consistent with provisioning, and no more.
 
-What the SPKI pins protect is an open conflict. ADR-043 says leaf SPKI pinning is
-deliberately not implemented in Dart, and the code agrees: nothing in `lib/` uses either pin
-once `app_configuration.dart` has checked its shape. ADR-067 D4, server ADR-0027 and
-`backend/SECURITY.md` say that a client built against a stale primary pin fails its
-handshake. ADR-076 D7 records the conflict and leaves it to a decision of its own, and this
-manual relies on neither statement: the live pin check keeps the rendered configuration
-true whichever of them is right.
+What the SPKI pins protect at runtime is an open **owner decision** (ADR-076 D7). ADR-043
+says leaf SPKI pinning is deliberately not implemented in Dart, and the code agrees: nothing
+in `lib/` uses either pin once `app_configuration.dart` has checked its shape. ADR-067 D4,
+server ADR-0027, and `docs/security/SECURITY.md` say that a client built against a stale
+primary pin fails its handshake. ADR-076 D7 records the conflict and leaves the runtime SPKI
+guarantee to an explicit owner decision; this manual relies on neither statement, as the
+build-time live pin check in `tool/build_production_release.sh` keeps the rendered
+configuration true whichever of them the owner decides.
 
 ## Failure modes, honestly
 

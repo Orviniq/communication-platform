@@ -2,57 +2,23 @@
 
 ## Status
 
-**The relay credential, the signalling transport, one peer connection, the room state, the
-call and its screens are implemented; no call has run on a device.** `lib/features/voice/`
-fetches the
-credential, holds it and builds the relay-only ICE configuration from it (phase 6 prompt
-3), and carries `CPVSV001` messages between devices in `signal` frames, each sealed to the
-pairwise session of the device it goes to and paced under the socket limits (prompt 4). That
-transport is `RealtimeGateway.send`'s one caller. Prompt 5 built the connection to one other
-device: one audio track, relay-only ICE, perfect negotiation over that transport and an
-ICE restart that keeps the connection ([`voice-signalling-v1.md`](voice-signalling-v1.md),
-The connection). Two adapters in `lib/features/voice/infrastructure/` are the only code
-that imports `flutter_webrtc` ([ADR-078](decisions.md)). Prompt 6 built the room: its
-signed control events, their fan-out and receipt, its four tables, and the durable requests
-that start the pairwise sessions its call will need, because a `signal` frame never starts
-one ([ADR-077](decisions.md), decided B on 2026-09-30). Prompt 7 built the call:
-`VoiceCallEngine` joins after minting the credential and starting the sessions, asks who is
-in the call, fans its `join` out, keeps one connection to each device in the call, retries
-and gives up on the schedule, refuses an eleventh device, closes a removed member's
-connections, carries room text, and hands the application layer the call's state as a
-stream ([`voice-signalling-v1.md`](voice-signalling-v1.md), The call). Prompt 8 added the
-microphone permission and the call's microphone-type foreground service behind two ports
-([`platform-android.md`](platform-android.md), A call's microphone). Prompt 9 built the
-screens on 2026-10-02 — the room list, Create, Room Info, the invite picker and the live
-room ([`ui-specification.md`](ui-specification.md) §10 and §13) — and the join, the one
-caller of those ports, which asks for the microphone, starts the service and only then
-joins. Prompt 10 runs a call on two devices. This document is the design phase 6 builds,
-not a description of the artifact.
+Android implements signed v1 room control, pairwise signalling, relay-only WebRTC
+audio and the call screens. One `SignalRouter` reads inbound `signal` frames and
+dispatches them to voice or presence. See the [frontend status matrix](STATUS.md#presence-voice-and-delivery)
+for the device evidence and release gaps.
 
-The one part that does exist is the realtime gateway: `dio_websocket_gateway.dart`
-validates and routes `envelope` and `signal` frames, and nothing else. The four room
-frames and the `presence` frame were retired by server
-[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
-and [ADR-0022](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md),
-and [ADR-069](decisions.md) deleted the client half.
-
-**The seven prerequisites this document used to be gated on are gone.**
-[ADR-058](decisions.md)'s P1 to P7 named an MLS exporter as the media-key source, a
-per-ABI group permit, a self-hosted LiveKit deployment, an SFrame contract and a wire
-record proving an SFU could not decrypt. None of those things exists to be met: groups are
-pairwise sessions and the MLS core and the permit were deleted
-([ADR-075](decisions.md)), the SFU left with server ADR-0021, and DTLS-SRTP keys each
-connection between its two endpoints so there is no application-level media key for an
-exporter to supply. [ADR-077](decisions.md) supersedes that list and replaces it with the
-design below. Voice is **buildable**, and what remains between here and a call is work
-rather than a gate.
+[ADR-077](decisions.md) superseded ADR-058's MLS, SFrame and LiveKit prerequisites
+after the project switched to pairwise groups and a DTLS-SRTP mesh. The
+[voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md) requires version 2
+if voice ships. It adds owner/admin/member authority, upgrade negotiation and
+authorized in-call actions. The protocol below describes the implemented v1.
 
 ## The architecture
 
 Voice is a full mesh of WebRTC audio between devices. Every path crosses the self-hosted
 coturn relay. Each connection is keyed by DTLS-SRTP between its two endpoints, so the
 backend, the relay and every other participant hold none of its keys.
-[`backend/CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §N is the binding
+[client contract](../../docs/client/CLIENT_CONTRACT.md) §N is the binding
 statement of it and its eleven rules are cited by number throughout.
 
 - **Audio only.** One audio track for each connection: no video track and no data channel
@@ -69,7 +35,7 @@ statement of it and its eleven rules are cited by number throughout.
   durable envelopes. **A call is `signal` frames between devices.**
 
 Two wire formats carry that, and both are specified in
-[`voice-signalling-v1.md`](voice-signalling-v1.md), which is binding for the phase:
+[v1 signalling](voice-signalling-v1.md):
 `CPVRV001` for the room's control events, durable; `CPVSV001` for the call's signalling,
 volatile. The transport under both is [`pairwise-transport-v1.md`](pairwise-transport-v1.md)
 unchanged — no suite, no header flag, no key schedule of its own.
@@ -84,8 +50,8 @@ unchanged — no suite, no header flag, no key schedule of its own.
 | Stores a room, a name, a roster, a capability, a join token or a live count | **nowhere** |
 | Counts participants, enforces a ceiling or reports presence | **nowhere** |
 
-`backend/openapi.json` holds 28 paths and `/api/v1/me/relay` is the only one of them that
-voice touches. There is no `backend/voicerooms/API.md`; the file is gone.
+[OpenAPI](../../backend/openapi.json) defines relay credentials and config. The
+[realtime API](../../backend/realtime/API.md) defines the socket transport.
 
 ## The room
 
@@ -97,8 +63,9 @@ hosts a call in this version.
   never holds it and there is nothing there to rename or delete.
 - Its roster is built by signed control events on one hash chain, mirroring
   `GroupControlEvent` field for field under its own signing domain. Every active member
-  has the same authority: any member may add a member, remove a member, or rename the
-  room. There is no owner and no admin.
+  has the same authority in v1: any active member may add or remove a member or
+  rename the room. Version 2 role permissions are defined by the
+  [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md#2-roles-and-who-may-do-what).
 - A member's *devices* are never in the roster. They are read from that member's
   authenticated live device list when a payload is sealed, exactly as a group's are (§F).
 - Conflicting events at one revision are a fork, and a forked room is quarantined and
@@ -186,8 +153,8 @@ decrypted, and because a frame published for a device that is mid-reconnect is g
 - **The participant set is this device's own.** A device is in the call when a connection
   to it is open, and for no other reason. `participants_query` and its answer are a hint
   for a device that joined late (§N rule 5) and never an authority.
-- **Speaking and mute come from local media state**, never from the server, and each needs
-  a non-colour signal as well.
+- **This device's mute state is local.** The call screen renders mute with an icon and
+  label. Speaking indicators and peer mute state are open UI gaps.
 - **A name and an avatar come from locally authenticated profile state**, not from
   anything a peer sent in a call.
 - There is no `live_count`. A room in the list shows *Live now · N* only from a call this
@@ -203,8 +170,9 @@ decrypted, and because a frame published for a device that is mid-reconnect is g
   permission is the common path rather than the edge. It is a stated outcome — the
   foreground-service disclosure is degraded and the screen says so — and never a retry
   loop.
-- A network change enters a reconnecting state, stops misleading speaking indicators, and
-  never connects to a foreign fallback.
+- A temporarily disconnected peer can recover on the same connection. A failed
+  connection is dropped and a fresh join is needed. Changing networks does not
+  trigger an ICE restart.
 - Minimising keeps audio only when the platform can truthfully maintain it, and shows the
   persistent in-app banner.
 
@@ -222,46 +190,29 @@ happens to each, and when it happened:
 | `activeVoiceRoomName`, which nothing sets | `app_shell.dart`, `app_router.dart` | **Keep.** It is the minimised banner's input and the call controller is what will set it. **Done 2026-10-02**: `LiveShellStatus` sets it from the call in progress, with the room's id and this device's mute |
 | The banner's tap target | `app_shell.dart:649` | **Replace** with the id of the call in progress, alongside the route above. **Done 2026-10-02**: it opens `/voice-rooms/:roomId/call`, and the call's own screen does not show it |
 | Contacts "New voice room" | `contacts_new_page.dart` | **Keep.** Since 2026-10-02 it opens the create flow, and on a server with no voice it is disabled with the reason |
-| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep**, and add the 22 icons the design canvas draws that `AppIcons` has no mapping for — mic, mic-off, speaker, phone-off, user-plus and the rest. **Partly done 2026-10-02**: the 14 the built screens draw, mic, mic-off, phone-off and user-plus among them; speaker and the rest wait for the surfaces that draw them |
+| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep.** The implemented controls use the app icon mapping, including mic, mic-off, phone-off and user-plus |
 | Drift table `voice_rooms` | `local_database.dart:995` | **Delete.** It has no reader and no writer, and its three columns describe a server room: a capability to hold, a name the server stored, a live count the server counted. `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` replace it. **Done 2026-09-30** by schema 23, phase 6 prompt 6 |
 | `StructuralPlaceholderKind.voiceRooms`, `.newRoom`, `.room` | `structural_placeholder_page.dart` | **Keep** until prompt 9 replaces each with a real screen. **Done 2026-10-02**: all three are deleted |
 | `voiceRoomsPlaceholderTitle` / `Body` | `l10n` | **Keep** until then. **Done 2026-10-02**: deleted, with `roomPlaceholderTitle` and `newRoomPlaceholderTitle` |
 | `voice_configured`, `signal_buckets` | `server_config_model.dart` | **Keep.** Both are already parsed and both are load-bearing here |
 
-## The testing path
+## Device validation
 
-The owner decided to test voice on two real devices with the signed `production` flavor.
-The signing setup is done ([ADR-076](decisions.md),
-[`release-signing.md`](release-signing.md)).
-
-- **The flavor is `production`**: application id `com.orviniq.chat`, entry point
-  `lib/main_production.dart`.
-- **A production APK for a phone comes only from**
-  `tool/build_production_release.sh --build-number N` (ADR-076 D7). `N` must be greater
-  than every build `release-signing.md` records, and a number is never reused. The last
-  installed build was 2, on 2026-09-15, so the first voice build is **3 or higher**.
-- **The devices** are the Samsung A56 (`R5CY716AG0L`) and the emulator (`emulator-5554`).
-- **The upgrade is in place.** Each device holds `com.orviniq.chat.beta` and, beside it,
-  production build 2 of `com.orviniq.chat`. A new production build replaces build 2 with
-  `adb install -r`. **Neither app is ever uninstalled**, and the beta app is not touched:
-  the signing certificate and the application id both match, which is the only reason an
-  update is possible at all (ADR-067 D2).
-- **The owner signs in and enrolls each device by hand** in the production app. No script
-  enrolls a device.
-- **Prompt 10 runs the call**: build and install on both devices, enroll both, create a
-  room on one, invite the other, join from both, and check that audio carries in both
-  directions across the relay. Then the states that need two devices — one device leaving,
-  one device removed mid-call, the socket dropped while audio continues, and a peer that
-  never answers.
+The [2026-10-05 run](validation/voice-mesh/2026-10-05/README.md) records signed
+production build 5 at `53ff386` on a Samsung Galaxy A56 and an API 35 emulator.
+It exercised two-way relay audio over UDP, mute, backgrounding, leave and rejoin,
+including a quick rejoin after the service fix. The [status matrix](STATUS.md#presence-voice-and-delivery)
+lists coverage still outstanding. Use the [production signing manual](release-signing.md)
+for subsequent signed test builds.
 
 ## Primary references
 
-- [`backend/CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) §F, §K, §N and §O
+- [client contract](../../docs/client/CLIENT_CONTRACT.md) §F, §K, §N and §O
 - [Realtime API and the relay credential](../../backend/realtime/API.md)
 - [Server ADR-0021: a relayed WebRTC mesh, and no server room](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 - [Server ADR-0022: the gateway holds no presence](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
 - [`voice-signalling-v1.md`](voice-signalling-v1.md) — the two wire formats
 - [`pairwise-transport-v1.md`](pairwise-transport-v1.md) — the transport under both
-- [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md) — every
-  screen and state
+- [Live Voice Room Screen](ui-specification.md#10-live-voice-room-screen) and
+  [Voice Rooms](ui-specification.md#13-voice-rooms--list-create--info) — UI states and actions
 - [ADR-077](decisions.md) — the decision record for this design

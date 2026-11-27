@@ -79,7 +79,8 @@ so are voice-room IDs: there is no backend room to carry a capability ID, and a 
 | `room.signal` | Reserved. A call's join, leave, offer, answer, candidates, participant query and ephemeral text are `CPVSV001` payloads in volatile `signal` frames, never application events (see Voice rooms) | — |
 | `session.repair` | Authenticated request/response for pairwise repair | yes |
 | `protocol.notice` | Supported-version/capability announcement | yes |
-| `contact.block_set` | Synchronize private block state to the user's other devices | yes, own devices only |
+| `contact.block_set` | Required private block-state synchronization, pending | yes, own devices only |
+| `privacy.settings_set` | Required account presence and read-receipt preferences, pending `CPCTV001` kind 7 | yes, own devices only |
 
 Unknown kinds are stored as unsupported encrypted events, bounded in size, and never
 partially interpreted.
@@ -134,7 +135,7 @@ logical message.
   roster records its sender as the owner, or as an admin and the message's author as a
   member; a `message.pin_set` counts when the roster records its sender as the owner or an
   admin. An edit is accepted from the original sender only, and a group sends none. The
-  server holds no role (`backend/CLIENT_CONTRACT.md` §F), so the sending phone checks the
+  server holds no role ([client contract, §F](../../docs/client/CLIENT_CONTRACT.md#f-sessions-and-groups)), so the sending phone checks the
   rule before it sends and each receiving phone checks it again when it folds the event,
   from its own `group_states` row.
 - **Order.** The roles are those of the roster this device holds now, not those at the
@@ -146,16 +147,25 @@ logical message.
   role counts as recorded whatever the membership: an admin who leaves keeps the deletes
   made while a member.
 
+The required local **who reacted** list uses the already-admitted reaction
+events and requires no wire change. See [presence and receipts, §7](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#7-who-reacted).
+
 ## Receipts and typing
 
 Delivery/read receipts name bounded explicit message-ID sets. A delivered receipt is
 sent after durable local application, not merely socket arrival. A read receipt is sent
-only after the conversation is visibly read and user privacy settings allow it.
+only after the conversation is visibly read and the conversation permits it.
+The current direct chat allows peer read receipts. The binding
+[presence and receipts contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#6-read-receipts-in-direct-conversations)
+requires an account-wide direct receipt preference. Off suppresses peer sends and
+display while own-device read sync continues. The preference, and its
+`privacy.settings_set` record (`CPCTV001` kind 7), remain unimplemented.
+Group read receipts follow the membership rules below.
 
 Typing is an encrypted volatile signal containing conversation ID, boolean state, and a
 short expiry. It is never queued.
 
-Typing and the online status are built (ADR-098, Accepted 2026-10-19) as one payload, `CPPSV001`,
+The implemented ADR-098 presence path uses one payload, `CPPSV001`,
 sent in volatile `signal` frames. Nothing about them reaches the server except 1024-byte blobs it
 already relays and drops when the target has no socket.
 
@@ -173,8 +183,10 @@ already relays and drops when the target has no socket.
   the foreground, or turned its status off). Every frame is a 1024-byte blob.
 - **Who may send and receive.** Only verified peers with a ready pairwise session, never the user's
   own devices, and only for a conversation both accounts hold: a direct chat with that peer, or an
-  active group of at most 32 members. Saved Messages, a conversation this phone does not hold, a
-  blocked account and an unverified one get nothing and are answered nothing.
+  active group of at most 32 members. Saved Messages and unverified peers are excluded.
+  The binding contract requires `MUTUAL` for direct chats, blocking and audience
+  enforcement on admission and send, and coverage for groups through 50 members.
+  See the [presence gaps](STATUS.md#presence-voice-and-delivery).
 - **Peer reads** (ADR-098 D7, amended by ADR-101). Presence learns a peer's verified devices from
   one `POST /api/v1/peers` for up to 64 accounts and keeps each answer. An answer under 10 s old is
   served as it is; one under 60 s old that verified the account is served at once and read again in
@@ -199,7 +211,10 @@ already relays and drops when the target has no socket.
   first of the two paths that see the departure (the screen's visibility and the supervisor's
   farewell) sends it, once. Until the app is in the foreground again nothing else is sealed, and a
   frame that arrives is committed and discarded unread. The socket closes once the `gone` has gone
-  to it, or after 1,500 ms, and not at all when the app came back during that wait.
+  to it, or after 1,500 ms, and stays open if the app came back during that wait.
+  The [binding goodbye](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md#36-online-and-the-goodbye)
+  limits this to 500 ms and to what the pacer can release in that window.
+  Reconciliation is an owner decision.
 - **Typing** (ADR-098 D3, amended by ADR-099). `typing` goes only to devices whose watch of that
   conversation is under 40 s old. The first edit that leaves the composer non-empty, and the first
   edit after a stop, send it at once; an edit every 10 s repeats it. 5 s without an edit, clearing
@@ -233,6 +248,7 @@ already relays and drops when the target has no socket.
   moment it is turned off aside), shows nobody's online state, last seen or typing, and deletes the
   last seen it holds; a receiver of that `gone` deletes the sender's. It still opens and commits every
   presence frame it receives, which spares the sender a dead key, and discards it.
+  The binding account-wide audience replaces this switch once implemented.
 
 **No claim the client cannot observe.** The gateway holds no presence and offers no subscription
 frame (server ADR-0022), so no screen says a peer is "offline": a peer this phone has not heard from
@@ -243,7 +259,10 @@ present because a connection to them is open, which is observed rather than asse
 
 ## Blocking
 
-Blocking is private account state, not a backend ACL. `contact.block_set` contains the
+The following is required behavior. Client-side blocking and its presence
+enforcement remain gaps. See [contacts and trust](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md#33-blocking).
+
+Blocking is private account state held by the client's own devices. `contact.block_set` contains the
 target user ID, blocked boolean, monotonic revision, and event ID and is encrypted only
 to the user's other live devices. It remains in each device's local history and is never
 sent to the blocked contact.
@@ -257,7 +276,7 @@ ordinary content may be locally collapsed without corrupting group state.
 
 ## Groups
 
-A group is a set of pairwise sessions (`backend/CLIENT_CONTRACT.md` §F, server ADR-0001).
+A group is a set of pairwise sessions ([client contract, §F](../../docs/client/CLIENT_CONTRACT.md#f-sessions-and-groups), server ADR-0001).
 The server holds no group object, roster, epoch, or group key. The roster exists only in
 its members' clients, and every change to it is a control event that one member's device
 signs and every other member checks. No group key material is uploaded.
@@ -421,18 +440,20 @@ A voice room is client state exactly as a group is, and a call inside it is a fu
 of WebRTC audio keyed by DTLS-SRTP between each pair of devices. The server holds no
 room, no roster, no name and no participant list: it mints a relay credential at
 `POST /api/v1/me/relay` and relays `signal` frames, and that is the whole of its part
-(`backend/CLIENT_CONTRACT.md` §N, server ADR-0021).
+([client contract, §N](../../docs/client/CLIENT_CONTRACT.md#n-voice), server ADR-0021).
 
 Two payload formats carry it, and both are specified in
-[voice-signalling-v1.md](voice-signalling-v1.md), which is binding:
+[v1 signalling](voice-signalling-v1.md). The [voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md)
+requires v2 control events and signalling for a voice release:
 
 - **`CPVRV001`**, the room's signed control events, in ordinary **durable** envelopes.
   It mirrors `CPGSV001` above — the same three kinds, the same hash chain, the same
   transcript, state-request and queue-gap rules — under its own signing domain
   `"chat:v1:room-control"` and its own state-hash domain `"chat:v1:room-control-state"`,
   so that no event of one kind can be replayed as the other. A room's id is 32 random
-  bytes, its name travels inside its control events, and every active member has the same
-  authority to add, remove and rename. There is no owner and no admin.
+  bytes and its name travels inside its control events. In the implemented v1,
+  every active member may add, remove and rename. V2 requires owner, admin and member
+  roles and migration of existing rooms.
 - **`CPVSV001`**, the call's signalling — join, leave, offer, answer, candidates,
   participant query, participant answer and ephemeral room text — in **volatile** `/ws`
   `signal` frames, padded to 1024, 4096 or 16384 bytes.

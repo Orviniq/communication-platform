@@ -15,8 +15,9 @@ WebRTC device testing; lowering it may not weaken required security controls sil
 - Store identity and ratchet material only through the encrypted database/crypto-core
   boundary.
 - Store cross-signing private keys in platform-protected storage and in the
-  recovery-encrypted backup only; device X25519/ML-KEM/ratchet private state never
-  enters that backup.
+  recovery-encrypted backup (`CPKBV001`, which wraps only `user_id` and the three
+  cross-signing private keys); device X25519/ML-KEM/ratchet private state and peer
+  attestations never enter that backup.
 - Disable Android Auto Backup/data extraction for databases, keys, tokens, caches, and
   attachments.
 - Use internal app storage and scoped `content://` sharing only.
@@ -118,49 +119,58 @@ Verification on 2026-07-28 passed:
   <android-device> --flavor development` on an Android 15/API 35 x86_64 emulator.
 
 This Android scope does not implement PQXDH, Double Ratchet, application-message schemas,
-or the post-v1 Web/Wasm adapter. It also excluded MLS state and KeyPackages, which no
+or a browser adapter. It also excluded MLS state and KeyPackages, which no
 piece builds now that a group is a set of pairwise sessions ([ADR-075](decisions.md)).
-It is sufficient for the Android-only version-1 foundation; browser interoperability
-remains a post-v1 release gate.
+The smoke covers the Android foundation. Browser interoperability would be a release
+gate if a browser target were approved.
 
 ## Network trust
 
-Production accepts only the provisioned origin and private CA. Native network security
-configuration and the HTTP/WebSocket clients enforce primary and backup SPKI pins. Pin
-failure is blocking and never offers "continue anyway". Development trust is compiled
-only into visibly non-production flavors.
+Production accepts only the provisioned origin and private CA. Trust rejection is blocking
+and never offers "continue anyway". Development trust is compiled only into visibly
+non-production flavors.
 
-**Android's network security configuration does not govern this app's API
-traffic.** It applies to the platform's Java HTTP stacks and WebView. Both of
-this client's transports — Dio for REST and `IOWebSocketChannel` for the socket
-— run on `dart:io`, which does not consult it. Release validation established
-this against a live server: every network precondition held and the connection
-still failed, and removing the pin-set changed nothing (ADR-043).
+**Runtime trust (`dart:io`, private CA across both Dart transports):**
 
-Trust for the app's own traffic is therefore installed in Dart, at
-`features/networking/infrastructure/tls/`. `TransportSecurity.provisioned`
-builds a `SecurityContext` with `withTrustedRoots: false` and the provisioned
-authority, so the built-in root store is **replaced**, not extended: no public
-authority can issue a certificate this client accepts. Chain construction,
-expiry, and hostname verification are still performed in full by the platform
-TLS implementation. The REST client and the WebSocket connector share one
-context, so neither can be left on default trust.
+- `CompileTimeBootstrapConfiguration` (`lib/app/config/app_configuration.dart`) decodes
+  `<ENVIRONMENT>_PRIVATE_CA_PEM_BASE64` into `AndroidTrustMaterial.certificateAuthority`,
+  failing closed before composition if absent or malformed.
+- `provisionedTransportSecurity` (`lib/app/dependencies/provisioned_transport.dart`) builds
+  `TransportSecurity.provisioned(certificateAuthority)`
+  (`lib/features/networking/infrastructure/tls/transport_security_native.dart`), which
+  creates `SecurityContext(withTrustedRoots: false)..setTrustedCertificatesBytes(certificateAuthority)`
+  so the built-in root store is **replaced**, not extended. Its `_createHttpClient()`
+  constructs `HttpClient(context: _context)` with `badCertificateCallback` returning
+  `false`.
+- `NetworkingFoundation` (`lib/app/dependencies/networking_foundation.dart`) wires that
+  same `TransportSecurity` into **both** Dart transports:
+  - **REST & attachment HTTP:** `DioRestClient` and `DioAttachmentTransport` each receive
+    `transportSecurity.httpClientAdapter` (`IOHttpClientAdapter(createHttpClient: _createHttpClient)`).
+    `DioHealthReachabilityPort` uses `DioRestClient` with the same `TransportSecurity`.
+  - **WebSocket:** `DioWebSocketGateway` receives `transportSecurity.socketConnector`,
+    which constructs `PlatformSocketConnector(createHttpClient: _createHttpClient)` and passes
+    `customClient: _createHttpClient?.call()` to `IOWebSocketChannel.connect`.
+- Chain construction, expiry, and hostname verification are performed in full by the
+  platform TLS implementation against that single private root. Leaf SPKI pinning is
+  **not** implemented in Dart at runtime (`app_configuration.dart` checks pin formatting at
+  startup only; `X509Certificate` exposes no SPKI accessor or SHA-256).
 
-The authority reaches the app as `<ENVIRONMENT>_PRIVATE_CA_PEM_BASE64`, because
-`dart:io` verifies against a certificate rather than the fingerprint the
-configuration carries. Absent or malformed authority material blocks at
-configuration rather than falling back to public roots.
+**Build-time pin checks and Android XML (`network_security_config.xml`):**
 
-The Android network security resources that
-[`android/provisioning/README.md`](../android/provisioning/README.md) describes are
-retained as defence in depth for any future WebView or Java-side traffic. They are not
-what protects the API traffic, and must not be described as though they were.
+- `tool/build_production_release.sh` checks `PRODUCTION_PRIMARY_SPKI_SHA256` against the
+  live host before building, and `tool/render_production_trust.sh` validates the CA
+  SHA-256 and expiry and renders `network_security_config.xml` and
+  `provisioned_private_ca.pem` for the `production` flavor.
+- **Android's network security configuration does not govern this app's API traffic.** It
+  applies to the platform's Java HTTP stacks and WebView; `dart:io` does not consult it
+  (verified against a live server for ADR-043). The resources that
+  [`android/provisioning/README.md`](../android/provisioning/README.md) describes are
+  retained as defence in depth for any future WebView or Java-side traffic.
 
-Leaf SPKI pinning is deliberately not reimplemented in Dart: `X509Certificate`
-exposes no SPKI accessor and no SHA-256, so it would take hand-written ASN.1
-parsing and a hashing dependency inside the TLS path. Anchoring exclusively to
-one offline private root is the stronger constraint; see ADR-043 for the
-residual exposure that choice accepts.
+**Owner decision (ADR-076 D7):** Whether runtime SPKI pinning must also be enforced in
+Dart (or whether exclusive private-CA anchoring in `dart:io` suffices; see
+[release-signing.md](release-signing.md#what-the-trust-checks-prove) and ADR-043) remains
+an open owner decision.
 
 ## Background delivery
 
@@ -396,8 +406,9 @@ artifact opened no socket, ran no drain, and — because `SendConversationEvents
 `fanout.prepareAndQueue` — transmitted no outbox row either. ADR-046's Layer 0 is now
 implemented: `MessageDeliveryController` starts one `MessageDeliverySession` per
 device-bound full session and stops it on logout, and the two composition roots are
-resolved into one, so the socket presents the same access token, refreshes through the
-same single-flight `TokenCoordinator`, and terminates its TLS chain at the same
+resolved into one, so the socket presents the same session token, renews/refreshes through
+the same single-flight `TokenCoordinator` (updated 2026-10-07 by ADR-068/ADR-083 to renew
+one unrotated session token via `POST /api/v1/auth/renew`), and terminates its TLS chain at the same
 provisioned authority as every REST call. Layer 1 followed on 2026-08-21 under ADR-049 and
 is described above. Layer 2 followed on 2026-08-22 under ADR-051, was
 withheld on 2026-08-23 under ADR-053, and was offered again in production on 2026-10-18
@@ -518,9 +529,14 @@ Request only at point of use:
 - the microphone (`RECORD_AUDIO`, dangerous) at the join and at no other time
   (`CLIENT_CONTRACT.md` §N rule 11), with the call's foreground service — see *A call's
   microphone* below;
-- no camera permission: a photo is taken by the system camera app through
-  `ACTION_IMAGE_CAPTURE`, and `CAMERA` is deliberately not declared (ADR-089; see
-  *Attachments* below). An in-app safety QR scanner would need it and is not built;
+- no camera permission in the current build (`AndroidManifest.xml`): a photo is taken by the
+  system camera app through `ACTION_IMAGE_CAPTURE`, and `CAMERA` is currently not
+  declared (ADR-089; see *Attachments* below). Under the binding contract
+  ([`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4.7),
+  implementing the live `CP-CONTACT-V1` QR scanner will require declaring
+  `android.permission.CAMERA` (with `uses-feature android.hardware.camera.any
+  required="false"`) and requesting `CAMERA` before `ACTION_IMAGE_CAPTURE` to avoid a
+  `SecurityException`;
 - no media or storage permission: pictures and files come through the system photo
   picker and the document picker, which grant access to what the user chose (ADR-089).
 
@@ -659,10 +675,9 @@ catalogues; it names no participant and no room. Unlike the sustained entry it i
 `VISIBILITY_PRIVATE` with the same sentence as its public version, so a locked screen and a
 screen being shared show it: whoever holds the phone learns that its microphone is live,
 which a live microphone owes them. Its status-bar icon is a plain microphone,
-`ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. **Not
-built**: the controls the design canvas puts in this notification
-([`voice-room-states.md`](design-handoff/voice-room-states.md) §5.8). A leave or a mute
-there needs the call, and the call has no mute yet.
+`ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. Mute and leave are available in the
+[call screen](ui-specification.md#10-live-voice-room-screen). The notification has no
+action buttons.
 
 **Two foreground services.** ADR-046, ADR-048 and ADR-051 each asked for the interaction
 between sustained delivery's service and a call's to be decided rather than discovered. As
@@ -698,11 +713,13 @@ then forwards the result to the channel.
 
 **System intents, no permission.** No picker package and no permission:
 
-- Photo: the system photo picker, `MediaStore.ACTION_PICK_IMAGES` with `image/*`, on API 33 and
-  later and on API 30 to 32 when `SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R)` is 2 or
+- Photo or video (`PickKind.PHOTO`): the system photo picker, `MediaStore.ACTION_PICK_IMAGES`
+  with no MIME filter (offering images and videos, ADR-097), on API 33 and later and on
+  API 30 to 32 when `SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R)` is 2 or
   more, which is where the action is available as an R extension. Elsewhere
-  `Intent.ACTION_GET_CONTENT` with `image/*` and `CATEGORY_OPENABLE`. The Google Play services
-  backport of the photo picker is not used: it is a Google dependency.
+  `Intent.ACTION_GET_CONTENT` with `*/*`, `EXTRA_MIME_TYPES` `["image/*", "video/*"]`,
+  and `CATEGORY_OPENABLE`. The Google Play services backport of the photo picker is not
+  used: it is a Google dependency.
 - File: `Intent.ACTION_OPEN_DOCUMENT` with `*/*` and `CATEGORY_OPENABLE`.
 - Camera: `MediaStore.ACTION_IMAGE_CAPTURE`, writing `secure_attachment_cache/outgoing/<id>/capture.jpg`
   through the `FileProvider` URI given as `EXTRA_OUTPUT` and as the intent's `ClipData`, with the
@@ -711,11 +728,15 @@ then forwards the result to the channel.
 Each intent is started and `ActivityNotFoundException` is caught, so the manifest adds no
 `<queries>` element: starting an activity needs no package visibility.
 
-**Why there is no `CAMERA` permission.** The camera app takes the picture, so this application
-never opens the camera itself. Declaring `CAMERA` would make things worse, not better: an app that
-targets API 23 or later and declares `CAMERA` without holding it gets a `SecurityException` from
-`ACTION_IMAGE_CAPTURE`. The capture works with the permission absent and would break with it
-declared and refused. The same reasoning keeps out `READ_MEDIA_*`, `READ_EXTERNAL_STORAGE` and
+**Why there is no `CAMERA` permission in the current build.** The camera app takes the
+picture, so the current application never opens the camera itself. Declaring `CAMERA`
+without requesting it first would break `ACTION_IMAGE_CAPTURE`: an app that targets API 23
+or later and declares `CAMERA` without holding it gets a `SecurityException` from
+`ACTION_IMAGE_CAPTURE`. Once the live `CP-CONTACT-V1` QR scanner of
+[`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4.7 is
+implemented, `AndroidManifest.xml` will declare `CAMERA` (and optional `camera.any`
+feature) and `AttachmentChannel.kt` will request `CAMERA` before starting
+`ACTION_IMAGE_CAPTURE`. The same reasoning keeps out `READ_MEDIA_*`, `READ_EXTERNAL_STORAGE` and
 `WRITE_EXTERNAL_STORAGE`: the photo picker and the document picker grant read access to what the
 user chose, and nothing more is read.
 
@@ -723,11 +744,17 @@ user chose, and nothing more is read.
 `secure_attachment_cache/outgoing/<32 hex>/<safe name>` and answered by path on the main thread.
 The bytes are counted against the limit Dart gives and the copy stops above it; only the display
 name and the size (`OpenableColumns`) and the type (`ContentResolver.getType`) are read from the
-provider. A photo is re-encoded there: `ImageDecoder` on API 28 and later, which applies the EXIF
-orientation itself, `BitmapFactory` with the orientation read through `android.media.ExifInterface`
-below it, then a new opaque white bitmap with its longest side at most 2048 px, written as a JPEG
-of quality 82 that carries no metadata. A GIF is sent unchanged. One pick or save waits at a time;
-a second is refused as busy.
+provider. A photo that is neither a GIF nor an allowed video (`VIDEO_TYPES`) is re-encoded
+there: `ImageDecoder` on API 28 and later, which applies the EXIF orientation itself,
+`BitmapFactory` with the orientation read through `android.media.ExifInterface` below it,
+then a new opaque white bitmap with its longest side at most 2048 px, written as a JPEG of
+quality 82 that carries no metadata. A GIF, an allowed video (`video/mp4`, `video/webm`,
+`video/3gpp`, `video/quicktime`), and a File pick are currently copied unchanged.
+*Remaining §8 work (`CLIENT_CONTACTS_AND_TRUST.md` §8):* neutral names for Photo/Camera
+picks (`photo.jpg` replacing `jpegName(displayName)` for picked photos, `animation.gif`,
+`video.*`), in-place metadata removal for ISO BMFF, GIF, MP3, and PNG with `MediaExtractor`
+/ `ImageDecoder` verification before replacing the outgoing copy, and the W1/W2 preview
+warnings. One pick or save waits at a time; a second is refused as busy.
 
 **The path rule of Open, Save and Share.** `openVerifiedFile` (`ACTION_VIEW`),
 `saveVerifiedFile` (`ACTION_CREATE_DOCUMENT` with `EXTRA_TITLE`) and `shareVerifiedFile`

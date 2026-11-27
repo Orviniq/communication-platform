@@ -1,15 +1,18 @@
 # Sustained-delivery run records
 
-One directory per measurement run, produced by `tool/measure_sustained_delivery.sh`
-and named `YYYY-MM-DD-<device>`. These are the evidence the release gate in
-`lib/app/config/sustained_delivery_gate.dart` reads, and the criteria they are
-judged against are in [`../../sustained-delivery-validation.md`](../../sustained-delivery-validation.md).
+Each dated directory holds output from
+[`measure_sustained_delivery.sh`](../../../tool/measure_sustained_delivery.sh).
+The [field criteria](../../sustained-delivery-validation.md) define the records
+required by the compiled release ledger.
 
-**Gate state: CLOSED.** The two directories here are environment probes on
-emulators. An emulator record can never open a cell of the matrix — the harness
-marks it `"emulated": true` and the gate's admissibility rule refuses it — so
-nothing here is evidence about the capability. It is evidence that the
-instrument runs.
+**Gate state: CLOSED.** The three directories hold probes dated 2026-08-23: one
+retail Samsung Galaxy A56 (Android 16/API 36) and two emulators (API 30 and API
+35). The A56 probe reports the app UID as absent. These probes establish device
+conditions and observation-tool coverage. No sustained-delivery trial was run.
+Emulator measurements are ineligible for matrix cells. The
+[compiled ledger](../../../lib/app/config/sustained_delivery_gate.dart) is empty,
+and production offers opt-in sustained delivery as `bestEffort` under ADR-094.
+See [frontend status](../../STATUS.md#presence-voice-and-delivery).
 
 ## What a run directory holds
 

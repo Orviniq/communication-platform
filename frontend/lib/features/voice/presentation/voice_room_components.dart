@@ -233,8 +233,8 @@ class VoiceResponsiveBody extends StatelessWidget {
 }
 
 /// A sheet on a narrow window and a dialog on a wider one
-/// (`voice-room-states.md` §7). Both scroll - the sheet by [showAppSheet], the
-/// dialog by [showAppContentDialog] - so a large text scale never pushes an
+/// (`docs/ui-specification.md` §10). Both scroll - the sheet by [showAppSheet],
+/// the dialog by [showAppContentDialog] - so a large text scale never pushes an
 /// action off the screen; both restore focus to what opened them when they
 /// close.
 Future<T?> showVoiceModal<T>({
