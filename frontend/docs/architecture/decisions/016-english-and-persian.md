@@ -9,7 +9,7 @@
 Support **English (`en`) and Persian (`fa`)** from the first release, with **structural RTL and mixed-direction (bidi) behavior** built into layout, typography, icons, and text rendering rather than retrofitted later.
 
 1. Localization catalogs live in [app_en.arb](../../../lib/l10n/app_en.arb) and [app_fa.arb](../../../lib/l10n/app_fa.arb), with generated localizations under `frontend/lib/l10n/generated/` and `AppearanceLanguage` supporting `system`, `en`, and `fa` ([appearance_model.dart](../../../lib/features/settings/domain/appearance_model.dart)).
-2. Typography bundles the official `Vazirmatn v33.003` variable font (`assets/fonts/vazirmatn/Vazirmatn-Variable.ttf`) for complete Latin and Persian coverage without runtime font downloads ([Visual design system](../../visual-design-system.md)).
+2. Typography bundles the official `Vazirmatn v33.003` variable font (`assets/fonts/vazirmatn/Vazirmatn-Variable.ttf`) for complete Latin and Persian coverage without runtime font downloads ([Visual design system](../../ui/DESIGN-SYSTEM.md)).
 3. Bubbles align by sender (`AlignmentDirectional`), message content resolves first-strong directionality per UAX #9 P2/P3 via [app_text_direction.dart](../../../lib/app/design_system/app_text_direction.dart) (ADR-066 D4), and directional icons mirror explicitly via `AppIconData.mirrorsInRtl` ([app_icons.dart](../../../lib/app/design_system/app_icons.dart)).
 
 ## Rationale
@@ -18,7 +18,7 @@ RTL, mixed-script message content, and Persian typography affect widget geometry
 
 ## Constraints and Open Gates
 
-- Enforced by [Visual design system](../../visual-design-system.md), [Responsive UI](../../responsive-ui.md), and ADR-066 D4–D6 (`goldens/chat_medium_rtl_mixed.png`).
+- Enforced by [Visual design system](../../ui/DESIGN-SYSTEM.md), [Adaptive layout](../../ui/ADAPTIVE-LAYOUT.md), and ADR-066 D4–D6 (`goldens/chat_medium_rtl_mixed.png`).
 - ADR-066 recorded two open/bounded items on first-strong bidi: `message.replyQuote` `Text` did not yet apply `textDirection` (ADR-066 F1), and `resolveFirstStrongDirection` intentionally returns `null` for neutral/digit-only strings and scripts outside its covered blocks so they inherit ambient direction (ADR-066 F2).
 - User-facing errors and deployment disclosures must be localized in both English and Persian, and written handover disclosures are bilingual ([Frontend status](../../STATUS.md#artifact-and-release-acceptance)).
 

@@ -119,7 +119,7 @@ enum DisclosurePoint {
   /// outside it has reviewed them (ADR-017); a message is one encrypted copy
   /// for each device of each member (ADR-075); and a group whose control state
   /// this phone loses waits, with its composer withheld, until another member
-  /// sends that state again (`docs/ui-specification.md` §9).
+  /// sends that state again (`docs/ui/SCREENS.md`, Group Chat Screen).
   pairwiseGroups(since: 9),
 
   /// What the online status shows to the people a user chats with (ADR-098

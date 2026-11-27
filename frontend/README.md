@@ -7,7 +7,7 @@ validation evidence, and release gaps.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
 `assets/fonts/vazirmatn/`. The exact artifact and checksum provenance is recorded in
-`docs/visual-design-system.md`; no font or visual asset is fetched at runtime.
+`docs/ui/DESIGN-SYSTEM.md`; no font or visual asset is fetched at runtime.
 
 ## Toolchain
 

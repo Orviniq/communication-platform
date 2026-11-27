@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-14); proposed 2026-10-14; D4 superseded in part by [ADR-096](096-group-moderation.md) (2026-10-19) for Pin and Delete for everyone
 - **Date:** 2026-10-14 (explicitly recorded in register and full section; PR #77 `9c60fc34`, commits `a8c828e7`–`d8bc6872`)
 - **Superseded in part by:** [ADR-096](096-group-moderation.md) (2026-10-19, supersedes D4 for Pin and Delete for everyone using signed roster roles; Edit stays off)
-- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-088](088-group-composer.md), [ADR-089](089-direct-attachments.md), [ADR-091](091-group-receipts.md), [ADR-096](096-group-moderation.md), [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before server [ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
+- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-088](088-group-composer.md), [ADR-089](089-direct-attachments.md), [ADR-091](091-group-receipts.md), [ADR-096](096-group-moderation.md), [SCREENS.md](../../ui/SCREENS.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before server [ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
 
 ## Decision (Position)
 
@@ -32,7 +32,7 @@ Unified group chat message reading and actions onto the shared conversation time
 
 ## Constraints and Open Gates
 
-- **Scope:** Changed group chat screen, `ChatMessageViewModel` / `ChatMessageProjection`, `chat_forward.dart`, group/conversation use cases, and group repository ports; changed no database schema/table, wire format, protocol, dependency, cryptographic construction, or `backend/` file. Also updated [ui-specification.md §9](../../ui-specification.md) to note that membership system lines (`"X was added"`) are not built.
+- **Scope:** Changed group chat screen, `ChatMessageViewModel` / `ChatMessageProjection`, `chat_forward.dart`, group/conversation use cases, and group repository ports; changed no database schema/table, wire format, protocol, dependency, cryptographic construction, or `backend/` file. Also updated [Group Chat Screen](../../ui/SCREENS.md#group-chat-screen) to note that membership system lines (`"X was added"`) are not built.
 - **Verification:** Covered by [chat_view_model_mapper_test.dart](../../../test/features/messaging/chat_view_model_mapper_test.dart), [group_use_cases_test.dart](../../../test/features/groups/application/group_use_cases_test.dart), [conversation_use_cases_test.dart](../../../test/features/messaging/conversation_use_cases_test.dart), [group_fanout_delivery_test.dart](../../../test/features/groups/application/group_fanout_delivery_test.dart), [group_pages_test.dart](../../../test/widget/group_pages_test.dart), and [group_message_actions_test.dart](../../../test/widget/group_message_actions_test.dart) (over an in-memory database).
 - **Left open at ADR-090 close:** No physical-device or live-server run; Pin/Edit/Delete for everyone (Pin and Delete for everyone later added by ADR-096), group attachments ([ADR-089](089-direct-attachments.md) D1), group read receipts (completed in [ADR-091](091-group-receipts.md)), membership system lines, and the direct-chat `ref.read` draft bug.
 

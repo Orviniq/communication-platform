@@ -14,7 +14,7 @@ revisions, devices, and scenarios stated in their run records.
 | Discovery and discoverability | [Client contract, §P](../../docs/client/CLIENT_CONTRACT.md#p-finding-a-contact), [OpenAPI](../../backend/openapi.json) | `DioContactRepository.fetchActivatedUsers` calls retired `GET /api/v1/users`. Contacts/New filters cached directory data. The server supports `POST /api/v1/users/lookup` and `GET`/`PUT /api/v1/me/discoverability`. The Android client has neither integration. | `bcc64eba`, [Dio contact repository](../lib/features/contacts/infrastructure/dio_contact_repository.dart) | Look up one exact username on explicit request. Use the same no-match wording for missing, inactive and hidden accounts. Expose the default-on account setting. Turning it off hides exact-name lookup results. Anyone holding the user ID can still use ID-addressed routes, and registration still reports the name as taken. | Required before release. |
 | Contacts, verification and profiles | [Contacts and trust, §§3–7](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md), [Security](../../docs/security/SECURITY.md#verification-by-both-people-the-contact-code-and-the-profile-key) | Directory rows and one-sided verification back the current contact flow. `SafetyNumberPage` displays `CP-SAFETY-V1`. The profile UI uses the username fallback and does not publish display names or photos. Block is disabled. | `bcc64eba`, [authentication and devices](contracts/AUTH-AND-DEVICES.md) | Migrate to a user-managed local contact list, implement `CP-CONTACT-V1` and the `MUTUAL` direct-content gate, and sync contact, block and trust records only in encrypted own-device envelopes and the history-transfer snapshot. Implement authorized profile-key distribution before profile publication. A lookup result supplies a pointer to verify out of band. | Contact and mutual-verification work is required before release. Profile-key work gates profile publication. |
 | Direct and group messaging | [Client contract, §§F–H](../../docs/client/CLIENT_CONTRACT.md), [Pairwise transport v1](contracts/PAIRWISE-V1.md) | Direct chats and groups use hybrid PQXDH and Double Ratchet. Groups fan out over pairwise sessions and apply signed control events locally, up to 50 members. The historical beta MLS core, KeyPackage flow, per-ABI permit and beta flavor were removed. | `bcc64eba`, [message protocol](contracts/MESSAGES.md#groups), [beta archive](archive/beta-mls-core/README.md) | Complete independent review of the transport and signed group-state handling. The review packet and archived beta evidence have their own scope. | Independent review and production gates remain open. |
-| Saved Messages, search and diagnostics | [UI specification](ui-specification.md), [Security](../../docs/security/SECURITY.md) | Android provides Saved Messages, local Chats and conversation search, and a user-initiated diagnostic report copied to the clipboard. | `bcc64eba`, [search fixture](../test/features/messaging/chats_search_test.dart), [diagnostic report fixture](../test/features/diagnostics/diagnostics_report_test.dart) | Verify core UI accessibility and inspect the diagnostic export on a device with representative data. | Accessibility and diagnostics release checks apply. |
+| Saved Messages, search and diagnostics | [UI screens](ui/SCREENS.md), [Security](../../docs/security/SECURITY.md) | Android provides Saved Messages, local Chats and conversation search, and a user-initiated diagnostic report copied to the clipboard. | `bcc64eba`, [search fixture](../test/features/messaging/chats_search_test.dart), [diagnostic report fixture](../test/features/diagnostics/diagnostics_report_test.dart) | Verify core UI accessibility and inspect the diagnostic export on a device with representative data. | Accessibility and diagnostics release checks apply. |
 | Mailbox gaps and history transfer | [Client contract, §§G–H](../../docs/client/CLIENT_CONTRACT.md#h-queue-gap-handling) | A `pruned_through` gap starts peer repair and signed state requests for active groups and voice rooms while the drain continues. A waiting group withholds sends and changes. A waiting room withholds joins and changes. Room requests settle independently of the mailbox checkpoint. A one-to-one gap has no UI. An existing online device supplies encrypted history. | `bcc64eba`, [sync engine](architecture/SYNC.md#queue-gap-recovery) | Surface direct gaps and implement the authenticated repair required by §H for each affected session. Implement the required contact/trust/profile-key snapshot for history transfer. Pruned envelopes cannot be recreated by the server. | The direct-gap behavior and snapshot remain contract gaps. |
 | Attachments and file privacy | [Contacts and trust, §8](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md#8-what-a-file-carries), [Client contract, §Q](../../docs/client/CLIENT_CONTRACT.md) | Direct and Saved Messages send encrypted files. Camera captures use `photo.jpg` and re-encoded photos strip metadata. Picked photos can retain the original base name, GIF and video Photo picks can retain provider names, and several formats are copied verbatim. | `bcc64eba`, [attachment privacy gaps](contracts/ATTACHMENTS.md#remaining-8-file-name-metadata-and-warning-work) | Finish neutral Photo names, metadata stripping and decode verification for the required formats, and preview warnings W1/W2. Group file sending and shared-media browsing remain unbuilt. | §8 is required before release. |
 | Runtime TLS | [Security](../../docs/security/SECURITY.md#trust-boundaries), [ADR-076 D7](architecture/decisions/076-production-signing.md) | REST, attachment and WebSocket clients use `dart:io` with exclusive private-CA trust and reject invalid certificates. The build script checks the live primary SPKI pin and generates Android XML with primary/backup pins. Dart does not enforce leaf SPKI pins at runtime. | `bcc64eba`, [authentication and devices](contracts/AUTH-AND-DEVICES.md#trust-configuration) | Owner decision on Dart runtime pinning versus exclusive private-CA trust. | Keep the runtime TLS gap visible in security and release review. |
@@ -57,3 +57,57 @@ signed builds.
 |---|---|---|---|---|---|
 | Signed APK and upgrade | [ADR-076](architecture/decisions/076-production-signing.md), [release signing](release-signing.md) | The production script checks signing identity and live primary pin and runs the APK verifier. Build 2 has a signed artifact and first-install record. Voice build 5 used the same signing identity for in-place upgrades. | `f85196de` [build 2 record](validation/production-release/2026-09-14-build-2/README.md), `53ff386` [build 5 record](validation/voice-mesh/2026-10-05/README.md) | Complete representative migration, rollback and connectivity verification for a release candidate. | Artifact checks and owner-device installs cover their recorded build and conditions. |
 | Release acceptance and handover | [Deployment and release](deployment-and-release.md), [security review gates](threat-model.md#security-release-gates) | Production is the named-recipient artifact. `DeploymentDisclosure` is at revision 11. The signed run records document owner testing. | `bcc64eba`, [voice run](validation/voice-mesh/2026-10-05/README.md) | Close required contract, independent review, Android E2E, offline, accessibility, performance and migration gates. Deliver the applicable written bilingual disclosure and [third-party notices](third-party-notices.md) with the artifact and re-deliver changed disclosure as required. | Signed artifact evidence leaves release acceptance open. |
+
+## Release scope and gates
+
+The first production release includes the complete screen inventory in
+[UI screens](ui/SCREENS.md#screen-inventory): authentication, encryption onboarding, chat
+list, search, contacts, DMs, groups, voice rooms, profiles and safety numbers, Saved
+Messages, settings, linked devices, recovery, and all referenced dialogs and states.
+Vertical milestones may be delivered incrementally, but an incomplete milestone is not
+called the production release, and no release is permitted while a required security,
+protocol, accessibility, or migration gate is failing.
+
+### Open pre-release verification gates
+
+- [ ] Android `mlkem_native` passes identical FIPS/PQXDH vectors; no educational or
+  pure-Dart ML-KEM is present.
+- [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
+- [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
+  pass malicious-server tests.
+- [ ] A call's residual metadata matches [the threat model](threat-model.md): the relay
+  sees the peer pairs, the packet sizes and the timing; the gateway sees which device
+  signals which device; and nothing carries the audio, the room name, the roster or the
+  SDP in clear.
+- [ ] Validate Android deferred `JobScheduler` polling and the opt-in `specialUse` service
+  under Doze, standby and force-stop ([field criteria](runbooks/SUSTAINED-DELIVERY.md)).
+  Active voice uses a separate `microphone` service.
+- [ ] Private CA/SPKI behavior works in Android staging, and owner decision on Dart
+  runtime SPKI pinning versus exclusive private-CA trust is closed.
+- [ ] Final product name, logo, and app icon replace the neutral placeholder and pass
+  light, dark, small-size, contrast, and Android asset review before release
+  ([brand assets](ui/DESIGN-SYSTEM.md#brand-assets-still-expected)).
+
+### Production completion gates
+
+- [ ] Resolve required gaps in this status page or explicitly remove their requirements
+  through an approved ADR.
+- [ ] Backend contract suite passes against production-equivalent infrastructure.
+- [ ] Full multi-device Android E2E matrix passes.
+- [ ] Offline/international-disconnection rehearsal passes with zero foreign requests.
+- [ ] Accessibility, RTL, performance, migration, battery, and voice gates pass.
+- [ ] Independent security review is complete and blocking findings are closed.
+- [ ] Reproducible artifacts, SBOM, signatures, hashes, update, and rollback runbooks are
+  archived ([deployment and release](deployment-and-release.md#production-release-checklist)).
+
+### The web target
+
+Removed, not deferred. Under [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md),
+the server serves no browser surface, so a web build of this client cannot connect: the
+`/ws` gateway refuses a handshake carrying no `Authorization` header, and a browser cannot
+set one. The application shell, the five conditional-import web variants with their stubs,
+the `kIsWeb` branches and the web CI step were removed. Browser encrypted storage
+compatibility, WebSocket lifecycle, shared Rust Wasm/worker packaging, browser crypto
+vectors, Web E2EE media, browser E2E, CSP/SRI/headers, and self-hosted Web distribution
+are therefore out of scope rather than backlog; reopening any of them needs an explicit
+ADR and a server that serves a browser.

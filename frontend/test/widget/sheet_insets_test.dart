@@ -14,7 +14,7 @@ import '../support/voice_screen_harness.dart';
 
 /// A sheet keeps each control out of the status bar's, the gesture bar's and
 /// the keyboard's way, and the surface it draws still reaches the screen's edge
-/// (`responsive-ui.md`, Adaptive shell). The rule is written once, in
+/// (`docs/ui/ADAPTIVE-LAYOUT.md`, Sheets). The rule is written once, in
 /// `app_modals.dart`; this proves it on the two sheet functions themselves and
 /// on the voice room's Rename sheet. The sheets of the pages that open them are
 /// proved beside those pages' own tests, under the same group name.

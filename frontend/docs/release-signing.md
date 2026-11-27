@@ -9,7 +9,7 @@ person taking part in a test.
 
 An installable build is not a released one. No store, download page or update channel
 carries it, and signing it opens nothing: not ADR-017, not a production completion gate in
-`implementation-checklist.md`, not an item of the production release checklist in
+[STATUS.md](STATUS.md#production-completion-gates), not an item of the production release checklist in
 [deployment-and-release.md](deployment-and-release.md), not ADR-053's sustained-delivery
 gate, and not ADR-054's follow-up F2, so a build reaches nobody except by hand (ADR-076
 D1 and D10).
@@ -509,7 +509,8 @@ is its manual, `git show 8267429:frontend/android/beta-release-identity.properti
 its certificate, and its scripts sit beside them at the same revision. Its upgrade
 continuity was proven on an API 35 emulator on 2026-08-19: an in-place update from version
 code 1 to 2 kept `firstInstallTime`, and the same artifact re-signed with another key was
-refused. `implementation-checklist.md` still records the reissued key's off-site backups as
+refused. [`implementation-checklist.md`](https://github.com/Orviniq/communication-platform/blob/b6bc53504e331381f912785415e9a49b5c2ae7f7/frontend/docs/implementation-checklist.md#direct-signed-apk-distribution)
+still recorded the reissued key's off-site backups as
 not existing. The old manual described those backups as stretched with SHA-512, but the
 beta script's `--digest-algo SHA512` never reached the passphrase stretching, so GnuPG
 used its SHA-256 default. That does not affect restoring them (ADR-076, as built by

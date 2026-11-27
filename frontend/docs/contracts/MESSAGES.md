@@ -300,7 +300,7 @@ as gone leaves the count.
 
 Decided by ADR-091 (Accepted, 2026-10-14) and built. The read time is kept in
 `receipts.read_at_ms` (schema 24), and the sender sees it in the reader list of an own message
-(`ui-specification.md` §9).
+([Group Chat Screen](../ui/SCREENS.md#group-chat-screen)).
 
 - **Read receipts only.** A group sends `receipt.read` and never `receipt.delivered`. The
   second tick means read, and a delivered state has no mark of its own.

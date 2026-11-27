@@ -17,7 +17,7 @@ Required for reliable operation during international internet disconnection (dom
 
 ## Constraints and Open Gates
 
-- Enforced by [Frontend instructions](../../../AGENTS.md), [background_delivery_policy_test.dart](../../../test/architecture/background_delivery_policy_test.dart) (forbidding `firebase`, `unifiedpush`, `FirebaseMessaging`, and external `http://`/`https://`/`InetAddress` probes in background delivery), and [Visual design system](../../visual-design-system.md) (bundled `Vazirmatn v33.003`).
+- Enforced by [Frontend instructions](../../../AGENTS.md), [background_delivery_policy_test.dart](../../../test/architecture/background_delivery_policy_test.dart) (forbidding `firebase`, `unifiedpush`, `FirebaseMessaging`, and external `http://`/`https://`/`InetAddress` probes in background delivery), and [Visual design system](../../ui/DESIGN-SYSTEM.md) (bundled `Vazirmatn v33.003`).
 - Directly constrains Android background delivery (ADR-046, ADR-049, ADR-051, ADR-094): without FCM, background delivery uses `JobScheduler` plus an optional opt-in `specialUse` foreground service.
 - Open gates: None.
 

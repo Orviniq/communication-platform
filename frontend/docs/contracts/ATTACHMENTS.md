@@ -148,7 +148,8 @@ immediate server deletion of abandoned uploads.
 *Built 2026-10-10, prompt 3 of the phase.* `AttachmentUploads`
 (`lib/features/attachments/application/attachment_uploads.dart`) is the upload queue of one
 session, one for each `MessagingScope`, composed in `attachment_providers.dart`. The tray and
-the preview step are in [UI specification](../ui-specification.md) §8 and §8.2.
+the preview step are in [DM Chat Screen](../ui/SCREENS.md#dm-chat-screen) and
+[Attachment sheet](../ui/SCREENS.md#attachment-sheet).
 
 1. **Pick.** The cache's first sweep runs before the picker opens, and no sweep runs while
    it is open (`AttachmentOutgoingHolds.pickOpen`): nothing holds the copy the picker is
@@ -225,8 +226,7 @@ dies drops its jobs, and the user sends again (ADR-089, Consequences).
 *Corrected 2026-10-07 (server ADR-0020):* this section said Web downloads used blob URLs,
 a download disposition, an allowlist of inline image and audio formats, and timely URL
 revocation. There is no Web client: the server serves no browser surface, and the
-client's web target was removed on 2026-09-08 (`implementation-checklist.md`, The web
-target).
+client's web target was removed on 2026-09-08 ([The web target](../STATUS.md#the-web-target)).
 
 1. Validate the descriptor and bucket before allocating.
 2. Download ciphertext as a stream; development direct-to-Daphne empty-body behavior is
@@ -245,7 +245,8 @@ through a scoped content URI, not a raw path.
 *Built 2026-10-11, prompt 4 of the phase.* `AttachmentDownloads`
 (`lib/features/attachments/application/attachment_downloads.dart`) is the download queue of
 one session, one for each `MessagingScope`, composed in `attachment_providers.dart`. The
-tiles and the details sheet are in [UI specification](../ui-specification.md) §8 and §8.2.
+tiles and the details sheet are in [DM Chat Screen](../ui/SCREENS.md#dm-chat-screen) and
+[Attachment sheet](../ui/SCREENS.md#attachment-sheet).
 
 1. **Tap.** No download starts without a tap on a tile. A tap adds a job for that
    attachment id, and a second request for an id that has a job does nothing. Jobs live in

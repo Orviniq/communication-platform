@@ -682,7 +682,7 @@ catalogues; it names no participant and no room. Unlike the sustained entry it i
 screen being shared show it: whoever holds the phone learns that its microphone is live,
 which a live microphone owes them. Its status-bar icon is a plain microphone,
 `ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. Mute and leave are available in the
-[call screen](../ui-specification.md#10-live-voice-room-screen). The notification has no
+[call screen](../ui/SCREENS.md#live-voice-room-screen). The notification has no
 action buttons.
 
 **Two foreground services.** ADR-046, ADR-048 and ADR-051 each asked for the interaction

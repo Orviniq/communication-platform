@@ -387,7 +387,7 @@ binding; the Persian MUST say the same and be read by a native reader.
 | Room info, a member's role | **Owner** or **Admin** beside the name; nothing for a member |
 | Removing a member from the room | "Removing is a signed change every member applies. The owner and admins can remove members, only the owner can remove an admin, and nobody can remove the owner." |
 
-`frontend/docs/ui-specification.md` §13.2 — "No role tags: every active member may add a member,
+[Voice Room Info screen](../../frontend/docs/ui/SCREENS.md#voice-room-info-screen) — "No role tags: every active member may add a member,
 remove a member and rename the room", and the removal confirmation that says "any member can remove
 any other" — stays true of a version-1 room only.
 

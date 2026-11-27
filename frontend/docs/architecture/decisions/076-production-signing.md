@@ -32,7 +32,7 @@ Gave the `production` Android flavor (`com.orviniq.chat`) one persistent signing
    - Owner alone creates keys/backups outside agent visibility. Agent sessions may run `tool/build_production_release.sh` passing only `CP_PRODUCTION_SIGNING_PROPERTIES` path (never reading `~/.communication-platform/`, `keytool`, or `apksigner sign`).
    - Artifacts reach devices only via `adb install` (never `-d`, `flutter install`, `flutter run`, or `flutter drive`, which can uninstall existing signed data).
 9. **D10 — Gates unchanged:**
-   - Opens no gate: [ADR-017](017-independent-crypto-review.md), [implementation-checklist.md](../../implementation-checklist.md) production gates, [deployment-and-release.md](../../deployment-and-release.md) checklist items, [ADR-053](053-field-evidence-gate.md) (until ADR-094 later changed `production` to `bestEffort`), and [ADR-054](054-dependency-policy.md) follow-up F2 remain closed.
+   - Opens no gate: [ADR-017](017-independent-crypto-review.md), [STATUS.md](../../STATUS.md#production-completion-gates) production gates, [deployment-and-release.md](../../deployment-and-release.md) checklist items, [ADR-053](053-field-evidence-gate.md) (until ADR-094 later changed `production` to `bestEffort`), and [ADR-054](054-dependency-policy.md) follow-up F2 remain closed.
 
 ## Rationale
 

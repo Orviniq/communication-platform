@@ -640,7 +640,7 @@ entry.
 | `PEER_SAYS_VERIFIED` | "@x says they verified you. Messages start once you verify @x too." | **Compare safety numbers**, **Scan their code** |
 | `AWAITING_PEER` | "You verified @x. Messages start once @x verifies you too. If @x already has, their app needs the update that sends that confirmation." | **Show my code**, **Notify again** — disabled, reading "Sent today", once a notice has gone to @x in that UTC day (§5.8) |
 | `KEY_CHANGED` | "@x's safety number changed. Messages stop until you verify @x again." — followed, when an unauthenticated claim under the new key is stored, by "@x says they verified you again." | **Compare safety numbers**, **Scan their code** |
-| `BLOCKED`, `DEVICE_PROBLEM` | The existing words of those states (`frontend/docs/ui-specification.md` §11, §11.1) | As today |
+| `BLOCKED`, `DEVICE_PROBLEM` | The existing words of those states ([Contact Profile](../../frontend/docs/ui/SCREENS.md#contact-profile--safety-number-verification), [Safety Number screen](../../frontend/docs/ui/SCREENS.md#safety-number-screen)) | As today |
 
 **Chats.** One row per peer for whom this phone holds held envelopes or an unauthenticated
 claim. With a claim: "@x says they verified you. Verify them to start messaging." — or, when
@@ -1042,7 +1042,7 @@ encrypted attachment.
 
 ### 8.4 The warning
 
-Shown in the preview step (`frontend/docs/ui-specification.md` §8.2), above **Send**, for the
+Shown in the preview step ([Attachment sheet](../../frontend/docs/ui/SCREENS.md#attachment-sheet)), above **Send**, for the
 attachment it concerns. It informs only: **Send** stays enabled, and there is no extra
 confirmation and no "do not show again".
 

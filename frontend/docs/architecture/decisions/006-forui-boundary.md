@@ -18,7 +18,7 @@ Gains consistent, accessible UI primitives without coupling product design, feat
 
 ## Constraints and Open Gates
 
-- Enforced by [design_system_boundary_test.dart](../../../test/architecture/design_system_boundary_test.dart) and [architecture_boundary_test.dart](../../../test/architecture/architecture_boundary_test.dart), and documented in [Visual design system](../../visual-design-system.md) and [Frontend instructions](../../../AGENTS.md).
+- Enforced by [design_system_boundary_test.dart](../../../test/architecture/design_system_boundary_test.dart) and [architecture_boundary_test.dart](../../../test/architecture/architecture_boundary_test.dart), and documented in [Visual design system](../../ui/DESIGN-SYSTEM.md) and [Frontend instructions](../../../AGENTS.md).
 - Text input, selection controls, menus, dialogs, and bottom sheets rely on Material where IME composition, RTL caret handling, and TalkBack semantics are already proven (ADR-066 D3).
 - Open gates: None.
 

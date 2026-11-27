@@ -23,7 +23,7 @@ Removed the remaining main-isolate UI rendering and keystroke cascades (findings
    - Jumps drop the standing anchor so resize notifications cannot cancel them, schedule a frame when targeting an already-drawn row, estimate landing position using the drawn range's average row height (instead of `88.0`), and run `ensureVisible` after settle.
 5. **D5 — 500 ms debounced drafts with five explicit exit flushes:**
    - `_onTextChanged` arms a 500 ms timer while Send button listens to the `TextEditingController` via `ValueListenableBuilder`.
-   - Flushes immediately (and idempotently via dirty tracking) on five exits: `FocusNode` blur, `PopScope.onPopInvokedWithResult` (`didPop`), lifecycle leaving `resumed`, `dispose`, and `_submit` post-clear, keeping drafts durable in the `conversations` row ([ui-specification.md](../../ui-specification.md)).
+   - Flushes immediately (and idempotently via dirty tracking) on five exits: `FocusNode` blur, `PopScope.onPopInvokedWithResult` (`didPop`), lifecycle leaving `resumed`, `dispose`, and `_submit` post-clear, keeping drafts durable in the `conversations` row ([DM Chat Screen](../../ui/SCREENS.md#dm-chat-screen)).
 
 ## Rationale
 

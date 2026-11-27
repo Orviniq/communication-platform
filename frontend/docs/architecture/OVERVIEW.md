@@ -56,9 +56,19 @@ REST / WebSocket / user action
 Widgets read a single projection. A send first commits the logical message and
 its owed preparation to Drift. A later delivery cycle seals and persists the
 per-device outbox rows before sending them. Network acceptance updates transport
-state, and receipt events update delivery state. Incoming envelopes are
-acknowledged after their disposition is persisted. See [outgoing preparation](SYNC.md#owed-send-preparations)
+state, and receipt events update delivery state. Each message received from REST and
+WebSocket is displayed once, multi-device delivery targets every live peer device and
+the sender's other devices, cached conversations remain readable offline with sends
+entering the durable outbox, and each send/receive transaction boundary recovers
+deterministically after process death. Incoming envelopes are acknowledged after their
+disposition is persisted. See [outgoing preparation](SYNC.md#owed-send-preparations)
 and [incoming envelopes](SYNC.md#incoming-durable-envelopes).
+
+The server stores no message history. Message history remains on client devices; a new
+device receives history only through an encrypted transfer from an existing online device,
+and the recovery backup restores cross-signing identity material rather than message
+history, ratchets, group control state, or authorization. Revoked devices lose tokens,
+queued content, local session access, and future group access.
 
 ## Feature boundaries
 
@@ -156,15 +166,27 @@ and emit typed intents; they cannot reach cryptography, APIs, Drift, or synchron
 
 ## Platform boundary
 
-Android is the only target. The Web shell, adapters and CI build were removed under
-[server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+Android is the only version-1 production target. The Web shell, adapters and CI build
+were removed under
+[server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md),
+and iOS, Windows, macOS, and Linux applications are out of scope. The interface supports
+English and Persian from the first release, including RTL chrome, mixed-direction message
+text, and localized dates ([Adaptive layout](../ui/ADAPTIVE-LAYOUT.md#accessibility-and-internationalization-gates)).
 See [platform status](../STATUS.md#platform-identity-and-content).
 
 - Android uses encrypted SQLite and Android Keystore wrapping.
-- Active-app messaging uses the socket and authoritative REST drain. The persisted
-  `JobScheduler` job supplies deferred catch-up. The opt-in messaging service uses
-  `specialUse`, and an active voice call uses a separate `microphone` foreground service.
-  See [delivery status](../STATUS.md#presence-voice-and-delivery).
+- Active-app messaging uses the socket and authoritative REST drain. Android background
+  messaging is layered and honestly tiered: the mandatory floor is a persisted periodic
+  `JobScheduler` job at the platform fifteen-minute minimum (giving eventual delivery and
+  nothing in Android 13+ *rare*/*restricted* standby buckets, Doze, Data Saver, or after
+  a force-stop). Above it, the opt-in `specialUse` foreground service is offered in
+  production as best effort under [ADR-094](decisions/094-best-effort-delivery.md) with
+  no delivery-time promise, while an active voice call uses a separate `microphone`
+  foreground service started on explicit join and stopped when the call ends.
+- Notifications are sender-neutral projections of committed local unread state rather than
+  transport events, with no decrypted previews ([ADR-048](decisions/048-generic-notifications.md)).
+  See [Android platform](ANDROID.md), [sustained delivery](../runbooks/SUSTAINED-DELIVERY.md),
+  and [delivery status](../STATUS.md#presence-voice-and-delivery).
 
 No platform-specific conditional is allowed inside domain or protocol logic.
 
@@ -333,8 +355,8 @@ decrypted, and because a frame published for a device that is mid-reconnect is g
 The router exposes the room list, creation flow and Room Info, with call and invite
 routes nested under the 64-character hex room ID. The shell compose action and Contacts
 entry open room creation. The in-app call banner opens the current call. See the
-[voice room screens](../ui-specification.md#13-voice-rooms--list-create--info) and
-[call screen](../ui-specification.md#10-live-voice-room-screen).
+[voice room screens](../ui/SCREENS.md#voice-rooms--list-create--info) and
+[call screen](../ui/SCREENS.md#live-voice-room-screen).
 
 The [local data model](LOCAL-DATA.md#voice-room-state) owns the four durable
 room tables. The call engine keeps media and participant state in memory. The
@@ -349,8 +371,8 @@ records the retired placeholders and table.
 - [Server ADR-0022: the gateway holds no presence](../../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
 - [`VOICE-V1.md`](../contracts/VOICE-V1.md) — the two wire formats
 - [`PAIRWISE-V1.md`](../contracts/PAIRWISE-V1.md) — the transport under both
-- [Live Voice Room Screen](../ui-specification.md#10-live-voice-room-screen) and
-  [Voice Rooms](../ui-specification.md#13-voice-rooms--list-create--info) — UI states and actions
+- [Live Voice Room Screen](../ui/SCREENS.md#live-voice-room-screen) and
+  [Voice Rooms](../ui/SCREENS.md#voice-rooms--list-create--info) — UI states and actions
 - [ADR-077](decisions/077-voice-mesh.md) — the decision record for this design
 
 ## Failure policy

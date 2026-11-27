@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-09); withdraws the copy count of [ADR-075](075-pairwise-groups.md) item 5
 - **Date:** 2026-10-09 (explicitly recorded in register and full section; PR #72 `b71f2d69`, commits `6f823836`, `fb25aae4`, `1446a832`)
 - **Amends:** [ADR-075](075-pairwise-groups.md) (withdraws the `"Copies sent: M of N"` text from item 5 while preserving owed-copy sent gating and retry)
-- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-090](090-group-timeline.md), [ADR-091](091-group-receipts.md), [ui-specification.md](../../ui-specification.md), [implementation-checklist.md](../../implementation-checklist.md)
+- **Related:** [ADR-075](075-pairwise-groups.md), [ADR-090](090-group-timeline.md), [ADR-091](091-group-receipts.md), [SCREENS.md](../../ui/SCREENS.md#group-chat-screen), [STATUS.md](../../STATUS.md)
 
 ## Decision (Position)
 

@@ -54,7 +54,7 @@ abstract final class AppMotion {
   static const Duration route = Duration(milliseconds: 240);
 
   /// How long a jumped-to message keeps its tint, fading as it goes
-  /// (`ui-specification.md`), and how long the same tint stays, unfading, when
+  /// (`docs/ui/DESIGN-SYSTEM.md`, Motion and interaction), and how long the same tint stays, unfading, when
   /// the system asks for reduced motion.
   static const Duration pulse = Duration(milliseconds: 1500);
   static const Duration pulseReduced = Duration(milliseconds: 1000);
@@ -72,8 +72,8 @@ abstract final class AppContentWidths {
 }
 
 /// The system insets a full-screen page keeps its controls out of: the status
-/// bar, the gesture bar and the navigation buttons (`ui-specification.md`
-/// §0.1).
+/// bar, the gesture bar and the navigation buttons (`docs/ui/ADAPTIVE-LAYOUT.md`,
+/// Adaptive shell).
 abstract final class AppInsets {
   /// [spacing] on every side of a scrolling body below an app bar, plus the
   /// insets the app bar leaves to it: the bottom and the sides. The body

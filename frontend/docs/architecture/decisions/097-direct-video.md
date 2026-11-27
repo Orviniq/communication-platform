@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-19); proposed 2026-10-19
 - **Date:** 2026-10-19 (explicitly recorded in register and full section; implemented on `frontend-dm-video` in `593fdbaa`, `ab8eef03`, `370e3ad6`, PR #89 `62d02fe1`)
 - **Amends:** [ADR-089](089-direct-attachments.md) (adds video sending/receiving in direct chats and Saved Messages; D1 keeping groups attachment-free stands)
-- **Related:** [ADR-089](089-direct-attachments.md), [ATTACHMENTS.md](../../contracts/ATTACHMENTS.md), [ui-specification.md](../../ui-specification.md)
+- **Related:** [ADR-089](089-direct-attachments.md), [ATTACHMENTS.md](../../contracts/ATTACHMENTS.md), [SCREENS.md](../../ui/SCREENS.md)
 
 ## Decision (Position)
 

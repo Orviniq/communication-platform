@@ -17,7 +17,7 @@ These instructions apply to everything under `frontend/`.
 Before changing code, read:
 
 1. `docs/README.md`;
-2. `docs/implementation-checklist.md`;
+2. `docs/STATUS.md`;
 3. the frontend documents that own the behavior in scope; and
 4. the relevant backend `API.md` files indexed by `docs/contracts/BACKEND.md`, plus
    `../docs/client/CLIENT_CONTRACT.md` and `../docs/security/SECURITY.md` when
@@ -107,7 +107,7 @@ endpoint, wire format, or weaker security behavior.
   without documenting the reason and obtaining user approval when the decision changes.
 - Error messages shown to users are reviewed/localized application strings, not raw
   backend detail.
-- Update `docs/implementation-checklist.md` only for work actually completed and
+- Update `docs/STATUS.md` only for work actually completed and
   verified. Update other frontend docs when implementation establishes a binding detail.
 - Do not create commits, push branches, or open pull requests unless the user asks.
 

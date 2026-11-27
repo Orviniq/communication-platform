@@ -188,7 +188,8 @@ of rows in state 2, 3 or 5 and its latest hold time; Chats draws one row for eac
 goes the moment a release, an expiry or an eviction empties the count. Released rows are not
 counted. The sender's chat asks nothing of the engine: it reads the own message's transport and
 receipt state, which a delivery receipt from the recipient's released envelope changes
-(`ui-specification.md` §6, §8).
+([Chats List](../ui/SCREENS.md#chats-list-home--chats-tab),
+[DM Chat Screen](../ui/SCREENS.md#dm-chat-screen)).
 
 Envelopes are still handed out oldest-due-first. Two guards keep that from being a
 head-of-line block: an inspection retry carries a floor of one second, because the retry

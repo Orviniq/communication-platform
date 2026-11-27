@@ -28,7 +28,7 @@ class AppShellStatus {
   final bool activeVoiceMuted;
 
   /// Whether the Voice Rooms tab offers to create a room. False when the
-  /// deployment serves no voice (`ui-specification.md` §13.0).
+  /// deployment serves no voice (`docs/ui/SCREENS.md`, Voice Rooms list).
   final bool voiceRoomsComposeAvailable;
 
   /// The banner for the page at [location], the page's own path: none while

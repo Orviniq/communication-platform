@@ -182,7 +182,7 @@ Future<T?> showAppSheet<T>({
 /// the user pressed. The obvious alternative - an `OverlayEntry` above the sheet
 /// route - puts the panel outside the route, where a modal route's focus scope
 /// cannot reach it and a screen reader does not traverse it, which would fail
-/// two of the accessibility rules in `responsive-ui.md`. So both surfaces live
+/// two of the accessibility rules in `docs/ui/ADAPTIVE-LAYOUT.md`. So both surfaces live
 /// in one route: the sheet keeps the bottom, and [anchored] is positioned in the
 /// space above it, as close to [anchor] as it fits.
 ///

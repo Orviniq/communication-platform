@@ -375,7 +375,7 @@ These carry privacy meaning, so their words are part of the requirement. The Eng
 binding; the Persian MUST say the same and be read by a native reader.
 
 - **Settings.** The row **Who can see my online status** replaces **Show my online status**
-  (`frontend/docs/ui-specification.md` §15, item 5c), with the three choices of §4.1 and the
+  ([Settings](../../frontend/docs/ui/SCREENS.md#settings-settings-tab--home), *Show my online status*), with the three choices of §4.1 and the
   line: "Applies on all your devices. You see other people's online status only if they are
   among the people you let see yours."
 - **The disclosure.** The point ADR-098 D10 added at revision 11 says "You can turn this off

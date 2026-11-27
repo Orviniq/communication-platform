@@ -57,12 +57,12 @@ GoRouter createAppRouter({
   AuthenticationRouteState? authenticationRouteState,
 }) {
   // The application's own navigator, above the shell. Every page above a tab
-  // root opens on it and covers the shell whole (ui-specification.md §0.1).
+  // root opens on it and covers the shell whole (docs/ui/ADAPTIVE-LAYOUT.md, Adaptive shell).
   // One per router rather than a top-level value: a key marks one navigator
   // at a time, and the tests build more than one router.
   final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
   // A page on the root navigator covers the shell and the shell's call banner
-  // with it, so it carries the banner itself (ui-specification.md §0.2). The
+  // with it, so it carries the banner itself (docs/ui/SCREENS.md, Persistent elements). The
   // bootstrap and sign-in pages do not.
   Page<void> fullScreen(
     BuildContext context,

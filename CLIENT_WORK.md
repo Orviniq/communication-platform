@@ -133,7 +133,7 @@ target the selector and the stub have one implementation to choose between.
 | `frontend/README.md` | "Flutter client for Android, with a preserved post-v1 Web foundation", "Android and Web targets only" under **Toolchain**, the `flutter build web` line, the Web CA-install paragraph, and the Web step in the local-CI description |
 | `frontend/pubspec.yaml` | `description: "Android and Web client foundation for Communication Platform."` |
 
-`frontend/docs/implementation-checklist.md` carries the same "preserved post-v1 Web
+[`frontend/docs/implementation-checklist.md`](https://github.com/Orviniq/communication-platform/blob/112691f316577c9593a2e0967dd48015b1632984/frontend/docs/implementation-checklist.md) carried the same "preserved post-v1 Web
 scaffold" status in several rows. It is the client's live status document, so its
 wording is the client developer's call — but it should stop describing a target the
 server no longer serves.
@@ -588,7 +588,7 @@ here is the client developer's to change until the owner decides.
 | Path | What is needed |
 |---|---|
 | `AttachmentChannel.kt`, the copy | The procedures of §8.2 on the outgoing copy, the proof of §8.3, the neutral names of §8.1 — a photo becomes `photo.jpg` in place of `jpegName`'s base of the original — and, in the answer to Dart, which of W1, W2 or none applies |
-| The preview step (`frontend/docs/ui-specification.md` §8.2) | The warnings of §8.4, above **Send**, which stays enabled |
+| The preview step ([Attachment sheet](frontend/docs/ui/SCREENS.md#attachment-sheet)) | The warnings of §8.4, above **Send**, which stays enabled |
 
 ### Required before profiles ship — the profile key
 
@@ -611,12 +611,12 @@ the work lands, and the binding text wins where they differ.
 | `frontend/docs/contracts/CRYPTO.md` | § "Safety numbers and cross-signing": the contact code replaces the `CP-SAFETY-V1` symbol, and verification is by both people. § "Recovery and device-to-device history": correct the sentence that says the backup includes user-signing signatures over verified peers' master keys — the `CPKBV001` plaintext is the three private keys and nothing else — and say that contacts and verifications travel in the snapshot. § "Profiles and labels": §7. § "Direct messages and per-device channels": the read of §5.3 |
 | `frontend/docs/contracts/PAIRWISE-V1.md` | § "Sender-hidden initial header", steps 2 to 4: the non-committing read of §5.3 as the one exception to "under the already confirmed master key" |
 | [`frontend/docs/architecture/SYNC.md`](frontend/docs/architecture/SYNC.md) | Held envelopes: the read of §5.3. The history transfer: the snapshot of §3.5 |
-| `frontend/docs/ui-specification.md` | §6 (the rows and previews), §7 (the add sheet and the state words), §8 (the panel), §8.2 (the warnings), §11 and §11.1 (the safety-number page), §15 (My code, the discoverability sentence) |
+| [`frontend/docs/ui/SCREENS.md`](frontend/docs/ui/SCREENS.md) | [Chats List](frontend/docs/ui/SCREENS.md#chats-list-home--chats-tab) (the rows and previews), [Contacts / New Chat](frontend/docs/ui/SCREENS.md#contacts--new-chat) (the add sheet and the state words), [DM Chat Screen](frontend/docs/ui/SCREENS.md#dm-chat-screen) (the panel), [Attachment sheet](frontend/docs/ui/SCREENS.md#attachment-sheet) (the warnings), [Contact Profile](frontend/docs/ui/SCREENS.md#contact-profile--safety-number-verification) and [Safety Number screen](frontend/docs/ui/SCREENS.md#safety-number-screen), [Settings](frontend/docs/ui/SCREENS.md#settings-settings-tab--home) (My code, the discoverability sentence) |
 | [`frontend/docs/architecture/ANDROID.md`](frontend/docs/architecture/ANDROID.md) | "Why there is no `CAMERA` permission" no longer holds (§4.7). The scanner. The copy's removal of metadata (§8) |
 | [`frontend/docs/architecture/LOCAL-DATA.md`](frontend/docs/architecture/LOCAL-DATA.md) | The contact, block, claim, carried-over and profile-key records |
 | `frontend/docs/threat-model.md` | The verification statements, against `docs/security/SECURITY.md` residual risk 7 |
 | [`frontend/docs/architecture/decisions/`](frontend/docs/architecture/decisions/README.md) | One new ADR recording this work on the client side — as ADR-068 to ADR-070 recorded server ADRs — that amends ADR-093 (the read of §5.3 beside D12; the row of D18 gains the claim; the hint of D19 is withdrawn), ADR-089 and ADR-097 (the neutral names and the removal of metadata) and ADR-098 (presence for a direct conversation in `MUTUAL` only), and records `com.google.zxing:core` under ADR-054's rules: the exact version, its licence, and the date and source it was read from |
-| `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
+| [`frontend/docs/STATUS.md`](frontend/docs/STATUS.md) | Only as each piece is done and verified |
 
 
 ## Recommended — the documents that moved
@@ -718,8 +718,8 @@ work lands, and the binding texts win where they differ.
 | `frontend/docs/contracts/MESSAGES.md` | § "Receipts and typing": every statement §2.2 of `CLIENT_PRESENCE_AND_RECEIPTS.md` lists — the list in "No claim the client cannot observe" loses "a group over 32 members" and gains "a peer outside your audience"; "Who may send and receive"; "Watching"; "The switch", replaced by the audience; and the opening sentence's "user privacy settings", which becomes the read-receipt setting. § "Event registry": `privacy.settings_set` as `CPCTV001` kind 7, and `room.control` with its version 2. § "Edits, reactions, pins, and deletion": who reacted. § "Blocking": presence refuses a blocked account. § "Voice rooms": "every active member has the same authority … There is no owner and no admin" holds for version-1 rooms only |
 | `frontend/docs/contracts/VOICE-V1.md` | `CLIENT_VOICE_ROLES.md` folded in as its version-2 part: in [CPVRV001 room control](frontend/docs/contracts/VOICE-V1.md#cpvrv001-room-control), § "The operations, and who may sign each", § "Applying an event", § "The payload" (kind 4) and § "Starting the sessions a call needs" (the announcement); in [CPVSV001 call signalling](frontend/docs/contracts/VOICE-V1.md#cpvsv001-call-signalling), § "The kinds" (9 to 12, leave reasons 4 and 5), § "Removal" and § "The call" (the in-call actions), and the allowance beside § "Volatile seal and open" |
 | [`frontend/docs/architecture/decisions/`](frontend/docs/architecture/decisions/README.md) | One new client ADR that amends ADR-098 — D4 (every group, the answer window), D5 (the goodbye's limit), D7 (sealing on release), D9 (the audience and the privacy record in place of the switch), D10 (revision 12) and D11 (the year) — records the read-receipt setting beside ADR-091, whose reader list it leaves as it is, and supersedes ADR-077's D1 for version-2 rooms, with the allowance of 16 beside D5's 32 frames. ADR-077's open question about room text stays open |
-| `frontend/docs/ui-specification.md` | §15: item 5c becomes **Who can see my online status**, and a **Read receipts** row joins it. §8 and §9: the **Reactions** sheet. §13.2: role tags, the actions of each role and the removal confirmation, for version-2 rooms |
-| [Live Voice Room Screen](frontend/docs/ui-specification.md#10-live-voice-room-screen) | The required v2 states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
+| [`frontend/docs/ui/SCREENS.md`](frontend/docs/ui/SCREENS.md) | [Settings](frontend/docs/ui/SCREENS.md#settings-settings-tab--home): *Show my online status* becomes **Who can see my online status**, and a **Read receipts** row joins it. [DM Chat Screen](frontend/docs/ui/SCREENS.md#dm-chat-screen) and [Group Chat Screen](frontend/docs/ui/SCREENS.md#group-chat-screen): the **Reactions** sheet. [Voice Room Info screen](frontend/docs/ui/SCREENS.md#voice-room-info-screen): role tags, the actions of each role and the removal confirmation, for version-2 rooms |
+| [Live Voice Room Screen](frontend/docs/ui/SCREENS.md#live-voice-room-screen) | The required v2 states: muted by the owner or an admin, removed from the call, the call ended, waiting for members to update, and a member who needs the app update |
 | [`frontend/docs/architecture/LOCAL-DATA.md`](frontend/docs/architecture/LOCAL-DATA.md) | The privacy record, the room version each peer device announced, and a room's version and roles |
 | `frontend/docs/threat-model.md` | The reading activity presence shows (`docs/security/SECURITY.md` § "Residual risk") and what a mesh can enforce (`CLIENT_VOICE_ROLES.md` §6) |
-| `frontend/docs/implementation-checklist.md` | Only as each piece is done and verified |
+| [`frontend/docs/STATUS.md`](frontend/docs/STATUS.md) | Only as each piece is done and verified |

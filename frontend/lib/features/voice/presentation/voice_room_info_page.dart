@@ -22,7 +22,7 @@ import 'package:go_router/go_router.dart';
 typedef MutateVoiceRoomCallback =
     Future<Result<RoomState>> Function(RoomControlOperation operation);
 
-/// Voice Room Info (`ui-specification.md` §13.2): the room outside a call.
+/// Voice Room Info (`docs/ui/SCREENS.md`, Voice Room Info screen): the room outside a call.
 ///
 /// Every active member may rename, invite and remove (ADR-077 D1), so nothing
 /// here is gated by a role; what gates an action is the room's own state.

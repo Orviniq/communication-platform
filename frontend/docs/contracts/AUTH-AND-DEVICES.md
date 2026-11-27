@@ -28,7 +28,7 @@ separate, visibly branded, and cannot be built as a production artifact accident
 *Corrected 2026-10-07 (server ADR-0020):* step 4 said a Web client, being
 online-session-first, stayed at the connection gate. There is no Web client: the server
 serves no browser surface, and the client's web target was removed on 2026-09-08
-(`implementation-checklist.md`, The web target).
+([The web target](../STATUS.md#the-web-target)).
 
 1. Load trust configuration and protected storage.
 2. If configuration is absent or invalid, show the blocking not-provisioned state.
@@ -102,7 +102,7 @@ had no caller after ADR-068 deleted the rotation repair, and ADR-083 deleted it.
 *Corrected 2026-10-07 (server ADR-0020):* it also said the Web stored token material under
 the origin's non-extractable wrapping key. There is no Web client: the server serves no
 browser surface, and the client's web target was removed on 2026-09-08
-(`implementation-checklist.md`, The web target).
+([The web target](../STATUS.md#the-web-target)).
 
 - Android stores the session token encrypted under a Keystore-wrapped storage key. It is
   the credential itself, not a placeholder: nothing retires it, and a token outlives a

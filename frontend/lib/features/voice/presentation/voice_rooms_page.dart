@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// The Voice Rooms tab (`ui-specification.md` §13.0).
+/// The Voice Rooms tab (`docs/ui/SCREENS.md`, Voice Rooms list).
 ///
 /// It reads the rooms this device holds and the call it is in, and asks for
 /// nothing: no microphone, no credential and no connection. A row opens the

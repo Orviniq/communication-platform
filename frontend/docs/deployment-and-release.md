@@ -164,7 +164,7 @@ by contract tests and conservative client behavior, not runtime version guessing
       each group message is one encrypted copy for each device of each member; and a
       group whose current state the phone loses comes back only when another member's
       app sends it, with sending in that group withheld until then
-      ([ADR-075](architecture/decisions/075-pairwise-groups.md), [ui-specification.md](ui-specification.md) §9);
+      ([ADR-075](architecture/decisions/075-pairwise-groups.md), [Group Chat Screen](ui/SCREENS.md#group-chat-screen));
    7. while the app is open on the screen, verified contacts a user shares a chat with can
       see that the user is online and typing and when they open a shared chat, and after the
       user leaves the app they see when the user was last online; the server cannot read any
