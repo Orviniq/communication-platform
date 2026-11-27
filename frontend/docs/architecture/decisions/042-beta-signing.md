@@ -16,7 +16,7 @@ Originally decided that the Private Experimental Beta ships under a frozen non-p
 3. **Beta signing scheme (v2 + v3):** Beta signs with APK Signature Scheme v2 and v3 only (omitting legacy v1, unnecessary at `minSdk` 24). V3 records the signer to allow future rotation lineage on API 28+, while key loss remains unrecoverable by rotation because creating a rotation lineage requires the original key.
 4. **Secret handling and artifact verification:** Private signing material never enters source control; Gradle reads it from environment variables or an untracked properties file and fails the build if absent. The public certificate fingerprint is committed so `tool/verify_release_apk.sh` verifies every artifact against the expected signing identity. Key custody and backup procedures were documented in `release-signing.md`.
 
-**Supersession (ADR-067, 2026-09-07):** When the project stopped operating `nimashadloo.dev` and moved the serving origin to `chat.orviniq.com`, ADR-067 superseded ADR-042's frozen identifiers with `com.orviniq.chat{,.beta,.development}` and reissued the Beta signing key under `CN=com.orviniq.chat.beta` (possible safely because no external install existed yet). ADR-042's underlying reasoning on why identity and signing certificates freeze at first external install remained unchanged and governed the new identifiers. Subsequently, ADR-075 (2026-09-13) deleted the `beta` flavor, and ADR-076 (2026-09-14) gave the `production` flavor (`com.orviniq.chat`) its own persistent RSA-4096 v2+v3 signing identity ([build.gradle.kts](../../../android/app/build.gradle.kts), [release-signing.md](../../release-signing.md)).
+**Supersession (ADR-067, 2026-09-07):** When the project stopped operating `nimashadloo.dev` and moved the serving origin to `chat.orviniq.com`, ADR-067 superseded ADR-042's frozen identifiers with `com.orviniq.chat{,.beta,.development}` and reissued the Beta signing key under `CN=com.orviniq.chat.beta` (possible safely because no external install existed yet). ADR-042's underlying reasoning on why identity and signing certificates freeze at first external install remained unchanged and governed the new identifiers. Subsequently, ADR-075 (2026-09-13) deleted the `beta` flavor, and ADR-076 (2026-09-14) gave the `production` flavor (`com.orviniq.chat`) its own persistent RSA-4096 v2+v3 signing identity ([build.gradle.kts](../../../android/app/build.gradle.kts), [SIGNING.md](../../runbooks/SIGNING.md)).
 
 ## Rationale
 
@@ -36,7 +36,7 @@ Why superseded: the domain premise (`dev.nimashadloo`) changed to `chat.orviniq.
 ## Costs
 
 - Key loss or application ID changes after first external install cause unrecoverable single-device history loss.
-- Keeping signing material outside source control requires external key custody and encrypted backups before external distribution ([release-signing.md](../../release-signing.md)).
+- Keeping signing material outside source control requires external key custody and encrypted backups before external distribution ([SIGNING.md](../../runbooks/SIGNING.md)).
 
 ## Reversal Trigger
 

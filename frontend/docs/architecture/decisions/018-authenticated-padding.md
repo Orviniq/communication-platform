@@ -15,7 +15,7 @@ Prevents ambiguous, malleable, or unprotected trailing padding bytes and padding
 ## Constraints and Open Gates
 
 - Defined in [Application-message protocol](../../contracts/MESSAGES.md#layering) and [Pairwise transport v1](../../contracts/PAIRWISE-V1.md).
-- Outer frame size must match allowed backend buckets; malformed or non-canonical inner padding fails closed during Rust core decryption ([Pairwise review readiness](../../pairwise-review-readiness.md)).
+- Outer frame size must match allowed backend buckets; malformed or non-canonical inner padding fails closed during Rust core decryption ([Pairwise v1 review packet](../../security/REVIEW-SCOPE.md#pairwise-v1-review-packet)).
 - Open gate: Independent cryptographic review of `TransportPlaintextV1` and padding validation remains open under [ADR-017](017-independent-crypto-review.md).
 
 ## Costs

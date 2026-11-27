@@ -401,8 +401,8 @@ void main() {
 
     test('the release checklist and the platform document point at it', () {
       expect(
-        File('docs/deployment-and-release.md').readAsStringSync(),
-        contains('runbooks/SUSTAINED-DELIVERY.md'),
+        File('docs/runbooks/RELEASE.md').readAsStringSync(),
+        contains('SUSTAINED-DELIVERY.md'),
       );
       expect(
         File('docs/architecture/ANDROID.md').readAsStringSync(),

@@ -780,7 +780,7 @@ by a single observation, or by a row somebody typed.
   answers `bestEffort` from the same constant, and no text of that artifact
   promises a delivery time.
 - It is discoverable: the constant, this document, the release checklist in
-  [deployment and release](../deployment-and-release.md), [Android platform](../architecture/ANDROID.md)
+  [deployment and release](RELEASE.md), [Android platform](../architecture/ANDROID.md)
   and [the documentation index](../README.md) all link to this runbook.
 
 ### What it costs that measurement needs a build users do not receive

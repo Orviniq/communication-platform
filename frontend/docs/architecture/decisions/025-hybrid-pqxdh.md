@@ -21,7 +21,7 @@ Protects recorded encrypted sessions against harvest-now-decrypt-later quantum a
 
 - Frozen in [Pairwise transport v1](../../contracts/PAIRWISE-V1.md) and implemented in `native/crypto_core/src/pairwise.rs` using `mlkem-native` v1.2.0 (`0ba906cb14b1c241476134d7403a811b382ca498`), `x25519-dalek` `=3.0.0`, `ed25519-dalek` `=3.0.0`, `chacha20poly1305` `=0.11.0`, and `hkdf`/`hmac`/`sha2`.
 - Prekey signing and additive unsigned `pq_otpk` mixing are constrained by [ADR-034](034-authenticated-pq-contribution.md); 7-day signed prekey rotation continuity is constrained by [ADR-035](035-prekey-rotation.md).
-- Open gate: Independent cryptographic review of `pairwise-transport-v1` and `pairwise.rs` remains open under [ADR-017](017-independent-crypto-review.md) ([Pairwise review readiness](../../pairwise-review-readiness.md)).
+- Open gate: Independent cryptographic review of `pairwise-transport-v1` and `pairwise.rs` remains open under [ADR-017](017-independent-crypto-review.md) ([Pairwise v1 review packet](../../security/REVIEW-SCOPE.md#pairwise-v1-review-packet)).
 
 ## Costs
 

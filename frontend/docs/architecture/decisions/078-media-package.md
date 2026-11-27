@@ -48,7 +48,7 @@ Evaluated and pinned the Android WebRTC dependency under [ADR-054](054-dependenc
 ## Costs
 
 - Adds 35.5 MB to the unsigned production APK (mostly `libjingle_peerconnection_so.so` across three ABIs) and introduces a second unreviewed native TLS/crypto stack (BoringSSL inside libwebrtc, used strictly for DTLS-SRTP media and never invoked directly by app code).
-- Depends on JitPack availability (requiring a mirror per [deployment-and-release.md](../../deployment-and-release.md) for air-gapped/CI resilience).
+- Depends on JitPack availability (requiring a mirror per [RELEASE.md](../../runbooks/RELEASE.md) for air-gapped/CI resilience).
 
 ## Reversal Trigger
 

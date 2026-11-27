@@ -45,7 +45,7 @@ Established what the distributed application says to users about its maturity, h
 ## Constraints and Open Gates
 
 - [deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart) owns `SurfaceMaturity`, `DisclosurePoint`, and `DeploymentDisclosure.distributed` (currently revision 11 for `production`, `null` for `development`).
-- Whenever `DeploymentDisclosure.revision` increases, re-delivering the written handover disclosure to existing recipients remains a release-blocking checklist item ([STATUS.md](../../STATUS.md#artifact-and-release-acceptance), [deployment-and-release.md](../../deployment-and-release.md)).
+- Whenever `DeploymentDisclosure.revision` increases, re-delivering the written handover disclosure to existing recipients remains a release-blocking checklist item ([STATUS.md](../../STATUS.md#artifact-and-release-acceptance), [RELEASE.md](../../runbooks/RELEASE.md)).
 - `AppEnvironmentBanner` (`lib/app/config/app_environment_banner.dart`) and `AppEnvironment` (`lib/app/config/app_environment.dart`) switch exhaustively over environments so no build inherits another's title or banner.
 
 ## Costs

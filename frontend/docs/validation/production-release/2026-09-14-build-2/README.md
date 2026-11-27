@@ -65,7 +65,7 @@ Installing the build opens nothing. ADR-017, every production completion gate in
 `implementation-checklist.md`, ADR-053's sustained-delivery gate and ADR-054's follow-up
 F2 stay closed (ADR-076 D10). The build went only to the owner's own devices, so the
 written disclosure still travels with the first build handed to anyone else
-(`deployment-and-release.md` steps 8 to 10).
+([`deployment-and-release.md`](https://github.com/Orviniq/communication-platform/blob/f85196de7d0d33adb1391c4ff6b1d0482750b780/frontend/docs/deployment-and-release.md) steps 8 to 10).
 
 The groups row "Not yet run" in `implementation-checklist.md` is unchanged: running groups
 on these devices against the live server is the owner's own test.

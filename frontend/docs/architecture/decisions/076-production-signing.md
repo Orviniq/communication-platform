@@ -15,7 +15,7 @@ Gave the `production` Android flavor (`com.orviniq.chat`) one persistent signing
    - Permanent application ID `com.orviniq.chat` (approved by Owner Question 1), RSA-4096 `SHA384withRSA` (10,000 days), PKCS12 alias `communication-platform-production`, subject `CN=com.orviniq.chat, OU=Production, O=Communication Platform`, APK Signature Schemes **v2 and v3 only** (no v1 at `minSdk` 24; no v4 `.idsig`).
    - Committed public certificate SHA-256 `a06f9e8a250dc68bf95bdf3f9ffcf4c5dc81e6bd82a785011cd1a1e964cc8395` (`ccf2ada4`) in `android/production-release-identity.properties`, read by both Gradle and `tool/verify_release_apk.sh`.
 3. **D3 — Workstation custody (Owner Question 2, Option A) and encrypted backups:**
-   - Recorded explicit deviation from [deployment-and-release.md](../../deployment-and-release.md) step 4's offline-key requirement: keystore and untracked `production-signing.properties` live in `~/.communication-platform/production-signing/` on the maintainer workstation (which also holds `backend/ops/tls/out/` private CA material), protected by Windows profile ACLs (`chmod` is a no-op on Git Bash `noacl` NTFS).
+   - Recorded explicit deviation from [RELEASE.md](../../runbooks/RELEASE.md) step 4's offline-key requirement: keystore and untracked `production-signing.properties` live in `~/.communication-platform/production-signing/` on the maintainer workstation (which also holds `backend/ops/tls/out/` private CA material), protected by Windows profile ACLs (`chmod` is a no-op on Git Bash `noacl` NTFS).
    - Required two independent GnuPG AES-256 symmetric backups (`tool/backup_production_keystore.sh` using `--s2k-digest-algo SHA512`) on separate drives (one off-site), test-decrypted by the owner before first install. Any public release under `com.orviniq.chat` inherits this key's custody history.
 4. **D4 — Irreversible loss and leak facts:**
    - Lost key/passphrase permanently orphans all existing installs (v3 key rotation requires the original key). Leaked key permits malicious updates on every API level (`minSdk < 28` ignores v3 and verifies v2, and rotation below rotation-min-sdk still allows original key signing); recovery requires a new application ID and uninstall/data loss.
@@ -32,7 +32,7 @@ Gave the `production` Android flavor (`com.orviniq.chat`) one persistent signing
    - Owner alone creates keys/backups outside agent visibility. Agent sessions may run `tool/build_production_release.sh` passing only `CP_PRODUCTION_SIGNING_PROPERTIES` path (never reading `~/.communication-platform/`, `keytool`, or `apksigner sign`).
    - Artifacts reach devices only via `adb install` (never `-d`, `flutter install`, `flutter run`, or `flutter drive`, which can uninstall existing signed data).
 9. **D10 — Gates unchanged:**
-   - Opens no gate: [ADR-017](017-independent-crypto-review.md), [STATUS.md](../../STATUS.md#production-completion-gates) production gates, [deployment-and-release.md](../../deployment-and-release.md) checklist items, [ADR-053](053-field-evidence-gate.md) (until ADR-094 later changed `production` to `bestEffort`), and [ADR-054](054-dependency-policy.md) follow-up F2 remain closed.
+   - Opens no gate: [ADR-017](017-independent-crypto-review.md), [STATUS.md](../../STATUS.md#production-completion-gates) production gates, [RELEASE.md](../../runbooks/RELEASE.md) checklist items, [ADR-053](053-field-evidence-gate.md) (until ADR-094 later changed `production` to `bestEffort`), and [ADR-054](054-dependency-policy.md) follow-up F2 remain closed.
 
 ## Rationale
 
@@ -41,7 +41,7 @@ Gave the `production` Android flavor (`com.orviniq.chat`) one persistent signing
 ## Constraints and Open Gates
 
 - **As-built verification:** Covered by [production_key_tooling_test.dart](../../../test/architecture/production_key_tooling_test.dart), [android_release_signing_test.dart](../../../test/architecture/android_release_signing_test.dart), [production_release_packaging_test.dart](../../../test/architecture/production_release_packaging_test.dart), and [deployment_disclosure_test.dart](../../../test/architecture/deployment_disclosure_test.dart).
-- **First device install (2026-09-14, build 2 at `f85196de`):** Installed via `adb install` on Galaxy A56 (Android 16, `arm64-v8a`) and Android 15 emulator (`x86_64`) reaching the Login screen alongside retained `com.orviniq.chat.beta` build 33 ([2026-09-14-build-2/README.md](../../validation/production-release/2026-09-14-build-2/README.md), [release-signing.md](../../release-signing.md)).
+- **First device install (2026-09-14, build 2 at `f85196de`):** Installed via `adb install` on Galaxy A56 (Android 16, `arm64-v8a`) and Android 15 emulator (`x86_64`) reaching the Login screen alongside retained `com.orviniq.chat.beta` build 33 ([2026-09-14-build-2/README.md](../../validation/production-release/2026-09-14-build-2/README.md), [SIGNING.md](../../runbooks/SIGNING.md)).
 - **Open gap:** D7 runtime TLS SPKI-pinning conflict between [ADR-043](043-private-ca-transport.md) / `transport_security_native.dart` and [SECURITY.md](../../../../docs/security/SECURITY.md) / server [ADR-0027](../../../../docs/architecture/decisions/0027-the-serving-origin-moves-and-a-pin-moves-with-it.md) remains open in [STATUS.md](../../STATUS.md#platform-identity-and-content).
 
 ## Costs

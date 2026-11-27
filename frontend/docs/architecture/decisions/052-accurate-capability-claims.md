@@ -27,7 +27,7 @@ Audited every user-facing security and capability statement directly against the
    - Users with `acknowledgedRevision < revision` see one blocking full-screen `DisclosureChangePage` with changed points marked by a labelled badge (`disclosureChangedLabel`); users with no durable record (`0`, i.e. pre-ADR-052 installs) see the whole statement with nothing badged because nothing is known about what they previously read.
    - **Fail-open safety rule:** An unreadable preference row withholds the gate rather than locking the user out of messages; a failed write only costs one extra showing.
 4. **Written handover & full-catalogue localization parity:**
-   - Updated [deployment-and-release.md](../../deployment-and-release.md) to match `DisclosurePoint` (fixing the stale 6-of-7 list, missing unbuilt surfaces, and missing ADR-051 opt-in) while keeping written re-delivery release-blocking for recipients who have not updated.
+   - Updated [RELEASE.md](../../runbooks/RELEASE.md) to match `DisclosurePoint` (fixing the stale 6-of-7 list, missing unbuilt surfaces, and missing ADR-051 opt-in) while keeping written re-delivery release-blocking for recipients who have not updated.
    - Replaced three per-feature hand-maintained l10n key lists with catalogue-wide parity enforcement between `app_en.arb` and `app_fa.arb` (and checked overflow up to 160% text scale).
 
 ## Rationale

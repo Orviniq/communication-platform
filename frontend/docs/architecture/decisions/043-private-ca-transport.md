@@ -38,6 +38,6 @@ Reopen if the owner decides Dart runtime SPKI pinning must be enforced alongside
 
 ## History, Amendments, and Supersession
 
-- **2026-08-20 (`9515be30`):** Recorded ADR-043 (`Accepted`), correcting [platform-android.md](https://github.com/Orviniq/communication-platform/blob/9515be300ffe62a6e80b3e6d96ff26ac31028f67/frontend/docs/platform-android.md), [provisioning README](../../../android/provisioning/README.md), and [release-signing.md](../../release-signing.md).
+- **2026-08-20 (`9515be30`):** Recorded ADR-043 (`Accepted`), correcting [platform-android.md](https://github.com/Orviniq/communication-platform/blob/9515be300ffe62a6e80b3e6d96ff26ac31028f67/frontend/docs/platform-android.md), [provisioning README](../../../android/provisioning/README.md), and [SIGNING.md](../../runbooks/SIGNING.md).
 - **2026-09-07 (ADR-067):** Reused the private CA unchanged across the `chat.orviniq.com` origin move, while leaf regeneration moved `BETA_PRIMARY_SPKI_SHA256` in build-time pin config.
 - **2026-09-14 (ADR-076 D7):** Flagged the mismatch between exclusive private-CA trust in `dart:io` and SPKI-pinning expectations in server/security documentation as an open owner decision.

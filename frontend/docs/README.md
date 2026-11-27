@@ -22,11 +22,10 @@ The documents use three requirement words:
 
 ## Security and protocols
 
-- [Threat model](threat-model.md)
+- [Client threat model](security/CLIENT-THREAT-MODEL.md)
 - [Cryptographic protocol](contracts/CRYPTO.md)
 - [Pairwise transport version 1](contracts/PAIRWISE-V1.md)
-- [Pairwise independent-review packet](pairwise-review-readiness.md)
-- [Retaining an independent cryptographic reviewer](independent-review-engagement.md)
+- [Independent cryptographic review scope and engagement](security/REVIEW-SCOPE.md) ([Pairwise v1 review packet](security/REVIEW-SCOPE.md#pairwise-v1-review-packet))
 - [Application-message protocol](contracts/MESSAGES.md)
 - [Authentication and devices](contracts/AUTH-AND-DEVICES.md)
 - [Attachments](contracts/ATTACHMENTS.md)
@@ -44,10 +43,10 @@ The documents use three requirement words:
 
 - [Backend API index](contracts/BACKEND.md)
 - [Release scope and gates](STATUS.md#release-scope-and-gates)
-- [Testing strategy](testing-strategy.md)
+- [Testing strategy and verification](runbooks/VERIFY.md)
 - [Sustained delivery: field validation and its gate](runbooks/SUSTAINED-DELIVERY.md)
-- [Deployment and release](deployment-and-release.md)
-- [Production release signing and key continuity](release-signing.md)
+- [Deployment and release](runbooks/RELEASE.md)
+- [Production release signing and key continuity](runbooks/SIGNING.md)
 - [Third-party notices](third-party-notices.md)
 
 ## Authority and change control

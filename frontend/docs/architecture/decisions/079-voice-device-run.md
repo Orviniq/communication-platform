@@ -37,7 +37,7 @@ Closed phase 6 (voice mesh) on live two-device evidence using signed `production
   - More than 2 devices, the 10-device ceiling, mid-call member removal, room rename/leave, 5-hour credential/ICE restart, and TCP relay transport were not exercised on devices (all connections selected UDP).
   - Network handoffs drop the connection (per *The call*, requiring a fresh join) rather than triggering automatic ICE restart; moving between networks remains a design question beside D10's unbuilt relay-unreachable state ([ADR-077](077-voice-mesh.md)).
   - At ADR-079, `DeploymentDisclosure` `unbuiltSurfaces` still said voice rooms "do nothing" (later updated in ADR-094 rev 10), and [ADR-077](077-voice-mesh.md)'s 2026-10-01 `room_text` budget question remained open.
-  - About and Diagnostics still display `0.1.0+1` (`pubspec.yaml` version) across builds `--build-number` 3–5; `dumpsys package` distinguishes installed `versionCode`s ([release-signing.md](../../release-signing.md)).
+  - About and Diagnostics still display `0.1.0+1` (`pubspec.yaml` version) across builds `--build-number` 3–5; `dumpsys package` distinguishes installed `versionCode`s ([SIGNING.md](../../runbooks/SIGNING.md)).
 
 ## Costs
 

@@ -39,7 +39,7 @@ Why closed: [server ADR-0001](../../../../docs/architecture/decisions/0001-pairw
 ## Constraints and Open Gates
 
 - **Closed:** `frontend/docs/mls-profile.md` (which held the normative D1–D10 evidence table) and `frontend/native/crypto_core/src/mls_beta.rs` were deleted when beta MLS was retired (historical snapshot preserved at commit `788453b430f34c52c2063ef67b8aa5e4f8fa935d`).
-- The prepared upstream defect report remains archived at [mls-rs-hybrid-kem-defect-report.md](../../upstream/mls-rs-hybrid-kem-defect-report.md), and on-device beta run records remain at [archive/beta-mls-core/README.md](../../archive/beta-mls-core/README.md).
+- The prepared upstream defect report remains archived at [mls-rs-hybrid-kem-defect-report.md](../../archive/beta-mls-core/mls-rs-hybrid-kem-defect-report.md), and on-device beta run records remain at [archive/beta-mls-core/README.md](../../archive/beta-mls-core/README.md).
 - Any future KEM or ciphersuite migration on an active track would have required explicit state-format version rejection because `Npk` and `Nenc` were identical (`BETA_STATE_FORMAT_VERSION`, transport v3, schema v11).
 
 ## Costs

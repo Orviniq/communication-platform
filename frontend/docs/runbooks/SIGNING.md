@@ -3,14 +3,14 @@
 This is the operating manual for making, signing, verifying and installing builds of the
 `production` flavor, `com.orviniq.chat`. It is written for whoever makes a build,
 including the person who inherits this project later. The governing decision is
-[ADR-076](architecture/decisions/076-production-signing.md), which on 2026-09-14 gave production one persistent signing key,
+[ADR-076](../architecture/decisions/076-production-signing.md), which on 2026-09-14 gave production one persistent signing key,
 so that the owner can install real builds on their own devices and hand one to a known
 person taking part in a test.
 
 An installable build is not a released one. No store, download page or update channel
 carries it, and signing it opens nothing: not ADR-017, not a production completion gate in
-[STATUS.md](STATUS.md#production-completion-gates), not an item of the production release checklist in
-[deployment-and-release.md](deployment-and-release.md), not ADR-053's sustained-delivery
+[STATUS.md](../STATUS.md#production-completion-gates), not an item of the production release checklist in
+[RELEASE.md](RELEASE.md), not ADR-053's sustained-delivery
 gate, and not ADR-054's follow-up F2, so a build reaches nobody except by hand (ADR-076
 D1 and D10).
 
@@ -32,7 +32,7 @@ For this client that erasure is not an inconvenience:
 | `storage_key_v1.bin` in the no-backup directory | The envelope holding the database key, deleted with it. |
 | Any backup of either | `AndroidManifest.xml` sets `allowBackup="false"` and `fullBackupContent="false"`, so Android Backup and `adb backup` hold nothing. |
 | The database key itself | Wrapped by a non-exportable `AndroidKeyStore` key (`ProtectedStorageChannel.kt`), so no exportable copy exists anywhere, by design. |
-| Message history | There is no server-side history by design; see [`docs/architecture/SYNC.md`](architecture/SYNC.md#device-to-device-history-transfer). |
+| Message history | There is no server-side history by design; see [`docs/architecture/SYNC.md`](../architecture/SYNC.md#device-to-device-history-transfer). |
 
 A user with a recovery secret and a second enrolled device can restore their identity and
 pull history device-to-device (pieces 10 and 17). A single-device user cannot. Ratchets and
@@ -108,7 +108,7 @@ not (ADR-076 D6).
 |---|---|
 | Who holds the key | The owner, currently the only holder. |
 | Where it lives | `~/.communication-platform/production-signing/` on the maintainer workstation: the keystore `communication-platform-production.p12` and the untracked `production-signing.properties`. Never inside a repository. |
-| Why there | The owner's answer to ADR-076's second question: this workstation, "for now". [deployment-and-release.md](deployment-and-release.md) step 4 asks for an offline-controlled key, and ADR-076 D3 records the deviation and what it costs from the first day. A public release under `com.orviniq.chat` would inherit a key that was never offline, and moving it offline later limits future exposure and undoes none of the past. |
+| Why there | The owner's answer to ADR-076's second question: this workstation, "for now". [RELEASE.md](RELEASE.md) step 4 asks for an offline-controlled key, and ADR-076 D3 records the deviation and what it costs from the first day. A public release under `com.orviniq.chat` would inherit a key that was never offline, and moving it offline later limits future exposure and undoes none of the past. |
 | How many copies | The working copy plus **two** encrypted backups, each on its own drive, one of them kept in another building. Both are made and test-decrypted before the first install, and nothing is installed until the owner confirms that both open (ADR-076 D3). A copy on the workstation's own disks is not a backup. |
 | Encryption | `tool/backup_production_keystore.sh`: GnuPG symmetric AES-256, with the passphrase salted and iterated over SHA-512 (`--s2k-digest-algo SHA512`, `--s2k-mode 3`, `--s2k-count 65011712`). Restoring needs only `gpg` and the backup passphrase. |
 | Passphrases | The keystore passphrase lives in the owner's password manager. Each backup archive's passphrase is recorded apart from that archive. Never store a passphrase beside the file it opens. |
@@ -288,7 +288,7 @@ The script refuses to start:
    never answers is given up on after 30 seconds.
 
 Then it renders the Android trust resources with `tool/render_production_trust.sh`
-([`android/provisioning/README.md`](../android/provisioning/README.md)), which checks the CA
+([`android/provisioning/README.md`](../../android/provisioning/README.md)), which checks the CA
 certificate against its SHA-256 and its expiry before writing anything; builds
 `--release --flavor production --target lib/main_production.dart` with the five defines;
 exports `JAVA_HOME` in `C:/...` form; and runs `tool/verify_release_apk.sh --production`. It
@@ -310,22 +310,22 @@ number is never reused, even for a build nobody installed.
 
 - **Last installed build:** 5, made on 2026-10-05 from `53ff386` and installed that day on
   the owner's phone and emulator with `adb install -r`, in place over build 4
-  ([run record](validation/voice-mesh/2026-10-05/README.md)). The next build is 6 or
+  ([run record](../validation/voice-mesh/2026-10-05/README.md)). The next build is 6 or
   higher.
 - **Installed before it:** 4, made on 2026-10-05 from `9b63a3c` and installed that day over
-  build 3 ([run record](validation/voice-mesh/2026-10-05/README.md)); 3, made on 2026-10-04
+  build 3 ([run record](../validation/voice-mesh/2026-10-05/README.md)); 3, made on 2026-10-04
   from `ab2ecb8` and installed that day over build 2
-  ([run record](validation/voice-mesh/2026-10-04/README.md)); and 2, made on 2026-09-14
+  ([run record](../validation/voice-mesh/2026-10-04/README.md)); and 2, made on 2026-09-14
   from `f85196d` and installed that day on the same two devices
-  ([run record](validation/production-release/2026-09-14-build-2/README.md)).
+  ([run record](../validation/production-release/2026-09-14-build-2/README.md)).
 - **Built and never installed:** 1, made on 2026-09-14 from `e0fe4a2` to prove
   `tool/build_production_release.sh`.
 
 ### 3. Hand the build over
 
 A build handed to someone carries the written disclosure and
-[third-party-notices.md](third-party-notices.md) in the same handover, before they install
-([deployment-and-release.md](deployment-and-release.md) steps 8 to 10). Hand over the APK,
+[third-party-notices.md](../third-party-notices.md) in the same handover, before they install
+([RELEASE.md](RELEASE.md) steps 8 to 10). Hand over the APK,
 its `.sha256` and its metadata file. The recipient can confirm the signer with
 `apksigner verify --print-certs <apk>`.
 
@@ -496,7 +496,7 @@ again, with a higher number, from values derived afresh.
 ## The retained beta key
 
 The `beta` flavor, its application ID `com.orviniq.chat.beta`, and its signing and release
-pipeline were deleted with the closed-beta MLS core ([ADR-075](architecture/decisions/075-pairwise-groups.md)). Its key was
+pipeline were deleted with the closed-beta MLS core ([ADR-075](../architecture/decisions/075-pairwise-groups.md)). Its key was
 not. It lives in `~/.communication-platform/beta-signing/`, reissued on 2026-09-07 under
 `CN=com.orviniq.chat.beta` (ADR-067 D5), and it is still the only key that can update the
 beta installs on the owner's phone and emulator, which hold real data. No tree after

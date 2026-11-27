@@ -177,7 +177,7 @@ non-production flavors.
 
 **Owner decision (ADR-076 D7):** Whether runtime SPKI pinning must also be enforced in
 Dart (or whether exclusive private-CA anchoring in `dart:io` suffices; see
-[release-signing.md](../release-signing.md#what-the-trust-checks-prove) and ADR-043) remains
+[SIGNING.md](../runbooks/SIGNING.md#what-the-trust-checks-prove) and ADR-043) remains
 an open owner decision.
 
 ## Background delivery
@@ -858,7 +858,7 @@ Third-party licence obligations are listed in
 ## Distribution
 
 Initial distribution uses a signed direct APK over the local network.
-[Deployment and release](../deployment-and-release.md) requires signed update
+[Deployment and release](../runbooks/RELEASE.md) requires signed update
 metadata with signature verification independent of TLS. The APK build and
 verification scripts cover signing identity and the APK itself. Generating
 and verifying the update metadata remain release-checklist work. A store
@@ -883,7 +883,7 @@ live host serves, renders the Android trust resources that
 the five defines, and publishes to `build/production-release/` only what
 `tool/verify_release_apk.sh --production` passed. An artifact reaches a device only through
 `adb install`, never with `-d`, and nothing is uninstalled.
-[Production release signing and key continuity](../release-signing.md) is the manual for the
+[Production release signing and key continuity](../runbooks/SIGNING.md) is the manual for the
 key, the build, the install rule and the retained beta key.
 
 ## Primary references

@@ -35,7 +35,7 @@ Usage: tool/build_production_release.sh --build-number N [--build-name X]
   --build-name X     Human version name (default: the pubspec version).
 
 Required environment, derived afresh for every build. These are public values,
-never committed; docs/release-signing.md shows how to derive them:
+never committed; docs/runbooks/SIGNING.md shows how to derive them:
   PRODUCTION_SERVER_ORIGIN         https origin, no path, query or fragment
   PRODUCTION_PRIVATE_CA_SHA256     SHA-256 of the CA certificate in DER, 64 hex chars
   PRODUCTION_PRIMARY_SPKI_SHA256   base64 SHA-256 pin the live host must serve
@@ -109,7 +109,7 @@ fi
 
 # A build number only rises (ADR-076 D9). This directory belongs to one checkout
 # and `flutter clean` deletes it, so the refusal is a convenience: the last
-# installed number is also recorded in docs/release-signing.md, and Android
+# installed number is also recorded in docs/runbooks/SIGNING.md, and Android
 # refuses a downgrade by itself.
 highest_recorded=0
 for metadata in "$release_directory"/*.metadata.txt; do
@@ -280,10 +280,10 @@ Production release artifact ready.
   $artifact_path.metadata.txt
 
 Before anyone installs it, hand over the written disclosure and
-docs/third-party-notices.md (docs/deployment-and-release.md, steps 8 to 10).
+docs/third-party-notices.md (docs/runbooks/RELEASE.md, steps 8 to 10).
 
 Put it on a device with adb install only: never with -d, and never uninstall
 anything to make an install succeed. Never point flutter install, flutter run or
 flutter drive at a device that holds the signed app (ADR-076 D9). Record the
-number of every installed build in docs/release-signing.md.
+number of every installed build in docs/runbooks/SIGNING.md.
 SUMMARY

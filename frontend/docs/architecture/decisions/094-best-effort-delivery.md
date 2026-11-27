@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-18); proposed 2026-10-17; supersedes [ADR-053](053-field-evidence-gate.md) for the `production` flavor only
 - **Date:** 2026-10-17 proposed, 2026-10-18 accepted (explicitly recorded in register and full section; implemented in `6f3b5516` and documented in `8e4a6ee3` on `frontend-offer-receiving-while-closed`, PR #86 `4091856e`)
 - **Supersedes in part:** [ADR-053](053-field-evidence-gate.md) (supersedes `production` withholding while keeping [ADR-053](053-field-evidence-gate.md) intact for its historical record and for the `development` flavor)
-- **Related:** [ADR-045](045-maturity-disclosure.md), [ADR-051](051-sustained-delivery.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-098](098-presence-and-typing.md), [SUSTAINED-DELIVERY.md](../../runbooks/SUSTAINED-DELIVERY.md), [ANDROID.md](../ANDROID.md), [deployment-and-release.md](../../deployment-and-release.md)
+- **Related:** [ADR-045](045-maturity-disclosure.md), [ADR-051](051-sustained-delivery.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-076](076-production-signing.md), [ADR-089](089-direct-attachments.md), [ADR-098](098-presence-and-typing.md), [SUSTAINED-DELIVERY.md](../../runbooks/SUSTAINED-DELIVERY.md), [ANDROID.md](../ANDROID.md), [RELEASE.md](../../runbooks/RELEASE.md)
 
 ## Decision (Position)
 
