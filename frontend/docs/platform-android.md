@@ -119,10 +119,10 @@ Verification on 2026-07-28 passed:
   <android-device> --flavor development` on an Android 15/API 35 x86_64 emulator.
 
 This Android scope does not implement PQXDH, Double Ratchet, application-message schemas,
-or the post-v1 Web/Wasm adapter. It also excluded MLS state and KeyPackages, which no
+or a browser adapter. It also excluded MLS state and KeyPackages, which no
 piece builds now that a group is a set of pairwise sessions ([ADR-075](decisions.md)).
-It is sufficient for the Android-only version-1 foundation; browser interoperability
-remains a post-v1 release gate.
+The smoke covers the Android foundation. Browser interoperability would be a release
+gate if a browser target were approved.
 
 ## Network trust
 
@@ -675,10 +675,9 @@ catalogues; it names no participant and no room. Unlike the sustained entry it i
 `VISIBILITY_PRIVATE` with the same sentence as its public version, so a locked screen and a
 screen being shared show it: whoever holds the phone learns that its microphone is live,
 which a live microphone owes them. Its status-bar icon is a plain microphone,
-`ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. **Not
-built**: the controls the design canvas puts in this notification
-([`voice-room-states.md`](design-handoff/voice-room-states.md) §5.8). A leave or a mute
-there needs the call, and the call has no mute yet.
+`ic_call_in_progress.xml`, and a tap opens the launcher intent and nothing else. Mute and leave are available in the
+[call screen](ui-specification.md#10-live-voice-room-screen). The notification has no
+action buttons.
 
 **Two foreground services.** ADR-046, ADR-048 and ADR-051 each asked for the interaction
 between sustained delivery's service and a call's to be decided rather than discovered. As

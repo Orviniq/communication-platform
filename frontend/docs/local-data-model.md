@@ -19,9 +19,10 @@ lives in the private cache directory the logout and revocation wipe deletes, ins
 bounds of [Attachment rows and decrypted files](#attachment-rows-and-decrypted-files)
 ([ADR-089](decisions.md) D8).
 
-### Web (post-v1)
+### Storage requirements if a browser target is approved
 
-Persist device state and content only as encrypted records. Store a non-extractable
+Android is the sole target under [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md). If a browser target is approved,
+persist device state and content only as encrypted records. Store a non-extractable
 WebCrypto wrapping key in IndexedDB when supported and wrap the local storage key. Drift
 Wasm may store ciphertext/index metadata, but decrypted message bodies and the search
 index remain memory-only and are cleared on logout/page teardown as far as the browser
@@ -453,6 +454,5 @@ history: the filter still reads every row it is given, and what it is given grow
 pages backwards. A result outside the window is still reachable, because a jump to a message
 loads it first. No separate
 index structure is built: it would hold a second copy of every message body, enlarge what
-a wipe has to reach, and buy nothing at this scale ([ADR-057](decisions.md)). A future Web
-build uses an in-memory index from decrypted session content. Search input and results
+a wipe has to reach, and buy nothing at this scale ([ADR-057](decisions.md)). If a browser target is approved, it must index decrypted session content in memory. Search input and results
 never leave the device. Each surface states its own scope.

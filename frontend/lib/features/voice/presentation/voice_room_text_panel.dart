@@ -11,7 +11,8 @@ import 'package:flutter/material.dart';
 /// Sends one line, answering whether it went.
 typedef SendRoomTextCallback = Future<bool> Function(String text);
 
-/// The call's ephemeral room text (`voice-room-states.md` §5.6).
+/// The call's ephemeral room text (see Ephemeral room text in
+/// `docs/voice-and-realtime.md`).
 ///
 /// It says plainly that it is temporary and best-effort, and while the
 /// signalling connection is down it says loudly that it has stopped updating

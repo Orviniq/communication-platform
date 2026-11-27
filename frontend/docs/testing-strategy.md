@@ -35,8 +35,8 @@ Version 1 is Android-only. Piece 07's required target tests are the shared Rust 
 suite, native ABI boundary tests, Android cross-build/package checks, Dart wrapper and
 isolate tests, and a smoke call through the library packaged in an Android application.
 A host-native dynamic-library test alone is not the packaged Android smoke. The Web target
-was removed on 2026-09-08 (server ADR-0020 / `CLIENT_WORK.md`), and any future Web release
-remains post-v1 work.
+was removed on 2026-09-08 under [server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md). A browser release would require an
+explicit decision and compatible server support.
 
 - FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, Argon2id, CBOR, and secretstream vectors
   applicable to the selected implementation. Voice needs none of its own: DTLS-SRTP is
@@ -152,8 +152,7 @@ Use at least two accounts and multiple Android devices for version 1:
   11 to 16; and whether a persisted job survives an in-place upgrade, which the platform
   documentation does not specify.
 
-Patrol may drive Android native flows. Browser E2E is post-v1 and is not required for the
-Android release.
+Patrol may drive Android native flows. Browser E2E applies if a browser target is approved.
 
 ## Adverse-environment matrix
 
@@ -193,5 +192,4 @@ Version-1 release budgets are measured on representative low/mid Android devices
 Pull requests require formatting, analysis, affected unit/widget tests, and documentation
 updates. Version-1 release additionally requires the Android build, crypto vectors,
 migrations, backend contracts, Android E2E matrix, accessibility, performance, offline
-rehearsal, and security review to pass. Web target gates are post-v1. Coverage percentage
-alone cannot waive an invariant test.
+rehearsal, and security review to pass. Coverage percentage alone cannot waive an invariant test.

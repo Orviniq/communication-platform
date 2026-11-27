@@ -997,7 +997,8 @@ so there is no shared key to rotate and no *negotiating encryption* step to show
   updating and takes no line.
 - *Everyone has left* — the alone state; the call's text goes when the call ends.
 - *Call full* — ten joined devices already, or this device sorted outside the ten: the
-  ceiling, its reason, and *Try again*.
+  ceiling, its reason, and *Try again*. The current message says *ten people* even
+  though the call counts devices.
 - *Voice not set up on this server* — `voice_configured` false, or `503
   voice_unconfigured`. Honest and **not retryable**: no call control is offered at all, and
   no foreign fallback is substituted.
@@ -1016,15 +1017,12 @@ and the count, which change too often for a screen reader to stay usable. Speaki
 shown, so it is not announced either.
 
 **Not built.** Speaking indicators, because nothing measures a stream's audio level; a
-peer's mute, which no frame carries; output selection (`voice-room-states.md` §5.7);
+peer's mute, which no frame carries; audio output selection;
 *Relay not answering*, which the call does not report (it reports each peer instead);
-controls in the call's notification (§5.8); the notification permission request at the
-join; and a screen of its own for a device revoked mid-call (§5.4). A call ends with its
+controls in the call's notification; the notification permission request at the
+join; and a screen of its own for a device revoked mid-call. A call ends with its
 session: a logout, an erasure or a revocation leaves the call, closing every connection and
 stopping the service, and the user lands where the session's end sends them.
-
-Every state above is drawn in [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md)
-§5, which is the tie-breaker for these screens.
 
 ---
 

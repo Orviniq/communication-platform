@@ -142,8 +142,7 @@ the group's domain never opens a room event, and a room event never opens as a g
 | — | `5` | Reserved, so that a later role operation cannot reuse a value | — |
 
 **Every active member has the same authority in v1 (D1).** There is no owner, no admin and no
-role tag, which is what §13.2 of [`ui-specification.md`](ui-specification.md) and the
-design canvas both already say, and it is the honest reading of "all peers are equal": a
+role tag, as described in [Voice Room Info](ui-specification.md#132-voice-room-info-screen). A
 room whose members can each invite anyone is a room whose members can each remove anyone.
 The cost is stated rather than designed away — any member can eject any other, and the
 remedy for a member who abuses that is a new room, because there is no authority above
@@ -216,10 +215,9 @@ The four delivery rules are the group's, and hold for the same reasons
   active member is answered, and only by a device that holds an unquarantined state as an
   active member itself.
 - **Queue gap.** After a `pruned_through` gap (§H) every room waits for its state before
-  it joins a call, invites or renames. That is the *Room waiting for its state* row of
-  [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md), and the
-  reason it blocks a join is that a device which may be missing a removal would otherwise
-  offer audio to somebody the room has ejected.
+  it joins a call, invites or renames. The [Voice Room Info screen](ui-specification.md#132-voice-room-info-screen)
+  shows *waiting for its state*. Blocking join prevents a device that missed a removal
+  from offering audio to someone the room has ejected.
 
 ## Starting the sessions a call needs
 
@@ -664,8 +662,8 @@ connection says anyway.
 
 An attempt happens only while the peer is still an active member's live device and this
 device is still in the call. **Nothing pauses when one peer fails**: the tile says *not
-reachable* and the audio with everybody else carries on, which is the *Participant — not
-reachable* state and the first of the design canvas's three principles. A peer reported
+reachable* and the audio with everybody else carries on. See the
+[call screen states](ui-specification.md#10-live-voice-room-screen). A peer reported
 unreachable is attempted again only when a fresh `join` arrives from it, never on a timer,
 which is also what keeps the 32-frame volatile budget above from being spent twice.
 
@@ -999,11 +997,9 @@ is enforced here and by nothing on the server.
 **Ten joined devices (D2).** The cost the ceiling bounds is per connection — each
 participant carries one uplink for every peer, and the relay carries every stream twice —
 and a connection is to a device, not to a person. A person who joins from a phone and a
-tablet occupies two of the ten and appears as two tiles. In practice a person joins a call
-from one device, which is why the copy reads *ten people*; the design canvas's *Call full*
-artboard says "Ten people are already in it, and a call holds ten at most, because every
-phone sends its audio to every other phone", and that sentence stays true under the
-device-counted rule for every user who is not in two places at once.
+tablet occupies two of the ten and appears as two tiles. The current *Call full* string
+calls them people. This wording differs from the device ceiling documented in the
+[call screen states](ui-specification.md#10-live-voice-room-screen).
 
 A device decides for itself whether the call is full, from its own participant set, before
 it sends its `join`: at ten it does not send one and shows *Call full*. Two devices

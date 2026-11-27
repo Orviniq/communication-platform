@@ -952,7 +952,7 @@
   "voiceRoomLeaveTitle": "Leave this room?",
   "voiceRoomLeaveBody": "Leaving is a signed change that the other members apply. It ends your membership and your access to this room's calls. It does not delete the room: the others keep it, and the server holds nothing to delete. Coming back needs a fresh invitation from one of them.",
   "@voiceRoomLeaveBody": {
-    "description": "Honest wording is a release rule (voice-room-states.md §4): a signed event the others apply, no deletion, and a fresh invitation to return."
+    "description": "Honest wording is a release rule (docs/ui-specification.md §13.2): a signed event the others apply, no deletion, and a fresh invitation to return."
   },
   "voiceRoomChangeFailed": "The change could not be committed. The room is unchanged.",
   "voiceRoomWaitingNotice": "Changes to this room may have been lost while this device was away. A member has been asked for its current state, and joining, inviting, renaming and leaving resume when it arrives.",
@@ -1073,11 +1073,11 @@
   },
   "voiceCallSocketDegraded": "Audio is fine. Room chat, joins and leaves are not updating until the connection to the server returns.",
   "@voiceCallSocketDegraded": {
-    "description": "Deliberately calm: the audio is unaffected (voice-room-states.md §5.4)."
+    "description": "Deliberately calm: the audio is unaffected (docs/ui-specification.md §10)."
   },
   "voiceCallNotificationHidden": "Notifications are off for this app, so the call's notice is not in your notifications. Android still lists the call among the active apps in quick settings.",
   "@voiceCallNotificationHidden": {
-    "description": "A stated outcome, never a retry loop (voice-room-states.md §5.1)."
+    "description": "A stated outcome, never a retry loop (docs/ui-specification.md §10)."
   },
   "voiceCallAloneTitle": "You are the only one here",
   "voiceCallAloneBody": "The call stays open. Invite someone, or wait for a member to join.",
@@ -1151,7 +1151,7 @@
   },
   "voiceChatNote": "Temporary and best-effort. Cleared when the call ends; others may keep what they read.",
   "@voiceChatNote": {
-    "description": "Ephemeral text is best-effort; copy never says it disappears forever (voice-room-states.md §1)."
+    "description": "Ephemeral text is best-effort; copy never says it disappears forever (docs/voice-and-realtime.md, Ephemeral room text)."
   },
   "voiceChatEmpty": "Nothing said yet. Messages here are gone when the call ends.",
   "voiceChatStale": "This chat is not updating. Your messages are not being delivered, and new ones will not appear.",

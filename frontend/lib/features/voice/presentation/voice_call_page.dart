@@ -23,8 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// The Live Voice Room (`ui-specification.md` §10,
-/// `voice-room-states.md` §5).
+/// The Live Voice Room (`docs/ui-specification.md` §10).
 ///
 /// Opening it asks for nothing. The microphone is asked for by a join the
 /// user starts - here, or from the room's info - and by nothing else.

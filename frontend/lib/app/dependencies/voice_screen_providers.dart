@@ -42,7 +42,7 @@ final voiceAvailabilityProvider = Provider<bool>(
 /// session reports it.
 ///
 /// While it is down the audio already flowing carries on, and room text,
-/// joins and leaves do not (`voice-room-states.md` §5.4). A phase not read
+/// joins and leaves do not (`docs/ui-specification.md` §10). A phase not read
 /// yet is taken as up: there is nothing to warn about before anything is
 /// known.
 final voiceSignallingConnectedProvider = Provider<bool>((ref) {

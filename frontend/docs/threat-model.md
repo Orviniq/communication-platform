@@ -76,10 +76,9 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Traffic-analysis resistance, anonymity, or cover traffic.
 - Availability against a server or network that refuses service.
 - Guaranteed remote deletion after another device decrypted content.
-- Reliable delivery to a force-stopped Android process or closed browser without a push
-  service. Background delivery remains best-effort at every tier (ADR-046, ADR-051), and no
-  tier is a guarantee — including the opt-in one, which the platform or a manufacturer may
-  end at any moment without telling the application or its owner.
+- Reliable delivery to a force-stopped Android process. Background delivery remains
+  best-effort at every tier (ADR-046, ADR-051). The platform or a manufacturer may end
+  opt-in delivery at any moment without telling the application or its owner.
 - Hiding the social graph, group fan-out, or communication timing from live server root.
 
 ## Trust boundaries
@@ -96,12 +95,12 @@ The signed application binary and Android Keystore are trusted within documented
 limits. A random database-wrapping key is non-exportable where supported. Hardware
 backing is preferred but not assumed on every device.
 
-### Web
+### Trust boundary if a browser target is approved
 
-*No Web client exists in version 1:* the server serves no browser surface (server
-ADR-0020), and the client's web target was removed on 2026-09-08. If a post-v1 Web release
-were ever reopened, the browser origin, browser implementation, and served application
-code would be trusted for the duration of a session: non-extractable WebCrypto keys reduce
+Android is the sole target under
+[server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+If a browser target is approved, the browser origin, browser implementation, and served
+application code would be trusted for the duration of a session: non-extractable WebCrypto keys reduce
 accidental extraction, they do not defend against malicious JavaScript executing in the
 same origin, a server that can replace the web bundle can compromise future sessions, and
 the UI would have to disclose that the installed Android client has a stronger
@@ -114,9 +113,8 @@ scanned. Crypto debug features and sensitive logging features are forbidden in r
 builds.
 
 Version 1 implements only the shared Rust primitive foundation and Android FFI/isolate
-adapter. The Web/Wasm boundary is deferred to post-v1 and crypto-dependent Web behavior
-remains fail-closed; Android completion is sufficient for the Android release but is not
-evidence for a future Web trust boundary or its browser vectors.
+adapter. A browser target would require evidence for its own trust boundary and browser
+vectors.
 
 ## Required controls
 
@@ -226,7 +224,7 @@ build over under them acceptable.
 - Dependency audit and SBOM are clean or formally accepted.
 - An independent reviewer signs off the protocol, implementation boundary, Android key
   storage, and release configuration. Web limitations and browser configuration are
-  reviewed only when the post-v1 Web release is reopened.
+  reviewed if a browser target is approved.
 
 ## Primary references
 

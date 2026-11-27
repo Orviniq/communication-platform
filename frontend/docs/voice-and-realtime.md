@@ -153,8 +153,8 @@ decrypted, and because a frame published for a device that is mid-reconnect is g
 - **The participant set is this device's own.** A device is in the call when a connection
   to it is open, and for no other reason. `participants_query` and its answer are a hint
   for a device that joined late (§N rule 5) and never an authority.
-- **Speaking and mute come from local media state**, never from the server, and each needs
-  a non-colour signal as well.
+- **This device's mute state is local.** The call screen renders mute with an icon and
+  label. Speaking indicators and peer mute state are open UI gaps.
 - **A name and an avatar come from locally authenticated profile state**, not from
   anything a peer sent in a call.
 - There is no `live_count`. A room in the list shows *Live now · N* only from a call this
@@ -190,7 +190,7 @@ happens to each, and when it happened:
 | `activeVoiceRoomName`, which nothing sets | `app_shell.dart`, `app_router.dart` | **Keep.** It is the minimised banner's input and the call controller is what will set it. **Done 2026-10-02**: `LiveShellStatus` sets it from the call in progress, with the room's id and this device's mute |
 | The banner's tap target | `app_shell.dart:649` | **Replace** with the id of the call in progress, alongside the route above. **Done 2026-10-02**: it opens `/voice-rooms/:roomId/call`, and the call's own screen does not show it |
 | Contacts "New voice room" | `contacts_new_page.dart` | **Keep.** Since 2026-10-02 it opens the create flow, and on a server with no voice it is disabled with the reason |
-| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep**, and add the 22 icons the design canvas draws that `AppIcons` has no mapping for — mic, mic-off, speaker, phone-off, user-plus and the rest. **Partly done 2026-10-02**: the 14 the built screens draw, mic, mic-off, phone-off and user-plus among them; speaker and the rest wait for the surfaces that draw them |
+| `AppIcons.voiceRooms` | `app_icons.dart` | **Keep.** The implemented controls use the app icon mapping, including mic, mic-off, phone-off and user-plus |
 | Drift table `voice_rooms` | `local_database.dart:995` | **Delete.** It has no reader and no writer, and its three columns describe a server room: a capability to hold, a name the server stored, a live count the server counted. `room_states`, `room_control_events`, `room_outbound_objects` and `room_state_requests` replace it. **Done 2026-09-30** by schema 23, phase 6 prompt 6 |
 | `StructuralPlaceholderKind.voiceRooms`, `.newRoom`, `.room` | `structural_placeholder_page.dart` | **Keep** until prompt 9 replaces each with a real screen. **Done 2026-10-02**: all three are deleted |
 | `voiceRoomsPlaceholderTitle` / `Body` | `l10n` | **Keep** until then. **Done 2026-10-02**: deleted, with `roomPlaceholderTitle` and `newRoomPlaceholderTitle` |
@@ -213,6 +213,6 @@ for subsequent signed test builds.
 - [Server ADR-0022: the gateway holds no presence](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
 - [`voice-signalling-v1.md`](voice-signalling-v1.md) — the two wire formats
 - [`pairwise-transport-v1.md`](pairwise-transport-v1.md) — the transport under both
-- [`design-handoff/voice-room-states.md`](design-handoff/voice-room-states.md) — every
-  screen and state
+- [Live Voice Room Screen](ui-specification.md#10-live-voice-room-screen) and
+  [Voice Rooms](ui-specification.md#13-voice-rooms--list-create--info) — UI states and actions
 - [ADR-077](decisions.md) — the decision record for this design

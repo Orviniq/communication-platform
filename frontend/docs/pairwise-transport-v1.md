@@ -403,8 +403,8 @@ The independent-review packet must contain:
 - parser/state-machine fuzz corpora and reproducible commands; and
 - an explicit list of open findings and the independent assessor's disposition.
 
-Android passing the packet does not provide Web evidence. Cross-target byte equality
-remains a post-v1 Web gate.
+Android passing the packet does not provide Web evidence. A browser target would require a new decision and compatible server support.
+Cross-target byte equality would be a release gate for that target.
 
 ## Primary references
 

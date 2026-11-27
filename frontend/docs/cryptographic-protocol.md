@@ -37,11 +37,12 @@ ad-hoc cryptography. It does not block the Android-only version-1 release.
 ### Piece-07 implementation staging
 
 Piece 07 establishes the shared Rust source and Android native FFI/isolate boundary only.
-The version-1 release is Android-only. The Web/Wasm adapter and browser worker are
-post-v1 work; crypto-dependent Web behavior remains fail-closed, with no Dart or
-JavaScript primitive fallback. A future reviewed Web adapter MUST consume the same
-locked core source, provider choices, serialization, domain constants, and fixtures and
-must satisfy the Web release gates before Web cryptographic behavior is enabled.
+Android is the sole target under
+[server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+A browser release would require a new decision and compatible server support. A reviewed
+Web adapter MUST consume the same locked core source, provider choices, serialization,
+domain constants, and fixtures. Crypto-dependent features MUST fail closed until the
+Web release gates pass. Dart and JavaScript primitive fallbacks are forbidden.
 Android-only completion is not a protocol downgrade or an alternate suite.
 
 ## Protocol suite
