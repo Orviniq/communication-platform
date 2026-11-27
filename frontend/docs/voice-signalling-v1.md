@@ -221,7 +221,7 @@ The four delivery rules are the group's, and hold for the same reasons
 
 ## Starting the sessions a call needs
 
-Decided on 2026-09-30, option B of [ADR-077](decisions.md)'s open conflict. A call's frames
+Decided on 2026-09-30, option B of [ADR-077](architecture/decisions/077-voice-mesh.md)'s open conflict. A call's frames
 are volatile, and a volatile frame never starts a pairwise session (Part 2, *Volatile seal
 and open*), so the room starts every session its call will need, on the durable path, before
 the call needs it. No payload is new: this is the kind 2 request above, sent on a rule of its
@@ -552,7 +552,7 @@ refuses a device with no ready primary session as `noSession`, and the store ref
 volatile transition that would create a session. A session begins on the durable path,
 whose queue does not lose a first message short of its TTL. Receiving an initial header
 over a `signal` frame is still accepted, under every check a durable one gets. This is a
-departure from the paragraph above, not a decision: [ADR-077](decisions.md) records it and
+departure from the paragraph above, not a decision: [ADR-077](architecture/decisions/077-voice-mesh.md) records it and
 the options, for the owner.
 
 **Decided B on 2026-09-30.** The suspension is the rule: a volatile frame never starts a
@@ -767,7 +767,7 @@ were in the call, and the room text goes.
   refused with the rest. The relay has no TLS listener ([Security, Voice](../../docs/security/SECURITY.md#voice)),
   and libwebrtc would check a TLS relay against its compiled-in roots and the platform
   store, user-installed authorities included, never against the provisioned CA
-  ([ADR-078](decisions.md)). A TLS relay would be a contract change and a trust decision of
+  ([ADR-078](architecture/decisions/078-media-package.md)). A TLS relay would be a contract change and a trust decision of
   its own, not something to accept on sight.
 - **A dead relay answers `200`.** The route reads a setting and never reaches coturn, so a
   credential minted against a relay that is down looks perfect and the call simply fails to
@@ -864,7 +864,7 @@ the copy. The four attempts at 0, 2, 4 and 8 seconds are the call's schedule.
 its offer was answered; that its ICE restart is, or is no longer, in progress; and each
 frame the transport did not send, with the reason. A device with no pairwise session is
 refused `noSession` by the transport, and the connection reports it rather than starting one.
-Since [ADR-077](decisions.md)'s open conflict was decided B on 2026-09-30, the room starts
+Since [ADR-077](architecture/decisions/077-voice-mesh.md)'s open conflict was decided B on 2026-09-30, the room starts
 that session on the durable path (Part 1, *Starting the sessions a call needs*), so
 `noSession` reaching the call means the room has not reached that device yet. A platform refusal of a step of this device's own negotiation is `failed` for good,
 and the call closes the connection. `close()` closes the platform connection at once and
@@ -872,7 +872,7 @@ gives back its hold, and the capture stays with the call's other connections: li
 `RtpSender.dispose` releases only the sender's own reference to the track.
 
 **The capture must follow the join's permission request.** `getUserMedia` asks for
-`RECORD_AUDIO` by itself when it is missing ([ADR-078](decisions.md)), and nothing here asks
+`RECORD_AUDIO` by itself when it is missing ([ADR-078](architecture/decisions/078-media-package.md)), and nothing here asks
 first, so the call takes its first hold only after the join has asked (§N rule 11, prompts 8
 and 9).
 

@@ -17,7 +17,7 @@ The documents use three requirement words:
 - [Product requirements](product-requirements.md)
 - [Complete page-by-page UI specification](ui-specification.md)
 - [Architecture](architecture.md)
-- [Architecture decisions](decisions.md)
+- [Architecture decisions](architecture/decisions/README.md)
 - [Responsive UI](responsive-ui.md)
 - [Visual design system](visual-design-system.md)
 

@@ -1,7 +1,7 @@
 # Closed-beta PQ MLS core run records
 
 One directory per measurement run, produced by `tool/measure_beta_mls_core.sh`
-and named `YYYY-MM-DD-<model>-<abi>`. [ADR-055](../../decisions.md) made these
+and named `YYYY-MM-DD-<model>-<abi>`. [ADR-055](../../architecture/decisions/055-initial-artifact.md) made these
 records evidence for the former gate in `lib/app/config/group_production_gate.dart`.
 
 **Recorded beta gate state: OPEN for `arm64-v8a`, CLOSED for `armeabi-v7a` and `x86_64`**

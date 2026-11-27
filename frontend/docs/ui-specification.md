@@ -70,7 +70,7 @@ These recur across screens. They are stated here so the individual screens can s
   it). There is no badge meaning supported, stable, verified or audited, and none may be
   added: an unbadged surface is covered by the application-level label and by nothing
   stronger. Both words come from `SurfaceMaturity`; a screen that invents its own
-  maturity wording is a defect ([ADR-045](decisions.md)).
+  maturity wording is a defect ([ADR-045](architecture/decisions/045-maturity-disclosure.md)).
 - **A feature that does not work does not offer itself.** Where an action cannot
   succeed - no adapter is composed, no picker exists - the screen says so and disables
   the action. It never presents a control that fails into a generic error.
@@ -132,7 +132,7 @@ edge of the screen.
 - **No connection strip.** The shell draws none. The connection and sync status is the
   Chats title's (§6): it shows what the delivery engine is doing once the engine has been
   unsettled for a second, and it clears when the engine settles. As built (2026-10-09,
-  phase 10 prompt 2), the strip of earlier builds is deleted ([ADR-087](decisions.md)): it
+  phase 10 prompt 2), the strip of earlier builds is deleted ([ADR-087](architecture/decisions/087-chat-status.md)): it
   showed on the Chats tab root only, after a start without the server, and nothing
   cleared it when the connection came back.
 
@@ -321,7 +321,7 @@ section must not be softened or omitted.
    leaves it, and is unreadable to the server, to anyone watching the network, and to
    anyone who seizes the server. **It must name no feature.** This section is permanent
    and outlives any feature list, so an enumeration goes stale by default: until
-   [ADR-052](decisions.md) it promised "messages, files, and voice audio" in an artifact
+   [ADR-052](architecture/decisions/052-accurate-capability-claims.md) it promised "messages, files, and voice audio" in an artifact
    that could send no file and carry no audio, and a test now forbids feature words here.
 3. **What it does NOT protect** — stated plainly, and **in the reader's vocabulary rather
    than the project's**:
@@ -335,9 +335,9 @@ section must not be softened or omitted.
    **content** unreadable — the rest is the user's informed risk. A limitation the reader
    cannot decode is a limitation that has not been disclosed (ADR-052).
 4. **What this build is** — the deployment disclosure required by
-   [ADR-045](decisions.md), whose exact points and order are
+   [ADR-045](architecture/decisions/045-maturity-disclosure.md), whose exact points and order are
    `DeploymentDisclosure.distributed`. Present **only** in a build that is handed to
-   someone: since [ADR-076](decisions.md) that is the production flavor, and development
+   someone: since [ADR-076](architecture/decisions/076-production-signing.md) that is the production flavor, and development
    carries none. At revision 9 that is eight short facts, ordered by consequence — no
    independent review; how and when messages arrive while the app is closed, and that none
    of it is guaranteed; that messages left waiting on the server are deleted unread and
@@ -354,7 +354,7 @@ section must not be softened or omitted.
    **[PRIVACY]** No cryptographic identifiers, draft names, or registry state here — they
    are true and unreadable, and they would bury the facts that matter. Sections 2 and 3
    are permanent and stay true in a public release; this section describes a build handed
-   to named people, which is not one ([ADR-076](decisions.md) D1), and a public release
+   to named people, which is not one ([ADR-076](architecture/decisions/076-production-signing.md) D1), and a public release
    decides it again.
 5. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
    plain **Close/Back**. In the re-presentation (below): the same **"I understand"**.
@@ -372,7 +372,7 @@ changing.
 
 **Shown again, once, when the content does change.** The revision the user accepted is
 recorded on the device, so a build whose disclosure revision is higher re-presents the
-statement on the first launch after the update ([ADR-052](decisions.md)). It is a
+statement on the first launch after the update ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)). It is a
 **full screen**, not a banner and not a notification: the app posts message alerts (§15)
 and can post a permanent service notice, and habituation to routine notifications
 transfers to warnings that resemble them. It renders **the same sections in the same
@@ -394,7 +394,7 @@ rooms pinned at top. The primary hub.
 **Layout.**
 - **Top bar:** left — title "Chats" (or an avatar/menu affordance opening Settings on
   mobile); center/right — the **search** icon and, on desktop, the compose "+".
-- **Title status.** As built (2026-10-09, phase 10 prompt 2, [ADR-087](decisions.md)), the
+- **Title status.** As built (2026-10-09, phase 10 prompt 2, [ADR-087](architecture/decisions/087-chat-status.md)), the
   title carries the connection and sync status. It is "Chats" while the delivery engine is
   **settled**: online, or no state read yet. Once the engine has been in any other state
   for **one second** without a break, the title is that state in place of the name:
@@ -403,7 +403,7 @@ rooms pinned at top. The primary hub.
   `AppIcons.connecting` icon. The words are the same in English and Persian as the line
   they replace.
   - **Four states.** The nine phases of the engine collapse to settled, connecting,
-    syncing and waiting, as [ADR-060](decisions.md) D11 decided: every terminal phase
+    syncing and waiting, as [ADR-060](architecture/decisions/060-delivery-latency.md) D11 decided: every terminal phase
     — revoked, circuit open, origin rejected — reads as waiting, because the
     session-level surfaces own those. The status is content-free: no counts, identifiers
     or timings. The title reads the live phase only; how the session was opened does not
@@ -421,7 +421,7 @@ rooms pinned at top. The primary hub.
   (§0.1). The icon is the only search entry: the body holds no search field.
 - **Body:** the scrollable list, and nothing above it. Order: pinned items first (including
   active voice rooms and pinned conversations), then the rest by most recent activity.
-- **A row for a sender whose messages are held until verified** ([ADR-093](decisions.md) D18).
+- **A row for a sender whose messages are held until verified** ([ADR-093](architecture/decisions/093-held-first-message.md) D18).
   One row for each sender with held envelopes: "@username sent you N messages. Verify to read
   them." ("1 message. Verify to read it." for one; the short identity without the "@" when
   this phone has no contact row for the sender). It shows no preview, time, badge or menu,
@@ -441,7 +441,7 @@ rooms pinned at top. The primary hub.
 - Timestamp of last activity.
 - Unread count badge.
 - Mute icon if muted. A mute that expires while the list is on screen clears the icon at the
-  moment it expires ([ADR-064](decisions.md)) — the row is not left claiming a mute that has
+  moment it expires ([ADR-064](architecture/decisions/064-incremental-rebuild.md)) — the row is not left claiming a mute that has
   ended until something else happens to redraw it.
 - Pin marker if pinned.
 - Optional delivery/read state on the last outgoing message.
@@ -469,7 +469,7 @@ server never indexes or assists — nothing searchable ever leaves the device, a
 does the query.**
 
 Search is built, and it is **two separate surfaces with two different scopes**. Each must
-state its own scope; borrowing the other's is a false promise ([ADR-052](decisions.md)).
+state its own scope; borrowing the other's is a false promise ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)).
 
 - **The search page (`/chats/search`).** As built (2026-10-09, phase 10 prompt 1), the
   search icon in the Chats top bar (§6) opens it as a full-screen page (§0.1). It replaces
@@ -500,13 +500,13 @@ state its own scope; borrowing the other's is a false promise ([ADR-052](decisio
     query and keeps no search history, and it asks the keyboard not to learn the query.
 - **In-conversation search (§8, §9, §14).** One surface, opened from the overflow of
   every conversation kind — direct, saved and group. It reads **that conversation's loaded
-  local history** — the message stream carries a window since [ADR-062](decisions.md), and
+  local history** — the message stream carries a window since [ADR-062](architecture/decisions/062-timeline-window.md), and
   what is loaded grows as the reader pages backwards — and a matching result scrolls the
   timeline to the message, loading it first if it sits outside the window. Its notice says
   the search covers only messages stored on this phone, and that the server never sees them
   or the query. It shows at most 30 matches at a time and **says so** when it is showing
   that many, because a silently capped result set misdescribes the scope the notice just
-  promised ([ADR-057](decisions.md)).
+  promised ([ADR-057](architecture/decisions/057-measured-settings.md)).
 - **States.** Empty query, no results, the match count, the truncation notice, and the
   scope note belonging to that surface.
 
@@ -516,7 +516,7 @@ search page, so the two cannot disagree. That is the third and last search surfa
 **[PRIVACY]** There is no separate search index. The encrypted database is the index:
 the decrypted message projection lives inside it, under the Keystore-wrapped key, and a
 search is a filter over rows that are already there. A second structure would hold a
-second copy of every message body ([ADR-057](decisions.md)).
+second copy of every message body ([ADR-057](architecture/decisions/057-measured-settings.md)).
 
 ---
 
@@ -580,13 +580,13 @@ experience.
    - **Message bubble:** text (decrypted locally), timestamp, outgoing delivery/read state,
      an **edited** marker if edited, a reply-quote block if it's a reply, reaction chips
      beneath, a star marker if starred.
-   - **Attachment message** (a DM and Saved Messages, [ADR-089](decisions.md) D7): one
+   - **Attachment message** (a DM and Saved Messages, [ADR-089](architecture/decisions/089-direct-attachments.md) D7): one
      **tile** for each attachment the message carries, then the **caption** below them. The
      caption is the message's text, so an edit changes it; its direction follows its first
      strong character. A message deleted for everyone or for me shows no tile.
    - **Tile:** the kind's icon (a picture, a video or a file; a `file` with a video type draws
      the video icon and is announced as "Encrypted video", with no thumbnail and no inline
-     playback, [ADR-097](decisions.md) V5), the name (at most two lines), the size in the locale's unit,
+     playback, [ADR-097](architecture/decisions/097-direct-video.md) V5), the name (at most two lines), the size in the locale's unit,
      and the state, at most 260 logical px wide and never lower than the minimum touch
      target. The states and what a tap on the tile does:
 
@@ -619,7 +619,7 @@ experience.
    - **Pinned banner** atop the list if any message is pinned; tap to jump; expand → all
      pinned messages (§8.3).
 3. **Upload tray** (a DM and Saved Messages), between the list and the input bar, while the
-   conversation has upload jobs ([ADR-089](decisions.md) D5). One row for each job: the
+   conversation has upload jobs ([ADR-089](architecture/decisions/089-direct-attachments.md) D5). One row for each job: the
    kind's icon, the file name, the state — *Waiting*, *Encrypting, n%*, *Uploading, n%*,
    *Sending* — a progress bar, and **Cancel**. A failed row names its reason instead: today's
    upload allowance is spent, with the local time it resets; the file is too large for the
@@ -650,7 +650,7 @@ experience.
      message with a cancel (×).
    - **Draft.** An unsent draft is kept per conversation and restored when it is reopened.
      It is written down on a short trailing pause rather than on every character
-     ([ADR-064](decisions.md)), and it is written down *immediately* on every way out of the
+     ([ADR-064](architecture/decisions/064-incremental-rebuild.md)), and it is written down *immediately* on every way out of the
      composer: losing focus, leaving the screen, the application leaving the foreground, and
      sending. So a draft is never lost by backgrounding or by leaving, and sending never
      leaves the sent text behind as a draft. What is on screen is always the draft; the
@@ -667,13 +667,13 @@ long-press.
   an expand control at the trailing edge that opens the full emoji picker. Reactions are a
   set operation per `(message, user)`, so choosing a second one replaces the first.
   **[PRIVACY]** the reaction is encrypted, and the server never sees the emoji. No control
-  anywhere sends a fixed emoji ([ADR-059](decisions.md)).
+  anywhere sends a fixed emoji ([ADR-059](architecture/decisions/059-emoji-surface.md)).
 - **Reply** — sets the reply strip. A reply to an attachment message with no caption quotes
   the name of its first attachment.
 - **Edit** (own messages) — loads the message into the input with an edit strip.
 - **Forward** — Forward target picker (§8.4). An attachment message forwards its
   attachments with their caption. The server's copy is not copied, so a forwarded
-  attachment expires on the date of the first send ([ADR-089](decisions.md) D11).
+  attachment expires on the date of the first send ([ADR-089](architecture/decisions/089-direct-attachments.md) D11).
 - **Copy** — local clipboard. An attachment message copies its caption, and one with no
   caption does not offer Copy.
 - **Star/Unstar** — client-side flag.
@@ -688,7 +688,7 @@ long-press.
 
 **States.**
 - *Loading* — history loads locally; older messages page in on scroll-up. The timeline holds
-  a window rather than the whole conversation ([ADR-062](decisions.md)): reaching the top of
+  a window rather than the whole conversation ([ADR-062](architecture/decisions/062-timeline-window.md)): reaching the top of
   what is drawn widens the drawn range first and then asks local storage for an older page,
   the marker at the top shows loading and offers a retry when that page fails, and a message
   arriving joins the timeline without moving the line being read. A jump — from the pinned
@@ -702,12 +702,12 @@ long-press.
   next active connection or background poll; there is no foreign push.
 - *Not delivered yet* — a line under the newest own direct message that the relay accepted and
   that has no delivery receipt an hour after it was sent: "Not delivered yet. If @username has
-  not verified you, ask them to." ([ADR-093](decisions.md) D19). It is one line between the
+  not verified you, ask them to." ([ADR-093](architecture/decisions/093-held-first-message.md) D19). It is one line between the
   timeline and the composer, and the screen holds a timer only for a qualifying message younger
   than an hour. Never in a group chat or Saved Messages, and never under a queued, sending or
   failed message.
 - *Failed send* — retry affordance on the message. An attachment message is retried with its
-  attachments and its caption, never with its caption alone ([ADR-089](decisions.md) D11).
+  attachments and its caption, never with its caption alone ([ADR-089](architecture/decisions/089-direct-attachments.md) D11).
 - *Uploading* — the upload tray (above) shows each attachment until its message is
   committed.
 - *Downloading* — a received attachment's tile shows its download (above); the download goes
@@ -717,17 +717,17 @@ long-press.
 
 ### 8.2 Attachment sheet
 
-*As built 2026-10-10 and 2026-10-11 ([ADR-089](decisions.md) D1, D5, D6, D7).* The sheet has
+*As built 2026-10-10 and 2026-10-11 ([ADR-089](architecture/decisions/089-direct-attachments.md) D1, D5, D6, D7).* The sheet has
 three modes:
 
 - **Choose** — a DM and Saved Messages: **Photo or video**, **File** and **Camera**, then
-  Cancel. Photo or video offers pictures and videos ([ADR-097](decisions.md) V2).
+  Cancel. Photo or video offers pictures and videos ([ADR-097](architecture/decisions/097-direct-video.md) V2).
 - **Not built** — a group chat (§9): "Group chats cannot send files yet. Files can be sent in
   direct chats and in Saved Messages.", the *Not built yet* badge, and Cancel.
 - **Details** — a ready attachment, from a tap on its tile (§8): see *Details* below.
 
 **Choice.** A choice closes the sheet and opens the system photo picker, the file picker or
-the camera app ([ADR-089](decisions.md) D2) under a byte limit: the largest file that fits
+the camera app ([ADR-089](architecture/decisions/089-direct-attachments.md) D2) under a byte limit: the largest file that fits
 the largest upload size both the server publishes and the client holds (64 MB with the
 default sizes). Closing the picker says nothing. Every other outcome says why, in a snack
 bar: another picker is already open; the file is too large to send, with the largest size;
@@ -752,7 +752,7 @@ accept.
 - **Send**, which closes the step and adds an upload job (§8, upload tray), and **Cancel**,
   which deletes the copy the pick made, as the barrier and Back do.
 
-**Details.** *As built 2026-10-11 ([ADR-089](decisions.md) D7, D8).* The name, the type
+**Details.** *As built 2026-10-11 ([ADR-089](architecture/decisions/089-direct-attachments.md) D7, D8).* The name, the type
 and the size; one sentence, "The server keeps the encrypted copy for up to N days after it
 was sent.", N being the server's `attachment_ttl_days`; then **Open**, **Save** and
 **Share**, and Cancel. Each action first opens the cached file, which moves its expiry to
@@ -775,7 +775,7 @@ on the device before upload; the server stores only ciphertext padded to one of 
 
 ### 8.3 Pinned messages screen
 - All pinned messages in the conversation. Each row: preview + jump-to + **Unpin**. In a group
-  **Unpin** is on the rows of the owner and the admins only ([ADR-096](decisions.md) D6).
+  **Unpin** is on the rows of the owner and the admins only ([ADR-096](architecture/decisions/096-group-moderation.md) D6).
 
 ### 8.4 Forward target picker
 - **Purpose.** Choose where to forward a message. **[PRIVACY]** Forwarding re-encrypts the
@@ -811,30 +811,30 @@ history; up to ~50 members; roles **owner → admins → members**.
    - **Search in chat** is the one action button; it opens the in-conversation search sheet.
    - Overflow (**⋮**) — **not built.** The entries once planned for it (**Mute**, **Leave
      group**, **Add members**, **Edit group**) are all in Group Info (§12.2).
-2. **Message list:** as §8, read through the same projection ([ADR-090](decisions.md) D1).
+2. **Message list:** as §8, read through the same projection ([ADR-090](architecture/decisions/090-group-timeline.md) D1).
    The first bubble of each run from another member carries that member's display name from
    the roster, or a short form of the user id for a sender the roster does not name; there is
    no avatar beside a bubble. A reply quotes the name of the member who wrote the replied
    message. The pinned banner of §8 shows above the list to every member: it counts the
    group's pinned messages, a tap jumps to the first, and *View all* lists them, with *Unpin*
-   only for the owner and the admins ([ADR-096](decisions.md) D6).
+   only for the owner and the admins ([ADR-096](architecture/decisions/096-group-moderation.md) D6).
    Inline system lines for membership changes ("X was added", "Y left") are **not built**.
 3. **Input bar:** as §8, with no upload tray: a group chat sends no attachment in this phase,
    and its attachment button opens the sheet in its not-built mode (§8.2,
-   [ADR-089](decisions.md) D1). By default all members can post; if you implement any
+   [ADR-089](architecture/decisions/089-direct-attachments.md) D1). By default all members can post; if you implement any
    posting restriction, disabled states must explain why. A send never replaces it: the bar
    keeps its focus, and the keyboard stays up, while a message is sent and between messages
-   ([ADR-088](decisions.md)). A group keeps a draft on this phone, as a direct chat does: an
+   ([ADR-088](architecture/decisions/088-group-composer.md)). A group keeps a draft on this phone, as a direct chat does: an
    unsent text is still in the bar when the group is opened again.
 
-**Message interactions** ([ADR-090](decisions.md)): **Reply**, **React**, **Forward**,
+**Message interactions** ([ADR-090](architecture/decisions/090-group-timeline.md)): **Reply**, **React**, **Forward**,
 **Copy**, **Star** and **Delete for me**, each as in §8. A reaction goes to each member, under
 the rule of a group send. Forward lists every other conversation and Saved Messages; a
 message forwarded into a group goes through the group's own send, and the picker of an
 attachment message lists no group, because a group sends no attachment. A forward to several
 conversations goes on past one that refuses it, and then says that the action failed.
 **Delete for everyone** is offered on an own message that is not deleted, as in §8, and goes
-to each member under the rule of a group send ([ADR-096](decisions.md) D4). It is offered on
+to each member under the rule of a group send ([ADR-096](architecture/decisions/096-group-moderation.md) D4). It is offered on
 another member's message only where the roles of the roster allow it: the owner on any
 member's or admin's message, an admin on a member's, and nobody on the owner's (D5); for
 anyone else that message's delete dialog offers *Delete for me* only. **Pin** and **Unpin**
@@ -846,7 +846,7 @@ is not offered in a group (D8).
 chat does: when it becomes visible with the application in front, and when a message arrives
 while it is visible. Its unread count clears, and no alert sounds for the group on screen.
 While this account may send into the group, the read also sends one read receipt for each
-sender of the messages read, to that sender alone ([ADR-091](decisions.md)); a group this
+sender of the messages read, to that sender alone ([ADR-091](architecture/decisions/091-group-receipts.md)); a group this
 account left, or one waiting for its state, is read on this phone alone.
 
 **Role-gated actions** (owner/admins only): the member actions appear on member rows within
@@ -854,7 +854,7 @@ Group Info (§12.2); on a message, only Pin, Unpin and Delete for everyone of an
 member's message depend on the role (above).
 
 **States.** As §8, plus: *left* and *removed*: the group is deleted from this phone with its
-history, and an open group chat or Group Info returns to Chats ([ADR-096](decisions.md) D1,
+history, and an open group chat or Group Info returns to Chats ([ADR-096](architecture/decisions/096-group-moderation.md) D1,
 D3), on each device of the account; *waiting for group state*; and *forked* (members hold
 conflicting histories, so the group is quarantined). Waiting for group state follows a queue gap, or
 an event this device cannot yet place. It disables the composer and group changes until a
@@ -862,14 +862,14 @@ member confirms the group's current control state, and it never asks members to 
 re-add this device.
 
 **Copies.** A group message is one encrypted copy for each device of each member
-([ADR-075](decisions.md)). While any copy is still owed, the message shows the sending mark
+([ADR-075](architecture/decisions/075-pairwise-groups.md)). While any copy is still owed, the message shows the sending mark
 and nothing beside it, so its bubble keeps one width from the send to the end
-([ADR-088](decisions.md), which withdrew the count that ADR-075 had put there). It takes the
+([ADR-088](architecture/decisions/088-group-composer.md), which withdrew the count that ADR-075 had put there). It takes the
 accepted mark only when none is still owed. A copy for a device the server reports as gone
 is no longer owed; a copy for a device whose mailbox is full stays owed until it is
 accepted. A failed send offers a retry of the same message.
 
-**Read ticks** ([ADR-091](decisions.md)). An own group message shows two ticks
+**Read ticks** ([ADR-091](architecture/decisions/091-group-receipts.md)). An own group message shows two ticks
 (`AppIcons.read`) as soon as one member, other than its sender, has read it. It does not wait
 for the other members, and it does not wait for owed copies. A failed message keeps its failed
 mark and its **Retry**, because a retry is the only way to reach the members whose copy
@@ -877,7 +877,7 @@ failed. Without a read, the message shows the clock while a copy is owed, and on
 copy is owed. A group has no delivered mark: it sends no delivered receipt. Read receipts are
 always on, as in a direct chat, and there is no setting.
 
-**Reader list** ([ADR-091](decisions.md)). The message sheet of an own group message that is
+**Reader list** ([ADR-091](architecture/decisions/091-group-receipts.md)). The message sheet of an own group message that is
 not deleted shows a row above its actions: **Seen by N**, where N is the number of members who
 read it, or **Not seen yet**. The row follows the database while the sheet is open, and it is
 one button with the count in its label. A tap on it closes the sheet and opens the reader list
@@ -1064,7 +1064,7 @@ The following describes implemented one-sided verification. The release gap is
   they are not dismissible warnings or automatic TOFU resets.
 
 ### 11.2 Shared media screen
-*Not built ([ADR-089](decisions.md) D1).* No route opens it: the *Shared media and files* row
+*Not built ([ADR-089](architecture/decisions/089-direct-attachments.md) D1).* No route opens it: the *Shared media and files* row
 of Contact Profile (§11) is drawn disabled, and Group Info (§12.2) offers no entry to it. A
 received attachment is reached from its message (§8).
 - A grid of images/files from the conversation, decrypted locally, with tap-to-open and
@@ -1101,7 +1101,7 @@ Reached from Contacts (§7). Multi-step:
 4. **Leave group** (all members) → confirm. The confirmation says that the group and its
    history are deleted from this phone and that the other members keep their copies. A Leave
    that commits returns to Chats; a refused one stays here and says the action failed. Being
-   removed by an admin deletes the group the same way ([ADR-096](decisions.md) D1 to D3). If
+   removed by an admin deletes the group the same way ([ADR-096](architecture/decisions/096-group-moderation.md) D1 to D3). If
    the account is added again, the group comes back to Chats with no old history (D2).
 
 Group Info has **no quick-action row**. **Mute** is set from the Chats list (§17), and
@@ -1362,7 +1362,7 @@ single *failed* state. Screen capture is blocked in the whole app (ADR-092), and
 copy goes through the clipboard path that expires; a build without that path says copying
 is unavailable rather than using a clipboard that never clears. **The new secret is shown
 only after the server has accepted the higher backup version.** Every failure says the
-current secret still works, because it does ([ADR-057](decisions.md)).
+current secret still works, because it does ([ADR-057](architecture/decisions/057-measured-settings.md)).
 
 ### 15.3 Diagnostics
 
@@ -1458,7 +1458,7 @@ optionally transfer locally held history.
 4. **Add device** — an explanation, not a button. The flow in §16.1 starts on the *other*
    device, so this screen has nothing to start; what it says is what the other device
    needs, and that this one should stay online afterwards so it can send its history
-   across, because the server has none to send ([ADR-057](decisions.md)).
+   across, because the server has none to send ([ADR-057](architecture/decisions/057-measured-settings.md)).
 
 ### 16.1 Add Device flow
 - **Purpose.** Bring a new device online, recover/cross-sign identity, then optionally
@@ -1487,13 +1487,13 @@ The recurring modal surfaces and their contents:
 - **Delete message dialog** (§8) — two labeled options, *Delete for me* / *Delete for
   everyone*, with the honest note that "for everyone" is best-effort. In a group, *Delete for
   everyone* is on an own message, and on another member's where the owner or an admin may
-  delete it ([ADR-096](decisions.md) D4, D5).
+  delete it ([ADR-096](architecture/decisions/096-group-moderation.md) D4, D5).
 - **Confirm dialogs** — Leave group, Remove member, Remove device, Clear history, Log out:
   each states the consequence plainly, including irreversibility where true.
 - **Mute options sheet** — durations / until toggled.
 - **Emoji reactor** (§8) — the floating reaction selector, which opens with the message
   context menu and is drawn above it, plus the full emoji picker its expand control opens.
-  The same picker serves the composer's emoji button ([ADR-059](decisions.md)).
+  The same picker serves the composer's emoji button ([ADR-059](architecture/decisions/059-emoji-surface.md)).
 - **Attachment sheet** (§8.2).
 - **Context menus** — message long-press menu (§8/§9) and conversation-list item menu (§6).
 - **Forward target picker** (§8.4).

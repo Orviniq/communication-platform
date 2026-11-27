@@ -1,7 +1,7 @@
 # Delivery-latency run records
 
 One directory per measurement run, named `YYYY-MM-DD-<what-was-measured>`. These
-are the before-and-after evidence for [ADR-060](../../decisions.md), which is
+are the before-and-after evidence for [ADR-060](../../architecture/decisions/060-delivery-latency.md), which is
 the only place the reasoning behind the changes they measure is recorded.
 
 Unlike the sustained-delivery records these are hand-driven rather than produced

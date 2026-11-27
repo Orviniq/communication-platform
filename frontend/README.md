@@ -34,7 +34,7 @@ mirror; the application has no foreign runtime dependency.
 
 The two are separate, coexisting applications; neither upgrades into the other. The
 `beta` flavor that shipped the Private Experimental deployment
-([ADR-044](docs/decisions.md)) under the frozen application ID `com.orviniq.chat.beta`
+([ADR-044](docs/architecture/decisions/044-private-deployment.md)) under the frozen application ID `com.orviniq.chat.beta`
 was deleted with the closed-beta MLS core, along with its signing and release tooling.
 No flavor builds that application ID now, so an existing install of it cannot be updated
 from this tree; [Production release signing and key continuity](docs/release-signing.md)
@@ -78,7 +78,7 @@ CP_PRODUCTION_UNSIGNED_BUILD=1 flutter build apk --release --flavor production -
 ```
 
 The production release build is signed with the one persistent production key
-([ADR-076](docs/decisions.md)), attached to the `production` flavor alone; the `release`
+([ADR-076](docs/architecture/decisions/076-production-signing.md)), attached to the `production` flavor alone; the `release`
 build type itself carries no signing config, and never the debug one. Gradle reads the
 application ID from the committed `android/production-release-identity.properties`, and
 the key from outside the repository: from the untracked properties file that

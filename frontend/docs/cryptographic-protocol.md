@@ -199,7 +199,7 @@ PQ prekeys rotate every seven days. Superseded private signed prekeys are retain
 eight days, matching the authoritative seven-day envelope TTL plus one day, then erased.
 The exception is a first message held, unopened, for a verification of its sender: it keeps
 every retired pair it may need until it expires, 7 days after it was held, and a rotation
-that would erase one waits ([ADR-093](decisions.md) D6, D17). In the current client
+that would erase one waits ([ADR-093](architecture/decisions/093-held-first-message.md) D6, D17). In the current client
 implementation (`PairwiseOpaqueEnvelopeInspector._inspectInitial`), an initial envelope
 from an unverified sender stops after probing the sender block and is held unopened without
 running initial acceptance. Under the binding contract
@@ -240,7 +240,7 @@ only an additional contribution and can never replace the authenticated PQ layer
 ## Groups
 
 A group is a set of pairwise sessions (`docs/client/CLIENT_CONTRACT.md` §F; server ADR-0001,
-recorded for the client in [ADR-075](decisions.md)). There is no group key agreement, no
+recorded for the client in [ADR-075](architecture/decisions/075-pairwise-groups.md)). There is no group key agreement, no
 group key, no epoch, and no key package, and the client uploads no group key material.
 
 A group message is encrypted independently for every live device of every active member and

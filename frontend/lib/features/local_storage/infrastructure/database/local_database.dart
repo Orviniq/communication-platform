@@ -484,7 +484,7 @@ class Conversations extends Table {
 ///
 /// Partial carries the same catch as the pinned index: SQLite will only choose
 /// it for a query whose `WHERE` contains the bare term `unread`, so the
-/// projector spells it that way ([ADR-063](decisions.md)).
+/// projector spells it that way ([ADR-063](../../../../../docs/architecture/decisions/063-event-projection.md)).
 @TableIndex.sql(
   'CREATE INDEX IF NOT EXISTS messages_unread_by_conversation '
   'ON messages (conversation_id, unread) WHERE unread',
@@ -638,14 +638,14 @@ class StoredApplicationEvents extends Table {
 /// facts a message has, and the answer decides what that message projects to.
 /// A `messageCreate` names its own message; an edit, delete, reaction or pin
 /// names one target; a receipt names **many**, which is why this is a table and
-/// not a column ([ADR-063](decisions.md)).
+/// not a column ([ADR-063](../../../../../docs/architecture/decisions/063-event-projection.md)).
 ///
 /// The primary key leads with `message_id`, so its implicit index answers the
 /// only question asked of it and no second index is declared. There is
 /// deliberately no foreign key: `event_id` would be an unindexed child key, and
 /// SQLite would then scan this table on every write to `application_events` to
 /// prove nothing was orphaned — the cost `attachments_by_message` exists to
-/// stop ([ADR-062](decisions.md)).
+/// stop ([ADR-062](../../../../../docs/architecture/decisions/062-timeline-window.md)).
 class ApplicationEventTargets extends Table {
   @override
   String get tableName => 'application_event_targets';

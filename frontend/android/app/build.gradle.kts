@@ -75,7 +75,7 @@ val productionApplicationId =
         if (!productionReleaseIdentityFile.isFile) {
             throw GradleException(
                 "Missing ${productionReleaseIdentityFile.name}. The production application " +
-                    "identity must stay in source control; see ADR-076 in docs/decisions.md.",
+                    "identity must stay in source control; see ADR-076 in docs/architecture/decisions/076-production-signing.md.",
             )
         }
         val identity = Properties()

@@ -3,7 +3,7 @@
 This is the operating manual for making, signing, verifying and installing builds of the
 `production` flavor, `com.orviniq.chat`. It is written for whoever makes a build,
 including the person who inherits this project later. The governing decision is
-[ADR-076](decisions.md), which on 2026-09-14 gave production one persistent signing key,
+[ADR-076](architecture/decisions/076-production-signing.md), which on 2026-09-14 gave production one persistent signing key,
 so that the owner can install real builds on their own devices and hand one to a known
 person taking part in a test.
 
@@ -496,7 +496,7 @@ again, with a higher number, from values derived afresh.
 ## The retained beta key
 
 The `beta` flavor, its application ID `com.orviniq.chat.beta`, and its signing and release
-pipeline were deleted with the closed-beta MLS core ([ADR-075](decisions.md)). Its key was
+pipeline were deleted with the closed-beta MLS core ([ADR-075](architecture/decisions/075-pairwise-groups.md)). Its key was
 not. It lives in `~/.communication-platform/beta-signing/`, reissued on 2026-09-07 under
 `CN=com.orviniq.chat.beta` (ADR-067 D5), and it is still the only key that can update the
 beta installs on the owner's phone and emulator, which hold real data. No tree after

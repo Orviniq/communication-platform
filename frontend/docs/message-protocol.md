@@ -130,7 +130,7 @@ logical message.
   accepted only from the original sender or an explicitly authorized group moderator.
   It replaces local display with a tombstone and requests attachment-cache deletion; it
   cannot force a recipient to erase previously decrypted content.
-- **Who changes a group message** ([ADR-096](decisions.md) D4 to D7). Each member deletes an
+- **Who changes a group message** ([ADR-096](architecture/decisions/096-group-moderation.md) D4 to D7). Each member deletes an
   own message for everyone. A `message.delete` from anyone else counts when the group's
   roster records its sender as the owner, or as an admin and the message's author as a
   member; a `message.pin_set` counts when the roster records its sender as the owner or an
@@ -463,7 +463,7 @@ requires v2 control events and signalling for a voice release:
 Without that rule the volatile channel is a way to write durable state, and the durable
 queue is a way to replay a call's signalling hours later.
 
-**A room starts the sessions its call needs** ([ADR-077](decisions.md), decided B on
+**A room starts the sessions its call needs** ([ADR-077](architecture/decisions/077-voice-mesh.md), decided B on
 2026-09-30). A volatile frame never starts a pairwise session, because a first frame the
 relay drops would leave a session only its sender holds. So a device sends a `CPVRV001`
 state request, sealed to one device alone, to each live device of each active member it

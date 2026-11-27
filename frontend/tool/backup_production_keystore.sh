@@ -81,7 +81,7 @@ Key alias:            $key_alias
 Certificate SHA-256:  $production_certificate_sha256
 Keystore file:        $(basename "$keystore_path")
 Keystore format:      PKCS12
-Decision record:      ADR-076 in frontend/docs/decisions.md
+Decision record:      ADR-076 in frontend/docs/architecture/decisions/076-production-signing.md
 
 WHAT THIS IS
   The only signing key that can publish an update to an installed production

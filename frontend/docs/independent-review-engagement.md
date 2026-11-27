@@ -9,7 +9,7 @@ and the MLS profile and the closed-beta PQ MLS review packet were deleted from t
 Every MLS gate, prerequisite, and packet named below is historical and can no longer
 open. The pairwise scope is unaffected.
 
-**Updated 2026-09-14.** Piece 19 is cancelled, not blocked ([ADR-075](decisions.md)), so
+**Updated 2026-09-14.** Piece 19 is cancelled, not blocked ([ADR-075](architecture/decisions/075-pairwise-groups.md)), so
 where this document says an MLS gate or prerequisite remains open or blocked, that is the
 state it was in when the track was cancelled. Files marked deleted in work packages WP1,
 WP2, WP5, WP6 and WP7 were deleted with the MLS track. The signed group control events
@@ -48,8 +48,8 @@ Everything in sections 4-6 is a *proposal for evaluation*, not an action taken.
 
 | Requirement | Where it is written | What it demands |
 |---|---|---|
-| ADR-017 | [decision register](decisions.md) | Shared reviewed crypto core **and independent assessment**; "a custom, unaudited cryptographic implementation is not production-ready" |
-| ADR-026 | [decision register](decisions.md) | Review is one of the mandatory conditions alongside registry assignment, suite identifier, provider support, and Android interoperability. ADR-026 also forbids assigning a production identifier locally, which is why no review outcome can substitute for gate 2 |
+| ADR-017 | [decision register](architecture/decisions/README.md) | Shared reviewed crypto core **and independent assessment**; "a custom, unaudited cryptographic implementation is not production-ready" |
+| ADR-026 | [decision register](architecture/decisions/README.md) | Review is one of the mandatory conditions alongside registry assignment, suite identifier, provider support, and Android interoperability. ADR-026 also forbids assigning a production identifier locally, which is why no review outcome can substitute for gate 2 |
 | Production gate 7 | MLS profile (deleted) | "An independent cryptographic review closes all blocking findings" |
 | Phase-A prerequisite 5 | MLS profile (deleted) | A qualified independent reviewer must be *available and retained*, with a recorded scope of work and schedule |
 | Pairwise production gate | [pairwise transport v1](pairwise-transport-v1.md), [pairwise packet](pairwise-review-readiness.md) | An independent assessor records a disposition for every blocking finding, with reviewed source hashes and residual-risk acceptance |
@@ -73,10 +73,10 @@ mandatory item does not meet the bar, regardless of standing.
 
 | # | Requirement | Evidence that satisfies it | Why this implementation needs it |
 |---|---|---|---|
-| **Q1** | **Demonstrated MLS competence** | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | Written when the group construction was MLS. It is not any more: a group is a set of pairwise sessions and the MLS core is deleted ([ADR-075](decisions.md)), so no material now in scope is MLS |
-| **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The pairwise track is hybrid PQXDH. The beta's *non-standard* hybrid KEM, which diverged from `TBD2` in ten recorded ways (rows D1-D10 of the deleted MLS profile) and posed the hardest question in the MLS packet, was deleted with the MLS core ([ADR-075](decisions.md)) |
+| **Q1** | **Demonstrated MLS competence** | Published work on RFC 9420 or its drafts: specification authorship, a machine-checked or hand-written security analysis, or a published assessment of an MLS implementation or an MLS-based deployment | Written when the group construction was MLS. It is not any more: a group is a set of pairwise sessions and the MLS core is deleted ([ADR-075](architecture/decisions/075-pairwise-groups.md)), so no material now in scope is MLS |
+| **Q2** | **Demonstrated hybrid post-quantum KEM competence** | Published work on ML-KEM/FIPS 203, KEM combiners, hybrid PQ/T constructions, HPKE, or PQ key agreement — specification, analysis, implementation, or assessment | The pairwise track is hybrid PQXDH. The beta's *non-standard* hybrid KEM, which diverged from `TBD2` in ten recorded ways (rows D1-D10 of the deleted MLS profile) and posed the hardest question in the MLS packet, was deleted with the MLS core ([ADR-075](architecture/decisions/075-pairwise-groups.md)) |
 | **Q3** | **Implementation-level review, not design-only** | At least one published engagement that read source and reported source-anchored findings, not solely a design/architecture opinion | The two packets are implementation packets. A design review of the profile documents would leave the entire inventory unread |
-| **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with 46 `unsafe` blocks in the shared C ABI and one 1 MiB-bounded `dart:ffi` allocation path. `mls_beta.rs`, which had no `unsafe` of its own, was deleted with the MLS core ([ADR-075](decisions.md)) |
+| **Q4** | **Rust and FFI boundary competence** | Published work involving Rust cryptographic code, `unsafe` review, memory/secret lifetime, or foreign-function boundaries | The core is Rust with 46 `unsafe` blocks in the shared C ABI and one 1 MiB-bounded `dart:ffi` allocation path. `mls_beta.rs`, which had no `unsafe` of its own, was deleted with the MLS core ([ADR-075](architecture/decisions/075-pairwise-groups.md)) |
 | **Q5** | **Protocol-invention review capability** | Evidence of reviewing bespoke state machines, concurrency, and persistence — not only primitive or parameter checking | The ten project inventions in the packet are the highest-value targets *precisely because* no external specification or vector can validate them: credential binding, control transcript, fork convergence, leave/eviction, queue-gap re-admission, the transactional commit boundary, state sealing, per-recipient re-wrapping, the FFI boundary, and redaction |
 | **Q6** | **A published report of the required shape** | At least one publicly readable report containing, per finding: an identifier, a severity, a source location, and a disposition; plus a statement of what was and was not in scope | Section 3 requires exactly this shape. A candidate who has never produced it is being asked to invent their deliverable format on this engagement |
 | **Q7** | **Named assessors** | The individuals who will do the work are named, with their own attributable prior work | A firm brand is not evidence that the people assigned to this engagement have Q1-Q5. Reports that name their assessors are the norm in this field, including in the closest comparable engagements |
@@ -91,7 +91,7 @@ Independence is a property of the *engagement*, not a compliment paid to the rev
 |---|---|
 | **I1** | The reviewer did not author, co-author, maintain, or contribute to any code, document, vector, or decision under review, and is not doing so during the engagement |
 | **I2** | The reviewer has no ownership, employment, contractor, advisory, or revenue relationship with the project owner beyond this engagement, and none is created by it |
-| **I3** | The reviewer discloses, in writing and before the engagement starts, any relationship to the parties whose work this implementation *depends on or criticises*, or did while it carried the MLS core deleted under [ADR-075](decisions.md): `mls-rs` and AWS; OpenMLS and Phoenix R&D; the authors of `draft-ietf-mls-pq-ciphersuites`, `draft-ietf-hpke-pq`, `draft-irtf-cfrg-concrete-hybrid-kems`, and `draft-connolly-cfrg-xwing-kem`; and libsodium and mlkem-native. Disclosure is not disqualification — the strongest candidates are close to this work — but an undisclosed relationship is |
+| **I3** | The reviewer discloses, in writing and before the engagement starts, any relationship to the parties whose work this implementation *depends on or criticises*, or did while it carried the MLS core deleted under [ADR-075](architecture/decisions/075-pairwise-groups.md): `mls-rs` and AWS; OpenMLS and Phoenix R&D; the authors of `draft-ietf-mls-pq-ciphersuites`, `draft-ietf-hpke-pq`, `draft-irtf-cfrg-concrete-hybrid-kems`, and `draft-connolly-cfrg-xwing-kem`; and libsodium and mlkem-native. Disclosure is not disqualification — the strongest candidates are close to this work — but an undisclosed relationship is |
 | **I4** | The reviewer's fee, scope, and continuation are not contingent on the findings, their severity, or a favourable conclusion. No clause may let the owner suppress a finding, and the reviewer keeps editorial control of the findings text |
 | **I5** | The reviewer states positively, in the report, what they did **not** review, and what their conclusions therefore do not cover |
 
@@ -179,7 +179,7 @@ The reviewer must accept and restate these, so the report cannot be read as cove
 - **The internals of pinned upstream dependencies**, beyond how this implementation uses
   them. The one deliberate exception, WP2's reading of the pinned `mls-rs` crypto crates to
   confirm or refute rows D1-D10, went with `mls-rs` and the MLS core
-  ([ADR-075](decisions.md)).
+  ([ADR-075](architecture/decisions/075-pairwise-groups.md)).
 - **Any claim about production readiness of the beta track.** The beta was Private Use
   `0xFE4C` with disposable state, and it was deleted. A favourable review could not have
   made it a production deployment, and no report may be worded so that it could be read
@@ -189,7 +189,7 @@ One dependency fact belonged in the residual-risk record rather than in scope: t
 `mls-rs` project states in its own README that it "has been validated for conformance to
 the RFC 9420 specification but has not yet received a full security audit by a 3rd party"
 (verified 2026-08-18), so the MLS core's assurance rested on an unaudited protocol engine.
-`mls-rs` left the tree with that core ([ADR-075](decisions.md)), so D7 no longer has it to
+`mls-rs` left the tree with that core ([ADR-075](architecture/decisions/075-pairwise-groups.md)), so D7 no longer has it to
 accept.
 
 ### 2.4 Effort benchmarks
@@ -212,7 +212,7 @@ added the whole pairwise transport. A DAVE-shaped engagement (design + implement
 engineer-weeks) was the floor, not the target. **The planning figure then for WP0-WP8
 across both packets was 10-16 engineer-weeks, plus a separate retest pass for WP8.** Treat
 it as an order of magnitude for deciding whether a funding route is viable at all, not as a
-number to negotiate against. It predates [ADR-075](decisions.md): `mls_beta.rs` and the MLS
+number to negotiate against. It predates [ADR-075](architecture/decisions/075-pairwise-groups.md): `mls_beta.rs` and the MLS
 packet are deleted, the group feature was rebuilt on pairwise sessions, and nothing has
 been re-estimated since.
 

@@ -120,7 +120,7 @@ Verification on 2026-07-28 passed:
 
 This Android scope does not implement PQXDH, Double Ratchet, application-message schemas,
 or a browser adapter. It also excluded MLS state and KeyPackages, which no
-piece builds now that a group is a set of pairwise sessions ([ADR-075](decisions.md)).
+piece builds now that a group is a set of pairwise sessions ([ADR-075](architecture/decisions/075-pairwise-groups.md)).
 The smoke covers the Android foundation. Browser interoperability would be a release
 gate if a browser target were approved.
 
@@ -477,7 +477,7 @@ sketch on evidence. What ships:
   (ADR-051) keeps it alive while the user has that capability on; neither makes an alert
   certain, and after a force-stop nothing arrives and nothing announces.
   **"Process alive" is not "app running", and user-facing text may not conflate them**
-  ([ADR-052](decisions.md)): `_reconcileAlerts` in the deferred catch-up and
+  ([ADR-052](architecture/decisions/052-accurate-capability-claims.md)): `_reconcileAlerts` in the deferred catch-up and
   `_SustainedAlertReconciler` in the sustained run both post from isolates with no activity
   in the process, so an alert does reach a user whose application is closed. The Settings
   row said the opposite from ADR-048 until ADR-052 corrected it; the limit worth stating to
@@ -860,7 +860,7 @@ Play App Signing does not apply: the application signing key is the distribution
 identity permanently, and there is no upload-key reset if it is lost. The deleted
 `beta` flavor carried a frozen application ID and a single persistent signing key for
 that reason (ADR-042), and its retained key still controls the beta installs. Production
-now carries the same pair under its own names ([ADR-076](decisions.md)): the application
+now carries the same pair under its own names ([ADR-076](architecture/decisions/076-production-signing.md)): the application
 ID and the certificate fingerprint recorded in
 `android/production-release-identity.properties`, and one persistent key that signs
 `productionRelease` alone. Without that key the release build fails closed, unless it
