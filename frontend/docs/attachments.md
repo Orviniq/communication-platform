@@ -335,7 +335,7 @@ answers `200` with an empty body and does nothing with `Range`.
 ## Caching
 
 *Built 2026-10-10 (ADR-089 D8, D9, D10, prompt 2 of the phase). The table, the projection and
-the sweeps are in [Local data model](local-data-model.md#attachment-rows-and-decrypted-files).*
+the sweeps are in [Local data model](architecture/LOCAL-DATA.md#attachment-rows-and-decrypted-files).*
 
 - **Where.** Every attachment file lives under `secure_attachment_cache` in the application's
   cache directory, never in shared external storage. The native wipe deletes that directory at

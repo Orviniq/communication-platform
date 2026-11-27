@@ -281,7 +281,7 @@ downgrade.
 - [ ] Backend contract and multi-device E2E suites pass.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.
 - [ ] Sustained delivery: either every mandatory cell of the matrix in
-  [sustained-delivery-validation.md](sustained-delivery-validation.md) has an admissible
+  [SUSTAINED-DELIVERY.md](runbooks/SUSTAINED-DELIVERY.md) has an admissible
   record in `SustainedDeliveryGate.releaseAssertion`, or the capability is offered as
   best effort and says so ([ADR-094](architecture/decisions/094-best-effort-delivery.md), superseding ADR-053 for production).
   **Currently best effort; the gate is CLOSED and no cell has been run.** A partially

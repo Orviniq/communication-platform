@@ -19,7 +19,7 @@ Keeps security, synchronization, UI, and platform concerns independently testabl
 
 ## Constraints and Open Gates
 
-- Enforced by [architecture_boundary_test.dart](../../../test/architecture/architecture_boundary_test.dart), [source_layout_test.dart](../../../test/architecture/source_layout_test.dart), and [use_case_composition_test.dart](../../../test/architecture/use_case_composition_test.dart), and codified in [Frontend instructions](../../../AGENTS.md) and [Architecture](../../architecture.md).
+- Enforced by [architecture_boundary_test.dart](../../../test/architecture/architecture_boundary_test.dart), [source_layout_test.dart](../../../test/architecture/source_layout_test.dart), and [use_case_composition_test.dart](../../../test/architecture/use_case_composition_test.dart), and codified in [Frontend instructions](../../../AGENTS.md) and [Architecture](../OVERVIEW.md).
 - A generic `utils` dumping ground is prohibited; `core/` must not accumulate feature business concepts.
 - Open gates: None for this structural pattern.
 
@@ -35,4 +35,4 @@ If a capability requires cross-cutting state or performance optimization that ca
 ## History, Amendments, and Supersession
 
 - **2026-07-24 (`1b321da1`):** Original decision recorded in the initial ADR register (`Accepted`).
-- No supersession. In [Architecture](../../architecture.md), the forbidden inner-layer package list also tracks timeline adapters (`flutter_chat_core` and `flutter_chat_ui`, checked in `architecture_boundary_test.dart` even after those packages were removed from `pubspec.yaml` by ADR-054).
+- No supersession. In [Architecture](../OVERVIEW.md), the forbidden inner-layer package list also tracks timeline adapters (`flutter_chat_core` and `flutter_chat_ui`, checked in `architecture_boundary_test.dart` even after those packages were removed from `pubspec.yaml` by ADR-054).

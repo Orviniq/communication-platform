@@ -66,7 +66,7 @@ Some questions no test in this repository can answer, because they are questions
 what a manufacturer's Android build does to this application over hours and days. Those
 are measured on hardware, against criteria fixed before the measurement, and recorded as
 evidence that a release gate reads. The first such gate is sustained delivery
-([sustained-delivery-validation.md](sustained-delivery-validation.md), ADR-053): its
+([SUSTAINED-DELIVERY.md](runbooks/SUSTAINED-DELIVERY.md), ADR-053): its
 criteria, its seven-cell matrix, its instrument (`tool/measure_sustained_delivery.sh`)
 and its current state — **closed, no cell run** — live there.
 

@@ -796,7 +796,7 @@ encrypted store; at expiry both rotate, one loses, and the loser's presentation 
 indistinguishable from a replay — so the honest device was signed out. The client answered
 with an in-process ownership gate, a bounded re-read repair path and a three-owner
 arbitration ([`frontend/docs/architecture/decisions/049-background-catch-up.md`](frontend/docs/architecture/decisions/049-background-catch-up.md) and [`050-delivery-ownership.md`](frontend/docs/architecture/decisions/050-delivery-ownership.md),
-`frontend/docs/sync-engine.md`), which is a consensus problem inside one process caused
+[`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/66bb9d1f986626d0b0c540953b55111ecfa3edcc/frontend/docs/sync-engine.md)), which is a consensus problem inside one process caused
 entirely by the server making one token unshareable.
 
 What the detection defended was also narrower than it looks. The adversary of this threat

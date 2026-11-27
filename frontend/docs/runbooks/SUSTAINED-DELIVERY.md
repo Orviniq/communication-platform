@@ -1,26 +1,25 @@
 # Sustained delivery: field validation, and the gate that depends on it
 
 **Gate state: CLOSED.** The compiled `SustainedDeliveryGate.releaseAssertion`
-ledger is empty. The [three 2026-08-23 probes](validation/sustained-delivery/README.md)
+ledger is empty. The [three 2026-08-23 probes](../validation/sustained-delivery/README.md)
 cover the Samsung Galaxy A56 and the API 30 and API 35 emulators. They recorded
 device conditions and exercised observation tooling. No capability trial filled a
 matrix cell.
 
-Under [ADR-094](architecture/decisions/094-best-effort-delivery.md), production offers **Receiving while closed** as
+Under [ADR-094](../architecture/decisions/094-best-effort-delivery.md), production offers **Receiving while closed** as
 `bestEffort` while the ledger is incomplete. The offer discloses battery use,
 the persistent notice and the absence of a delivery-time promise. Development
 uses `measurementOnly`. A complete ledger would move the offer to `evidenced`.
-See [frontend status](STATUS.md#presence-voice-and-delivery).
+See [frontend status](../STATUS.md#presence-voice-and-delivery).
 
-Decided by [ADR-053](architecture/decisions/053-field-evidence-gate.md), which amends ADR-051's distribution clause,
-and superseded for production by [ADR-094](architecture/decisions/094-best-effort-delivery.md).
+Decided by [ADR-053](../architecture/decisions/053-field-evidence-gate.md), which amends ADR-051's distribution clause,
+and superseded for production by [ADR-094](../architecture/decisions/094-best-effort-delivery.md).
 This document is authoritative for the success criteria, the matrix, the
-measurement procedure and the recorded results. The gate constant is
-authoritative for what the software does about them.
+measurement procedure and the recorded results. The [compiled gate](../../lib/app/config/sustained_delivery_gate.dart) defines the available offer.
 
 ---
 
-## 1. What is being validated
+## What is being validated
 
 ADR-051's opt-in *sustained delivery*: a `specialUse` foreground service that
 keeps this application's process out of Android's cached state so that the
@@ -48,7 +47,7 @@ this document exists for.
 
 ---
 
-## 2. How the fleet was derived
+## How the fleet was derived
 
 **Source:** Statcounter Global Stats, Islamic Republic of Iran.
 **Period:** twelve months, 2025-08 to 2026-07 inclusive; 2026-07 is the most
@@ -63,9 +62,9 @@ recent complete month.
 These figures were re-read for this piece rather than carried forward. ADR-046
 and ADR-051 both quote Samsung 46.34% / Xiaomi 30.98%; the July 2026 figures are
 46.31% and 30.99%, so those numbers survive — but the *use* both decisions made
-of them does not, for the reason in §2.2.
+of them does not, for the reason in [the vendor-share correction](#correction-to-what-this-repository-already-records).
 
-### 2.1 Vendor share, July 2026
+### Vendor share, July 2026
 
 | Vendor | Share of all mobile | Share of the **Android** fleet |
 |---|---:|---:|
@@ -84,7 +83,7 @@ months are treated as a sampling artefact of the panel and are excluded from the
 trend statement; they are not excluded from the record, because a reader is
 entitled to see that this source has months that do not behave.
 
-### 2.2 Correction to what this repository already records
+### Correction to what this repository already records
 
 ADR-051 states that Samsung and Xiaomi are "roughly 77% of this fleet". That is
 their share of *all* mobile devices, iPhones included. This deployment is an
@@ -93,7 +92,7 @@ and the correct figure is **about 90%** — Samsung 54.0% and Xiaomi 36.1% of th
 Android devices. The repository understates its own vendor concentration by
 thirteen points, in the one place where that concentration is the whole argument.
 
-### 2.3 Platform-version share, July 2026
+### Platform-version share, July 2026
 
 | Android | API | Share | Why this version band matters here |
 |---|---:|---:|---|
@@ -108,7 +107,7 @@ thirteen points, in the one place where that concentration is the whole argument
 Twelve-month trend: Android 16 went from 0.02% to 14.13% in a year and is still
 climbing; Android 15 fell from 16.99% to 10.09% as devices moved to 16; 11, 12
 and 13 are flat within a point. **The version axis is moving fast enough that a
-result is perishable**, which is why §8 fixes an expiry.
+result is perishable**, which is why [Limitations of this validation, and when it expires](#limitations-of-this-validation-and-when-it-expires) fixes an expiry.
 
 **Second correction.** ADR-051 states that "roughly half this fleet by version
 share is Android 13 or earlier", and uses that to bound how much of the fleet
@@ -119,7 +118,7 @@ that is before subtracting every Xiaomi device, for which no such statement
 exists. The uncovered fraction is therefore **at least 60%, and in practice
 about 78%** once Xiaomi is removed from the covered side.
 
-### 2.4 The honest limit of all of this
+### The honest limit of all of this
 
 This deployment has **20–30 known users receiving a private handover**. A
 country-level panel statistic is a prior over an unobserved fleet; it is not the
@@ -129,16 +128,16 @@ does, the matrix below is built on a proxy, and a proxy is what it should be
 recorded as.
 
 **Follow-up F1:** enumerate the actual devices at handover — manufacturer, model,
-Android version, vendor skin version — and replace §2.3 with the real
+Android version, vendor skin version — and replace [Platform-version share, July 2026](#platform-version-share-july-2026) with the real
 distribution. That single act would shrink this matrix, or expand it, on fact.
 
 ---
 
-## 3. Success criteria
+## Success criteria
 
 **Fixed on 2026-08-23, before any measurement of any kind was attempted.**
 Nothing here was written or adjusted after seeing a result. The device probes
-recorded later that day (§6.1) came after this section was written and measure
+recorded later that day ([What was actually run](#what-was-actually-run)) came after this section was written and measure
 no criterion in it: they establish what a device *is* and what it will
 *permit*, and every threshold below is still waiting on a run. Each criterion states the condition, what is
 observed, the threshold, the number of repetitions, and what separates a failure
@@ -266,7 +265,7 @@ Android 16 result, and one day is not the next. It does, however, keep the
 
 ---
 
-## 4. The matrix
+## The matrix
 
 Seven cells. Six are the fleet; the seventh is the control.
 
@@ -274,14 +273,14 @@ Seven cells. Six are the fleet; the seventh is the control.
 |---|---|---:|---|
 | `samsungAndroid11To12` | Samsung, Android 11 or 12, One UI 3–4 | ~14.6% | **NOT RUN** |
 | `samsungAndroid13` | Samsung, Android 13, One UI 5.x | ~11.0% | **NOT RUN** |
-| `samsungAndroid14Plus` | Samsung, Android 14/15/16, One UI 6.0+ | ~21.6% | **NOT RUN** — device available and probed (§6.1), nothing measured |
+| `samsungAndroid14Plus` | Samsung, Android 14/15/16, One UI 6.0+ | ~21.6% | **NOT RUN** — device available and probed ([What was actually run](#what-was-actually-run)), nothing measured |
 | `xiaomiAndroid11To12` | Xiaomi, Android 11 or 12, MIUI 13/14 | ~9.8% | **NOT RUN** |
 | `xiaomiAndroid13` | Xiaomi, Android 13, MIUI 14 | ~7.4% | **NOT RUN** |
 | `xiaomiAndroid14Plus` | Xiaomi, Android 14+, HyperOS | ~14.4% | **NOT RUN** |
-| `platformReference` | Pixel or AOSP at the same API level as the Samsung/Xiaomi 13 cells | control | **NOT RUN** (substituted, §6.2) |
+| `platformReference` | Pixel or AOSP at the same API level as the Samsung/Xiaomi 13 cells | control | **NOT RUN** (substituted, [What prevented it, exactly](#what-prevented-it-exactly)) |
 
-Fleet weight is vendor share of the Android fleet (§2.1) times version-band
-share (§2.3), and is indicative only — it assumes vendor and version are
+Fleet weight is vendor share of the Android fleet ([Vendor share, July 2026](#vendor-share-july-2026)) times version-band
+share ([Platform-version share, July 2026](#platform-version-share-july-2026)), and is indicative only — it assumes vendor and version are
 independent, which they are not.
 
 **Why this set is representative.** The six fleet cells cover about
@@ -315,9 +314,9 @@ findings with different remedies, and no single run distinguishes them.
 
 ---
 
-## 5. How the measurement is designed
+## How the measurement is designed
 
-### 5.1 How the behaviour is observed at all
+### How the behaviour is observed at all
 
 **Nothing is added to the application.** No log line, no counter, no diagnostic
 screen, no export, and above all no outbound call. This project forbids the
@@ -342,7 +341,7 @@ The consequence worth stating: **the device under test runs exactly the artifact
 a user would run.** The measurement cannot alter what it measures, and there is
 nothing to remove afterwards.
 
-### 5.2 How time is measured on both ends
+### How time is measured on both ends
 
 The **measuring host is the single time base**. It drives the sender over adb
 and it reads the receiver over adb, so a send mark and the sample that first
@@ -352,7 +351,7 @@ any other. Device clock offset is recorded before and after each run
 than assumed. No time service — domestic or foreign — is contacted by anything
 in this procedure.
 
-### 5.3 Reaching the conditions that take hours
+### Reaching the conditions that take hours
 
 Forced and natural are **two arms of the same cell, and whether they agree is
 itself a result.**
@@ -370,10 +369,10 @@ had been reached naturally.
 
 The Doze constants are **read from each device** rather than assumed
 (`dumpsys deviceidle`, captured by `probe`). They are not the same everywhere —
-see §6.1 for an emulator that is nothing like a stock phone — and a procedure
+see [What was actually run](#what-was-actually-run) for an emulator that is nothing like a stock phone — and a procedure
 that assumed one device's timings would mis-time every other.
 
-### 5.4 What a realistic idle device looks like
+### What a realistic idle device looks like
 
 A phone plugged into a workstation is charging, is being kept awake by the adb
 connection, and never enters the natural Doze path. So:
@@ -386,7 +385,7 @@ connection, and never enters the natural Doze path. So:
   24-hour or 9-day run, because it is a simulation of the condition rather than
   the condition.
 
-### 5.5 Numbers
+### Numbers
 
 Seven cells × 3 runs × 24 h for C1/C2, plus 20 timed deliveries per cell for C3,
 plus one 9-day run per cell for C4, plus 3 reboots and 3 updates. Serialised on
@@ -394,7 +393,7 @@ one device per cell that is **at least 9 + 3 days of elapsed time per cell**, an
 the cells are independent, so seven devices run in parallel finish in about a
 fortnight. One device run serially would take roughly three months.
 
-### 5.6 The manufacturer step, both ways
+### The manufacturer step, both ways
 
 Every cell is run twice at C1/C2: once with the manufacturer's exclusion **not**
 performed (C7) and once with it performed (C7′). The unconfigured arm is the one
@@ -402,7 +401,7 @@ that matters for this deployment, because its users do not maintain settings.
 The configured arm exists to tell "this phone kills it" apart from "this phone
 kills it *unless* the user does something".
 
-### 5.7 The system-update question
+### The system-update question
 
 There is no way to schedule a manufacturer OTA. The approach is:
 
@@ -416,7 +415,7 @@ There is no way to schedule a manufacturer OTA. The approach is:
 If no OTA arrives during the campaign, C8 is recorded **not observed**. It is
 not inferred from anything.
 
-### 5.8 What the data is, where it lives, what is in it
+### What the data is, where it lives, what is in it
 
 One directory per run under `docs/validation/sustained-delivery/`, containing
 `probe.json`, `deviceidle.txt`, `samples.ndjson`, `marks.ndjson`. Contents:
@@ -429,20 +428,43 @@ anything is written, so a run record can be committed here without disclosing
 where this deployment lives or who is on it. Runs use dedicated test accounts,
 never a real user's device or account.
 
-### 5.9 Reproducibility
+### Reproducibility
 
-Every step above is a subcommand of `tool/measure_sustained_delivery.sh`, and
-every threshold in §3 is either in that script's `verdict` output or in the
-admissibility rules compiled into `lib/app/config/sustained_delivery_gate.dart`.
-Somebody who has never read this document can run `probe`, `doze`, `watch`,
-`mark`, `verdict` in that order and get a result they can compare against
-criteria they can see.
+Use the [measurement script](../../tool/measure_sustained_delivery.sh) from
+`frontend/`. Select a physical device for the matrix cell and use two activated
+test accounts. Record the build and device used and keep each independent run in
+its own directory under [the field evidence directory](../validation/sustained-delivery/README.md).
+
+1. Run `probe --serial S --out DIR`, read the device-specific Doze constants,
+   and verify the observation surfaces. Establish a fresh enable before each
+   run. Record whether the vendor exclusion was applied.
+2. Run the forced arm with `doze --serial S --mode force` and release it with
+   `doze --serial S --mode release`. For the natural arm, leave the phone
+   physically unplugged and observe its actual entry into deep Doze. The
+   script's `--mode natural` calls `dumpsys battery unplug` and is a simulated
+   setup. Keep it out of the real 24-hour and 9-day arms.
+3. Run `watch --serial S --out DIR --package P --origin-port PORT --hours 24
+   --interval 60` for the C1/C2 observations. Use a separate five-second sample
+   cadence for the C3 windows. Write a `mark --out DIR --label send` timestamp
+   for each test send and identify the first matching alert sample on the same
+   host clock. Record misses as well as delivered sends.
+4. Run `verdict --out DIR` and evaluate the raw samples and the operator's
+   observations against all [success criteria](#success-criteria). The script
+   prints the observed period, foreground-service and socket sample counts, and
+   deep-Doze sample counts. Its "longest socket gap" value stops at the first
+   missing sample following a live socket, so calculate the maximum gap using
+   the raw timestamps. C3 percentiles and misses, C4–C8, and C9/C10 require
+   review of the recorded observations.
+5. Review the run record and [admissibility rules](#exactly-what-would-open-it)
+   before entering a result in the ledger. The gate checks an entry's fields,
+   including a non-empty run-record path. Verify that the path identifies
+   committed evidence and that the samples and manual observations support it.
 
 ---
 
-## 6. Results
+## Results
 
-### 6.1 What was actually run
+### What was actually run
 
 **Three probes — one on a real phone, two on emulators — and no run of any
 kind.** That is the whole of it. A probe records what a device *is* and what it
@@ -451,7 +473,7 @@ started anywhere.
 
 | Run | Hardware | Platform | Date | What it establishes |
 |---|---|---|---|---|
-| `2026-08-23-emulator-api35` | `Google sdk_gphone16k_x86_64` (`user` build, x86_64) | Android 15, API 35 | 2026-08-23 | that the observation surfaces in §5.1 all work unrooted; this image's Doze constants and freezer setting |
+| `2026-08-23-emulator-api35` | `Google sdk_gphone16k_x86_64` (`user` build, x86_64) | Android 15, API 35 | 2026-08-23 | that the observation surfaces in [How the behaviour is observed at all](#how-the-behaviour-is-observed-at-all) all work unrooted; this image's Doze constants and freezer setting |
 | `2026-08-23-emulator-api30` | `Google sdk_gphone_x86` (`user` build, x86) | Android 11, API 30 | 2026-08-23 | the same, and that both differ sharply from the API 35 image |
 | `2026-08-23-samsung-a56` | **Samsung SM-A566B (Galaxy A56 5G)**, retail `user` build, `release-keys` | **Android 16, API 36, One UI 8.5** (`ro.build.version.oneui=80500`), patch 2026-07-05 | 2026-08-23 | that the whole procedure runs on retail Samsung hardware; this phone's real Doze constants; that the vendor intent the app ships resolves |
 
@@ -489,7 +511,7 @@ rather than as claims about any phone.
 
 1. **The natural Doze schedule differs by a factor of thirty between two
    platform versions on one host.** Any procedure that assumed a fixed
-   time-to-Doze would mis-time most of the matrix. This is why §5.3 derives the
+   time-to-Doze would mis-time most of the matrix. This is why [Reaching the conditions that take hours](#reaching-the-conditions-that-take-hours) derives the
    waits from each device's own `dumpsys deviceidle`, and why `probe` commits
    that dump beside every run.
 2. **The cached-apps freezer is off on the Android 11 image and on at Android
@@ -506,7 +528,7 @@ rather than as claims about any phone.
 end to end against a package that was not this application — `probe`, `doze
 --mode force` and `--mode release`, `watch` (four samples at 20 s, resolving the
 application UID, Doze state, standby bucket and exemption correctly), `mark`,
-and `verdict`, which printed each threshold beside its result. The instrument
+and `verdict`, which printed a sample summary alongside the C1/C2 criteria. The instrument
 works. That is a fact about the instrument and is not a result about sustained
 delivery, which the instrument has never been pointed at.
 
@@ -518,7 +540,7 @@ a measurement of the capability, which was never started.
 - **The procedure runs on retail Samsung hardware.** From an unrooted `adb
   shell` on a `release-keys` `user` build: `dumpsys deviceidle force-idle`
   answered *"Now forced in to deep idle mode"* and `get deep` then reported
-  **`IDLE`** — so the forced arm of §5.3 is available on the cell that carries
+  **`IDLE`** — so the forced arm of [Reaching the conditions that take hours](#reaching-the-conditions-that-take-hours) is available on the cell that carries
   the most fleet weight. `am get-standby-bucket` returned a bucket,
   `/proc/net/tcp6` was readable (122 rows), `dumpsys notification --noredact`
   and `dumpsys deviceidle whitelist` both answered, and `dumpsys activity oom`
@@ -555,7 +577,7 @@ a measurement of the capability, which was never started.
   duration taken from that emulator would have been wrong by more than an order
   of magnitude. The API 30 emulator happens to match this phone; that is not a
   reason to trust either, it is a reason to keep reading the constants per
-  device, which §5.3 already requires and `probe` already captures.
+  device, which [Reaching the conditions that take hours](#reaching-the-conditions-that-take-hours) already requires and `probe` already captures.
 - **Whether the cached-apps freezer is active on One UI 8.5 could not be
   determined.** `dumpsys activity settings` prints no `use_freezer` on this
   device (the API 35 emulator prints `use_freezer=true` with
@@ -591,11 +613,14 @@ still ahead of it.
    records `absent` when the process is not listed at all — which is the
    strongest failure the instrument can see.
 
-**Everything else in §3 and §4: NOT RUN.**
+**Everything else in [Success criteria](#success-criteria) and [The matrix](#the-matrix): NOT RUN.**
 
-### 6.2 What prevented it, exactly
+### What prevented it, exactly
 
-1. **Five of the seven cells have no device.** No Xiaomi of any version, and no
+These were the blockers recorded during the 2026-08-23 campaign at
+[the probe revision](https://github.com/Orviniq/communication-platform/blob/973e6eb825a8c0e09a39caf04b5c894f8f85ce83/frontend/docs/sustained-delivery-validation.md#62-what-prevented-it-exactly).
+
+1. **Six of the seven cells lacked matching physical hardware.** No Xiaomi of any version, and no
    Pixel or AOSP hardware for the control cell. A Samsung A56 on Android 16 is
    available, which is the `samsungAndroid14Plus` cell; the two older Samsung
    cells need Samsung hardware on Android 11–13, which this phone is not and
@@ -629,16 +654,16 @@ still ahead of it.
    test deliberately pins, and it is correct; it also means there is no
    shortcut around (3).
 
-### 6.3 Measurement, inference, and neither
+### Measurement, inference, and neither
 
 - **Measurements** (this run): the emulator observations and the Samsung A56
-  observations in §6.1 — what those devices are, what they permit, this phone's
+  observations in [What was actually run](#what-was-actually-run) — what those devices are, what they permit, this phone's
   Doze constants, and that the vendor intent resolves. Each is one reading on
   one device on one date, about the *device*, never about the capability.
 - **Inferences**: that a foreground service prevents the freeze and the socket
   termination, and that the exemption preserves network through Doze and lifts
   the standby-bucket restrictions. Every one of those is drawn from Android's
-  documentation (§9) and none has been observed here.
+  documentation ([Sources](#sources)) and none has been observed here.
 - **Neither**: whether Samsung or Xiaomi actually let this run. Samsung's One UI
   6.0 statement is a vendor's declaration of intent about a subset of its own
   devices, and having a One UI 8.5 phone in hand does not convert it into
@@ -647,7 +672,7 @@ still ahead of it.
   `dontkillmyapp.com` is collected community evidence with no stated methodology,
   useful for knowing what to look for and load-bearing for nothing.
 
-### 6.4 The strongest claim this evidence supports, in one sentence
+### The strongest claim this evidence supports, in one sentence
 
 *On a retail Samsung Galaxy A56 running Android 16 and One UI 8.5, and on two
 AOSP emulator images, on 2026-08-23, every observation surface this procedure
@@ -659,7 +684,7 @@ manufacturer that is half this fleet, and establishes nothing whatsoever about
 whether sustained delivery works on that phone or any other, because it was
 never started on one.*
 
-### 6.5 The weakest link
+### The weakest link
 
 **A Xiaomi device on Android 13 or 14 whose owner has not touched the autostart
 setting.** It is roughly a fifth of the fleet on its own, the manufacturer has
@@ -670,17 +695,17 @@ this repository, and nothing this piece found, says what happens there.
 
 ---
 
-## 7. The gate
+## The gate
 
 **State: CLOSED.** Not partially evidenced. Closed. Since 2026-10-18
-([ADR-094](architecture/decisions/094-best-effort-delivery.md)) a closed gate means a production build offers the
+([ADR-094](../architecture/decisions/094-best-effort-delivery.md)) a closed gate means a production build offers the
 capability as **best effort**; it no longer means the capability is withheld.
 
 ### What it is
 
 `lib/app/config/sustained_delivery_gate.dart` holds a compile-time constant
 `SustainedDeliveryGate.releaseAssertion` carrying an evidence ledger, which is
-**empty**. The gate is open only when **every** mandatory cell of §4 has an
+**empty**. The gate is open only when **every** mandatory cell of [The matrix](#the-matrix) has an
 **admissible** record.
 
 ### Where it bites
@@ -691,7 +716,7 @@ fixed by the entry point, unselectable at runtime — and answers:
 | Build | Answer | Effect |
 |---|---|---|
 | any build, ledger complete | `evidenced` | offered, on the evidence |
-| production (the build handed to people, [ADR-076](architecture/decisions/076-production-signing.md)), ledger incomplete | `bestEffort` | offered, with its cost and the statement that it is untested ([ADR-094](architecture/decisions/094-best-effort-delivery.md)) |
+| production (the build handed to people, [ADR-076](../architecture/decisions/076-production-signing.md)), ledger incomplete | `bestEffort` | offered, with its cost and the statement that it is untested ([ADR-094](../architecture/decisions/094-best-effort-delivery.md)) |
 | development, ledger incomplete | `measurementOnly` | offered, so the matrix can be run |
 
 Every answer offers the capability. `SustainedDeliveryController` attaches its
@@ -732,7 +757,7 @@ Seven records in that ledger — one per cell — each of which must pass
 - `emulated` is **false**;
 - `hardware` and `platformVersion` are non-empty, as the device reports them;
 - `observedOn` is a real ISO date;
-- `runRecord` names a committed run directory;
+- `runRecord` is non-empty. Verify independently that it names a committed run directory;
 - `holdingHours` ≥ **24**;
 - `deliveriesObserved` ≥ **20**;
 - `repetitions` ≥ **3**.
@@ -755,8 +780,8 @@ by a single observation, or by a row somebody typed.
   answers `bestEffort` from the same constant, and no text of that artifact
   promises a delivery time.
 - It is discoverable: the constant, this document, the release checklist in
-  `deployment-and-release.md`, `platform-android.md` and `docs/README.md` all
-  name each other.
+  [deployment and release](../deployment-and-release.md), [Android platform](../architecture/ANDROID.md)
+  and [the documentation index](../README.md) all link to this runbook.
 
 ### What it costs that measurement needs a build users do not receive
 
@@ -772,15 +797,15 @@ freezer behaviour, Doze survival, restart recovery, vendor deviation.
 It does **not** transfer for: anything touching the provisioned origin's TLS path
 or its certificate authority, and the behaviour of the frozen signing identity
 across an upgrade. Measurement of the development build covers its mechanics.
-Production reads the same compiled ledger and applies its own offer state (§7).
+Production reads the same compiled ledger and applies its own offer state ([The gate](#the-gate)).
 
 ---
 
-## 8. Limitations of this validation, and when it expires
+## Limitations of this validation, and when it expires
 
 - The fleet is a **country panel statistic**, not this deployment's twenty-odd
-  actual phones (§2.4). Follow-up F1.
-- Statcounter's own series has two months that do not behave (§2.1). A panel that
+  actual phones ([The honest limit of all of this](#the-honest-limit-of-all-of-this)). Follow-up F1.
+- Statcounter's own series has two months that do not behave ([Vendor share, July 2026](#vendor-share-july-2026)). A panel that
   can move Apple's share by sixteen points in a month is not a precision
   instrument.
 - C8 (vendor setting survives an OTA) **cannot be scheduled** and may never be
@@ -807,7 +832,7 @@ Production reads the same compiled ledger and applies its own offer state (§7).
 
 ---
 
-## 9. Sources
+## Sources
 
 All read **2026-08-23** unless stated. Official platform and vendor
 documentation first; collected community evidence is labelled as such and

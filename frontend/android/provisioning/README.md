@@ -18,7 +18,7 @@ reads them back out of the packaged artifact. `docs/release-signing.md` is the m
 to the platform's Java HTTP stacks and WebView; this client's REST and WebSocket
 transports both run on `dart:io`, which does not consult them. Trust for that
 traffic is installed in Dart from `<ENV>_PRIVATE_CA_PEM_BASE64`; see ADR-043 and
-`docs/platform-android.md`. What is rendered here is retained as defence in depth
+[`docs/architecture/ANDROID.md`](../../docs/architecture/ANDROID.md#network-trust). What is rendered here is retained as defence in depth
 for any future WebView or Java-side traffic.
 
 Those rendered resources are provisioning artifacts and are ignored by Git, and no pin,

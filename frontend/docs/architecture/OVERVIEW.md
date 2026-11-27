@@ -1,5 +1,10 @@
 # Architecture
 
+See the [Android platform contract](ANDROID.md) for platform boundaries, the
+[local data model](LOCAL-DATA.md) for durable state and migrations, and the
+[synchronization engine](SYNC.md) for delivery and recovery. The
+[frontend ADR index](decisions/README.md) records the governing decisions.
+
 ## Decision
 
 Use **Modular Feature-First Clean Architecture with an Offline-First, Event-Driven
@@ -48,10 +53,12 @@ REST / WebSocket / user action
              +--> app-owned timeline adapter and builders
 ```
 
-Widgets never merge optimistic, REST, and socket lists. A send first creates the logical
-message and outbox work in one transaction. Network acceptance updates that work; receipt
-events update delivery state. An incoming envelope is decrypted, validated, applied, and
-recorded as processed before it is acknowledged.
+Widgets read a single projection. A send first commits the logical message and
+its owed preparation to Drift. A later delivery cycle seals and persists the
+per-device outbox rows before sending them. Network acceptance updates transport
+state, and receipt events update delivery state. Incoming envelopes are
+acknowledged after their disposition is persisted. See [outgoing preparation](SYNC.md#owed-send-preparations)
+and [incoming envelopes](SYNC.md#incoming-durable-envelopes).
 
 ## Feature boundaries
 
@@ -150,14 +157,14 @@ and emit typed intents; they cannot reach cryptography, APIs, Drift, or synchron
 ## Platform boundary
 
 Android is the only target. The Web shell, adapters and CI build were removed under
-[server ADR-0020](../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
-See [platform status](STATUS.md#platform-identity-and-content).
+[server ADR-0020](../../../docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md).
+See [platform status](../STATUS.md#platform-identity-and-content).
 
 - Android uses encrypted SQLite and Android Keystore wrapping.
 - Active-app messaging uses the socket and authoritative REST drain. The persisted
   `JobScheduler` job supplies deferred catch-up. The opt-in messaging service uses
   `specialUse`, and an active voice call uses a separate `microphone` foreground service.
-  See [delivery status](STATUS.md#presence-voice-and-delivery).
+  See [delivery status](../STATUS.md#presence-voice-and-delivery).
 
 No platform-specific conditional is allowed inside domain or protocol logic.
 
@@ -167,9 +174,10 @@ No platform-specific conditional is allowed inside domain or protocol logic.
 - Malformed or unauthenticated protocol input is quarantined and never partially applied.
 - Unknown future event kinds are retained as unsupported records without crashing.
 - Security failures fail closed.
-- A mailbox `pruned_through` gap starts authenticated peer repair and signed group-state
-  requests. The client keeps draining and withholds affected group sends while waiting.
-  Direct gaps still lack a user-facing state. See [queue-gap recovery](sync-engine.md#queue-gap-recovery).
+- A mailbox `pruned_through` gap queues state recovery for active groups and voice
+  rooms while the client continues draining. Groups withhold sends and changes
+  while waiting, and rooms withhold joins and changes. The client has no direct-chat
+  gap UI. See [queue-gap recovery](SYNC.md#queue-gap-recovery).
 - Network failures preserve outbox work and surface honest connection state.
 
 ## Source references

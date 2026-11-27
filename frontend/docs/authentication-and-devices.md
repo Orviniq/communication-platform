@@ -117,8 +117,7 @@ browser surface, and the client's web target was removed on 2026-09-08
   token coordinator.
 - A session token is renewed from half its lifetime, behind the request that finds it due,
   because `POST /api/v1/auth/renew` refuses a token past its `exp`. The lifetime is the
-  issuing answer's `expires_in`, stored beside the token (ADR-085; `sync-engine.md`, Token
-  lifecycle).
+  issuing answer's `expires_in`, stored beside the token (ADR-085; [Token lifecycle](architecture/SYNC.md#token-lifecycle)).
 - A renewal carries its token in the `Authorization` header and sends no body. It writes
   nothing and moves no generation, so it is safe to repeat: a renewal whose answer was
   lost costs a retry rather than the session, and two that race simply produce two working

@@ -18,7 +18,7 @@ Supports testable dependency scopes (`ProviderScope` overrides in unit/widget te
 
 ## Constraints and Open Gates
 
-- Enforced by [Architecture](../../architecture.md) and [Frontend instructions](../../../AGENTS.md).
+- Enforced by [Architecture](../OVERVIEW.md) and [Frontend instructions](../../../AGENTS.md).
 - Root-level lifecycle controllers must not rely on widget `build`-scoped `ref.watch` subscriptions, because `flutter_riverpod` 3.3.2 pauses those when a route leaves view (`ConsumerStatefulElement._applyTickerMode`); root-owned coordination uses `listenManual` (ADR-047).
 - Hand-written provider declarations are used without code generation.
 - Open gates: None.

@@ -14,7 +14,7 @@ references:
 
 These files define transport only. Encrypted content formats and client synchronization
 rules are defined by [cryptographic-protocol.md](cryptographic-protocol.md),
-[message-protocol.md](message-protocol.md), and [sync-engine.md](sync-engine.md).
+[message-protocol.md](message-protocol.md), and [SYNC.md](architecture/SYNC.md).
 Handoff copies MUST NOT be duplicated here; these repository paths remain the single
 source of truth.
 

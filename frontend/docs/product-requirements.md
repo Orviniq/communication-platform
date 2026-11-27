@@ -59,7 +59,7 @@ implementation and evidence against this scope.
   ratchets, group control state, or authorization.
 - Surface a mailbox `pruned_through` gap as recoverable loss. Affected groups withhold sends
   and changes until a member confirms their signed control state. The Android client has
-  no direct-chat gap UI yet. See [queue-gap recovery](sync-engine.md#queue-gap-recovery).
+  no direct-chat gap UI yet. See [queue-gap recovery](architecture/SYNC.md#queue-gap-recovery).
 - Revoked devices lose tokens, queued content, local session access, and future group
   access.
 - Voice is audio-only: a full mesh of WebRTC connections between devices, each keyed by
@@ -90,7 +90,7 @@ implementation and evidence against this scope.
   production): it holds the connection, and what that is worth has never been measured on
   a single phone, so the build says so, promises no time, and the floor is the whole of
   what a user gets until they turn it on. If the
-  matrix in [sustained-delivery-validation.md](sustained-delivery-validation.md) is run
+  matrix in [SUSTAINED-DELIVERY.md](runbooks/SUSTAINED-DELIVERY.md) is run
   and passes, it becomes *near-real-time, best-effort* for a user who grants
   notifications and the battery-optimization exemption, and that exemption also lifts the
   standby-bucket ceiling underneath. It is not a guarantee: the platform

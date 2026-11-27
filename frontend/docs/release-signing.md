@@ -32,7 +32,7 @@ For this client that erasure is not an inconvenience:
 | `storage_key_v1.bin` in the no-backup directory | The envelope holding the database key, deleted with it. |
 | Any backup of either | `AndroidManifest.xml` sets `allowBackup="false"` and `fullBackupContent="false"`, so Android Backup and `adb backup` hold nothing. |
 | The database key itself | Wrapped by a non-exportable `AndroidKeyStore` key (`ProtectedStorageChannel.kt`), so no exportable copy exists anywhere, by design. |
-| Message history | There is no server-side history by design; see `sync-engine.md`. |
+| Message history | There is no server-side history by design; see [`docs/architecture/SYNC.md`](architecture/SYNC.md#device-to-device-history-transfer). |
 
 A user with a recovery secret and a second enrolled device can restore their identity and
 pull history device-to-device (pieces 10 and 17). A single-device user cannot. Ratchets and

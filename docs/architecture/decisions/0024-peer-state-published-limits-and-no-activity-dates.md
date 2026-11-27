@@ -15,7 +15,7 @@ server anything.
 
 **The verification round trips.** Before a send the client verifies every
 recipient, and `frontend/docs/decisions.md` ADR-060 and ADR-065 and
-`frontend/docs/sync-engine.md` record what that costs: three reads for each
+[`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/4c250c215c8d7948cde79f37afe5b19a042e3234/frontend/docs/sync-engine.md) record what that costs: three reads for each
 recipient — `GET /api/v1/users/{user_id}/identity`,
 `GET /api/v1/users/{user_id}/devices` and the device log — at 107 to 137
 milliseconds a round trip. A 50-member group is 150 round trips against a scope of
@@ -28,7 +28,7 @@ state it has not re-checked.
 device log landed. `/identity` never did, so every one of those reads was a full
 `200` carrying four base64 key fields, whether the identity had moved or not.
 
-**The unstateable retention window.** `frontend/docs/sync-engine.md` records that
+**The unstateable retention window.** [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/4c250c215c8d7948cde79f37afe5b19a042e3234/frontend/docs/sync-engine.md) records that
 `ENVELOPE_TTL_DAYS` is an operator setting the client cannot state, so a client
 that tells a user how long an undelivered message survives is guessing. The same
 is true of every other limit a `413`, a `409` or a `400 bad_bucket` teaches the
@@ -161,7 +161,7 @@ The client's own four-minute keepalive stays the client's decision.
   seen" is no longer answerable from the panel, the database or a dump.
 - **Evidence.** The client cost is recorded rather than predicted:
   `frontend/docs/decisions.md` ADR-060 and ADR-065 and
-  `frontend/docs/sync-engine.md` name the three reads per recipient, the 107–137 ms
+  [`frontend/docs/sync-engine.md`](https://github.com/Orviniq/communication-platform/blob/4c250c215c8d7948cde79f37afe5b19a042e3234/frontend/docs/sync-engine.md) name the three reads per recipient, the 107–137 ms
   round trip, the 150 round trips for a 50-member group and the 30-second cache
   built to survive them, and record that `ENVELOPE_TTL_DAYS` is an operator setting
   the client cannot state (read 2026-09-06). The query count is measured, not

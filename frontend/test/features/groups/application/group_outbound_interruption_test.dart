@@ -32,8 +32,8 @@ import '../../../support/storage_fault_injection.dart';
 /// counts its own invocations, which is how "the retry never advanced the
 /// ratchet twice" becomes an assertion instead of a claim.
 ///
-/// The design ordering under test, from `docs/local-data-model.md` and
-/// `docs/sync-engine.md`:
+/// The design ordering under test, from `docs/architecture/LOCAL-DATA.md` and
+/// `docs/architecture/SYNC.md`:
 ///
 ///   T1  signed control event + roster projection + exact outbound payload,
 ///       one compare-and-swap transaction

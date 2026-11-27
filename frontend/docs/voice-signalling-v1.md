@@ -973,8 +973,7 @@ says so. A microphone or a platform connection that cannot be opened ends the ca
 
 **As built, 2026-10-02 (prompt 9): the join from the screens, mute and the session's
 end.** `VoiceCallController` in `lib/features/voice/application/` is the one caller of the
-two ports of phase 6 prompt 8 ([`platform-android.md`](platform-android.md), A call's
-microphone). A join refuses a second call and a server with no voice before it asks for
+two ports of phase 6 prompt 8 ([A call's microphone](architecture/ANDROID.md#a-calls-microphone)). A join refuses a second call and a server with no voice before it asks for
 anything, then asks for the microphone, starts the call's foreground service, and only then
 joins. A refused microphone or a service that does not start ends the attempt with nothing
 sent, a refused join stops the service again, and a leave leaves the call and then stops

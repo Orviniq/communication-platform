@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-27 (explicitly recorded in register and full section; implemented in `d1d1a0f`, documented in `5776e98`)
-- **Amends:** [local-data-model.md](../../local-data-model.md#search) and [ADR-057](057-measured-settings.md) search scope (in-conversation search reads the loaded window rather than the whole local history; out-of-window targets load on jump via `reveal`)
+- **Amends:** [LOCAL-DATA.md](../LOCAL-DATA.md#search) and [ADR-057](057-measured-settings.md) search scope (in-conversation search reads the loaded window rather than the whole local history; out-of-window targets load on jump via `reveal`)
 - **Related:** [ADR-002](002-drift-source-of-truth.md), [ADR-057](057-measured-settings.md), [ADR-061](061-durable-send.md), [ADR-063](063-event-projection.md), [ADR-064](064-incremental-rebuild.md)
 
 ## Decision (Position)
@@ -38,7 +38,7 @@ Replaced unbounded `3N + 1` timeline queries and zero-index table scans with a c
 ## Constraints and Open Gates
 
 - **Scope:** Additive index-only migration (16 → 17, `IF NOT EXISTS`, rollback-safe in transaction); zero cryptographic, wire, or `backend/` changes; opens no production gate.
-- **Page-scoped behavior ([local-data-model.md](../../local-data-model.md#search)):** In-conversation search filters loaded rows (full-history chat search subsequently added separately at `/chats/search` under ADR-087); `ConversationSummary.pinnedMessageIds` remains computed for summary contract parity despite the chat page reading `pinnedMessages`.
+- **Page-scoped behavior ([LOCAL-DATA.md](../LOCAL-DATA.md#search)):** In-conversation search filters loaded rows (full-history chat search subsequently added separately at `/chats/search` under ADR-087); `ConversationSummary.pinnedMessageIds` remains computed for summary contract parity despite the chat page reading `pinnedMessages`.
 - **Deferred at ADR-062:** F2 (incremental projection — addressed in ADR-063), F6 (peer cache — addressed in ADR-065), F8–F10 (UI mapper/anchor/debounce — addressed in ADR-064), widening `watchMessages` stream triggers beyond `messages`, and on-device A56 timing for long conversations.
 
 ## Costs

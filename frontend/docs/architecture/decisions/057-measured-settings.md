@@ -1,16 +1,16 @@
 # ADR-057: Piece 21 remainders — shared local search, settings surface set, recovery rotation, and typed diagnostics export
 
-- **Status:** Accepted (chat-list search later extended by `/chats/search` under [ADR-087](087-chat-status.md); `chat_pages.dart` and `group_pages.dart` later split into per-screen files; conversation search scope subsequently narrowed to the loaded keyset window when pagination landed in [ADR-062](062-timeline-window.md) per [local-data-model.md](../../local-data-model.md#search))
+- **Status:** Accepted (chat-list search later extended by `/chats/search` under [ADR-087](087-chat-status.md); `chat_pages.dart` and `group_pages.dart` later split into per-screen files; conversation search scope subsequently narrowed to the loaded keyset window when pagination landed in [ADR-062](062-timeline-window.md) per [LOCAL-DATA.md](../LOCAL-DATA.md#search))
 - **Date:** 2026-08-25 (explicitly recorded in register and full section; implemented in `d344d8aa`)
-- **Amends:** [ADR-044](044-private-deployment.md) Absent tier (removes appearance settings and notes local search was never absent; moves Absent tier to voice rooms, file attachments, profile publishing, shared media); [local-data-model.md](../../local-data-model.md#search) and `implementation-checklist.md` (corrects "Android encrypted index" claim)
+- **Amends:** [ADR-044](044-private-deployment.md) Absent tier (removes appearance settings and notes local search was never absent; moves Absent tier to voice rooms, file attachments, profile publishing, shared media); [LOCAL-DATA.md](../LOCAL-DATA.md#search) and `implementation-checklist.md` (corrects "Android encrypted index" claim)
 - **Related:** [ADR-012](012-local-search.md), [ADR-016](016-english-and-persian.md), [ADR-030](030-recovery-key-material.md), [ADR-044](044-private-deployment.md), [ADR-045](045-maturity-disclosure.md), [ADR-052](052-accurate-capability-claims.md), [ADR-053](053-field-evidence-gate.md), [ADR-055](055-initial-artifact.md)
 
 ## Decision (Position)
 
 Audited the remaining Piece 21 items (local search, Settings surfaces, and diagnostics export) directly against the composed artifact and implemented what was actually missing:
 
-1. **No separate encrypted search index ([local-data-model.md](../../local-data-model.md#search)):**
-   - Corrected `implementation-checklist.md` ("Pending Android encrypted index", wrong in both halves since [ADR-052](052-accurate-capability-claims.md)) and [local-data-model.md](../../local-data-model.md#search) (which had originated the phrase repeated into prompt 21 without any ADR behind [ADR-012](012-local-search.md)'s local-only rule).
+1. **No separate encrypted search index ([LOCAL-DATA.md](../LOCAL-DATA.md#search)):**
+   - Corrected `implementation-checklist.md` ("Pending Android encrypted index", wrong in both halves since [ADR-052](052-accurate-capability-claims.md)) and [LOCAL-DATA.md](../LOCAL-DATA.md#search) (which had originated the phrase repeated into prompt 21 without any ADR behind [ADR-012](012-local-search.md)'s local-only rule).
    - Because `messages` already stores decrypted message projections inside Keystore-wrapped SQLCipher, building a second FTS/index copy was rejected (duplicates every message body, expands wipe surface and migration corruption risk for zero benefit at this scale).
 2. **One shared in-conversation search surface ([conversation_search.dart](../../../lib/features/messaging/presentation/conversation_search.dart)):**
    - Unified direct, saved, and group conversation search onto `showConversationSearch` over `ChatMessageViewModel` with a pure filter function so scope notice, empty states, jump behavior, and the previously silent 30-result cap (now displayed on screen when hit) cannot drift.
@@ -55,5 +55,5 @@ Reopen if conversation lengths outgrow in-memory filtering of the loaded window 
 ## History, Amendments, and Supersession
 
 - **2026-08-25 (`d344d8aa`):** Recorded ADR-057 (`Accepted`), completing Settings, Appearance, About, recovery-secret rotation (`cp_crypto_v1_rotate_recovery_secret`), typed diagnostics export, unified `showConversationSearch`, and Linked Devices / Clear history audit fixes.
-- **2026-08-27 (ADR-062):** Bounded `watchMessages` to a cursor-anchored keyset window, updating [local-data-model.md](../../local-data-model.md#search) so in-conversation search operates over the loaded window and jumps load out-of-window messages first.
+- **2026-08-27 (ADR-062):** Bounded `watchMessages` to a cursor-anchored keyset window, updating [local-data-model.md](https://github.com/Orviniq/communication-platform/blob/5776e98a61565bda1e8f6942eca877e1bf951f6f/frontend/docs/local-data-model.md#search) so in-conversation search operates over the loaded window and jumps load out-of-window messages first.
 - **2026-10-09 (ADR-087):** Added dedicated `/chats/search` full-history chat search alongside in-conversation search.

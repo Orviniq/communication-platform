@@ -16,7 +16,7 @@ The documents use three requirement words:
 - [Current implementation, evidence, and release gaps](STATUS.md)
 - [Product requirements](product-requirements.md)
 - [Complete page-by-page UI specification](ui-specification.md)
-- [Architecture](architecture.md)
+- [Architecture](architecture/OVERVIEW.md)
 - [Architecture decisions](architecture/decisions/README.md)
 - [Responsive UI](responsive-ui.md)
 - [Visual design system](visual-design-system.md)
@@ -37,16 +37,16 @@ The documents use three requirement words:
 
 ## Data, synchronization, and platforms
 
-- [Local data model](local-data-model.md)
-- [Synchronization engine](sync-engine.md)
-- [Android platform](platform-android.md)
+- [Local data model](architecture/LOCAL-DATA.md)
+- [Synchronization engine](architecture/SYNC.md)
+- [Android platform](architecture/ANDROID.md)
 
 ## Delivery
 
 - [Backend API index](backend-api.md)
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
-- [Sustained delivery: field validation and its gate](sustained-delivery-validation.md)
+- [Sustained delivery: field validation and its gate](runbooks/SUSTAINED-DELIVERY.md)
 - [Deployment and release](deployment-and-release.md)
 - [Production release signing and key continuity](release-signing.md)
 - [Third-party notices](third-party-notices.md)

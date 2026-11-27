@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-17)
 - **Date:** 2026-10-17 (explicitly recorded in register and full section; implemented in `b4654d94` and documented in `fbc225d6`)
 - **Amends:** [ADR-057](057-measured-settings.md) (widens `FLAG_SECURE` from recovery/enrollment screens only to the entire application window)
-- **Related:** [ADR-049](049-background-catch-up.md), [ADR-057](057-measured-settings.md), [threat-model.md](../../threat-model.md), [platform-android.md](../../platform-android.md)
+- **Related:** [ADR-049](049-background-catch-up.md), [ADR-057](057-measured-settings.md), [threat-model.md](../../threat-model.md), [ANDROID.md](../ANDROID.md)
 
 ## Decision (Position)
 

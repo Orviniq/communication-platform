@@ -973,7 +973,7 @@ holds only in a history-transfer snapshot (§3.5).
 
 ### 8.1 What is removed, by kind
 
-Every attachment is copied before it is encrypted (`frontend/docs/platform-android.md`,
+Every attachment is copied before it is encrypted ([`frontend/docs/architecture/ANDROID.md`](../../frontend/docs/architecture/ANDROID.md#attachments-pickers-the-camera-open-save-and-share-adr-089),
 "Attachments"). The removal happens on that copy, before it is encrypted, and the bytes it
 leaves are the bytes that are sent; it never makes a copy larger. The format is recognised by
 its content, never by its name or by the type the provider reports.

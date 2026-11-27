@@ -13,7 +13,7 @@ Originally decided that closed-beta MLS transport v3 carries the **complete auth
 2. Absence, disagreement, replay, authorization failure, or malformed credentials failed closed.
 3. V2 beta state and queued objects were treated as disposable closed-beta data ([ADR-036](036-beta-mls-track.md)).
 
-**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13). There is no MLS Welcome or MLS credential roster; new/rejoined group members receive and verify the signed group control transcript as a `CPGSV001` payload directly over pairwise Double Ratchet envelopes ([Cryptographic protocol](../../cryptographic-protocol.md#groups), [Local data model](../../local-data-model.md)).
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13). There is no MLS Welcome or MLS credential roster; new/rejoined group members receive and verify the signed group control transcript as a `CPGSV001` payload directly over pairwise Double Ratchet envelopes ([Cryptographic protocol](../../cryptographic-protocol.md#groups), [Local data model](../LOCAL-DATA.md)).
 
 ## Rationale
 

@@ -7,7 +7,7 @@
 
 ## Decision (Position)
 
-Corrects [ADR-049](049-background-catch-up.md)'s ownership arbitration after tracing the composed application revealed that `MessageDeliverySession.compose` ran *after* `AuthenticationController.restore()` had already opened protected storage and rotated the shared refresh token (while `message_delivery_composition_test.dart` masked this using a fake restore, and [sync-engine.md](../../sync-engine.md) still contradicted itself by referencing ADR-046's removed durable lease):
+Corrects [ADR-049](049-background-catch-up.md)'s ownership arbitration after tracing the composed application revealed that `MessageDeliverySession.compose` ran *after* `AuthenticationController.restore()` had already opened protected storage and rotated the shared refresh token (while `message_delivery_composition_test.dart` masked this using a fake restore, and [sync-engine.md](https://github.com/Orviniq/communication-platform/blob/19232fa78fd6b288947750c21f7e41979a77fe21/frontend/docs/sync-engine.md) still contradicted itself by referencing ADR-046's removed durable lease):
 
 1. **Decision A — Entry-point ownership gate in [bootstrap.dart](../../../lib/app/bootstrap.dart):**
    - `bootstrap()` awaits `DeliveryOwnershipGate().awaitExclusiveOwnership()` *before* `ApplicationRuntime.create(...)`, before protected storage opens, before any token is read, and before `runApp(...)`.
