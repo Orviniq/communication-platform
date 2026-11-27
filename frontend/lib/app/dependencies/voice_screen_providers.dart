@@ -25,7 +25,7 @@ final voiceScopeProvider = FutureProvider<MessagingScope?>((ref) async {
 
 /// Whether a call may be offered at all: the deployment publishes
 /// `voice_configured` true, and no join has met `503 voice_unconfigured`
-/// since this process started (`voice-signalling-v1.md`, The credential).
+/// since this process started (`docs/contracts/VOICE-V1.md`, The credential).
 ///
 /// Until `GET /api/v1/config` has answered, the published value is the
 /// stored one or the fallback, and the fallback is false: no call control is

@@ -16,7 +16,7 @@ import 'package:flutter/services.dart';
 
 /// The reactions the floating selector offers, in this order.
 ///
-/// Presentation only, and deliberately so: `message-protocol.md` carries "one
+/// Presentation only, and deliberately so: `docs/contracts/MESSAGES.md` carries "one
 /// normalized emoji grapheme or null", every layer below this one takes whatever
 /// grapheme it is handed, and nothing outside this file knows which twenty-four
 /// are on the panel. Each entry is one grapheme cluster - `❤️` and `🕊️` are a

@@ -4565,7 +4565,7 @@ abstract class AppLocalizations {
   /// **'The relay connection to {name} is being renewed. The audio keeps its old path meanwhile.'**
   String voiceTileRestartingIceBody(String name);
 
-  /// Ephemeral text is best-effort; copy never says it disappears forever (docs/voice-and-realtime.md, Ephemeral room text).
+  /// Ephemeral text is best-effort; copy never says it disappears forever (docs/architecture/OVERVIEW.md, Ephemeral room text).
   ///
   /// In en, this message translates to:
   /// **'Temporary and best-effort. Cleared when the call ends; others may keep what they read.'**

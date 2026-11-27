@@ -2,14 +2,14 @@
 
 - **Status:** Accepted (2026-10-06); D3 (own-account `PublicDeviceDto` and pending check) completed by [ADR-084](084-pending-device-log.md) (2026-10-07)
 - **Date:** 2026-10-06 (explicitly recorded in register and full section; implemented in `ab287902`, documented in `40ca7f50`)
-- **Related:** [ADR-080](080-batched-peers.md), [ADR-084](084-pending-device-log.md), [cryptographic-protocol.md](../../cryptographic-protocol.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md)
+- **Related:** [ADR-080](080-batched-peers.md), [ADR-084](084-pending-device-log.md), [CRYPTO.md](../../contracts/CRYPTO.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md)
 
 ## Decision (Position)
 
 Resolved the parser mismatch surfaced by [ADR-080](080-batched-peers.md) on peer-device routes without prematurely exposing own-account live-set checks to unlogged enrollments:
 
 1. **D1 — Peer parser reads `cross_sig: null, bundle_version: 0` as unsigned ([contact_api_dtos.dart](../../../lib/features/contacts/infrastructure/contact_api_dtos.dart)):**
-   - `_devices` (shared by `GET /api/v1/users/{user_id}/devices` and `POST /api/v1/peers`) now reads `cross_sig: null` beside `bundle_version: 0` as an unsigned `PeerPublicDevice` with `bundleVersion: null`, matching `Device.bundle_version = PositiveIntegerField(default=0)` in `backend/devices/services.py` (`PeerDeviceOut` in [backend/openapi.json](../../../../backend/openapi.json)) and matching the canonical device-set encoding in [cryptographic-protocol.md](../../cryptographic-protocol.md) ("zero only while unsigned").
+   - `_devices` (shared by `GET /api/v1/users/{user_id}/devices` and `POST /api/v1/peers`) now reads `cross_sig: null` beside `bundle_version: 0` as an unsigned `PeerPublicDevice` with `bundleVersion: null`, matching `Device.bundle_version = PositiveIntegerField(default=0)` in `backend/devices/services.py` (`PeerDeviceOut` in [backend/openapi.json](../../../../backend/openapi.json)) and matching the canonical device-set encoding in [CRYPTO.md](../../contracts/CRYPTO.md) ("zero only while unsigned").
    - Moves judgment from transport parsing (`malformedServerResponse`, which failed an entire `POST /api/v1/peers` batch) into `_refresh`, which records `invalidDevice` and fails only that peer with `unauthenticatedInput` ([CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) §E) while verifying and storing other peers in the batch.
 2. **D2 — Every other `(cross_sig, bundle_version)` combination stays malformed:**
    - Rejects a signature with `bundle_version < 1`, missing signature with `bundle_version > 0`, and negative, null, missing, or non-integer `bundle_version` (tightening away legacy acceptance of `bundle_version: null`, which the server never emits). Matches `inspect_peer_device_log_record` in the Rust core.

@@ -20,7 +20,7 @@ import 'package:communication_platform/features/voice/domain/voice_signal_model.
 
 /// This device's call: one at a time, in one room, as a full mesh of the
 /// connections of `VoicePeerConnection` (`backend/CLIENT_CONTRACT.md` §N,
-/// `voice-signalling-v1.md` Part 2).
+/// `docs/contracts/VOICE-V1.md` CPVSV001 call signalling).
 ///
 /// **Joining.** A join is refused before anything is sent unless this device
 /// may act in the room ([RoomAuthorization.mayAct]). Then the relay credential
@@ -362,7 +362,7 @@ final class VoiceCallEngine implements VoiceCallPort {
     if (call.ended) {
       return VoiceJoinRefused(call.endReason ?? VoiceCallEndReason.left);
     }
-    // At ten it does not send one (`voice-signalling-v1.md`, The ceiling).
+    // At ten it does not send one (`docs/contracts/VOICE-V1.md`, The ceiling).
     if (call.peers.values.where(_isSeated).length >=
         VoiceCallCeiling.maximumJoinedDevices) {
       await _end(call, VoiceCallEndReason.callFull);

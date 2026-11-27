@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-13); proposed 2026-11-13
 - **Date:** 2026-11-13 (explicitly recorded in register and full section; implemented across `878bd5f7`, `2fa399cc`, `bb399e6c`, `8b4d66bd`, `685ac9a3` and documented in `c561db4e` on `frontend-presence-hot-path`, PR #97 `80e9e9cb`)
 - **Amends:** [ADR-098](098-presence-and-typing.md) D5 and D7 (stale-while-revalidate peer cache, lock-free resolution, immediate non-blocking cached `gone`, and 1,500 ms generation-guarded farewell limit)
-- **Related:** [ADR-094](094-best-effort-delivery.md), [ADR-098](098-presence-and-typing.md), [ADR-099](099-typing-sessions.md), [ADR-100](100-socket-presence.md), [STATUS.md](../../STATUS.md), [message-protocol.md](../../message-protocol.md), [CLIENT_PRESENCE_AND_RECEIPTS.md](../../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+- **Related:** [ADR-094](094-best-effort-delivery.md), [ADR-098](098-presence-and-typing.md), [ADR-099](099-typing-sessions.md), [ADR-100](100-socket-presence.md), [STATUS.md](../../STATUS.md), [MESSAGES.md](../../contracts/MESSAGES.md), [CLIENT_PRESENCE_AND_RECEIPTS.md](../../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
 
 ## Decision (Position)
 
@@ -31,7 +31,7 @@ Removed peer-read stalls from the presence hot path and made foreground departur
 
 ## Constraints and Open Gates
 
-- **Scope:** Changed `CachedPresencePeers`, `PresenceChannel` (`_depart`, `_sayGoodbye`, `_unlessDeparting`, `_send(goodbye:)`), `signal_providers.dart` (`goodbyeSealer`), `sync_lifecycle_supervisor.dart` (`farewellLimit`, transition generation guard), and [message-protocol.md](../../message-protocol.md); changed no server route, wire format, database table, dependency, or Android permission.
+- **Scope:** Changed `CachedPresencePeers`, `PresenceChannel` (`_depart`, `_sayGoodbye`, `_unlessDeparting`, `_send(goodbye:)`), `signal_providers.dart` (`goodbyeSealer`), `sync_lifecycle_supervisor.dart` (`farewellLimit`, transition generation guard), and [MESSAGES.md](../../contracts/MESSAGES.md); changed no server route, wire format, database table, dependency, or Android permission.
 - **Verification:** Covered by host suites: [presence_peer_reads_test.dart](../../../test/features/signals/presence_peer_reads_test.dart), [presence_goodbye_test.dart](../../../test/features/signals/presence_goodbye_test.dart), [cached_presence_peers_test.dart](../../../test/features/signals/cached_presence_peers_test.dart), [presence_round_trip_test.dart](../../../test/features/signals/presence_round_trip_test.dart), [presence_channel_test.dart](../../../test/features/signals/presence_channel_test.dart), [presence_status_test.dart](../../../test/features/signals/presence_status_test.dart), and [sync_lifecycle_supervisor_test.dart](../../../test/features/synchronization/sync_lifecycle_supervisor_test.dart) (T1–T11 plus 9 targeted mutation checks; 3 earlier tests updated for `gone`-only goodbye and G4 background departure behavior).
 - **Left open / not verified:**
   - **No device run:** No phone ran this change; real-device peer-read latency remains unmeasured.

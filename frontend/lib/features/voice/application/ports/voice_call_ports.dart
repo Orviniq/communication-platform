@@ -4,7 +4,7 @@ import 'package:communication_platform/features/voice/domain/voice_call_model.da
 
 /// Starts, on the durable path, the pairwise sessions a call will need, and
 /// routes the requests that start them into the pairwise outbox
-/// (`voice-signalling-v1.md`, Starting the sessions a call needs).
+/// (`docs/contracts/VOICE-V1.md`, Starting the sessions a call needs).
 ///
 /// A call's frames are volatile and never start a session, so the call runs
 /// this before its first frame. A device whose request is committed but not

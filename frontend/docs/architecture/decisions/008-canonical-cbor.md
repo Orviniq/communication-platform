@@ -18,9 +18,9 @@ Compact, deterministic, binary-safe, and versionable wire encoding that avoids J
 
 ## Constraints and Open Gates
 
-- Specified in [Cryptographic protocol](../../cryptographic-protocol.md) and [Application-message protocol](../../message-protocol.md).
-- For signed group and voice-room control events (`CPGSV001` / `CPVRV001`), the Rust core performs canonical CBOR encoding and decoding and verifies re-encoding byte equality before accepting state ([Cryptographic protocol](../../cryptographic-protocol.md#groups)).
-- Open gate: [Application-message protocol](../../message-protocol.md#purpose-and-status) notes that exact deterministic-CBOR CDDL and golden byte fixtures remain part of protocol stabilization and independent review ([ADR-017](017-independent-crypto-review.md)).
+- Specified in [Cryptographic protocol](../../contracts/CRYPTO.md) and [Application-message protocol](../../contracts/MESSAGES.md).
+- For signed group and voice-room control events (`CPGSV001` / `CPVRV001`), the Rust core performs canonical CBOR encoding and decoding and verifies re-encoding byte equality before accepting state ([Cryptographic protocol](../../contracts/CRYPTO.md#groups)).
+- Open gate: [Application-message protocol](../../contracts/MESSAGES.md#purpose-and-status) notes that exact deterministic-CBOR CDDL and golden byte fixtures remain part of protocol stabilization and independent review ([ADR-017](017-independent-crypto-review.md)).
 
 ## Costs
 

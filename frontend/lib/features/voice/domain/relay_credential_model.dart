@@ -11,7 +11,7 @@ import 'package:communication_platform/core/result/failure.dart';
 /// [expiresAt]. This class therefore deliberately has no string form, and
 /// neither has anything built from it: it is kept in memory for as long as a
 /// call needs it, and never written to the database or to a log
-/// (`voice-signalling-v1.md`, "The credential").
+/// (`docs/contracts/VOICE-V1.md`, "The credential").
 ///
 /// [username] is passed through unchanged. It is an expiry timestamp, a colon
 /// and sixteen random bytes, and it carries no account identifier and no device

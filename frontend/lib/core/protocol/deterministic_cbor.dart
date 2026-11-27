@@ -4,7 +4,7 @@ import 'dart:typed_data';
 /// One item of the deterministic CBOR subset the `CPVSV001` and `CPPSV001`
 /// bodies are written in: unsigned integers, byte and text strings, arrays,
 /// maps keyed by unsigned integers, and the two booleans
-/// (`voice-signalling-v1.md`, "The common body header"; ADR-098 D2).
+/// (`docs/contracts/VOICE-V1.md`, "The common body header"; ADR-098 D2).
 ///
 /// Nothing else of RFC 8949 is representable, so nothing else can be encoded,
 /// and nothing else is accepted when decoding.

@@ -40,7 +40,7 @@ specifies, this document is authoritative and the client document is the one to 
   A claim is **authentic** or **unauthenticated** (§5.4), and it never writes a trust record.
 - **Carried-over confirmation.** The one-time migration record of §5.10.
 - **Direct conversation.** The conversation between this account and one peer, whose id is
-  the domain-separated hash of the sorted pair (`frontend/docs/message-protocol.md`).
+  the domain-separated hash of the sorted pair (`frontend/docs/contracts/MESSAGES.md`).
 - **Both verified.** The conversation state `MUTUAL` of §5.5.
 - **Short identity.** The name Chats already gives a user this phone holds no name for
   (`chatShortIdentity`, client ADR-093 D18).
@@ -113,7 +113,7 @@ record per peer (§6, kind 2), sent only to this account's other devices and nev
 blocked peer. It is independent of the contact list — a peer who is not a contact can be
 blocked, and a blocked peer can stay on the list. Its effects are §5.6 (nothing of theirs
 is admitted into the direct conversation), §5.8 (no alert, no reply) and §7.2 (no profile
-key). Groups keep the existing rule of `frontend/docs/message-protocol.md` § "Blocking": a
+key). Groups keep the existing rule of `frontend/docs/contracts/MESSAGES.md` § "Blocking": a
 blocked member's control events are still verified and applied.
 
 ### 3.4 Between the account's own devices
@@ -377,9 +377,9 @@ it the two people could never get to `MUTUAL`:
 
 | Entry | What it is | Why it must pass before both have verified |
 |---|---|---|
-| Session establishment | A PQXDH initial envelope — or an authenticated repair replacement — from a sender **this device has verified**. From a sender it has not verified the envelope is held unopened as today (ADR-093), apart from the read of §5.3 | The notice travels inside a pairwise session, so without one no verification could ever reach the peer. Accepting the initial only from a verified sender keeps the precondition of `frontend/docs/pairwise-transport-v1.md` § "Sender-hidden initial header": a session is committed only for a device under a master key this account confirmed |
+| Session establishment | A PQXDH initial envelope — or an authenticated repair replacement — from a sender **this device has verified**. From a sender it has not verified the envelope is held unopened as today (ADR-093), apart from the read of §5.3 | The notice travels inside a pairwise session, so without one no verification could ever reach the peer. Accepting the initial only from a verified sender keeps the precondition of `frontend/docs/contracts/PAIRWISE-V1.md` § "Sender-hidden initial header": a session is committed only for a device under a master key this account confirmed |
 | The verification notice | `CPCTV001` kind 3 from the peer, the peer signing and this account its subject (§5.3) — `contact.master_verify` sent to the peer | It is the only thing that tells a person the other one has verified them. It is admitted as a claim and never changes a trust record |
-| `session.repair` | The authenticated repair control and its replacement (`pairwise-transport-v1.md` § "Replay, skipped keys, and repair"), unchanged | A session that reaches its skipped-key bound stops carrying anything, the notice included. Repair needs a session this account accepted, so it exists only after a verification on this side |
+| `session.repair` | The authenticated repair control and its replacement (`frontend/docs/contracts/PAIRWISE-V1.md` § "Replay, skipped keys, and repair"), unchanged | A session that reaches its skipped-key bound stops carrying anything, the notice included. Repair needs a session this account accepted, so it exists only after a verification on this side |
 | `protocol.notice` | `CPCTV001` kind 4 (§6.4) | Two clients that do not speak the same version of this allowlist could otherwise never learn it, and would wait on each other forever. It is advisory and changes no state |
 
 `device_log.gossip` is not a direct-conversation event, so it needs no place on the list: it
@@ -866,7 +866,7 @@ vectors are [`CLIENT_PRESENCE_AND_RECEIPTS.md`](CLIENT_PRESENCE_AND_RECEIPTS.md)
 ### 7.1 One key per profile version
 
 Every profile version an account publishes (`PUT /api/v1/me/profile`, whose version must
-increase) is sealed in the `MetadataBlobV1` form of `frontend/docs/cryptographic-protocol.md`
+increase) is sealed in the `MetadataBlobV1` form of `frontend/docs/contracts/CRYPTO.md`
 § "Profiles and labels" under a **fresh 32-byte key** from the shared core's random source. The
 key of a version goes to the audience of the moment it is published (§7.2) and to nobody else.
 So a person who leaves the audience can open no version published after they left — whatever

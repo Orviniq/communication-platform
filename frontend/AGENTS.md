@@ -19,7 +19,7 @@ Before changing code, read:
 1. `docs/README.md`;
 2. `docs/implementation-checklist.md`;
 3. the frontend documents that own the behavior in scope; and
-4. the relevant backend `API.md` files indexed by `docs/backend-api.md`, plus
+4. the relevant backend `API.md` files indexed by `docs/contracts/BACKEND.md`, plus
    `../docs/client/CLIENT_CONTRACT.md` and `../docs/security/SECURITY.md` when
    security or protocol behavior is involved.
 

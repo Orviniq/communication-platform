@@ -57,7 +57,7 @@ Login without a known live device ID returns register scope. Before registration
 client generates the device Ed25519/X25519 identity and classical and ML-KEM-768
 prekeys. It generates no MLS KeyPackage: a group is a set of pairwise sessions with no
 group key material to upload
-([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §F). It calls
+([`CLIENT_CONTRACT.md`](../../../docs/client/CLIENT_CONTRACT.md) §F). It calls
 `POST /api/v1/me/devices` without `cross_sig` or `bundle_version`, and without
 `keypackages`: `RegisterDeviceIn` has no such field and refuses an extra one. The `201`
 response supplies the assigned `device_id` and one full-scope session token with its
@@ -94,7 +94,7 @@ There is one token. Login (`POST /api/v1/auth/login`) and device registration
 session token in the `Authorization` header and no body.
 The server issues no second credential to hold, so there is no pair to keep in step, no
 rotation, and no route named `refresh` — server-side ADR-0023 retired all three, and
-[ADR-068](architecture/decisions/068-session-token.md) records what that costs this client.
+[ADR-068](../architecture/decisions/068-session-token.md) records what that costs this client.
 *Corrected 2026-10-07 (ADR-083):* this section said a decision that could end a session
 read the durable row instead of the cached token, because that row is shared with every
 other delivery owner in the process (ADR-050). That read, `SessionTokenStore.readDurable`,
@@ -117,7 +117,7 @@ browser surface, and the client's web target was removed on 2026-09-08
   token coordinator.
 - A session token is renewed from half its lifetime, behind the request that finds it due,
   because `POST /api/v1/auth/renew` refuses a token past its `exp`. The lifetime is the
-  issuing answer's `expires_in`, stored beside the token (ADR-085; [Token lifecycle](architecture/SYNC.md#token-lifecycle)).
+  issuing answer's `expires_in`, stored beside the token (ADR-085; [Token lifecycle](../architecture/SYNC.md#token-lifecycle)).
 - A renewal carries its token in the `Authorization` header and sends no body. It writes
   nothing and moves no generation, so it is safe to repeat: a renewal whose answer was
   lost costs a retry rather than the session, and two that race simply produce two working
@@ -177,7 +177,7 @@ devices are withheld; master-key change or log fork blocks sensitive operations.
 Unknown/foreign/revoked IDs are treated identically in UI to avoid exposing server
 existence distinctions. (Currently `ClientAuthenticationService.confirmOutOfBand` records
 one-sided peer verification and `SafetyNumberPage` displays `CP-SAFETY-V1`; under
-[`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4–§5,
+[`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §4–§5,
 `CP-CONTACT-V1` and mutual verification (`MUTUAL`) are required for direct conversations.)
 
 A device that has not cross-signed itself is listed as `cross_sig: null` beside
@@ -186,9 +186,9 @@ pair, and only that pair, is an unsigned device, on the peer routes and on this 
 list alike: it is read with no version. A signature below version 1, no signature past version
 0, and a version that is negative, null, missing or not an integer are malformed answers. On the
 peer routes, the list holding an unsigned device is refused as `invalidDevice` rather than the
-answer as malformed ([ADR-081](architecture/decisions/081-unsigned-device-state.md)). This account's own list is read for enrollment,
+answer as malformed ([ADR-081](../architecture/decisions/081-unsigned-device-state.md)). This account's own list is read for enrollment,
 including the reconcile of an ambiguous registration, which looks for exactly such a device, and
-for Linked Devices and the own device log ([ADR-084](architecture/decisions/084-pending-device-log.md)).
+for Linked Devices and the own device log ([ADR-084](../architecture/decisions/084-pending-device-log.md)).
 
 ### This account's live set and the log
 
@@ -210,13 +210,13 @@ covers. The list is:
 
 A list whose head number differs from the chain the client has just verified is a conflict to
 read again, not a fork. A prekey rotation, which uploads a new signature and version before its
-append, still latches if another device checks inside that gap ([ADR-084](architecture/decisions/084-pending-device-log.md)).
+append, still latches if another device checks inside that gap ([ADR-084](../architecture/decisions/084-pending-device-log.md)).
 
 ### Verifying a fan-out in one call
 
 A send verifies its recipients — every peer it is for, and this account for its own other
 devices — with one `POST /api/v1/peers`, and as many more as its 64-peer ceiling makes it
-([ADR-080](architecture/decisions/080-batched-peers.md)). The answer is the bytes the per-user identity and device-list reads
+([ADR-080](../architecture/decisions/080-batched-peers.md)). The answer is the bytes the per-user identity and device-list reads
 serve, so each peer's answer goes through the checks above unchanged; what the route removes is
 round trips, never a check. The device log is still read page by page, and only for a peer whose
 head moved.
@@ -245,7 +245,7 @@ session repair, and voice.
 ### No peer cache
 
 Nothing remembers what the server said about a peer between two resolutions
-([ADR-082](architecture/decisions/082-fresh-peer-resolution.md)). Every resolution asks the server, so a send is verified against the
+([ADR-082](../architecture/decisions/082-fresh-peer-resolution.md)). Every resolution asks the server, so a send is verified against the
 state its recipients hold when it is made, and a safety number or a `stale_devices` refresh
 reads exactly what a fan-out reads. The authentication service is composed against the network
 repository itself, with nothing between them that could answer from memory.
@@ -265,7 +265,7 @@ What a repeat read saves is the body, never the request:
   replayed and never shared between callers.
 
 Until ADR-082, a thirty-second cache answered repeated per-user reads from memory
-([ADR-065](architecture/decisions/065-peer-read-cost.md)). It existed because a fan-out cost three reads for each recipient.
+([ADR-065](../architecture/decisions/065-peer-read-cost.md)). It existed because a fan-out cost three reads for each recipient.
 ADR-080 made a fan-out one call, and what the cache still saved, the second re-read of a peer on
 the claim path, did not pay for a send sealed to state nobody had checked again.
 
@@ -318,6 +318,6 @@ localized messages rather than displaying arbitrary server strings.
 
 ## API references
 
-- [Accounts API](../../backend/accounts/API.md)
-- [Devices API](../../backend/devices/API.md)
-- [Vault API](../../backend/vault/API.md)
+- [Accounts API](../../../backend/accounts/API.md)
+- [Devices API](../../../backend/devices/API.md)
+- [Vault API](../../../backend/vault/API.md)

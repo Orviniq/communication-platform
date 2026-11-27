@@ -4,7 +4,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/features/voice/domain/room_model.dart';
 
 /// Framing for the room payloads an ordinary pairwise envelope carries
-/// (`voice-signalling-v1.md`, The payload).
+/// (`docs/contracts/VOICE-V1.md`, The payload).
 ///
 /// ```text
 /// "CPVRV001" || kind:u8 || body

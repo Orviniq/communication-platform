@@ -197,7 +197,7 @@ final class PairwiseSendCommit {
 /// marker. The advanced states are written in one transaction before any frame
 /// leaves, because a ratchet key that encrypts two plaintexts is the failure
 /// this transport cannot survive; the ciphertext stays with the caller, and a
-/// retry seals again on the next message number (`voice-signalling-v1.md`,
+/// retry seals again on the next message number (`docs/contracts/VOICE-V1.md`,
 /// "Volatile seal and open").
 final class PairwiseVolatileSealCommit {
   PairwiseVolatileSealCommit({

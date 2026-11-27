@@ -2,41 +2,26 @@
 
 ## Status and scope
 
-This document defines two wire formats and nothing else:
+This contract defines the two v1 wire formats and how the client applies them:
 
 - **`CPVRV001`**, the room's signed control events, carried in ordinary **durable**
   envelopes exactly as a group's control events are; and
 - **`CPVSV001`**, the call's signalling payloads, carried in **volatile** `/ws` `signal`
   frames.
 
-This document specifies the implemented v1 formats. The
-[voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md) defines required
+The [voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md) defines required
 v2 behavior for a voice release, including migration, role checks and in-call actions.
-The architecture is in [voice and realtime](voice-and-realtime.md) and ADR-077.
-[Client contract §N](../../docs/client/CLIENT_CONTRACT.md#n-voice) and server
-[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+See [voice and realtime](../architecture/OVERVIEW.md#voice-and-realtime) for the
+architecture and [ADR-077](../architecture/decisions/077-voice-mesh.md) for the decision.
+[Client contract §N](../../../docs/client/CLIENT_CONTRACT.md#n-voice) and server
+[ADR-0021](../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 are binding.
 
-**The credential, the signalling transport, one peer connection, the room, the call and
-its screens are built.** Signed build 5 at `53ff386` passed the two-device UDP relay
-run on an A56 and emulator. See the [run record](validation/voice-mesh/2026-10-05/README.md)
-and [status matrix](STATUS.md#presence-voice-and-delivery) for its limits.
-
-`lib/features/voice/` fetches, holds and refreshes the relay credential and builds
-the ICE configuration from it (*The credential*, below, phase 6
-prompt 3). Phase 6 prompt 4 built the `CPVSV001` transport of Part 2 — the codec, the
-volatile seal and open on the pairwise session, the pacing, the candidate batching and the
-bounded inbound queue — carried on the delivery session's own socket. Prompt 5 built the
-connection between this device and one other (*The connection*, below). Prompt 6 built all
-of Part 1: the room and its signed control events, their fan-out and receipt, the four
-tables, and the sessions a call needs. Prompt 7 built the call (*The call*, below): who each
-frame goes to, when to try again, the ceiling and the removal. Prompt 8 built the microphone
-request and the call's foreground service, and prompt 9 the screens and the join that calls
-both (*The call*, below). Where the build departs from what this document decided, the
-departure is dated beside the decision.
+See the [frontend status](../STATUS.md#presence-voice-and-delivery) for implementation
+gaps and device evidence.
 
 The transport beneath both formats is unchanged and is not restated here:
-[`pairwise-transport-v1.md`](pairwise-transport-v1.md) is the hybrid session, the Double
+[`PAIRWISE-V1.md`](PAIRWISE-V1.md) is the hybrid session, the Double
 Ratchet, the envelope and the sealed sender header, and this profile adds no suite, no
 header flag and no key schedule of its own.
 
@@ -54,7 +39,7 @@ A room's roster has to survive being offline; a call's offer does not.
 | Carries | Who is in the room | Who is in the call, and how to reach them |
 
 The split is the same one server
-[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+[ADR-0021](../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
 point 7 makes: "a room is client state, carried by client-signed control events over
 ordinary envelopes, exactly as a group is. Ephemeral room text and join and leave
 announcements are `signal` frames the client fans out to each member device."
@@ -66,9 +51,9 @@ durable queue is a way to replay a call's signalling hours later.
 
 ---
 
-# Part 1 — `CPVRV001`, the room's control events
+## CPVRV001 room control
 
-## The room
+### The room
 
 A room is a named set of member accounts that exists only in its members' clients. The
 server holds no room object, no roster, no name and no live count: the whole of the voice
@@ -87,7 +72,7 @@ surface it serves is `POST /api/v1/me/relay` and the relaying of `signal` frames
   outside a member's device. There is nothing to rename on the server and nothing to
   delete there.
 
-## The event
+### The event
 
 `RoomControlEvent` mirrors `GroupControlEvent`
 (`lib/features/groups/domain/group_model.dart`) field for field. The shared native core
@@ -131,7 +116,7 @@ core refuses a create of fewer than two members or one that does not name its cr
 add of 50 or more, an all-zero account id, and the reserved value 5. A signature made under
 the group's domain never opens a room event, and a room event never opens as a group's.
 
-## The operations, and who may sign each
+### The operations, and who may sign each
 
 | Operation | Value | Body | Who may sign it |
 |---|---|---|---|
@@ -142,7 +127,7 @@ the group's domain never opens a room event, and a room event never opens as a g
 | — | `5` | Reserved, so that a later role operation cannot reuse a value | — |
 
 **Every active member has the same authority in v1 (D1).** There is no owner, no admin and no
-role tag, as described in [Voice Room Info](ui-specification.md#132-voice-room-info-screen). A
+role tag, as described in [Voice Room Info](../ui-specification.md#132-voice-room-info-screen). A
 room whose members can each invite anyone is a room whose members can each remove anyone.
 The cost is stated rather than designed away — any member can eject any other, and the
 remedy for a member who abuses that is a new room, because there is no authority above
@@ -152,10 +137,10 @@ A name is at most 100 Unicode scalar values, the same bound a group name has. Th
 description: a room has no timeline to describe.
 
 A room holds at most 50 members, and a **call** inside it holds at most 10 joined devices
-(Part 2, "The ceiling"). Those are different numbers on purpose: membership costs one
+([The ceiling](#the-ceiling)). Those are different numbers on purpose: membership costs one
 envelope fan-out on a change, and a call costs every participant an uplink for every peer.
 
-## Applying an event
+### Applying an event
 
 A receiving device refuses an event whose signing device is not in its account's
 authenticated live device list, whose signature does not verify under that device's key,
@@ -185,7 +170,7 @@ copy from a member who was itself behind — an answer that came late, or a new 
 transcript that crossed an event — retires nothing. A removed member's later events are
 recorded in `quarantine` and dropped, and their state requests go unanswered.
 
-## The payload
+### The payload
 
 Control state travels in ordinary pairwise envelopes as a room payload, framed exactly as
 a group payload is:
@@ -203,7 +188,7 @@ entry = signer_user_id[16] || signer_device_id[16]
 A revision of zero carries an all-zero hash, and a payload is at most 200,000 bytes.
 
 The four delivery rules are the group's, and hold for the same reasons
-([`message-protocol.md`](message-protocol.md), Groups):
+([`MESSAGES.md`](MESSAGES.md), Groups):
 
 - **Control.** A device sends the event it signed to every member who held the state the
   event builds on — the member a removal removes included, so that member learns of it —
@@ -215,15 +200,14 @@ The four delivery rules are the group's, and hold for the same reasons
   active member is answered, and only by a device that holds an unquarantined state as an
   active member itself.
 - **Queue gap.** After a `pruned_through` gap (§H) every room waits for its state before
-  it joins a call, invites or renames. The [Voice Room Info screen](ui-specification.md#132-voice-room-info-screen)
+  it joins a call, invites or renames. The [Voice Room Info screen](../ui-specification.md#132-voice-room-info-screen)
   shows *waiting for its state*. Blocking join prevents a device that missed a removal
   from offering audio to someone the room has ejected.
 
-## Starting the sessions a call needs
+### Starting the sessions a call needs
 
-Decided on 2026-09-30, option B of [ADR-077](architecture/decisions/077-voice-mesh.md)'s open conflict. A call's frames
-are volatile, and a volatile frame never starts a pairwise session (Part 2, *Volatile seal
-and open*), so the room starts every session its call will need, on the durable path, before
+Decided on 2026-09-30, option B of [ADR-077](../architecture/decisions/077-voice-mesh.md)'s open conflict. A call's frames
+are volatile, and a volatile frame never starts a pairwise session ([Volatile seal and open](#volatile-seal-and-open)), so the room starts every session its call will need, on the durable path, before
 the call needs it. No payload is new: this is the kind 2 request above, sent on a rule of its
 own.
 
@@ -262,7 +246,7 @@ and reported. The call's check is `startSessionsForCall`, which refuses a room t
 may not act in. The call routes the room's outbound work before its `join`, and a peer that
 has not fetched the request yet drops that frame and takes the next attempt.
 
-## What it replaces in the database
+### What it replaces in the database
 
 The Drift table `voice_rooms` — `local_room_id`, `capability_ciphertext`,
 `metadata_ciphertext`, `live_state` — described a server room: a capability to hold, a
@@ -292,9 +276,9 @@ waiting on its state reads as `stateRecoveryRequired`.
 
 ---
 
-# Part 2 — `CPVSV001`, the call's signalling
+## CPVSV001 call signalling
 
-## Framing
+### Framing
 
 ```text
 "CPVSV001" || version:u8 || kind:u8 || deterministic-CBOR body
@@ -311,7 +295,7 @@ state within about twenty seconds, and the tile can say the peer needs a newer b
 the version byte is what was wrong. An unknown `kind` inside a known version is ignored
 and nothing else, so that a later version can add a kind without breaking this one.
 
-## The common body header
+### The common body header
 
 Every body is a CBOR map with small unsigned integer keys, under deterministic CBOR (RFC
 8949 §4.2.1: definite lengths, smallest integer encoding, sorted keys, no tags, no
@@ -330,7 +314,7 @@ moving a body key; kind-specific keys begin at 8.
 
 **`sender_user_id` and `sender_device_id` must equal the device that authenticated the
 pairwise session**, exactly as an application event's must
-([`message-protocol.md`](message-protocol.md), Common logical-event header). That check is
+([`MESSAGES.md`](MESSAGES.md), Common logical-event header). That check is
 what makes the inbound `signal` frame's missing sender field cost nothing: the transport
 never named a sender either, and the ciphertext has named one since the first envelope.
 
@@ -349,9 +333,9 @@ its per-peer state on `(device_id, join_id)`:
 A frame whose `room_id` names a room this device does not hold, or holds quarantined, or
 is not an active member of, is dropped before its body is read. So is a frame from a
 device whose account is not an active member of that room — which is the whole of the
-removal refusal of §N rule 8, and needs no separate list (Part 2, "Removal").
+removal refusal of §N rule 8, and needs no separate list ([Removal](#removal)).
 
-## The kinds
+### The kinds
 
 | Kind | Name | Sent to | Retried |
 |---|---|---|---|
@@ -398,15 +382,15 @@ device is in this device's call when a connection to it is open, and for no othe
 encoded bytes. Ephemeral room text, in memory only, never appended to a timeline, never
 acknowledged and never retried.
 
-## Sizes, and what fits a bucket
+### Sizes, and what fits a bucket
 
 A `signal` blob is standard base64 of **exactly** 1024, 4096 or 16384 bytes — the
 `signal_buckets` of `GET /api/v1/config`, already parsed into
 `ServerConfig.signalBuckets`. An off-bucket blob is dropped in silence: there is no
-`400 bad_bucket` here and no error to read (`realtime/API.md`, server ADR-0022 point 4).
+`400 bad_bucket` here and no error to read ([Realtime API](../../../backend/realtime/API.md), server ADR-0022 point 4).
 
 The blob is an `EnvelopeV1` of exactly that length, so the plaintext budget is arithmetic
-on [`pairwise-transport-v1.md`](pairwise-transport-v1.md):
+on [`PAIRWISE-V1.md`](PAIRWISE-V1.md):
 
 ```text
 bucket = 1 (version) + 1 (suite) + 2 (ratchet_header_length)
@@ -461,7 +445,7 @@ a regular header, so an offer or an answer lands in 4096 by rule 3 alone; one th
 sealed frame with the published `signal_buckets` before anything is committed, so a frame a
 deployment's buckets cannot carry is refused (`offBucket`) and its ratchet step discarded.
 Rule 2's fallback to 16384 does not arise while a volatile frame never starts a session
-(*Volatile seal and open*, below).
+([Volatile seal and open](#volatile-seal-and-open)).
 
 A relay ICE candidate line is roughly 120 to 180 bytes — a foundation, a component, a
 transport, a priority, an address and port, `typ relay`, a `raddr`/`rport` pair and the
@@ -470,12 +454,12 @@ transport, a priority, an address and port, `typ relay`, a `raddr`/`rport` pair 
 rtcp-mux gathers one candidate per TURN URL for one transport, so a batch of eight is a
 ceiling with a wide margin rather than an expected size.
 
-## Volatile seal and open
+### Volatile seal and open
 
 A signalling payload is **encrypted to the pairwise session of §F, on the same Double
 Ratchet as a durable message, in the same chain** (D5). There is no second session between
 a device pair, no signalling-only key schedule and no change to
-[`pairwise-transport-v1.md`](pairwise-transport-v1.md), because §N rule 6 binds the
+[`PAIRWISE-V1.md`](PAIRWISE-V1.md), because §N rule 6 binds the
 signalling to the session of §F and that profile is frozen and under independent review.
 
 **The sealed state is committed before the frame leaves.** A ratchet key that encrypts two
@@ -552,18 +536,18 @@ refuses a device with no ready primary session as `noSession`, and the store ref
 volatile transition that would create a session. A session begins on the durable path,
 whose queue does not lose a first message short of its TTL. Receiving an initial header
 over a `signal` frame is still accepted, under every check a durable one gets. This is a
-departure from the paragraph above, not a decision: [ADR-077](architecture/decisions/077-voice-mesh.md) records it and
+departure from the paragraph above, not a decision: [ADR-077](../architecture/decisions/077-voice-mesh.md) records it and
 the options, for the owner.
 
 **Decided B on 2026-09-30.** The suspension is the rule: a volatile frame never starts a
 session, so *When no session exists with a device*, above, no longer applies, and nothing
 is ever sealed under an initial header in a `signal` frame. The room's durable payloads start the sessions instead
-(Part 1, *Starting the sessions a call needs*), so a call's first `join` to a peer rides a
+([Starting the sessions a call needs](#starting-the-sessions-a-call-needs)), so a call's first `join` to a peer rides a
 session the durable queue already carried the first message of.
 
 **When a peer's safety number changes.** An expected prekey rotation does not reset
 account-master verification and costs a call nothing
-([`pairwise-transport-v1.md`](pairwise-transport-v1.md), Simultaneous initiation and
+([`PAIRWISE-V1.md`](PAIRWISE-V1.md), Simultaneous initiation and
 overlap). Any other cross-signature change is a blocking safety-number change, and in a
 call it is blocking per peer: the connection to that device is closed, nothing further is
 sealed to it, and the tile says so with a route to verify. Everybody else keeps talking.
@@ -576,7 +560,7 @@ identity is now in doubt and a call is the wrong place to carry that doubt silen
 why the `signal` frame's missing sender field is not a problem to solve. A regular header
 names the `session_id`; an initial header names the prekey ids that locate the private
 keys and carries the sealed sender block, whose authenticated `sender_user_id` and
-`sender_device_id` are the sender's identity (`pairwise-transport-v1.md`, Sender-hidden
+`sender_device_id` are the sender's identity (`PAIRWISE-V1.md`, Sender-hidden
 initial header). The receive path is the existing one — prepare with no mutation, then one
 transaction — and it is the same path whether the ciphertext arrived over `signal` or over
 the durable queue. The channel the blob arrived on is remembered and checked against the
@@ -593,9 +577,9 @@ dropped. A committed message whose header names a sender other than the device t
 authenticated is dropped, and a major version this build does not speak is reported with
 its authenticated sender, so the call can say that peer needs a newer build.
 
-## The socket limits
+### The socket limits
 
-Two ceilings bound a call, and neither is close (`realtime/API.md`, Frame limits):
+Two ceilings bound a call, and neither is close ([Realtime API frame limits](../../../backend/realtime/API.md#frame-limits)):
 **100 frames in a rolling second** closes the socket with `4008`, and **256 undelivered
 server frames** for one socket closes it the same way.
 
@@ -642,7 +626,7 @@ join to each device, which the call releases when it leaves. Signals ride the ru
 delivery session's socket, attached when the session starts and detached when it stops, so
 there is one connection and one rolling second to count.
 
-## Retries, and when a device is unreachable
+### Retries, and when a device is unreachable
 
 §N rule 7: a `signal` frame is dropped if the target is not connected at the instant it is
 published, and nothing recovers it. Re-send after a bounded timeout, a bounded number of
@@ -663,7 +647,7 @@ connection says anyway.
 An attempt happens only while the peer is still an active member's live device and this
 device is still in the call. **Nothing pauses when one peer fails**: the tile says *not
 reachable* and the audio with everybody else carries on. See the
-[call screen states](ui-specification.md#10-live-voice-room-screen). A peer reported
+[call screen states](../ui-specification.md#10-live-voice-room-screen). A peer reported
 unreachable is attempted again only when a fresh `join` arrives from it, never on a timer,
 which is also what keeps the 32-frame volatile budget above from being spent twice.
 
@@ -672,7 +656,7 @@ unknown protocol version and a peer whose app was killed. The state says what is
 observable — this device did not answer — and offers *Try again*, which re-arms the four
 attempts.
 
-## Removal
+### Removal
 
 §N rule 8: removal is immediate, and the server takes no part — it will keep relaying the
 removed member's frames, so the refusal has to be the client's.
@@ -727,10 +711,10 @@ device's call when its own account is removed or leaves, or when the room starts
 its state or forks: its connections close, a `leave` with reason 2 goes to the devices that
 were in the call, and the room text goes.
 
-## The credential
+### The credential
 
 §N rule 9, and `POST /api/v1/me/relay` in
-[`backend/realtime/API.md`](../../backend/realtime/API.md).
+[`backend/realtime/API.md`](../../../backend/realtime/API.md).
 
 - **Before the button.** `voice_configured` from `GET /api/v1/config` — already parsed into
   `ServerConfig.voiceConfigured` — decides whether the deployment does voice at all.
@@ -764,10 +748,10 @@ were in the call, and the room text goes.
 - **`turn:` URLs only.** The whole answer is refused, and the mint reported as failed,
   when `urls` is empty, holds more than 16 entries, or holds anything but `turn:`, a host,
   an optional port and an optional `?transport=udp` or `?transport=tcp`. `turns:` is
-  refused with the rest. The relay has no TLS listener ([Security, Voice](../../docs/security/SECURITY.md#voice)),
+  refused with the rest. The relay has no TLS listener ([Security, Voice](../../../docs/security/SECURITY.md#voice)),
   and libwebrtc would check a TLS relay against its compiled-in roots and the platform
   store, user-installed authorities included, never against the provisioned CA
-  ([ADR-078](architecture/decisions/078-media-package.md)). A TLS relay would be a contract change and a trust decision of
+  ([ADR-078](../architecture/decisions/078-media-package.md)). A TLS relay would be a contract change and a trust decision of
   its own, not something to accept on sight.
 - **A dead relay answers `200`.** The route reads a setting and never reaches coturn, so a
   credential minted against a relay that is down looks perfect and the call simply fails to
@@ -783,10 +767,10 @@ were in the call, and the room text goes.
 Built in `lib/features/voice/`: `RelayCredential` and `RelayIceConfiguration` in the
 domain, `RelayCredentialService` for the rules above, and `DioRelayCredentialRepository`
 for the route, composed in `lib/app/dependencies/voice_providers.dart`. The ICE restart is
-`VoicePeerConnection.restartIce` (*The connection*, below); when to call it — at
+`VoicePeerConnection.restartIce` ([The connection](#the-connection)); when to call it — at
 `refreshDueAt`, with the new credential's configuration — is the call's.
 
-## The connection
+### The connection
 
 §N rules 1, 2, 3, 6 and 9, as phase 6 prompt 5 built them on 2026-09-30:
 `VoicePeerConnection` in `lib/features/voice/application/`, over two ports —
@@ -864,15 +848,15 @@ the copy. The four attempts at 0, 2, 4 and 8 seconds are the call's schedule.
 its offer was answered; that its ICE restart is, or is no longer, in progress; and each
 frame the transport did not send, with the reason. A device with no pairwise session is
 refused `noSession` by the transport, and the connection reports it rather than starting one.
-Since [ADR-077](architecture/decisions/077-voice-mesh.md)'s open conflict was decided B on 2026-09-30, the room starts
-that session on the durable path (Part 1, *Starting the sessions a call needs*), so
+Since [ADR-077](../architecture/decisions/077-voice-mesh.md)'s open conflict was decided B on 2026-09-30, the room starts
+that session on the durable path ([Starting the sessions a call needs](#starting-the-sessions-a-call-needs)), so
 `noSession` reaching the call means the room has not reached that device yet. A platform refusal of a step of this device's own negotiation is `failed` for good,
 and the call closes the connection. `close()` closes the platform connection at once and
 gives back its hold, and the capture stays with the call's other connections: libwebrtc's
 `RtpSender.dispose` releases only the sender's own reference to the track.
 
 **The capture must follow the join's permission request.** `getUserMedia` asks for
-`RECORD_AUDIO` by itself when it is missing ([ADR-078](architecture/decisions/078-media-package.md)), and nothing here asks
+`RECORD_AUDIO` by itself when it is missing ([ADR-078](../architecture/decisions/078-media-package.md)), and nothing here asks
 first, so the call takes its first hold only after the join has asked (§N rule 11, prompts 8
 and 9).
 
@@ -895,7 +879,7 @@ in `api/jsep.cc`, which builds a rollback without reading its text, beside
 `JavaToNativeSessionDescription` in `sdk/android/src/jni/pc/session_description.cc`, which
 reads the text whatever the type.
 
-## The call
+### The call
 
 §N rules 4, 5, 7, 8 and 10, as phase 6 prompt 7 built them on 2026-10-01:
 `VoiceCallEngine` in `lib/features/voice/application/`, one for the process, over the
@@ -912,12 +896,12 @@ reason.
 2. The relay credential is minted (§N rule 9). No voice on the server, `429` with its retry
    time, and a mint that failed each refuse the join and say which.
 3. The room starts every pairwise session the call will need and routes those requests
-   into the outbox (*Starting the sessions a call needs*), and a 16-byte join id is drawn
+   into the outbox ([Starting the sessions a call needs](#starting-the-sessions-a-call-needs)), and a 16-byte join id is drawn
    from the native core's CSPRNG.
 4. A `participants_query` goes to every live device of every active member, this account's
    other devices included. After the first answer window — the schedule's first wait, 2
    seconds within 25 % — the `join` goes to the same devices, unless the answers name ten
-   devices already in the call: then no `join` goes out (*The ceiling*).
+   devices already in the call: then no `join` goes out ([The ceiling](#the-ceiling)).
 
 **Presence.** A participant answers every copy of a query it receives, since a copy means
 its answer was lost, naming itself and the devices it is connected or negotiating with. A
@@ -934,7 +918,7 @@ seen, from a device it knows, tears the old connection down first. A `leave` of 
 join, a connection that closes, and one that fails after it connected each drop the device;
 one that fails before it ever connected stays, *not reachable*.
 
-**Retries** (§N rule 7, on the schedule of *Retries, and when a device is unreachable*). The
+**Retries** (§N rule 7, on the schedule of [Retries, and when a device is unreachable](#retries-and-when-a-device-is-unreachable)). The
 `join` and the query go again to each device that has not replied — an offer replies to a
 `join`, and an answer or an offer to a query — and each negotiation is sent again by the
 connection's `resend()` until it has connected. A copy of an offer this device already
@@ -973,7 +957,7 @@ says so. A microphone or a platform connection that cannot be opened ends the ca
 
 **As built, 2026-10-02 (prompt 9): the join from the screens, mute and the session's
 end.** `VoiceCallController` in `lib/features/voice/application/` is the one caller of the
-two ports of phase 6 prompt 8 ([A call's microphone](architecture/ANDROID.md#a-calls-microphone)). A join refuses a second call and a server with no voice before it asks for
+two ports of phase 6 prompt 8 ([A call's microphone](../architecture/ANDROID.md#a-calls-microphone)). A join refuses a second call and a server with no voice before it asks for
 anything, then asks for the microphone, starts the call's foreground service, and only then
 joins. A refused microphone or a service that does not start ends the attempt with nothing
 sent, a refused join stops the service again, and a leave leaves the call and then stops
@@ -984,11 +968,9 @@ silence and nothing is renegotiated; a join starts unmuted, and no frame carries
 a peer's mute is not shown. **A session that ends** — a logout, an erasure or a revocation
 — leaves the call, which closes every connection and stops the capture and the service.
 
-Not built: the relay-unreachable state of *The credential* — no connection connected within
-15 seconds and every candidate pair failed — which the call would report in place of nine
-peers one at a time.
+See [voice implementation gaps](../STATUS.md#voice-implementation-gaps) for the relay failure state.
 
-## The ceiling
+### The ceiling
 
 §N rule 10 refuses an eleventh participant and states the reason to the user. The ceiling
 is enforced here and by nothing on the server.
@@ -998,7 +980,7 @@ participant carries one uplink for every peer, and the relay carries every strea
 and a connection is to a device, not to a person. A person who joins from a phone and a
 tablet occupies two of the ten and appears as two tiles. The current *Call full* string
 calls them people. This wording differs from the device ceiling documented in the
-[call screen states](ui-specification.md#10-live-voice-room-screen).
+[call screen states](../ui-specification.md#10-live-voice-room-screen).
 
 A device decides for itself whether the call is full, from its own participant set, before
 it sends its `join`: at ten it does not send one and shows *Call full*. Two devices

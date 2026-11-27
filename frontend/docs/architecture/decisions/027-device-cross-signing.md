@@ -19,7 +19,7 @@ Prevents a hostile or compromised server from silently injecting an unsigned dev
 
 ## Constraints and Open Gates
 
-- Defined in [Cryptographic protocol](../../cryptographic-protocol.md#account-cross-signing-identity) and [Authentication and devices](../../authentication-and-devices.md).
+- Defined in [Cryptographic protocol](../../contracts/CRYPTO.md#account-cross-signing-identity) and [Authentication and devices](../../contracts/AUTH-AND-DEVICES.md).
 - Extended by [ADR-035](035-prekey-rotation.md) (monotonic `bundle_version + 1` prekey rotation), ADR-080 (`POST /api/v1/peers` fan-out resolution), ADR-081 (an unsigned peer device as listed by the server), ADR-082 (server resolution on every send), and ADR-084 (a device not yet covered by the log is `pending`, not a fork).
 - Open gates:
   - Independent cryptographic review under [ADR-017](017-independent-crypto-review.md).

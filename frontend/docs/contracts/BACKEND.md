@@ -5,26 +5,26 @@ Reference these API specifications when implementing or changing frontend API in
 The following backend-wide documents are authoritative before the per-app endpoint
 references:
 
-- [Backend overview](../../backend/README.md)
-- [Binding client security contract](../../docs/client/CLIENT_CONTRACT.md)
-- [Binding client contacts, trust, and file metadata contract](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
-- [Binding client presence and read-receipts contract](../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
-- [Binding client voice roles contract](../../docs/client/CLIENT_VOICE_ROLES.md)
-- [Backend threat model and residual risk](../../docs/security/SECURITY.md)
+- [Backend overview](../../../backend/README.md)
+- [Binding client security contract](../../../docs/client/CLIENT_CONTRACT.md)
+- [Binding client contacts, trust, and file metadata contract](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md)
+- [Binding client presence and read-receipts contract](../../../docs/client/CLIENT_PRESENCE_AND_RECEIPTS.md)
+- [Binding client voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md)
+- [Backend threat model and residual risk](../../../docs/security/SECURITY.md)
 
 These files define transport only. Encrypted content formats and client synchronization
-rules are defined by [cryptographic-protocol.md](cryptographic-protocol.md),
-[message-protocol.md](message-protocol.md), and [SYNC.md](architecture/SYNC.md).
+rules are defined by [CRYPTO.md](CRYPTO.md),
+[MESSAGES.md](MESSAGES.md), and [SYNC.md](../architecture/SYNC.md).
 Handoff copies MUST NOT be duplicated here; these repository paths remain the single
 source of truth.
 
-- [Accounts API](../../backend/accounts/API.md)
-- [Attachments API](../../backend/attachments/API.md)
-- [Core API](../../backend/core/API.md)
-- [Devices API](../../backend/devices/API.md)
-- [Messaging API](../../backend/messaging/API.md)
-- [Realtime API](../../backend/realtime/API.md)
-- [Vault API](../../backend/vault/API.md)
+- [Accounts API](../../../backend/accounts/API.md)
+- [Attachments API](../../../backend/attachments/API.md)
+- [Core API](../../../backend/core/API.md)
+- [Devices API](../../../backend/devices/API.md)
+- [Messaging API](../../../backend/messaging/API.md)
+- [Realtime API](../../../backend/realtime/API.md)
+- [Vault API](../../../backend/vault/API.md)
 
 There is no voice-rooms API. The whole of the voice surface is one route,
 `POST /api/v1/me/relay`, published at the end of the realtime API, and the relaying of
@@ -33,7 +33,7 @@ There is no voice-rooms API. The whole of the voice surface is one route,
 ## The error vocabulary
 
 Every error of every route is one envelope, `{"code": ..., "detail": ...}`. The code
-table is authoritative in [core API](../../backend/core/API.md); what follows is what
+table is authoritative in [core API](../../../backend/core/API.md); what follows is what
 the client does with it, and is binding on this side.
 
 - **Branch on `code`, never on `detail`.** A status is not a branch either: two pairs
@@ -78,7 +78,7 @@ valid signature and version through
 after registration gives it full scope. Until the follow-up succeeds, peers see
 `cross_sig: null` and withhold messages.
 
-The Devices API and its [golden vectors](../../backend/devices/vectors/README.md) now
+The Devices API and its [golden vectors](../../../backend/devices/vectors/README.md) now
 freeze the four canonical signature encodings and the 64-byte `ik_pub` layout (Ed25519
 followed by X25519). The Android version-1 implementation MUST reproduce those vectors
 byte-for-byte; a future Web implementation must reproduce the same bytes before Web
@@ -86,9 +86,9 @@ release.
 
 The backend serves no MLS. The three KeyPackage routes answer `404`, and a group is a set
 of pairwise sessions with no group endpoint and no group key material
-([`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §F,
-[server ADR-0001](../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)).
+([`CLIENT_CONTRACT.md`](../../../docs/client/CLIENT_CONTRACT.md) §F,
+[server ADR-0001](../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md)).
 Note also that `GET /api/v1/users` has been replaced by `POST /api/v1/users/lookup`
 (ADR-0028) and `last_active_date` is no longer returned by `GET /api/v1/me/devices`
 (ADR-0024); remaining client updates against the current backend OpenAPI surface are
-tracked in [`CLIENT_WORK.md`](../../CLIENT_WORK.md).
+tracked in [`CLIENT_WORK.md`](../../../CLIENT_WORK.md).

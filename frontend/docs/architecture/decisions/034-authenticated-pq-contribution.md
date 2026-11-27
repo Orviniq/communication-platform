@@ -20,7 +20,7 @@ Unlike Signal's upstream PQXDH specification (which signs the selected PQ one-ti
 
 ## Constraints and Open Gates
 
-- Frozen in [Pairwise transport v1](../../pairwise-transport-v1.md#backend-pq-one-time-key-deviation), implemented in `native/crypto_core/src/pairwise.rs`, and flagged explicitly for independent assessment in [Pairwise review readiness](../../pairwise-review-readiness.md#source-baseline).
+- Frozen in [Pairwise transport v1](../../contracts/PAIRWISE-V1.md#backend-pq-one-time-key-deviation), implemented in `native/crypto_core/src/pairwise.rs`, and flagged explicitly for independent assessment in [Pairwise review readiness](../../pairwise-review-readiness.md#source-baseline).
 - Open gate: Independent cryptographic review ([ADR-017](017-independent-crypto-review.md)) must verify that appending optional `SS_O` after `SS_S` introduces no transcript ambiguity and preserves the hybrid guarantee.
 
 ## Costs

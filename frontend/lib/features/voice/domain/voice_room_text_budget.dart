@@ -35,7 +35,7 @@ final class VoiceRoomTextUnsendable extends VoiceRoomTextCheck {
 }
 
 /// How much room text one `signal` frame carries under the buckets a
-/// deployment publishes (`voice-signalling-v1.md`, Sizes, and what fits a
+/// deployment publishes (`docs/contracts/VOICE-V1.md`, Sizes, and what fits a
 /// bucket).
 ///
 /// The record caps a `room_text` at 2,000 Unicode scalar values and 8,000
@@ -54,7 +54,7 @@ final class VoiceRoomTextUnsendable extends VoiceRoomTextCheck {
 /// to write.
 abstract final class VoiceRoomTextBudget {
   /// The version, suite and header-length bytes, the AEAD tag and the real
-  /// length (`pairwise-transport-v1.md`).
+  /// length (`docs/contracts/PAIRWISE-V1.md`).
   static const envelopeOverheadBytes = 24;
 
   /// A regular Double Ratchet header.

@@ -1113,7 +1113,7 @@ void main() {
   });
 
   group('a reaction value is one grapheme within the wire bound', () {
-    // `message-protocol.md`: the value of a reaction event is "one normalized
+    // `docs/contracts/MESSAGES.md`: the value of a reaction event is "one normalized
     // emoji grapheme or null". The encoder writes whatever string it is given
     // and only the reader is bounded, so this is the last place the two can be
     // made to agree.

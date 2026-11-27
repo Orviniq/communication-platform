@@ -15,7 +15,7 @@ The online status this document binds is the one the client already built: clien
 (accepted and built on 2026-10-19, PR #90), in
 [`frontend/docs/architecture/decisions/098-presence-and-typing.md`](../../frontend/docs/architecture/decisions/098-presence-and-typing.md). §3 states that protocol as
 binding text, and §2 lists every change this document makes to it. The client folds those
-changes into [`frontend/docs/message-protocol.md`](../../frontend/docs/message-protocol.md)
+changes into [`MESSAGES.md`](../../frontend/docs/contracts/MESSAGES.md)
 and records them in a new client ADR that amends ADR-098.
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as described in
@@ -77,7 +77,7 @@ dropped frame does (ADR-098 D5's own reasoning):
 
 ### 2.2 Statements in the client's documents this changes
 
-`frontend/docs/message-protocol.md` § "Receipts and typing" describes ADR-098 as built. These
+`frontend/docs/contracts/MESSAGES.md` § "Receipts and typing" describes ADR-098 as built. These
 statements in it change, and [`CLIENT_WORK.md`](../../CLIENT_WORK.md) routes each one:
 
 - **"No claim the client cannot observe."** The paragraph stays true and keeps its title: no

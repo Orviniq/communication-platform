@@ -13,7 +13,7 @@ import 'package:communication_platform/features/voice/domain/room_sync_payload.d
 ///
 /// The create's own fan-out starts this device's session with every member
 /// device that has none; the members start theirs with each other when they
-/// accept it (`voice-signalling-v1.md`, Starting the sessions a call needs).
+/// accept it (`docs/contracts/VOICE-V1.md`, Starting the sessions a call needs).
 final class CreateRoom {
   const CreateRoom({
     required this.repository,

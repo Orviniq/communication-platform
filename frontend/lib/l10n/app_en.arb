@@ -1151,7 +1151,7 @@
   },
   "voiceChatNote": "Temporary and best-effort. Cleared when the call ends; others may keep what they read.",
   "@voiceChatNote": {
-    "description": "Ephemeral text is best-effort; copy never says it disappears forever (docs/voice-and-realtime.md, Ephemeral room text)."
+    "description": "Ephemeral text is best-effort; copy never says it disappears forever (docs/architecture/OVERVIEW.md, Ephemeral room text)."
   },
   "voiceChatEmpty": "Nothing said yet. Messages here are gone when the call ends.",
   "voiceChatStale": "This chat is not updating. Your messages are not being delivered, and new ones will not appear.",

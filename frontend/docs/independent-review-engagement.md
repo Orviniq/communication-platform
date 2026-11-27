@@ -13,7 +13,7 @@ open. The pairwise scope is unaffected.
 where this document says an MLS gate or prerequisite remains open or blocked, that is the
 state it was in when the track was cancelled. Files marked deleted in work packages WP1,
 WP2, WP5, WP6 and WP7 were deleted with the MLS track. The signed group control events
-that replaced the MLS group construction ([message-protocol.md](message-protocol.md))
+that replaced the MLS group construction ([MESSAGES.md](contracts/MESSAGES.md))
 have no work package of their own, and ADR-075 leaves their review open.
 
 This document prepares the *engagement* that ADR-017 requires, and that production gate 7
@@ -52,7 +52,7 @@ Everything in sections 4-6 is a *proposal for evaluation*, not an action taken.
 | ADR-026 | [decision register](architecture/decisions/README.md) | Review is one of the mandatory conditions alongside registry assignment, suite identifier, provider support, and Android interoperability. ADR-026 also forbids assigning a production identifier locally, which is why no review outcome can substitute for gate 2 |
 | Production gate 7 | MLS profile (deleted) | "An independent cryptographic review closes all blocking findings" |
 | Phase-A prerequisite 5 | MLS profile (deleted) | A qualified independent reviewer must be *available and retained*, with a recorded scope of work and schedule |
-| Pairwise production gate | [pairwise transport v1](pairwise-transport-v1.md), [pairwise packet](pairwise-review-readiness.md) | An independent assessor records a disposition for every blocking finding, with reviewed source hashes and residual-risk acceptance |
+| Pairwise production gate | [pairwise transport v1](contracts/PAIRWISE-V1.md), [pairwise packet](pairwise-review-readiness.md) | An independent assessor records a disposition for every blocking finding, with reviewed source hashes and residual-risk acceptance |
 | Threat-model sign-off | [threat model](threat-model.md) | An independent reviewer signs off the protocol, implementation boundary, and Android key handling |
 
 Note what gate 7 does **not** do. Closing it opens nothing on its own: gates 1, 2, and 3
@@ -153,7 +153,7 @@ engagement, they become a *second* recorded revision in D2, or they wait.
 | **WP0** | Scope agreement and threat-model reconciliation. Confirm the claims in scope, confirm the out-of-scope list is understood and accepted, and reconcile against [the threat model](threat-model.md) | Both packets' "Security claims in scope" and "Explicitly out of scope"; [threat model](threat-model.md) | D1 |
 | **WP1** | **The ten project inventions.** Credential binding to the Authentication Service; the control transcript and later-member admission (ADR-037); fork convergence (ADR-041); leave and eviction (ADR-039); queue-gap re-admission; the transactional commit boundary; state sealing and versioning; per-recipient envelope re-wrapping (ADR-011); the FFI boundary; redaction and the error surface | MLS packet, "The project's own protocol inventions"; `group_model.dart`, `native_beta_group_mls.dart` (deleted), `drift_group_repository.dart`, `mls_beta.rs` (deleted) | D3 |
 | **WP2** | **Suite assembly and the recorded KEM divergence.** Whether rows D1-D10 are complete and correctly characterised; whether the divergence has consequences beyond the loss of `TBD2` interoperability that ADR-040 asserts; whether an unassigned HPKE `kem_id` reaching every key schedule is confined as claimed | MLS profile (deleted) rows D1-D10; `docs/upstream/mls-rs-hybrid-kem-defect-report.md`; `mls_beta.rs` (deleted); `beta_kem_vectors.rs` (deleted) | D3 |
-| **WP3** | **Pairwise transport v1.** Hybrid PQXDH composition and transcript, the ratchet state machine, skipped-key bounds, repair, rotation overlap, revocation | [pairwise transport v1](pairwise-transport-v1.md); [pairwise packet](pairwise-review-readiness.md) | D3 |
+| **WP3** | **Pairwise transport v1.** Hybrid PQXDH composition and transcript, the ratchet state machine, skipped-key bounds, repair, rotation overlap, revocation | [pairwise transport v1](contracts/PAIRWISE-V1.md); [pairwise packet](pairwise-review-readiness.md) | D3 |
 | **WP4** | **Persistence, concurrency, and the commit boundary.** Compare-and-swap under control revision and hash; crash between commit and fan-out; exact-ciphertext retry; the 20,000-key account bound under concurrent transactions | `drift_group_repository.dart`, `drift_pairwise_transport_store.dart`, `drift_sync_store.dart`, `local_database.dart` (schema 11) | D3 |
 | **WP5** | **The boundary.** The single C ABI operation, the 46 `unsafe` blocks in `lib.rs`, the 1 MiB-bounded `dart:ffi` allocation and its zero-and-free path, isolate ownership, typed-response decoding | `lib.rs`, `beta_mls_ffi.dart` (deleted), `beta_mls_native_session.dart` (deleted), `isolate_crypto_core_worker.dart` | D3 |
 | **WP6** | **Isolation and packaging.** That the production release artifact contains no beta code path — not a disabled one, not a dead one — and that the source-only production gate cannot be flipped by accident | `tool/build_rust_android.sh/.ps1`, `android/app/build.gradle.kts`, `group_production_gate.dart` (deleted), `unsupported_group_mls.dart` (deleted); the 15-vs-16 symbol allowlists (the beta list was deleted) | D3 |

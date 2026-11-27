@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// The bounds `voice-signalling-v1.md` Part 2 sets on a `CPVSV001` body.
+/// The bounds `docs/contracts/VOICE-V1.md` CPVSV001 call signalling sets on a `CPVSV001` body.
 abstract final class VoiceSignalLimits {
   static const roomIdBytes = 32;
   static const joinIdBytes = 16;

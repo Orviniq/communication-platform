@@ -8,7 +8,7 @@ import 'package:communication_platform/features/voice/domain/relay_credential_mo
 /// Holds the relay credential of the call in progress, and decides when to
 /// fetch one.
 ///
-/// The lifetime rule is §N rule 9 and `voice-signalling-v1.md`, "The
+/// The lifetime rule is §N rule 9 and `docs/contracts/VOICE-V1.md`, "The
 /// credential":
 ///
 /// - **Fetch at a join, never at launch.** [fetchForJoin] mints one credential

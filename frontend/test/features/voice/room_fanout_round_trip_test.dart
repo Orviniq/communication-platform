@@ -26,7 +26,7 @@ import 'support/room_fakes.dart';
 
 /// Room events between devices, each with its own database, over the real
 /// room stores, the real pairwise fan-out and outbox, and the real inbox
-/// transaction (`backend/CLIENT_CONTRACT.md` §N; `voice-signalling-v1.md`,
+/// transaction (`backend/CLIENT_CONTRACT.md` §N; `docs/contracts/VOICE-V1.md`,
 /// Part 1).
 ///
 /// Only the ratchet step, the prekey claim and the native signing call are

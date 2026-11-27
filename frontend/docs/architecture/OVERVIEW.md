@@ -168,6 +168,191 @@ See [platform status](../STATUS.md#platform-identity-and-content).
 
 No platform-specific conditional is allowed inside domain or protocol logic.
 
+## Voice and realtime
+
+The relayed mesh in [ADR-077](decisions/077-voice-mesh.md) supersedes the MLS, SFrame
+and LiveKit prerequisites in [ADR-058](decisions/058-voice-prerequisites.md).
+[Voice status](../STATUS.md#presence-voice-and-delivery) records the release gaps. The
+[v1 contract](../contracts/VOICE-V1.md) specifies the implemented formats. The binding
+[voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md) defines v2 for a voice release.
+
+### The architecture
+
+Voice is a full mesh of WebRTC audio between devices. Every path crosses the self-hosted
+coturn relay. Each connection is keyed by DTLS-SRTP between its two endpoints, so the
+backend, the relay and every other participant hold none of its keys.
+[Client contract §N](../../../docs/client/CLIENT_CONTRACT.md#n-voice) is the binding
+statement of it and its eleven rules are cited by number throughout.
+
+- **Audio only.** One audio track for each connection: no video track and no data channel
+  in this version (§N rule 1).
+- **No application media key, and none is designed** (ADR-0021 point 3). A connection's
+  keys belong to its endpoints. Closing a removed member's peer connections ends media
+  on those connections.
+- **Relay-only ICE**, with the credential `POST /api/v1/me/relay` mints as the only ICE
+  server. No STUN server and no foreign server is configured anywhere (§N rule 2, ADR-0021
+  point 2).
+- **The server holds no room and no participant list.** It mints a relay credential and it
+  relays `signal` frames. That is the whole of its part.
+- **A room is client state, exactly as a group is** — signed control events over ordinary
+  durable envelopes. **A call is `signal` frames between devices.**
+
+Two wire formats carry that, and both are specified in
+[v1 signalling](../contracts/VOICE-V1.md):
+`CPVRV001` for the room's control events, durable; `CPVSV001` for the call's signalling,
+volatile. Both formats use [pairwise transport v1](../contracts/PAIRWISE-V1.md) with its existing
+suite, header flags and key schedule.
+
+### What the server does, and what it does not
+
+| | Where |
+|---|---|
+| Mints a coturn credential | `POST /api/v1/me/relay` |
+| Relays an opaque blob to one device, if that device is connected at that instant | `/ws` `signal` |
+| Publishes `voice_configured` and `signal_buckets` | `GET /api/v1/config` |
+| Stores a room, a name, a roster, a capability, a join token or a live count | **nowhere** |
+| Counts participants, enforces a ceiling or reports presence | **nowhere** |
+
+[OpenAPI](../../../backend/openapi.json) defines relay credentials and config. The
+[realtime API](../../../backend/realtime/API.md) defines the socket transport.
+
+### The room
+
+A room is a named set of member accounts that exists only in its members' clients. It is
+standalone — not a group, not a direct conversation, and no group or direct conversation
+hosts a call in this version.
+
+- Its id is 32 CSPRNG bytes. Its name travels inside its control events, so the server
+  never holds it and there is nothing there to rename or delete.
+- Its roster is built by signed control events on one hash chain, mirroring
+  `GroupControlEvent` field for field under its own signing domain. Every active member
+  has the same authority in v1: any active member may add or remove a member or
+  rename the room. Version 2 role permissions are defined by the
+  [voice roles contract](../../../docs/client/CLIENT_VOICE_ROLES.md#2-roles-and-who-may-do-what).
+- A member's *devices* are never in the roster. They are read from that member's
+  authenticated live device list when a payload is sealed, exactly as a group's are (§F).
+- Conflicting events at one revision are a fork, and a forked room is quarantined and
+  joins no call until it is resolved. A `pruned_through` gap makes a room wait for a
+  member's answer before it joins, invites or renames, because a device that may be
+  missing a removal would otherwise offer audio to somebody the room has ejected.
+- At most 50 members in a room; at most 10 joined devices in a call. They are different
+  numbers because membership costs an envelope fan-out on a change and a call costs every
+  participant an uplink for every peer.
+
+Leaving is a signed `remove member` event naming yourself. It is not a backend deletion,
+because there is nothing on the backend to delete: the other members keep the room, and
+a member who leaves needs a fresh invite to come back.
+
+### A call
+
+1. The call action requires a voice-enabled deployment and a room this device may act in.
+2. On explicit join, the controller requests microphone permission and starts the
+   microphone foreground service.
+3. The engine fetches the relay credential, starts missing pairwise sessions over the
+   durable path and draws a 16-byte `join_id`. It queries participants before announcing
+   the join.
+4. A participant that receives a join creates a relay-only `RTCPeerConnection` and offers.
+   The joiner answers. The device whose lowercase device ID sorts first rolls back its
+   own offer if both devices offer at once.
+5. Peers exchange batched ICE candidates. The pairwise session authenticates the
+   fingerprint in the SDP and the DTLS handshake keys the connection.
+6. Leaving sends a volatile notice and closes the peer connections. The controller stops
+   the foreground service and the call drops its in-memory text and participant state.
+
+See the [v1 call contract](../contracts/VOICE-V1.md#the-call) and the
+[Android microphone lifecycle](ANDROID.md#a-calls-microphone).
+
+**Trouble is per person.** Every tile is its own encrypted connection, so one peer can be
+unreachable, or blocked by a changed safety number, while everybody else keeps talking.
+Nothing pauses when one connection fails and nothing pauses when somebody leaves — there
+is no shared key to rotate.
+
+### Realtime gateway
+
+One application-owned gateway wraps `/ws`. It validates frame type and bounds before
+routing typed events; widgets never send raw JSON. The upgrade authenticates with
+`Authorization: Bearer <session token>`, which is the only handshake path: a refusal
+arrives as a failed upgrade with `403 Forbidden` and never as a close code, and a handler
+waiting for a close code there will never fire (§O).
+
+Two frames go up — `ack` and `signal` — and two come down — `envelope` and `signal`. There
+is no subscription frame, no `presence` frame and no room frame in either direction
+(ADR-0022). Durable `envelope` frames enter the inbox pipeline and are deduplicated
+against REST. The shared `SignalRouter` reads volatile `signal` frames from the delivery
+socket and dispatches opened payloads to voice or presence.
+
+The client validates the server's published signal buckets on send and receive. An outgoing
+off-bucket blob is refused locally. An incoming one is dropped without closing the
+socket. See the [backend realtime API](../../../backend/realtime/API.md) and the
+[v1 socket limits](../contracts/VOICE-V1.md#the-socket-limits) for frame bounds, pacing and
+the inbound queue.
+
+Durable delivery uses REST recovery when the socket is down. A connected media path can
+continue during an outage while joins, leaves and ephemeral text cannot travel over the
+signalling path. The room text panel shows when signalling is unavailable.
+
+### Ephemeral room text
+
+Room text is carried in individually sealed `CPVSV001` frames. The call keeps up to
+200 lines in memory and clears them when the call ends, including when the device loses
+access to the room. The panel adds the sender's line locally and the relay forwards each
+recipient device's frame individually.
+
+The wording stays best-effort, because another participant can retain what they
+decrypted, and because a frame published for a device that is mid-reconnect is gone.
+
+### Participants and speaking state
+
+- **The participant set is this device's own.** The call engine projects local peer
+  connection states. `participants_query` answers can identify a peer to expect an offer
+  from (§N rule 5). The media connection establishes the peer's connected state.
+- **This device's mute state is local.** The call screen renders mute with an icon and
+  label. See [voice status](../STATUS.md#voice-implementation-gaps) for outstanding call UI work.
+- **A name and an avatar come from locally authenticated profile state**, not from
+  anything a peer sent in a call.
+- The room list shows *Live now · N* for this device's active call and uses that call's
+  local count. Other eligible rooms show *Empty*. The server supplies no live count.
+
+### Platform lifecycle
+
+- Android requests the microphone on explicit join and at no other time, and runs a
+  microphone-type foreground service for as long as the call lasts (§N rule 11): a call
+  outlives the moment the user looks at another screen.
+- `POST_NOTIFICATIONS` is off by default on a fresh install, so a denied notification
+  permission is the common path rather than the edge. It is a stated outcome — the
+  foreground-service disclosure is degraded and the screen says so — and never a retry
+  loop.
+- A temporarily disconnected peer can recover on the same connection. A failed
+  connection is dropped and a fresh join is needed. Changing networks does not
+  trigger an ICE restart.
+- Minimising keeps audio only when the platform can truthfully maintain it, and shows the
+  persistent in-app banner.
+
+### The existing surfaces
+
+The router exposes the room list, creation flow and Room Info, with call and invite
+routes nested under the 64-character hex room ID. The shell compose action and Contacts
+entry open room creation. The in-app call banner opens the current call. See the
+[voice room screens](../ui-specification.md#13-voice-rooms--list-create--info) and
+[call screen](../ui-specification.md#10-live-voice-room-screen).
+
+The [local data model](LOCAL-DATA.md#voice-room-state) owns the four durable
+room tables. The call engine keeps media and participant state in memory. The
+[October 2026 screen migration](https://github.com/Orviniq/communication-platform/blob/ab2ecb826dd00cf3256d2055d4a354527d4d9441/frontend/docs/voice-and-realtime.md#the-existing-surfaces)
+records the retired placeholders and table.
+
+### Voice references
+
+- [client contract](../../../docs/client/CLIENT_CONTRACT.md) §F, §K, §N and §O
+- [Realtime API and the relay credential](../../../backend/realtime/API.md)
+- [Server ADR-0021: a relayed WebRTC mesh, and no server room](../../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+- [Server ADR-0022: the gateway holds no presence](../../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)
+- [`VOICE-V1.md`](../contracts/VOICE-V1.md) — the two wire formats
+- [`PAIRWISE-V1.md`](../contracts/PAIRWISE-V1.md) — the transport under both
+- [Live Voice Room Screen](../ui-specification.md#10-live-voice-room-screen) and
+  [Voice Rooms](../ui-specification.md#13-voice-rooms--list-create--info) — UI states and actions
+- [ADR-077](decisions/077-voice-mesh.md) — the decision record for this design
+
 ## Failure policy
 
 - Expected failures are typed results, not strings parsed in widgets.

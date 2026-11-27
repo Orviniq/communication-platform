@@ -21,8 +21,8 @@
 >   [`visual-design-system.md`](visual-design-system.md).
 > - It does **NOT** duplicate cryptographic protocol detail (key exchange, ratchets,
 >   key-backup internals). Those rules live in
->   [`cryptographic-protocol.md`](cryptographic-protocol.md) and
->   [`message-protocol.md`](message-protocol.md). Where
+>   [`CRYPTO.md`](contracts/CRYPTO.md) and
+>   [`MESSAGES.md`](contracts/MESSAGES.md). Where
 >   the UI must respect a privacy or honesty rule, it is stated inline and flagged
 >   **[PRIVACY]** — you can build the screen correctly from that flag alone.
 >

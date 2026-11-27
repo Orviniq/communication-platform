@@ -1044,7 +1044,7 @@ class PendingApplicationReceipts extends Table {
 /// transcript that justifies it. [sessionsCheckedAt] is when this device last
 /// checked the room's member devices for a missing pairwise session; it is
 /// empty after a change that gave it the room or added a member, which makes
-/// the check due (`voice-signalling-v1.md`, Starting the sessions a call
+/// the check due (`docs/contracts/VOICE-V1.md`, Starting the sessions a call
 /// needs). A call writes no row anywhere.
 @DataClassName('StoredRoomStateRow')
 class RoomStates extends Table {

@@ -22,7 +22,7 @@ Executed [ADR-055](055-initial-artifact.md)'s closed-beta PQ MLS test binary on 
 3. **D5 — Disclosure revision 6 → 7 ([deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart)):**
    - Updated the `experimentalGroups` `DisclosurePoint` (`since: 7`) to state both [ADR-036](036-beta-mls-track.md)'s disposable-state rule where groups are active and that unmeasured-ABI devices have groups switched off, triggering re-presentation via `DisclosureChangeGate`.
 
-**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) when MLS and the `beta` flavor were removed; groups now use pairwise Double Ratchet fan-out across all ABIs ([cryptographic-protocol.md](../../cryptographic-protocol.md#groups)), and the A56 measurement record is preserved in [archive/beta-mls-core/](../../archive/beta-mls-core/README.md).
+**Closure:** Closed by [ADR-075](075-pairwise-groups.md) (2026-09-13) when MLS and the `beta` flavor were removed; groups now use pairwise Double Ratchet fan-out across all ABIs ([CRYPTO.md](../../contracts/CRYPTO.md#groups)), and the A56 measurement record is preserved in [archive/beta-mls-core/](../../archive/beta-mls-core/README.md).
 
 ## Rationale
 

@@ -11,7 +11,7 @@ recorded in
 the work it gives the client is [`../CLIENT_WORK.md`](../../CLIENT_WORK.md).
 
 It is a **complete delta against
-[`frontend/docs/voice-signalling-v1.md`](../../frontend/docs/voice-signalling-v1.md)**, which
+[`VOICE-V1.md`](../../frontend/docs/contracts/VOICE-V1.md)**, which
 stays binding for version-1 rooms and for every rule this document does not name. The client
 developer folds it into that document as its version-2 part, and records a client ADR that
 supersedes client ADR-077's D1 — *every active member has the same authority* — for version-2
@@ -32,7 +32,7 @@ with the creator as its owner, once every member's devices can read version 2 (�
 creator has left keeps version 1. Inside a call, muting a participant, removing one from the
 call and ending the call for everyone are call signals (§5).
 
-**Stays**, unchanged and still bound by `voice-signalling-v1.md` and `CLIENT_CONTRACT.md` §N:
+**Stays**, unchanged and still bound by `frontend/docs/contracts/VOICE-V1.md` and `CLIENT_CONTRACT.md` §N:
 
 - rooms are standalone: no group and no direct conversation hosts a call (client ADR-077 D3).
   This is not group voice chat;
@@ -74,7 +74,7 @@ the role and is not granted right by right
 
 ### 3.1 The canonical event
 
-The event of `voice-signalling-v1.md` § "The event", unchanged in its form: one ten-key
+The event of `frontend/docs/contracts/VOICE-V1.md` § "The event", unchanged in its form: one ten-key
 deterministic-CBOR map, built and signed by the shared native core under the signing device's
 Ed25519 key, never by Dart. Version 2 changes key 0 to `2` and admits two operations.
 
@@ -125,7 +125,7 @@ opens:
 | change role | 5 | Reserved; refused | The owner. The target is another active member and not the owner. Naming 1 or 2 sets the target's role, and naming the role it holds is refused. Naming 0 **hands the room over**: the target becomes the owner and the signer an admin |
 | upgrade | 6 | Refused | Only on a version-1 state, signed by its derived owner (§4.1); the room becomes version 2 |
 
-These are the group's rules of `frontend/docs/message-protocol.md` § "Control events", with the
+These are the group's rules of `frontend/docs/contracts/MESSAGES.md` § "Control events", with the
 group's invitation policy fixed at *owner and admins*, which is the policy every group this
 client creates carries.
 
@@ -285,7 +285,7 @@ A receiver:
 
 - refuses a version-2 frame for a room it holds at version 1, and asks the sender's device for the
   room's state, because it is behind — within the 64 open state requests of
-  `voice-signalling-v1.md`, so a stream of such frames opens no more than one request a room;
+  `frontend/docs/contracts/VOICE-V1.md`, so a stream of such frames opens no more than one request a room;
 - refuses a version-1 frame for a room it holds at version 2, and answers as §4.4 says.
 
 ### 5.2 The kinds version 2 adds, and the leave reasons
@@ -327,7 +327,7 @@ outcome there is a repair.
 A receiving device applies a frame of kind 9 to 12 only when every one of these holds, in this
 order; any other frame is dropped after the router's commit, and nothing is shown:
 
-1. the version-1 checks of `voice-signalling-v1.md` § "The common body header": the room is held,
+1. the version-1 checks of `frontend/docs/contracts/VOICE-V1.md` § "The common body header": the room is held,
    at version 2, not quarantined and not waiting for its state, this account is an active member,
    and the header names the device the pairwise session authenticated, whose account is an active
    member;

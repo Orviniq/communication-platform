@@ -312,8 +312,7 @@ all. An open row in `room_state_requests` makes an active room read as waiting f
 state, which withholds joining a call, inviting, renaming and leaving until a member answers; a
 room's gap row does not hold the checkpoint's gap open. A change that gives this device a
 room or adds a member empties `room_states.sessions_checked_at`, which makes the room's
-check for missing pairwise sessions due ([`voice-signalling-v1.md`](../voice-signalling-v1.md),
-Starting the sessions a call needs). Rejected room events are recorded in `quarantine`
+check for missing pairwise sessions due ([Starting the sessions a call needs](../contracts/VOICE-V1.md#starting-the-sessions-a-call-needs)). Rejected room events are recorded in `quarantine`
 under reason codes 48 to 51.
 
 ## Migrations
@@ -446,7 +445,7 @@ database was stamped back. The migration fixture exercises both cases.
 - Retained pairwise metadata is pruned on a sixteen-day cutoff, **except** the opaque
   payload of a send whose preparation is still owed. Discarding those bytes would leave a
   message on screen that nothing can ever seal.
-- Ratchet skipped keys obey the bounds in [Pairwise transport version 1](../pairwise-transport-v1.md).
+- Ratchet skipped keys obey the bounds in [Pairwise transport version 1](../contracts/PAIRWISE-V1.md).
 - Decrypted attachment files live in one bounded cache: 7 days after the last open, 256 MiB,
   least recently opened first ([Attachment rows and decrypted files](#attachment-rows-and-decrypted-files)).
   No thumbnail is made.

@@ -24,7 +24,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 ///
 /// - `max-bundle` and `rtcp-mux` put the one audio section on one transport,
 ///   so ICE gathers one relay candidate for each `turn:` URL — the shape the
-///   offer's size was measured in (`voice-signalling-v1.md`, Sizes).
+///   offer's size was measured in (`docs/contracts/VOICE-V1.md`, Sizes, and what fits a bucket).
 /// - `gather_once` is libwebrtc's default, stated because the candidate
 ///   batching waits for gathering to complete.
 Map<String, Object> voiceRtcConfiguration(

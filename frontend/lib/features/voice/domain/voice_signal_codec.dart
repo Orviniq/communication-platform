@@ -43,8 +43,8 @@ final class MalformedVoiceSignal extends VoiceSignalDecoding {
   const MalformedVoiceSignal();
 }
 
-/// `CPVSV001`, the call's signalling payload (`voice-signalling-v1.md`,
-/// Part 2):
+/// `CPVSV001`, the call's signalling payload (`docs/contracts/VOICE-V1.md`,
+/// CPVSV001 call signalling):
 ///
 /// ```text
 /// "CPVSV001" || version:u8 || kind:u8 || deterministic-CBOR body

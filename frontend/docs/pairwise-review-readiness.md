@@ -7,7 +7,7 @@ application-security review. It is not a review report and does not claim approv
 Production pairwise messaging remains gated until an independent assessor records a
 disposition for every blocking finding.
 
-The normative construction is [Pairwise transport version 1](pairwise-transport-v1.md).
+The normative construction is [Pairwise transport version 1](contracts/PAIRWISE-V1.md).
 Reviewers should treat code, vectors, and this packet as subordinate to that profile and
 report any divergence as a blocking interoperability/security defect.
 

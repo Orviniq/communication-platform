@@ -22,7 +22,7 @@ Closed phase 6 (voice mesh) on live two-device evidence using signed `production
    - Fixed so `outbox_depth` counts pending entries in `group_outbound_objects` and `room_outbound_objects` until routed into the pairwise outbox, and its stream re-reads when either table changes (documented in [SYNC.md](../SYNC.md#cycle-order); fixed in build 4, reducing room propagation from >6 min to 9.1 s on build 4 and 6.3 s on build 5). Cannot loop because supervisor reacts strictly to depth growth.
 3. **D3 — Call leave stops the foreground service only if no newer join started (`5b5cadbc`):**
    - Build 4 revealed a race on rapid rejoin (657 ms after leave began): `VoiceCallController.leave` ([voice_call_controller.dart](../../../lib/features/voice/application/voice_call_controller.dart)) ended the call immediately (stopping the service via guard), then waited ~2 s notifying peers before calling service stop a second time — stripping the `microphone` service from the newly started rejoin and causing Android to silence recording ~6 s after backgrounding and tear down sockets.
-   - Fixed so `VoiceCallController.leave` stops the call service only when no join has started since `leave` began (documented in [voice-signalling-v1.md](../../voice-signalling-v1.md) and [ANDROID.md](../ANDROID.md); pinned by controller test).
+   - Fixed so `VoiceCallController.leave` stops the call service only when no join has started since `leave` began (documented in [VOICE-V1.md](../../contracts/VOICE-V1.md) and [ANDROID.md](../ANDROID.md); pinned by controller test).
 
 ## Rationale
 

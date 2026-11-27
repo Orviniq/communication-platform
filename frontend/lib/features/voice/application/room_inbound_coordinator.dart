@@ -33,7 +33,7 @@ final class RoomInboundNoChange extends RoomInboundPreparation {
 }
 
 /// Decides what an ordinary pairwise envelope carrying a room payload means
-/// (`voice-signalling-v1.md`, Applying an event and The payload).
+/// (`docs/contracts/VOICE-V1.md`, Applying an event and The payload).
 ///
 /// The server checks nothing about a room, so everything is checked here,
 /// before anything commits: every control event's signature under the key the

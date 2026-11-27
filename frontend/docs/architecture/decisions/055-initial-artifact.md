@@ -23,7 +23,7 @@ Decided that the first externally distributed Private Experimental artifact expo
 5. **D5 — Disclosure revision 5 → 6 ([deployment_disclosure.dart](../../../lib/app/config/deployment_disclosure.dart)):**
    - Updated the groups `DisclosurePoint` from describing experimental group encryption/resets to stating that group chats were switched off and why (`since: 6`, triggering one-time re-presentation via `DisclosureChangeGate`).
 
-**Amendment and Closure:** Later the same day ([ADR-056](056-abi-evidence.md), 2026-08-24), `arm64-v8a` passed on hardware and the gate shifted from all-or-nothing to per-ABI (`arm64-v8a` open, `armeabi-v7a`/`x86_64` withheld). On 2026-09-13, ADR-075 closed the entire closed-beta MLS track following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md), deleting the `beta` flavor, `beta-pq-mls` Cargo profile, `GroupProductionGate`, `GroupExperimentalGate`, and `measure_beta_mls_core.sh`; groups now ship on pairwise Double Ratchet fan-out ([cryptographic-protocol.md](../../cryptographic-protocol.md#groups)).
+**Amendment and Closure:** Later the same day ([ADR-056](056-abi-evidence.md), 2026-08-24), `arm64-v8a` passed on hardware and the gate shifted from all-or-nothing to per-ABI (`arm64-v8a` open, `armeabi-v7a`/`x86_64` withheld). On 2026-09-13, ADR-075 closed the entire closed-beta MLS track following [server ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md), deleting the `beta` flavor, `beta-pq-mls` Cargo profile, `GroupProductionGate`, `GroupExperimentalGate`, and `measure_beta_mls_core.sh`; groups now ship on pairwise Double Ratchet fan-out ([CRYPTO.md](../../contracts/CRYPTO.md#groups)).
 
 ## Rationale
 

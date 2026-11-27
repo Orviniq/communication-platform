@@ -410,7 +410,7 @@ by its next one.
   ([ADR-080](decisions/080-batched-peers.md)). Nothing remembers a peer's answers between resolutions
   ([ADR-082](decisions/082-fresh-peer-resolution.md)): the single-peer paths read the per-user identity, device and
   device-log routes every time, the identity and the device list conditionally on the tag
-  stored beside them. See [authentication-and-devices.md](../authentication-and-devices.md).
+  stored beside them. See [AUTH-AND-DEVICES.md](../contracts/AUTH-AND-DEVICES.md).
 - `stale_devices` responses immediately invalidate matching outbox targets and trigger one
   conditional refresh of that peer. Newly discovered eligible replacement devices receive independently
   encrypted target rows with the same logical event ID; already accepted targets do not.
@@ -439,7 +439,7 @@ a signal into durable message or membership state.
 The gateway holds no presence and only relays opaque signals. The client shows
 online, last seen and typing from encrypted `CPPSV001` watches and responses,
 subject to local verification and the per-phone switch. See
-[receipts and typing](../message-protocol.md#receipts-and-typing) and the
+[receipts and typing](../contracts/MESSAGES.md#receipts-and-typing) and the
 [presence contract gaps](../STATUS.md#presence-voice-and-delivery).
 
 ## Android lifecycle

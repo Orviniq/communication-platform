@@ -552,7 +552,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
 
   /// A voice room's payload arrives the way a group's does, in an ordinary
   /// durable envelope whose plaintext names the room
-  /// (`voice-signalling-v1.md`, The payload). The voice feature decides what
+  /// (`docs/contracts/VOICE-V1.md`, The payload). The voice feature decides what
   /// it means; this layer commits that decision in the same transaction as
   /// the receive that carried it. Only a durable envelope reaches here: the
   /// signal path drops a room payload unopened.

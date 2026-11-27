@@ -16,7 +16,7 @@ Voice was designed around a self-hosted LiveKit SFU behind nginx at `/rtc`, a
 on `/ws`, and the per-sender media keys of
 [0016](0016-client-held-voice-media-keys.md). None of it was ever built on the
 client: `frontend/pubspec.yaml` declares no media package and
-`frontend/docs/voice-and-realtime.md` records the design as unbuilt.
+[`frontend/docs/voice-and-realtime.md`](https://github.com/Orviniq/communication-platform/blob/a75e70004d598835806b28ef95ac7d5b595960e8/frontend/docs/voice-and-realtime.md#status) records the design as unbuilt.
 
 Three things make that design undeliverable at this band.
 

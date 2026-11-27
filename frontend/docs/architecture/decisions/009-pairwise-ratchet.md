@@ -19,7 +19,7 @@ Why superseded: the binding backend client contract (`CLIENT_CONTRACT.md`) requi
 
 ## Constraints and Open Gates
 
-- Classical-only session initiation is prohibited and fails closed (`pairwise-transport-v1.md`, [Cryptographic protocol](../../cryptographic-protocol.md)).
+- Classical-only session initiation is prohibited and fails closed (`contracts/PAIRWISE-V1.md`, [Cryptographic protocol](../../contracts/CRYPTO.md)).
 - Double Ratchet itself remains in use for ongoing pairwise messaging after hybrid PQXDH establishment.
 
 ## Costs

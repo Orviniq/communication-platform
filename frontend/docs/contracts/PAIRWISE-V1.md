@@ -170,8 +170,8 @@ Receiving an initial envelope is two phase and side-effect free until commit:
   an initial envelope from an unverified sender stops after step 1 (`probeInitial`) and
   sender-device matching against the unverified server-served list, and is held unopened
   without executing steps 3 or 4.
-- Under [`CLIENT_CONTRACT.md`](../../docs/client/CLIENT_CONTRACT.md) §C and
-  [`CLIENT_CONTACTS_AND_TRUST.md`](../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5.3,
+- Under [`CLIENT_CONTRACT.md`](../../../docs/client/CLIENT_CONTRACT.md) §C and
+  [`CLIENT_CONTACTS_AND_TRUST.md`](../../../docs/client/CLIENT_CONTACTS_AND_TRUST.md) §5.3,
   the one permitted exception to "under the already confirmed master key" in steps 2–4 is
   a **non-committing read** before holding: the inspector may execute step 3 in memory
   while skipping step 4 (committing no session, no device-state transition, no consumed
@@ -323,7 +323,7 @@ body is attempted. Ambiguous PUT retries reuse that body and its key IDs. Supers
 private signed-prekey pairs are receive-only through the end of day eight, then erased,
 with one exception: while an envelope is held for a verification of its sender, no pair
 whose last day is on or after the day it was held is erased, and a due rotation that could
-erase one waits ([ADR-093](architecture/decisions/093-held-first-message.md) D17).
+erase one waits ([ADR-093](../architecture/decisions/093-held-first-message.md) D17).
 
 An expected rotation does not itself reset account-master verification when all of the
 following hold: user/device ID, `ik_pub`, and registration ID are unchanged; both new
@@ -372,7 +372,7 @@ This profile carries a group unchanged: there is no group suite, header flag, ke
   then the conversation shows how many copies the server has accepted out of the copies
   owed to devices still in the set.
 - **Control events.** A signed control event, a state request, and a transcript are group
-  payloads ([message-protocol.md](message-protocol.md), Groups) and fan out per recipient
+  payloads ([MESSAGES.md](MESSAGES.md), Groups) and fan out per recipient
   user: one pairwise operation for each member they are owed to, so a member whose devices
   cannot be reached delays only that member's copies.
 

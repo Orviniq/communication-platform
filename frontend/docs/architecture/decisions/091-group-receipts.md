@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-14); proposed 2026-10-14
 - **Date:** 2026-10-14 (explicitly recorded in register and full section; proposed in `7fbe2eaa`, PR #78 `3747d5d8`; built in three prompts on `frontend-group-read-receipts` in `ec69cb9d`–`d91c9d0e`, PR #79 `221b2816`)
 - **Completes:** [ADR-090](090-group-timeline.md) D6 (group read-receipt follow-up)
-- **Related:** [ADR-074](074-seen-tick.md), [ADR-075](075-pairwise-groups.md), [ADR-088](088-group-composer.md), [ADR-090](090-group-timeline.md), server [ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md), [message-protocol.md](../../message-protocol.md), [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before server [ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
+- **Related:** [ADR-074](074-seen-tick.md), [ADR-075](075-pairwise-groups.md), [ADR-088](088-group-composer.md), [ADR-090](090-group-timeline.md), server [ADR-0001](../../../../docs/architecture/decisions/0001-pairwise-double-ratchet-group-fan-out.md), [MESSAGES.md](../../contracts/MESSAGES.md), [ui-specification.md](../../ui-specification.md), [CLIENT_CONTRACT.md](../../../../docs/client/CLIENT_CONTRACT.md) (cited historically as `backend/CLIENT_CONTRACT.md` before server [ADR-0030](../../../../docs/architecture/decisions/0030-the-security-model-and-the-client-contract-move-under-docs.md))
 
 ## Decision (Position)
 

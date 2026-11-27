@@ -33,7 +33,7 @@ Replaced the chat page's hardcoded `👍` reaction and `🙂` composer insertion
   - *A. In-house Unicode CLDR grid:* Avoids the 40 Android modules, but sourcing, localizing, skin-toning, and testing 1,500+ glyphs for an input control exceeded justified scope.
   - *B. Earlier `emoji_picker_flutter` releases:* Still depend on `shared_preferences`, while 4.5.0–4.5.2 break on `android.builtInKotlin=false`.
   - *C. Other pub.dev packages (`awesome_emoji_picker`, `emoji_mart_flutter`, forks):* Either still pull `SharedPreferences`, bundle remote/preset image sets (failing D2), or lack a verified maintained publisher.
-  - *D. Keeping hardcoded `👍` and `🙂`:* Violated [ui-specification.md](../../ui-specification.md) §8 / §17 ("a control that presents itself as more than it is") when [message-protocol.md](../../message-protocol.md) already supports arbitrary normalized emoji graphemes.
+  - *D. Keeping hardcoded `👍` and `🙂`:* Violated [ui-specification.md](../../ui-specification.md) §8 / §17 ("a control that presents itself as more than it is") when [MESSAGES.md](../../contracts/MESSAGES.md) already supports arbitrary normalized emoji graphemes.
 
 ## Constraints and Open Gates
 

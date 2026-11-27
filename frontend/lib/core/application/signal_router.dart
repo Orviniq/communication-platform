@@ -10,7 +10,7 @@ import 'package:communication_platform/core/result/result.dart';
 /// A volatile channel, named by the 8 bytes its plaintext begins with
 /// (ADR-098 D1).
 enum SignalChannel {
-  /// `CPVSV001`, a call's signalling (`voice-signalling-v1.md`, Part 2).
+  /// `CPVSV001`, a call's signalling (`docs/contracts/VOICE-V1.md`, CPVSV001 call signalling).
   voice([0x43, 0x50, 0x56, 0x53, 0x56, 0x30, 0x30, 0x31]),
 
   /// `CPPSV001`, typing and the online status (ADR-098 D2).

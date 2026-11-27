@@ -8,7 +8,7 @@ import 'package:communication_platform/features/voice/domain/voice_signal_model.
 import 'package:flutter_test/flutter_test.dart';
 
 /// The composer's limit: no line may need a frame larger than the largest
-/// bucket the deployment publishes (`voice-signalling-v1.md`, Sizes, and what
+/// bucket the deployment publishes (`docs/contracts/VOICE-V1.md`, Sizes, and what
 /// fits a bucket).
 void main() {
   const published = {1024, 4096, 16384};

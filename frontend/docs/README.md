@@ -16,7 +16,7 @@ The documents use three requirement words:
 - [Current implementation, evidence, and release gaps](STATUS.md)
 - [Product requirements](product-requirements.md)
 - [Complete page-by-page UI specification](ui-specification.md)
-- [Architecture](architecture/OVERVIEW.md)
+- [Architecture](architecture/OVERVIEW.md), including [voice and realtime](architecture/OVERVIEW.md#voice-and-realtime)
 - [Architecture decisions](architecture/decisions/README.md)
 - [Responsive UI](responsive-ui.md)
 - [Visual design system](visual-design-system.md)
@@ -24,14 +24,14 @@ The documents use three requirement words:
 ## Security and protocols
 
 - [Threat model](threat-model.md)
-- [Cryptographic protocol](cryptographic-protocol.md)
-- [Pairwise transport version 1](pairwise-transport-v1.md)
+- [Cryptographic protocol](contracts/CRYPTO.md)
+- [Pairwise transport version 1](contracts/PAIRWISE-V1.md)
 - [Pairwise independent-review packet](pairwise-review-readiness.md)
 - [Retaining an independent cryptographic reviewer](independent-review-engagement.md)
-- [Application-message protocol](message-protocol.md)
-- [Authentication and devices](authentication-and-devices.md)
-- [Attachments](attachments.md)
-- [Voice and realtime](voice-and-realtime.md)
+- [Application-message protocol](contracts/MESSAGES.md)
+- [Authentication and devices](contracts/AUTH-AND-DEVICES.md)
+- [Attachments](contracts/ATTACHMENTS.md)
+- [Voice room control and signalling v1](contracts/VOICE-V1.md)
 - [Live voice room](ui-specification.md#10-live-voice-room-screen) and
   [voice room list, creation, and info](ui-specification.md#13-voice-rooms--list-create--info)
 
@@ -43,7 +43,7 @@ The documents use three requirement words:
 
 ## Delivery
 
-- [Backend API index](backend-api.md)
+- [Backend API index](contracts/BACKEND.md)
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
 - [Sustained delivery: field validation and its gate](runbooks/SUSTAINED-DELIVERY.md)

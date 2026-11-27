@@ -18,7 +18,7 @@ Matches the backend's 256-target batch limit on `POST /api/v1/envelopes`, suppor
 
 ## Constraints and Open Gates
 
-- Defined in [Synchronization engine](../SYNC.md#outbox) and [Pairwise transport v1](../../pairwise-transport-v1.md).
+- Defined in [Synchronization engine](../SYNC.md#outbox) and [Pairwise transport v1](../../contracts/PAIRWISE-V1.md).
 - Under ADR-060 and ADR-061, send preparation runs inside the sync cycle (`pending_send_preparations`) immediately before the outbox pass, and outbox drains before inbox so a stuck inbound envelope cannot starve user sends.
 - Under ADR-075 and ADR-088, group sends map partial fan-out completion to `sending` (never `sent` early) without rendering numeric fraction text beside the status mark.
 - Open gates: Independent review ([ADR-017](017-independent-crypto-review.md)) and representative multi-device group scale testing.

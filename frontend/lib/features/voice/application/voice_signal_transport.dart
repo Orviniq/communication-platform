@@ -13,7 +13,7 @@ import 'package:communication_platform/features/voice/domain/voice_signal_codec.
 import 'package:communication_platform/features/voice/domain/voice_signal_model.dart';
 
 /// The call's signalling transport: `CPVSV001` messages carried one device to
-/// another in volatile `signal` frames (`voice-signalling-v1.md`, Part 2).
+/// another in volatile `signal` frames (`docs/contracts/VOICE-V1.md`, CPVSV001 call signalling).
 ///
 /// **Out.** A message is encoded once, sealed to each target device's
 /// pairwise session, and every advanced session state is committed before any
@@ -57,7 +57,7 @@ final class VoiceSignalTransport implements VoiceSignallingPort {
              channels: const {SignalChannel.voice},
            );
 
-  /// Sealed frames one join sends one device (`voice-signalling-v1.md`,
+  /// Sealed frames one join sends one device (`docs/contracts/VOICE-V1.md`,
   /// "Volatile seal and open").
   static const volatileBudgetPerPeer = 32;
 

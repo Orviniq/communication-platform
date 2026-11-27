@@ -73,7 +73,7 @@ final class PairwiseVolatileRefused extends PairwiseVolatileSealOutcome {
 /// Seals one payload to each target device's pairwise session for a volatile
 /// frame, and commits every advanced state before handing any frame back.
 ///
-/// It is the durable fan-out without its queue (`voice-signalling-v1.md`,
+/// It is the durable fan-out without its queue (`docs/contracts/VOICE-V1.md`,
 /// "Volatile seal and open"): the same authenticated live device list, the
 /// same reviewed native ratchet step, the same compare-and-set commit, and no
 /// outbox row, because a frame is either delivered at once or dropped, and a

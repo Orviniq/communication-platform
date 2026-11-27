@@ -19,7 +19,7 @@ Protects recorded encrypted sessions against harvest-now-decrypt-later quantum a
 
 ## Constraints and Open Gates
 
-- Frozen in [Pairwise transport v1](../../pairwise-transport-v1.md) and implemented in `native/crypto_core/src/pairwise.rs` using `mlkem-native` v1.2.0 (`0ba906cb14b1c241476134d7403a811b382ca498`), `x25519-dalek` `=3.0.0`, `ed25519-dalek` `=3.0.0`, `chacha20poly1305` `=0.11.0`, and `hkdf`/`hmac`/`sha2`.
+- Frozen in [Pairwise transport v1](../../contracts/PAIRWISE-V1.md) and implemented in `native/crypto_core/src/pairwise.rs` using `mlkem-native` v1.2.0 (`0ba906cb14b1c241476134d7403a811b382ca498`), `x25519-dalek` `=3.0.0`, `ed25519-dalek` `=3.0.0`, `chacha20poly1305` `=0.11.0`, and `hkdf`/`hmac`/`sha2`.
 - Prekey signing and additive unsigned `pq_otpk` mixing are constrained by [ADR-034](034-authenticated-pq-contribution.md); 7-day signed prekey rotation continuity is constrained by [ADR-035](035-prekey-rotation.md).
 - Open gate: Independent cryptographic review of `pairwise-transport-v1` and `pairwise.rs` remains open under [ADR-017](017-independent-crypto-review.md) ([Pairwise review readiness](../../pairwise-review-readiness.md)).
 
@@ -35,6 +35,6 @@ Only an explicit security/protocol upgrade (e.g. a future versioned ciphersuite 
 ## History, Amendments, and Supersession
 
 - **2026-07-25 (`7e4930f8`):** Original decision added to the register (`Accepted`), superseding [ADR-009](009-pairwise-ratchet.md).
-- **2026-07-29 (`d0092ee9`):** Implemented in `native/crypto_core/src/pairwise.rs`, frozen in [Pairwise transport v1](../../pairwise-transport-v1.md), and supplemented by [ADR-034](034-authenticated-pq-contribution.md) and [ADR-035](035-prekey-rotation.md).
+- **2026-07-29 (`d0092ee9`):** Implemented in `native/crypto_core/src/pairwise.rs`, frozen in [Pairwise transport v1](https://github.com/Orviniq/communication-platform/blob/d0092ee97693276b28127e08443f45b9fa2dee9a/frontend/docs/pairwise-transport-v1.md), and supplemented by [ADR-034](034-authenticated-pq-contribution.md) and [ADR-035](035-prekey-rotation.md).
 - **2026-09-13 (ADR-075):** Extended to carry all group messaging and control payloads after MLS retirement.
 - No supersession.
